@@ -1,0 +1,38 @@
+{
+  "name": "greycat-language",
+  "version": "1.0.0",
+  "description": "Comprehensive GreyCat backend development skill for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, React integration, and all standard libraries.",
+  "author": "DataThings",
+  "license": "MIT",
+  "repository": "https://hub.datathings.com/greycat/skill/greycat-language.skill",
+  "homepage": "https://hub.datathings.com/greycat/skill/greycat-language.skill#readme",
+
+  "skills": [
+    {
+      "id": "greycat-language",
+      "path": "greycat-language",
+      "entry": "SKILL.md",
+      "tags": [
+        "greycat",
+        "backend",
+        "graph-database",
+        "persistence",
+        "time-series",
+        "react",
+        "typescript",
+        "api-development",
+        "parallel-processing",
+        "data-modeling"
+      ],
+      "compatibility": {
+        "assistant": "claude",
+        "min_version": "3.0"
+      }
+    }
+  ],
+
+  "install": {
+    "type": "git",
+    "command": "git clone https://hub.datathings.com/greycat/skill/greycat-language.skill.git"
+  }
+}

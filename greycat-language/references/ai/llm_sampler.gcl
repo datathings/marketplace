@@ -1,0 +1,372 @@
+/// llama.cpp Advanced Sampler API for GreyCat
+///
+/// This file provides low-level access to llama.cpp's sampling system for expert
+/// users who need fine-grained control over token selection, custom sampler chains,
+/// and token candidate inspection.
+///
+/// Most users should use the high-level GenerationParams (llm_types.gcl) instead.
+/// Use this API when you need:
+/// - Custom sampler chains with specific ordering
+/// - Token candidate inspection and filtering
+/// - Custom sampling algorithms
+/// - Manual token acceptance and probability updates
+///
+/// Basic workflow:
+/// ```
+/// // Create sampler chain
+/// var chain = SamplerChain::create(SamplerChainParams { no_perf: false });
+/// chain.add(Sampler::top_k(40));
+/// chain.add(Sampler::top_p(0.95, 1));
+/// chain.add(Sampler::temp(0.8));
+/// chain.add(Sampler::dist(12345));
+///
+/// // Sample token
+/// var token = chain.sample(ctx, -1);
+///
+/// // Accept and continue
+/// chain.accept(token);
+///
+/// // Cleanup
+/// chain.free();
+/// ```
+
+// ============================================================================
+// SAMPLER CHAIN PARAMETERS
+// ============================================================================
+
+/// Sampler chain configuration
+type SamplerChainParams {
+    /// Disable performance measurements
+    no_perf: bool?;
+}
+
+// ============================================================================
+// SAMPLER CHAIN TYPE
+// ============================================================================
+
+/// Sampler chain
+///
+/// A chain of samplers applied in sequence to select the next token.
+/// Samplers are applied in the order they are added.
+///
+/// Common chains:
+/// - Greedy: [greedy]
+/// - Temperature: [temp, dist]
+/// - Top-K + Top-P: [top_k, top_p, temp, dist]
+/// - With penalties: [penalties, top_k, top_p, temp, dist]
+/// - Mirostat: [temp, mirostat_v2]
+type SamplerChain {
+    /// Create empty sampler chain
+    static native fn create(params: SamplerChainParams?): SamplerChain;
+
+    /// Add sampler to chain
+    ///
+    /// Samplers are applied in the order added.
+    native fn add(sampler: Sampler);
+
+    /// Get number of samplers in chain
+    native fn size(): int;
+
+    /// Get sampler at index
+    ///
+    /// Returns the sampler at the specified index in the chain.
+    /// Returns null if index is out of bounds.
+    native fn get(index: int): Sampler?;
+
+    /// Remove sampler at index
+    ///
+    /// Removes and returns the sampler at the specified index.
+    /// After removal, the chain no longer owns the sampler.
+    /// Returns null if index is out of bounds.
+    native fn remove(index: int): Sampler?;
+
+    /// Sample next token from context
+    ///
+    /// Applies all samplers in sequence and returns selected token.
+    /// - ctx: Inference context
+    /// - idx: Batch index to sample from (-1 = last)
+    native fn sample(ctx: Context, idx: int): int;
+
+    /// Accept token
+    ///
+    /// Notifies samplers that a token was accepted (updates state for
+    /// stateful samplers like Mirostat).
+    native fn accept(token: int);
+
+    /// Apply samplers to token candidates
+    ///
+    /// Manually apply the sampler chain to a batch of token candidates.
+    /// Used for custom sampling logic.
+    native fn apply(candidates: TokenDataBatch);
+
+    /// Reset sampler state
+    ///
+    /// Resets internal state of all samplers in chain.
+    native fn reset();
+
+    /// Clone sampler chain
+    ///
+    /// Creates a deep copy of the sampler chain.
+    native fn clone(): SamplerChain;
+
+    /// Get performance data
+    native fn perf(): PerfSamplerData;
+
+    /// Reset performance counters
+    native fn perf_reset();
+
+    /// Free sampler chain
+    ///
+    /// Releases all samplers in chain. Optional - GC handles cleanup.
+    native fn free();
+}
+
+// ============================================================================
+// INDIVIDUAL SAMPLERS
+// ============================================================================
+
+/// Individual sampler
+///
+/// Single sampling strategy that can be added to a SamplerChain.
+/// Create using static factory methods.
+type Sampler {
+    // ========================================================================
+    // STATIC: Basic Samplers
+    // ========================================================================
+
+    /// Greedy sampler (always select highest probability token)
+    static native fn greedy(): Sampler;
+
+    /// Distribution sampler (sample from probability distribution)
+    ///
+    /// - seed: Random seed (use different seeds for different results)
+    static native fn dist(seed: int): Sampler;
+
+    // ========================================================================
+    // STATIC: Top Samplers
+    // ========================================================================
+
+    /// Top-K sampler
+    ///
+    /// Keep only top K most probable tokens.
+    /// - k: Number of tokens to keep (e.g., 40)
+    static native fn top_k(k: int): Sampler;
+
+    /// Top-P (nucleus) sampler
+    ///
+    /// Keep tokens until cumulative probability reaches P.
+    /// - p: Cumulative probability threshold (0.0-1.0, e.g., 0.95)
+    /// - min_keep: Minimum tokens to keep (e.g., 1)
+    static native fn top_p(p: float, min_keep: int): Sampler;
+
+    /// Min-P sampler
+    ///
+    /// Remove tokens with probability less than P * max_prob.
+    /// - p: Threshold (0.0-1.0, e.g., 0.05)
+    /// - min_keep: Minimum tokens to keep
+    static native fn min_p(p: float, min_keep: int): Sampler;
+
+    /// Typical sampler
+    ///
+    /// Sample from tokens close to expected entropy.
+    /// - p: Typical probability (0.0-1.0, e.g., 0.95)
+    /// - min_keep: Minimum tokens to keep
+    static native fn typical(p: float, min_keep: int): Sampler;
+
+    /// Top-N-Sigma sampler
+    ///
+    /// Samples from tokens within N standard deviations of the mean.
+    /// - n: Number of standard deviations
+    static native fn top_n_sigma(n: float): Sampler;
+
+    // ========================================================================
+    // STATIC: Temperature Samplers
+    // ========================================================================
+
+    /// Temperature sampler
+    ///
+    /// Scale logits by temperature (higher = more random).
+    /// - temp: Temperature (0.0-2.0, e.g., 0.8)
+    static native fn temp(temp: float): Sampler;
+
+    /// Temperature with exponent
+    ///
+    /// Apply temperature with custom exponent.
+    /// - temp: Temperature
+    /// - delta: Delta for smoothing
+    /// - exponent: Exponent (1.0 = normal temperature)
+    static native fn temp_ext(temp: float, delta: float, exponent: float): Sampler;
+
+    /// XTC (cross-token correlation) sampler
+    ///
+    /// - probability: XTC probability
+    /// - threshold: XTC threshold
+    /// - min_keep: Minimum tokens to keep
+    /// - seed: Random seed
+    static native fn xtc(probability: float, threshold: float, min_keep: int, seed: int): Sampler;
+
+    // ========================================================================
+    // STATIC: Penalty Samplers
+    // ========================================================================
+
+    /// Repetition penalties sampler
+    ///
+    /// Penalize tokens based on their frequency in recent context.
+    /// - penalty_last_n: Number of last tokens to consider (0 = disabled, -1 = context size)
+    /// - penalty_repeat: Repeat penalty (1.0 = disabled, >1.0 = penalize)
+    /// - penalty_freq: Frequency penalty (0.0 = disabled)
+    /// - penalty_present: Presence penalty (0.0 = disabled)
+    static native fn penalties(
+        penalty_last_n: int,
+        penalty_repeat: float,
+        penalty_freq: float,
+        penalty_present: float
+    ): Sampler;
+
+    /// DRY (Don't Repeat Yourself) sampler
+    ///
+    /// Advanced repetition penalty that detects and penalizes repeating sequences.
+    /// - model: Model instance (for vocabulary)
+    /// - multiplier: DRY multiplier
+    /// - base: DRY base
+    /// - allowed_length: Allowed length of repeated sequences
+    /// - penalty_last_n: Penalty range
+    /// - seq_breakers: Sequence breakers (tokens that break repetition detection)
+    static native fn dry(
+        model: Model,
+        multiplier: float,
+        base: float,
+        allowed_length: int,
+        penalty_last_n: int,
+        seq_breakers: Array<int>
+    ): Sampler;
+
+    // ========================================================================
+    // STATIC: Advanced Samplers
+    // ========================================================================
+
+    /// Grammar-based sampler
+    ///
+    /// Constrain generation to follow a grammar (GBNF format).
+    /// - model: Model instance (for vocabulary)
+    /// - grammar_str: Grammar string (GBNF format)
+    /// - grammar_root: Root rule name
+    static native fn grammar(model: Model, grammar_str: String, grammar_root: String): Sampler;
+
+    /// Lazy grammar sampler with pattern triggers
+    ///
+    /// Like grammar(), but only activates when trigger patterns or tokens are encountered.
+    /// Patterns are matched from the start of generation output.
+    ///
+    /// - model: Model instance (for vocabulary)
+    /// - grammar_str: Grammar string (GBNF format)
+    /// - grammar_root: Root rule name
+    /// - trigger_patterns: Array of regex patterns to trigger grammar
+    /// - trigger_tokens: Array of token IDs to trigger grammar
+    static native fn grammar_lazy_patterns(
+        model: Model,
+        grammar_str: String,
+        grammar_root: String,
+        trigger_patterns: Array<String>,
+        trigger_tokens: Array<int>
+    ): Sampler;
+
+    /// Mirostat v1 sampler
+    ///
+    /// - vocab_size: Vocabulary size
+    /// - seed: Random seed
+    /// - tau: Target entropy
+    /// - eta: Learning rate
+    /// - m: Number of candidates
+    static native fn mirostat(
+        vocab_size: int,
+        seed: int,
+        tau: float,
+        eta: float,
+        m: int
+    ): Sampler;
+
+    /// Mirostat v2 sampler
+    ///
+    /// - seed: Random seed
+    /// - tau: Target entropy
+    /// - eta: Learning rate
+    static native fn mirostat_v2(seed: int, tau: float, eta: float): Sampler;
+
+    /// Logit bias sampler
+    ///
+    /// Apply fixed biases to specific tokens.
+    /// - vocab_size: Vocabulary size
+    /// - biases: Array of (token, bias) pairs
+    static native fn logit_bias(vocab_size: int, biases: Array<LogitBias>): Sampler;
+
+    /// Infill sampler
+    ///
+    /// For code infilling (fill-in-the-middle).
+    /// - model: Model instance
+    static native fn infill(model: Model): Sampler;
+
+    // ========================================================================
+    // INSTANCE: Sampler Operations
+    // ========================================================================
+
+    /// Apply sampler to token candidates
+    ///
+    /// Manually apply this sampler to a batch of token candidates.
+    native fn apply(candidates: TokenDataBatch);
+
+    /// Accept token
+    ///
+    /// For stateful samplers (Mirostat), update state after token selection.
+    native fn accept(token: int);
+
+    /// Clone sampler
+    native fn clone(): Sampler;
+
+    /// Get sampler name
+    native fn name(): String;
+
+    /// Get sampler seed
+    ///
+    /// Returns the random seed used by this sampler if applicable.
+    /// Returns 0xFFFFFFFF (LLAMA_DEFAULT_SEED) if not applicable.
+    native fn get_seed(): int;
+
+    /// Free sampler resources
+    native fn free();
+}
+
+// ============================================================================
+// TOKEN CANDIDATES TYPE
+// ============================================================================
+
+/// Token candidates
+///
+/// Utilities for creating and inspecting token candidate lists.
+type TokenCandidates {
+    /// Create token candidates from context logits
+    ///
+    /// - ctx: Inference context
+    /// - idx: Batch index (-1 = last)
+    static native fn from_context(ctx: Context, idx: int): TokenDataBatch;
+
+    /// Create empty token candidates
+    ///
+    /// - vocab_size: Vocabulary size
+    static native fn create(vocab_size: int): TokenDataBatch;
+
+    /// Sort candidates by probability (descending)
+    static native fn sort(candidates: TokenDataBatch);
+
+    /// Sample from candidates using temperature
+    ///
+    /// - candidates: Token candidates
+    /// - temp: Temperature
+    /// - seed: Random seed
+    static native fn sample_temp(candidates: TokenDataBatch, temp: float, seed: int): int;
+
+    /// Sample from candidates (top token)
+    ///
+    /// Returns the token with highest probability.
+    static native fn sample_top(candidates: TokenDataBatch): int;
+}

@@ -1,0 +1,31 @@
+type UserAgent {
+  /// "The browser name of the user agent, For example Chrome "
+  browserFamily: String?;
+  /// "The browser major version, example: 36"
+  browserMajor: String?;
+  /// "The browser minor version, example: 0"
+  browserMinor: String?;
+  /// "The browser patch version version, example: 1985"
+  browserPatch: String?;
+  /// "The OS main name, example: Android"
+  osFamily: String?;
+  /// "The OS major version, example: 4"
+  osMajor: String?;
+  /// "The OS minor version, example: 4"
+  osMinor: String?;
+  /// "The OS patch number, example: 2"
+  osPatch: String?;
+  /// "The OS minor patch number, example: 4"
+  osPatchMinor: String?;
+  /// "The Device name, example: iPhone"
+  deviceFamily: String?;
+  /// "The Device brand, example: Apple"
+  deviceBrand: String?;
+  /// "The Device model, example: 11"
+  deviceModel: String?;
+
+  /// The main parsing method, it takes user agent as string and splits the fields to create the UserAgent object.
+  /// For example you can try parsing the following:
+  /// `"Mozilla/5.0 (Linux; Android 4.4.2; QMV7A Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.135 Safari/537.36"`
+  static native fn parse(userAgent: String): UserAgent;
+}

@@ -1,0 +1,10 @@
+
+
+type Iban {
+  iban: String;
+  country: String;
+  bank: String;
+  account: String;
+
+  native static fn parse(iban: String): Iban?;
+}

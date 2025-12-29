@@ -1,0 +1,159 @@
+/// llama.cpp LoRA Adapter API for GreyCat
+///
+/// This file provides support for LoRA (Low-Rank Adaptation) adapters, which
+/// allow fine-tuning of models without modifying the base weights.
+///
+/// LoRA adapters are small files that contain task-specific adjustments to a
+/// model. Multiple adapters can be loaded and applied with different scaling
+/// factors to customize model behavior.
+///
+/// Use cases:
+/// - Apply domain-specific fine-tuning (medical, legal, code, etc.)
+/// - Switch between different task adaptations
+/// - Combine multiple adapters for multi-task models
+/// - A/B test different fine-tuning approaches
+///
+/// Basic workflow:
+/// ```
+/// var model = Model::load("./base-model.gguf", null);
+/// var ctx = Context::create(model, null);
+///
+/// // Load LoRA adapter
+/// var lora = LoraAdapter::load(model, "./medical-lora.gguf", 1.0, null);
+///
+/// // Apply adapter to context
+/// ctx.apply_lora_adapter(lora, 1.0);
+///
+/// // Use context with adapter applied
+/// // ... inference code ...
+///
+/// // Remove adapter from context
+/// ctx.remove_lora_adapter(lora);
+///
+/// // Or clear all adapters
+/// ctx.clear_lora_adapters();
+/// ```
+
+// ============================================================================
+// LORA ADAPTER TYPE
+// ============================================================================
+
+/// LoRA adapter
+///
+/// Represents a loaded LoRA adapter that has been applied to a model.
+/// The adapter remains active until removed or the model is freed.
+///
+/// Example with scaling:
+/// ```
+/// var lora = LoraAdapter::load(model, "./lora.gguf", 0.8, null);
+/// var ctx = Context::create(model, null);
+///
+/// // Apply adapter to context with 80% strength
+/// ctx.apply_lora_adapter(lora, 0.8);
+///
+/// // Use context...
+///
+/// // Remove when done
+/// ctx.remove_lora_adapter(lora);
+/// ```
+type LoraAdapter {
+    // ========================================================================
+    // STATIC: LoRA Loading
+    // ========================================================================
+
+    /// Load and apply LoRA adapter to model
+    ///
+    /// Loads a LoRA adapter from file and applies it to the model with
+    /// the specified scaling factor.
+    ///
+    /// - model: Base model to apply adapter to
+    /// - path: Path to LoRA adapter file (.gguf format)
+    /// - scale: Scaling factor (0.0-1.0, typically 1.0)
+    /// - n_threads: Number of threads for loading (0 = auto)
+    ///
+    /// Returns null if loading fails.
+    static native fn load(
+        model: Model,
+        path: String,
+        scale: float,
+        n_threads: int?
+    ): LoraAdapter;
+
+    // NOTE: load_splits() removed - no longer supported in llama.cpp API
+
+    // ========================================================================
+    // INSTANCE: LoRA Management
+    // ========================================================================
+
+    /// Get adapter path
+    ///
+    /// Returns the file path this adapter was loaded from.
+    native fn path(): String;
+
+    /// Get scaling factor
+    ///
+    /// Returns the current scaling factor.
+    native fn scale(): float;
+
+    /// Update scaling factor
+    ///
+    /// Changes the scaling factor. You'll need to re-apply the adapter
+    /// to contexts using Context.apply_lora_adapter() for changes to take effect.
+    ///
+    /// - new_scale: New scaling factor (0.0-1.0)
+    native fn set_scale(new_scale: float);
+
+    // NOTE: remove() and is_applied() removed - LoRA adapters are now managed per-context
+    // Use Context.apply_lora_adapter() and Context.remove_lora_adapter() instead
+
+    // ========================================================================
+    // INSTANCE: Adapter Metadata
+    // ========================================================================
+
+    /// Get adapter metadata value by key
+    ///
+    /// Retrieves a specific metadata field from the LoRA adapter file.
+    /// Returns null if the key doesn't exist.
+    native fn meta(key: String): String?;
+
+    /// Get number of adapter metadata key/value pairs
+    ///
+    /// Returns the total count of metadata entries in the adapter.
+    native fn meta_count(): int;
+
+    /// Get adapter metadata key name by index
+    ///
+    /// Retrieves the key name at the specified index (0-based).
+    /// Returns null if index is out of bounds.
+    native fn meta_key_by_index(index: int): String?;
+
+    /// Get adapter metadata value by index
+    ///
+    /// Retrieves the value at the specified index (0-based).
+    /// Returns null if index is out of bounds.
+    native fn meta_val_by_index(index: int): String?;
+
+    // ========================================================================
+    // INSTANCE: ALORA Support
+    // ========================================================================
+
+    /// Get number of ALORA invocation tokens
+    ///
+    /// For adapters using ALORA (activation-aware LoRA), returns the count
+    /// of invocation tokens. Returns 0 if not an ALORA adapter.
+    native fn alora_invocation_token_count(): int;
+
+    /// Get ALORA invocation tokens
+    ///
+    /// Returns the array of token IDs used to invoke this ALORA adapter.
+    /// Returns empty array if not an ALORA adapter.
+    native fn alora_invocation_tokens(): Array<int>;
+
+    /// Free adapter resources
+    ///
+    /// Removes adapter and releases memory. Optional - GC handles cleanup.
+    native fn free();
+}
+
+// NOTE: LoraUtils type removed - LoRA adapters are now managed per-context
+// Use Context.clear_lora_adapters() to clear all adapters from a context

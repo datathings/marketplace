@@ -1,0 +1,467 @@
+type GaussianND {
+  private total: int?;
+  private min: Tensor?;
+  private max: Tensor?;
+  private sum: Tensor?;
+  private sum_square: Tensor?;
+
+  //    i64_t count;
+  //    gc_core_tensor_t *min;
+  //    gc_core_tensor_t *max;
+  //    gc_core_tensor_t *sum;
+  //    gc_core_tensor_t *sumsq;
+  /// Learns from a tensor of [BatchSize x N dimension], each row is one observation, each column is one of the dimensions or features
+  native fn learn(input: Tensor);
+
+  /// Returns a 1D tensor of size [N] where each value is the average of the dimension over all observations
+  native fn avg(): Tensor?;
+
+  /// Returns a 1D tensor of size [N] where each value is the standard deviation of the dimension over all observations
+  native fn std(): Tensor?;
+
+  /// Returns a 2D tensor of size [N ; N] where each value is the covariance of the dimension i with all other dimensions j
+  native fn covariance(): Tensor?;
+
+  /// Returns a 2D tensor of size [N ; N] where each value is the correlation of the dimension i with all other dimensions j
+  native fn correlation(): Tensor?;
+
+  /// Returns N, the dimensions of the ND space
+  native fn dimensions();
+
+  /// Resets all the state of the gaussian ND for reusability of memory
+  native fn clear();
+
+  /// Takes a [batch ; N ] 2D tensor and returns another tensor of the same dimension where values are scaled according to min max scaling (normalization (value - min) / (max - min))
+  native fn min_max_scaling(input: Tensor): Tensor;
+
+  /// Takes a [batch ; N ] 2D tensor and returns another tensor of the same dimension where values are inverse normalization scaled to get back original values
+  native fn inverse_min_max_scaling(input: Tensor): Tensor;
+
+  /// Creates another gaussian ND with a subset of features
+  native fn crop(from: int, to: int): GaussianND;
+
+  /// Takes a [batch ; N ] 2D tensor and returns another tensor of the same dimension where are values are scaled according to standard scaling (value - avg)/std
+  native fn standard_scaling(input: Tensor): Tensor;
+
+  /// Takes a [batch ; N ] 2D tensor and returns another tensor of the same dimension where values are inverse standard scaled to get back original values
+  native fn inverse_standard_scaling(input: Tensor): Tensor;
+}
+
+
+type PCA {
+  static threshold_def: float = 0.95;
+
+  private eigen_vectors: Tensor?;
+  private eigen_values: Tensor?;
+
+  private avg: Tensor?;
+  private std: Tensor?;
+  private correlation: Tensor?;
+
+  private explained_variance: Tensor?;
+  private space_origin: Tensor?;
+
+  private dimension_info: Tensor?;
+
+  best_dimension: int?;
+  selected_dimension: int?;
+  threshold: float?;
+  space: Tensor?;
+
+  /// In order to learn PCA, you should create a GaussianND first, learn the correlation, avg, std, then call this method.
+  /// Threshold is optional positive parameter, less than 1, to set what level is considered for the best dimension. Default value is 0.95 or 95% of the variance.
+  native fn learn(correlation: Tensor, avg: Tensor, std: Tensor, threshold: float?);
+
+  /// sets the dimension of the PCA to reduce the space, dim <=N
+  native fn set_dimension(dimension: int);
+
+  /// Forward transform the tensor from N dimensions to dim dimensions. This method can be called only after a learn and a set_dim
+  native fn transform(input: Tensor): Tensor;
+
+  /// Inverse transform the tensor from dim dimensions to N dimensions. This method can be called only after a learn and a set_dim
+  native fn inverse_transform(input: Tensor): Tensor;
+
+  /// Returns the number of dimensions needed to reach a certain threshold of variance retained
+  native fn get_dimension(threshold: float): int;
+}
+
+type Solver {
+  static native fn solve(X: Tensor, Y: Tensor): Tensor;
+}
+
+//used to be native
+type Polynomial {
+  degree: int?;
+  coefficients: Array<float>?;
+  x_start: float?;
+  x_step: float?;
+
+  native fn learn(degrees: int, X: Tensor, Y: Tensor): float;
+  native fn predict(X: Tensor): Tensor;
+  native fn predictValue(x: float): float;
+  fn getDegrees(): int {
+    if (this.coefficients != null) {
+      return this.coefficients.size();
+    }
+  }
+
+  static fn compress(originalTS: nodeTime<float>, polynomialTS: nodeTime<Polynomial>, maxDegree: int, maxError: float, maxBufferSize: int) {
+    var tensorX = Tensor {};
+    tensorX.init(TensorType::f64, Array<int> {0});
+    tensorX.setCapacity(maxBufferSize);
+
+    var tensorY = Tensor {};
+    tensorY.init(TensorType::f64, Array<int> {0});
+    tensorY.setCapacity(maxBufferSize);
+
+    var firstTime: time;
+    var prevPoly: Polynomial? = null;
+
+    for (t, v in originalTS) {
+      var poly = prevPoly;
+
+      if (tensorX.size() == maxBufferSize) {
+        //reset polynomial and previous tensors - to avoid expanding forever
+
+        prevPoly == null;
+        tensorX.reset();
+        tensorX.init(TensorType::f64, Array<int> {0});
+        tensorY.reset();
+        tensorY.init(TensorType::f64, Array<int> {0});
+      }
+
+      var t_f = t.to(DurationUnit::milliseconds) as float;
+      tensorX.append(t_f);
+      tensorY.append(v);
+      if (prevPoly == null) {
+        poly = Polynomial {};
+        poly.learn(0, tensorX, tensorY);
+        firstTime = t;
+        polynomialTS.setAt(firstTime, poly);
+        //info("First Poly ${poly}");
+      } else {
+        var y = prevPoly.predictValue(t_f);
+        var error = abs(y - v);
+
+        if (error > maxError) {
+          var prevDegree = poly!!.getDegrees();
+          poly = Polynomial {};
+          error = poly.learn(prevDegree, tensorX, tensorY);
+
+          while (error > maxError && poly.getDegrees() < maxDegree) {
+            prevDegree = poly.getDegrees();
+            poly = Polynomial {};
+            error = poly.learn(prevDegree + 1, tensorX, tensorY);
+          }
+
+          if (error > maxError) {
+            //Error is larger than max error and no degree managed to fit => split and reset tensor and polynomial
+            tensorX.reset();
+            tensorX.init(TensorType::f64, Array<int> {0});
+
+            tensorY.reset();
+            tensorY.init(TensorType::f64, Array<int> {0});
+            tensorX.append(t_f);
+            tensorY.append(v);
+            poly = Polynomial {};
+            poly.learn(0, tensorX, tensorY);
+            firstTime = t;
+            polynomialTS.setAt(firstTime, poly);
+            //info("restarting new Poly ${poly}");
+          } else {
+            //update previous polynomial
+            polynomialTS.setAt(firstTime, poly);
+            //info("increased existing Poly ${poly}");
+          }
+        }
+      }
+      prevPoly = poly;
+    }
+  }
+
+  static fn decompress(originalTS: nodeTime<float>, polynomialTS: nodeTime<Polynomial>, maxError: float, decompressedTS: nodeTime<float>, errorTS: nodeTime<float>) {
+    for (t, v in originalTS) {
+      var poly = polynomialTS.resolveAt(t);
+      if (poly != null) {
+        var predict = poly.predictValue(t.to(DurationUnit::milliseconds) as float);
+        var error = abs(predict - v);
+        if (error > maxError) {
+          warn("Error ${error} > ${maxError} at ${t}");
+        }
+        decompressedTS.setAt(t, predict);
+        errorTS.setAt(t, error);
+      }
+    }
+  }
+}
+
+type TimeSeriesDecomposition {
+  static fn reset(ts: nodeTime<any>, tz: TimeZone, calendarUnit: CalendarUnit, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+    var defaultValue: any;
+    if (ts.first() is int) {
+      defaultValue = 0;
+    } else if (ts.first() is float) {
+      defaultValue = 0.0;
+    } else if (ts.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in ts) {
+        ts.setAt(t, defaultValue);
+      }
+    } else {
+      var startDate = lastUpdatedTime.calendar_floor(calendarUnit, tz);
+
+      for (t, v in ts[startDate..]) {
+        ts.setAt(t, defaultValue);
+      }
+    }
+  }
+
+  static fn resetWeekly(ts: nodeTime<any>, tz: TimeZone, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+    var defaultValue: any;
+    if (ts.first() is int) {
+      defaultValue = 0;
+    } else if (ts.first() is float) {
+      defaultValue = 0.0;
+    } else if (ts.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in ts) {
+        ts.setAt(t, defaultValue);
+      }
+    } else {
+      var startDate = lastUpdatedTime.startOfWeek(tz);
+      for (t, v in ts[startDate..]) {
+        ts.setAt(t, defaultValue);
+      }
+    }
+  }
+
+  static fn calculate(originalTS: nodeTime<any>, destinationTS: nodeTime<any>, tz: TimeZone, calendarUnit: CalendarUnit, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+    var defaultValue: any;
+    if (originalTS.first() is int) {
+      defaultValue = 0;
+    } else if (originalTS.first() is float) {
+      defaultValue = 0.0;
+    } else if (originalTS.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in destinationTS) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS) {
+        newT = t.calendar_floor(calendarUnit, tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v);
+      }
+    } else {
+      var startDate = lastUpdatedTime.calendar_floor(calendarUnit, tz);
+      for (t, v in destinationTS[startDate..]) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS[startDate..]) {
+        newT = t.calendar_floor(calendarUnit, tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v);
+      }
+    }
+  }
+
+  static fn calculateWeekly(originalTS: nodeTime<any>, destinationTS: nodeTime<any>, tz: TimeZone, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+
+    var defaultValue: any;
+    if (originalTS.first() is int) {
+      defaultValue = 0;
+    } else if (originalTS.first() is float) {
+      defaultValue = 0.0;
+    } else if (originalTS.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in destinationTS) {
+        destinationTS.setAt(t, defaultValue);
+      }
+      for (t, v in originalTS) {
+        newT = t.startOfWeek(tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v);
+      }
+    } else {
+      var startDate = lastUpdatedTime.startOfWeek(tz);
+      for (t, v in destinationTS[startDate..]) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS[startDate..]) {
+        newT = t.startOfWeek(tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v);
+      }
+    }
+  }
+
+  static fn calculateWithFactor(originalTS: nodeTime<any>, destinationTS: nodeTime<any>, tz: TimeZone, calendarUnit: CalendarUnit, factor: float, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+    var defaultValue: any;
+    if (originalTS.first() is int) {
+      defaultValue = 0;
+    } else if (originalTS.first() is float) {
+      defaultValue = 0.0;
+    } else if (originalTS.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in destinationTS) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS) {
+        newT = t.calendar_floor(calendarUnit, tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v * factor);
+      }
+    } else {
+      var startDate = lastUpdatedTime.calendar_floor(calendarUnit, tz);
+
+      for (t, v in destinationTS[startDate..]) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS[startDate..]) {
+        newT = t.calendar_floor(calendarUnit, tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v * factor);
+      }
+    }
+  }
+
+  static fn calculateWeeklyWithFactor(originalTS: nodeTime<any>, destinationTS: nodeTime<any>, tz: TimeZone, factor: float, lastUpdatedTime: time?) {
+    var d: Date;
+    var newT: time;
+
+    var defaultValue: any;
+    if (originalTS.first() is int) {
+      defaultValue = 0;
+    } else if (originalTS.first() is float) {
+      defaultValue = 0.0;
+    } else if (originalTS.first() is duration) {
+      defaultValue = 0_s;
+    } else {
+      defaultValue = 0;
+    }
+
+    if (lastUpdatedTime == null) {
+      for (t, v in destinationTS) {
+        destinationTS.setAt(t, defaultValue);
+      }
+      for (t, v in originalTS) {
+        newT = t.startOfWeek(tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v * factor);
+      }
+    } else {
+      var startDate = lastUpdatedTime.startOfWeek(tz);
+      for (t, v in destinationTS[startDate..]) {
+        destinationTS.setAt(t, defaultValue);
+      }
+
+      for (t, v in originalTS[startDate..]) {
+        newT = t.startOfWeek(tz);
+        destinationTS.setAt(newT, destinationTS.getAt(newT) ?? defaultValue + v * factor);
+      }
+    }
+  }
+
+  static fn calculateAll(instant: nodeTime<any>, hourly: nodeTime<any>?, daily: nodeTime<any>?, weekly: nodeTime<any>?, monthly: nodeTime<any>?, yearly: nodeTime<any>?, tz: TimeZone, lastUpdatedTime: time?) {
+    if (hourly != null) {
+      TimeSeriesDecomposition::calculate(instant, hourly, tz, CalendarUnit::hour, lastUpdatedTime);
+
+      if (daily != null) {
+        TimeSeriesDecomposition::calculate(hourly, daily, tz, CalendarUnit::day, lastUpdatedTime);
+
+        if (weekly != null) {
+          TimeSeriesDecomposition::calculateWeekly(daily, weekly, tz, lastUpdatedTime);
+        }
+        if (monthly != null) {
+          TimeSeriesDecomposition::calculate(daily, monthly, tz, CalendarUnit::month, lastUpdatedTime);
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(monthly, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        } else {
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(daily, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        }
+      } else {
+        if (weekly != null) {
+          TimeSeriesDecomposition::calculateWeekly(hourly, weekly, tz, lastUpdatedTime);
+        }
+        if (monthly != null) {
+          TimeSeriesDecomposition::calculate(hourly, monthly, tz, CalendarUnit::month, lastUpdatedTime);
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(monthly, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        } else {
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(hourly, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        }
+      }
+    } else {
+      if (daily != null) {
+        TimeSeriesDecomposition::calculate(instant, daily, tz, CalendarUnit::day, lastUpdatedTime);
+
+        if (weekly != null) {
+          TimeSeriesDecomposition::calculateWeekly(daily, weekly, tz, lastUpdatedTime);
+        }
+        if (monthly != null) {
+          TimeSeriesDecomposition::calculate(daily, monthly, tz, CalendarUnit::month, lastUpdatedTime);
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(monthly, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        } else {
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(daily, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        }
+      } else {
+        if (weekly != null) {
+          TimeSeriesDecomposition::calculateWeekly(instant, weekly, tz, lastUpdatedTime);
+        }
+        if (monthly != null) {
+          TimeSeriesDecomposition::calculate(instant, monthly, tz, CalendarUnit::month, lastUpdatedTime);
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(monthly, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        } else {
+          if (yearly != null) {
+            TimeSeriesDecomposition::calculate(instant, yearly, tz, CalendarUnit::year, lastUpdatedTime);
+          }
+        }
+      }
+    }
+  }
+}
+

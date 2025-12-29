@@ -1,0 +1,143 @@
+//used to be native
+type FFT {
+    static log_min: float = -6666.0;
+    ///Create a new FFT engine able to process nb_samples time/frequency
+    static native fn new(nb_samples: int, inverse: bool): FFT;
+
+    ///Transforms timeseries tensor of N complex values sampled at the same sampling rate to a complex frequency tensor
+    //or vis versa according to the inverse bool factor of the new
+    native fn transform(timeseries_complex: Tensor, frequency_complex: Tensor);
+
+    ///THIS METHOD WORKS only on inverse = false mode
+    ///Transforms the timeseries table into timeseries complex tensor, then calculate the frequency in the frequency complex tensor
+    ///Returns a table where the columns are: frequency in hz, period(duration), frequency abs power, power in db, phase angle, cumulated ratio
+    native fn transform_table(timeseries: Table, timeseries_complex: Tensor, frequency_complex: Tensor): Table;
+
+    native fn get_nb_sample(): int;
+
+    native fn get_inverse_mode(): bool;
+
+    ///Get the [0 to N/2] frequencies (in Hertz) in total N/2 + 1 values, first frequency is 0 = DC component
+    ///Labels will not change if sampling step does not change
+    static native fn get_frequency_labels(sampling_step: duration, nb_samples: int): Tensor;
+
+    ///get frequency spectrum from the complex tensor, convert to decibel if needed (applies 20 log10 (abs(freq)))
+    ///returns only first low_pass_filter int if not null
+    static native fn get_frequency_spectrum(frequency_complex: Tensor, frequency_spectrum: Tensor, to_decibel: bool, low_pass_filter: int?);
+
+    //Returns a table where the columns are: frequency in hz, frequency abs power, phase angle (in radians), position, period (duration), power in db, cumulated ratio
+    static native fn get_frequency_table(frequency_complex: Tensor, sampling_step: duration): Table;
+
+    static native fn extrapolate(frequency_complex: Tensor, sampling_step: duration, timeseries_start: time, t: time, low_pass_filter: int?): float;
+
+    static native fn extrapolate_table(timeseries_complex: Tensor, sampling_step: duration, timeseries_start: time, from: time, to: time, skip_elements: int?): Table;
+
+    static native fn apply_low_pass_filter(frequency_complex: Tensor, destination_frequency_complex: Tensor, low_pass_filter: int);
+
+    ///Select on which frequency array size to crop to retain ratio (between 0.0 and 1.0) of the signal
+    static native fn get_low_pass_filter_size(frequency_complex: Tensor, ratio: float): int;
+
+    static native fn get_next_fast_size(nb_samples: int): int;
+
+    //frequency 0 will return period 0 (DC component)
+    static native fn frequency_to_period(frequency: float): duration;
+
+    static native fn period_to_frequency(period: duration): float;
+
+    static fn power_to_db(power: float): float {
+        if (power > 0.0) {
+            return 20 * log10(power);
+        } else {
+            return FFT::log_min;
+        }
+    }
+}
+
+type FFTModel {
+    nt: nodeTime;
+    sampling_step: duration;
+    time_complex: Tensor;
+    frequency_complex: Tensor;
+    frequency_table: Table;
+    start_time: time;
+    best_size: int;
+
+    static fn train(nt: nodeTime, from: time, to: time): FFTModel {
+        var time_complex = Tensor {};
+        var frequency_complex = Tensor {};
+        var size = nt.rangeSize(from, to);
+        if (size < 2) {
+            throw "Node time should contain at least 2 time points";
+        }
+        var best_size = FFT::get_next_fast_size(size);
+        var fft = FFT::new(best_size, false);
+        var sampling_step_us = (to - from).to(DurationUnit::microseconds) / (best_size - 1);
+        var sampling_step = duration::new(sampling_step_us, DurationUnit::microseconds);
+        time_complex.init(TensorType::c128, Array<int> {best_size});
+
+        var ntc = nodeTimeCursor { n: nt };
+        ntc.lessOrEq(from);
+
+        for (var i = 0; i < best_size; i++) {
+            time_complex.set(Array<int> {i}, ntc.current() as float);
+            ntc.skip_duration(sampling_step);
+        }
+        fft.transform(time_complex, frequency_complex);
+        var frequency_table = FFT::get_frequency_table(frequency_complex, sampling_step);
+        frequency_table.sort(1, SortOrder::desc);
+
+        return FFTModel {
+            nt: nt,
+            sampling_step: sampling_step,
+            time_complex: time_complex,
+            frequency_complex: frequency_complex,
+            frequency_table: frequency_table,
+            start_time: from,
+            best_size: best_size,
+        };
+    }
+
+    fn extrapolate_value(t: time, low_pass_filter_ratio: float?, nb_harmonics: int?): float {
+        var result = Table {}; //previously new(2);
+        var low_pass_filter: int = this.best_size / 2 + 1;
+        if (low_pass_filter_ratio != null && low_pass_filter_ratio >= 0.0 && low_pass_filter_ratio <= 1.0) {
+            low_pass_filter = FFT::get_low_pass_filter_size(this.frequency_complex, low_pass_filter_ratio);
+        }
+        if (nb_harmonics != null && (nb_harmonics + 1) < low_pass_filter && nb_harmonics >= 1) {
+            low_pass_filter = (nb_harmonics + 1);
+        }
+        var signal = FFT::extrapolate(this.frequency_complex, this.sampling_step, this.start_time, t, low_pass_filter);
+        return signal;
+    }
+
+    fn extrapolate(from: time, to: time, low_pass_filter_ratio: float?, nb_harmonics: int?, skip_elements: int?): Table {
+        if (this.best_size == 0) {
+            throw "call train first";
+        }
+
+        var result = Table {}; //previously new(2);
+        var low_pass_filter: int = this.best_size / 2 + 1;
+        if (low_pass_filter_ratio != null && low_pass_filter_ratio >= 0.0 && low_pass_filter_ratio <= 1.0) {
+            low_pass_filter = FFT::get_low_pass_filter_size(this.frequency_complex, low_pass_filter_ratio);
+        }
+        if (nb_harmonics != null && (nb_harmonics + 1) < low_pass_filter && nb_harmonics >= 0) {
+            low_pass_filter = (nb_harmonics + 1);
+        }
+        var fftInverse = FFT::new(this.best_size, true);
+
+        var t_tensor: Tensor;
+
+        if (low_pass_filter < this.best_size / 2 + 1) {
+            var freq = Tensor {};
+            FFT::apply_low_pass_filter(this.frequency_complex, freq, low_pass_filter);
+            t_tensor = Tensor {};
+            var fftInv = FFT::new(this.best_size, true);
+            fftInv.transform(t_tensor, freq);
+        } else {
+            t_tensor = this.time_complex;
+        }
+
+        return FFT::extrapolate_table(t_tensor, this.sampling_step, this.start_time, from, to, skip_elements);
+    }
+}
+

@@ -1,0 +1,2 @@
+/// Universal Thermal Climate Index
+native fn utci(temp_outside: float, wind_avg: float, temp_rad: float, hygro_per: float): float;

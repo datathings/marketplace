@@ -1,0 +1,626 @@
+type KmeanMetaResult {
+    runDistances: Array<float>;
+    bestResult: KmeanResult?;
+}
+
+type KmeanResult {
+    loss: float;
+    roundsDistances: Array<float>;
+    centroids: Tensor?;
+    clusters_count: Tensor?;
+    clusters_sum_distance: Tensor?;
+    clusters_avg_distance: Tensor?;
+
+    assignment: Tensor?;
+    distances: Tensor?;
+    clusterInterDistances: Tensor?;
+}
+
+type Kmeans {
+    static var_input: String = "input";
+    static var_assignment: String = "assignment";
+    static var_min_distance: String = "min_distance";
+
+    static varo_centroids: String = "centroids";
+
+    static var_distance: String = "distance";
+    static var_sum_centroids: String = "sum_centroids";
+    static var_sum_min_distance: String = "sum_min_distance";
+    static var_count_centroids: String = "count_centroids";
+    static var_centroid_distances: String = "centroid_distances";
+
+    static var_sum_cluster_distances: String = "sum_cluster_distances";
+    static var_avg_cluster_distances: String = "avg_cluster_distances";
+    static var_count_cluster_distances: String = "count_cluster_distances";
+
+
+    static layer_placeholders: String = "placeholders";
+    static layer_forward: String = "kmeans_forward";
+    static layer_backward: String = "kmeans_backward";
+    static layer_init_round: String = "kmeans_init_round";
+    static layer_end_round: String = "kmeans_end_round";
+    static layer_stats: String = "kmeans_stats_layer";
+
+
+    static seq_init_round: String = "kmeans_init_round_seq";
+    static seq_forward: String = "kmeans_forward_seq";
+    static seq_backward: String = "kmeans_backward_seq";
+    static seq_end_round: String = "kmeans_end_round_seq";
+    static seq_stats: String = "kmeans_stats_seq";
+
+    static default_meta_rounds: int = 100;
+    static default_rounds: int = 20;
+
+
+    static fn replaceEmptyClusters(engine: ComputeEngine): bool {
+        var centroidCounts = engine.getVar(Kmeans::layer_backward, Kmeans::var_count_centroids)!!;
+        var centroids = engine.getVar(Kmeans::layer_forward, Kmeans::varo_centroids)!!;
+        var inputTensor = engine.getVar(Kmeans::layer_placeholders, Kmeans::var_input)!!;
+
+        var nbClusters = centroidCounts.size();
+        var shape = inputTensor.shape();
+        var batch = shape[0];
+        var nbFeatures = shape[1];
+        var rand = Random { seed: engine.getSeed() };
+        var emptyFound = false;
+        for (var i = 0; i < nbClusters; i++) {
+            var count = centroidCounts.get(Array<int> {i}) as int;
+            if (count == 0) {
+                var n = rand.uniform(0, batch);
+                for (var j = 0; j < nbFeatures; j++) {
+                    centroids.set(Array<int> {i, j}, inputTensor.get(Array<int> {n, j}));
+                }
+                emptyFound = true;
+            }
+        }
+        return emptyFound;
+    }
+
+    static fn sortClusters(engine: ComputeEngine) {
+        var centroids = engine.getVar(Kmeans::layer_forward, Kmeans::varo_centroids)!!;
+        var prevCentroids = clone(centroids);
+
+        var distanceTable = Table {}; //previously new(2);
+        var shape = centroids.shape();
+
+        for (var i = 0; i < shape[0]; i++) {
+            var sum = 0;
+            for (var j = 0; j < shape[1]; j++) {
+                sum = sum + centroids.get(Array<int> {i, j});
+            }
+            distanceTable.set_cell(i, 0, i);
+            distanceTable.set_cell(i, 1, sum);
+        }
+        distanceTable.sort(1, SortOrder::asc);
+
+        for (var i = 0; i < shape[0]; i++) {
+            var prevI = distanceTable.get_cell(i, 0) as int;
+            for (var j = 0; j < shape[1]; j++) {
+                centroids.set(Array<int> {i, j}, prevCentroids.get(Array<int> {prevI, j}));
+            }
+        }
+    }
+
+    /// Configures the clustering problem, needs the number of cluster, number of features, and from which distribution to draw the initial centroids [features_min;features_max]
+    static fn configure(nb_clusters: int, nb_features: int, tensor_type: TensorType, features_min: float, features_max: float, calculateInterClusterStats: bool): ComputeModel {
+        var batch_size = 0;
+        var placeholders_layer = ComputeLayerCustom {
+            name: Kmeans::layer_placeholders,
+            vars: Array<ComputeVariable> {
+                ComputeVarInOut { name: Kmeans::var_input, with_grad: false, shape: Array<int> {batch_size, nb_features}, type: tensor_type },
+                ComputeVarInOut { name: Kmeans::var_assignment, with_grad: false, shape: Array<int> {batch_size}, type: TensorType::i64 },
+                ComputeVarInOut { name: Kmeans::var_min_distance, with_grad: false, shape: Array<int> {batch_size}, type: TensorType::f64 },
+            }, ops: Array<ComputeOperation> {}
+        };
+
+        // distance = euclidean(input, centroids)
+        // arg_min, min_distances = argMin(distance)
+        var forward_layer = ComputeLayerCustom {
+            name: Kmeans::layer_forward,
+            vars: Array<ComputeVariable> {
+                ComputeVarOptimize { name: Kmeans::varo_centroids, type: tensor_type, shape: Array<int> {nb_clusters, nb_features}, l1: 0.0, l2: 0.0, init: ComputeInitializerUniform { min: features_min, max: features_max } },
+                ComputeVar { name: Kmeans::var_distance }, //4
+                ComputeVarProxy { name: Kmeans::var_input }, //5
+                ComputeVarProxy { name: Kmeans::var_assignment }, //6 = 1
+                ComputeVarProxy { name: Kmeans::var_min_distance }, //7= 2
+            },
+            ops: Array<ComputeOperation> {
+                ComputeOperationEuclidean { input: Kmeans::var_input, input2: Kmeans::varo_centroids, output: Kmeans::var_distance },
+                ComputeOperationArgMin { input: Kmeans::var_distance, output: Kmeans::var_assignment, output2: Kmeans::var_min_distance },
+            }
+        };
+
+        // sum_centroid, count_centroids = sumIf(input, assignment)
+        // sum_min_distance = Sum(min_distances)
+        var backward_layer = ComputeLayerCustom {
+            name: Kmeans::layer_backward,
+            vars: Array<ComputeVariable> {
+                ComputeVar { name: Kmeans::var_sum_centroids },
+                ComputeVar { name: Kmeans::var_count_centroids },
+                ComputeVar { name: Kmeans::var_sum_cluster_distances },
+                ComputeVar { name: Kmeans::var_count_cluster_distances },
+                ComputeVar { name: Kmeans::var_sum_min_distance },
+
+                ComputeVarProxy { name: Kmeans::var_input },
+                ComputeVarProxy { name: Kmeans::var_assignment },
+                ComputeVarProxy { name: Kmeans::var_min_distance },
+            },
+            ops: Array<ComputeOperation> {
+                ComputeOperationSumIf { input: Kmeans::var_input, ifCondition: Kmeans::var_assignment, output: Kmeans::var_sum_centroids, counts: Kmeans::var_count_centroids, classes: nb_clusters },
+                ComputeOperationSumIf { input: Kmeans::var_min_distance, ifCondition: Kmeans::var_assignment, output: Kmeans::var_sum_cluster_distances, counts: Kmeans::var_count_cluster_distances, classes: nb_clusters },
+                ComputeOperationSum { input: Kmeans::var_min_distance, output: Kmeans::var_sum_min_distance }
+            }
+        };
+
+
+        // var_sum_centroids = 0.0
+        // var_count_centroids = 0
+        // var_sum_min_distance = 0.0
+        var init_round_layer: ComputeLayerCustom = ComputeLayerCustom {
+            name: Kmeans::layer_init_round,
+            vars: Array<ComputeVariable> {
+                ComputeVarProxy { name: Kmeans::var_sum_centroids },
+                ComputeVarProxy { name: Kmeans::var_count_centroids },
+                ComputeVarProxy { name: Kmeans::var_sum_cluster_distances },
+                ComputeVarProxy { name: Kmeans::var_count_cluster_distances },
+                ComputeVarProxy { name: Kmeans::var_sum_min_distance },
+            },
+            ops: Array<ComputeOperation> {
+                ComputeOperationFill { input: Kmeans::var_sum_centroids, value: 0.0 },
+                ComputeOperationFill { input: Kmeans::var_count_centroids, value: 0 },
+                ComputeOperationFill { input: Kmeans::var_sum_cluster_distances, value: 0.0 },
+                ComputeOperationFill { input: Kmeans::var_count_cluster_distances, value: 0 },
+                ComputeOperationFill { input: Kmeans::var_sum_min_distance, value: 0.0 },
+            },
+        };
+
+
+        // centroid = sum/count
+        var end_round_layer: ComputeLayerCustom = ComputeLayerCustom {
+            name: Kmeans::layer_end_round,
+            vars: Array<ComputeVariable> {
+                ComputeVarProxy { name: Kmeans::var_sum_centroids },
+                ComputeVarProxy { name: Kmeans::var_count_centroids },
+                ComputeVarProxy { name: Kmeans::varo_centroids },
+            },
+            ops: Array<ComputeOperation> {
+                ComputeOperationAvg { input: Kmeans::var_sum_centroids, input2: Kmeans::var_count_centroids, output: Kmeans::varo_centroids },
+            },
+        };
+
+
+
+        //var init_round_sequence
+
+        var forward_sequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: Kmeans::seq_forward,
+            calls: Array<ComputeLayerCall> {}
+        };
+        var backward_sequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: Kmeans::seq_backward,
+            calls: Array<ComputeLayerCall> {}
+        };
+        var init_round_sequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: Kmeans::seq_init_round,
+            calls: Array<ComputeLayerCall> {}
+        };
+        var end_round_sequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: Kmeans::seq_end_round,
+            calls: Array<ComputeLayerCall> {}
+        };
+        var stats_sequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: Kmeans::seq_stats,
+            calls: Array<ComputeLayerCall> {}
+        };
+
+
+
+        //Add forward layer
+        var computeLayerCall = ComputeLayerCall {
+            layer_name: Kmeans::layer_forward,
+            bindings: Array<ComputeBinding> {
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_input,
+                    target_var_name: Kmeans::var_input
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_assignment,
+                    target_var_name: Kmeans::var_assignment
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_min_distance,
+                    target_var_name: Kmeans::var_min_distance
+                },
+            }
+        };
+        forward_sequence.calls.add(computeLayerCall);
+
+        //Add backward layer
+        computeLayerCall = ComputeLayerCall {
+            layer_name: Kmeans::layer_backward,
+            bindings: Array<ComputeBinding> {
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_input,
+                    target_var_name: Kmeans::var_input
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_assignment,
+                    target_var_name: Kmeans::var_assignment
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_placeholders,
+                    src_var_name: Kmeans::var_min_distance,
+                    target_var_name: Kmeans::var_min_distance
+                },
+            }
+        };
+        backward_sequence.calls.add(computeLayerCall);
+
+        //add init round
+        computeLayerCall = ComputeLayerCall {
+            layer_name: Kmeans::layer_init_round,
+            bindings: Array<ComputeBinding> {
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_sum_centroids,
+                    target_var_name: Kmeans::var_sum_centroids
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_count_centroids,
+                    target_var_name: Kmeans::var_count_centroids
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_sum_cluster_distances,
+                    target_var_name: Kmeans::var_sum_cluster_distances
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_count_cluster_distances,
+                    target_var_name: Kmeans::var_count_cluster_distances
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_sum_min_distance,
+                    target_var_name: Kmeans::var_sum_min_distance
+                },
+            }
+        };
+        init_round_sequence.calls.add(computeLayerCall);
+
+
+        //add end round
+        computeLayerCall = ComputeLayerCall {
+            layer_name: Kmeans::layer_end_round,
+            bindings: Array<ComputeBinding> {
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_sum_centroids,
+                    target_var_name: Kmeans::var_sum_centroids
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_backward,
+                    src_var_name: Kmeans::var_count_centroids,
+                    target_var_name: Kmeans::var_count_centroids
+                },
+                ComputeBinding {
+                    src_layer_name: Kmeans::layer_forward,
+                    src_var_name: Kmeans::varo_centroids,
+                    target_var_name: Kmeans::varo_centroids
+                },
+            }
+        };
+        end_round_sequence.calls.add(computeLayerCall);
+
+        //add stats round
+        if (calculateInterClusterStats) {
+            computeLayerCall = ComputeLayerCall {
+                layer_name: Kmeans::layer_stats,
+                bindings: Array<ComputeBinding> {
+                    ComputeBinding {
+                        src_layer_name: Kmeans::layer_backward,
+                        src_var_name: Kmeans::var_sum_cluster_distances,
+                        target_var_name: Kmeans::var_sum_cluster_distances
+                    },
+                    ComputeBinding {
+                        src_layer_name: Kmeans::layer_backward,
+                        src_var_name: Kmeans::var_count_cluster_distances,
+                        target_var_name: Kmeans::var_count_cluster_distances
+                    },
+                    ComputeBinding {
+                        src_layer_name: Kmeans::layer_forward,
+                        src_var_name: Kmeans::varo_centroids,
+                        target_var_name: Kmeans::varo_centroids
+                    },
+                }
+            };
+            stats_sequence.calls.add(computeLayerCall);
+        } else {
+            computeLayerCall = ComputeLayerCall {
+                layer_name: Kmeans::layer_stats,
+                bindings: Array<ComputeBinding> {
+                    ComputeBinding {
+                        src_layer_name: Kmeans::layer_backward,
+                        src_var_name: Kmeans::var_sum_cluster_distances,
+                        target_var_name: Kmeans::var_sum_cluster_distances
+                    },
+                    ComputeBinding {
+                        src_layer_name: Kmeans::layer_backward,
+                        src_var_name: Kmeans::var_count_cluster_distances,
+                        target_var_name: Kmeans::var_count_cluster_distances
+                    },
+                }
+            };
+            stats_sequence.calls.add(computeLayerCall);
+        }
+
+
+        var layersWithSequences = Array<ComputeLayer>{};
+        layersWithSequences.add(placeholders_layer);
+        layersWithSequences.add(forward_layer);
+        layersWithSequences.add(backward_layer);
+        layersWithSequences.add(init_round_layer);
+        layersWithSequences.add(end_round_layer);
+
+        if (calculateInterClusterStats) {
+            var stats_layer: ComputeLayerCustom = ComputeLayerCustom {
+                name: Kmeans::layer_stats,
+                vars: Array<ComputeVariable> {
+                    ComputeVarProxy { name: Kmeans::var_sum_cluster_distances },
+                    ComputeVarProxy { name: Kmeans::var_count_cluster_distances },
+                    ComputeVarProxy { name: Kmeans::varo_centroids },
+                    ComputeVar { name: Kmeans::var_avg_cluster_distances },
+                    ComputeVar { name: Kmeans::var_centroid_distances },
+                },
+                ops: Array<ComputeOperation> {
+                    ComputeOperationAvg { input: Kmeans::var_sum_cluster_distances, input2: Kmeans::var_count_cluster_distances, output: Kmeans::var_avg_cluster_distances },
+                    ComputeOperationEuclidean { input: Kmeans::varo_centroids, input2: Kmeans::varo_centroids, output: Kmeans::var_centroid_distances },
+                },
+            };
+            layersWithSequences.add(stats_layer);
+        } else {
+            var stats_layer: ComputeLayerCustom = ComputeLayerCustom {
+                name: Kmeans::layer_stats,
+                vars: Array<ComputeVariable> {
+                    ComputeVarProxy { name: Kmeans::var_sum_cluster_distances },
+                    ComputeVarProxy { name: Kmeans::var_count_cluster_distances },
+                    ComputeVar { name: Kmeans::var_avg_cluster_distances },
+                },
+                ops: Array<ComputeOperation> {
+                    ComputeOperationAvg { input: Kmeans::var_sum_cluster_distances, input2: Kmeans::var_count_cluster_distances, output: Kmeans::var_avg_cluster_distances }
+                },
+            };
+            layersWithSequences.add(stats_layer);
+        }
+
+        layersWithSequences.add(forward_sequence);
+        layersWithSequences.add(backward_sequence);
+        layersWithSequences.add(init_round_sequence);
+        layersWithSequences.add(end_round_sequence);
+        layersWithSequences.add(stats_sequence);
+
+        return ComputeModel {
+            layers: layersWithSequences
+        };
+    }
+    /// Initialize the engine for clustering. This method has to be called before running anything
+    static fn initialize(engine: ComputeEngine, seed: int) {
+        engine.configure(true);
+        engine.setSeed(seed);
+        engine.initialize();
+    }
+
+    /// A method that needs to be called at the beginning of each training round to reset to 0 all the counters
+    static fn init_round(engine: ComputeEngine) {
+        engine.forward(Kmeans::seq_init_round);
+    }
+
+    /// A method that needs to be called at the end of each training round to finalize the round
+    static fn end_round(engine: ComputeEngine) {
+        engine.forward(Kmeans::seq_end_round);
+    }
+
+    /// A method that can be called at the end of all rounds once, to calculate the stats of the model
+    static fn calculate_stats(engine: ComputeEngine) {
+        engine.forward(Kmeans::seq_stats);
+    }
+
+    /// A method to learn from a mini batch
+    static fn learn(engine: ComputeEngine, mini_batch: Tensor) {
+        engine.getVar(Kmeans::layer_placeholders, Kmeans::var_input)?.fill(mini_batch);
+        engine.forward(Kmeans::seq_forward);
+        engine.forward(Kmeans::seq_backward);
+    }
+
+    /// A method to cluster a mini batch and gets its corresponding assigned cluster ID
+    static fn cluster(engine: ComputeEngine, mini_batch: Tensor): Tensor {
+        engine.getVar(Kmeans::layer_placeholders, Kmeans::var_input)?.fill(mini_batch);
+        engine.forward(Kmeans::seq_forward);
+        return engine.getVar(Kmeans::layer_placeholders, Kmeans::var_assignment)!!;
+    }
+
+    /// Gets the distance tensor of the last mini_batch to all cluster centroids, tensor dimension is [mini_batch; nbCluster]
+    static fn getDistances(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_forward, Kmeans::var_distance)!!;
+    }
+
+    /// Gets the assignment tensor of the last mini_batch
+    static fn getAssignment(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_placeholders, Kmeans::var_assignment)!!;
+    }
+
+    /// Gets the distance tensor of the last mini_batch to the closest best centroid, tensor dimension is [mini_batch; 1]
+    static fn getBestDistances(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_placeholders, Kmeans::var_min_distance)!!;
+    }
+
+    /// Gets the sum of distances of all batches, equivalent to total loss metric
+    static fn getSumOfDistances(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_backward, Kmeans::var_sum_min_distance)!!;
+    }
+
+    /// Gets the number of elements in each cluster
+    static fn getClustersCounts(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_backward, Kmeans::var_count_centroids)!!;
+    }
+
+    /// Gets the centroids of each cluster, tensor dimension is [nbCluster, nbFeatures]
+    static fn getClustersCentroids(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_forward, Kmeans::varo_centroids)!!;
+    }
+
+    /// Gets the sum of distances of each cluster separately
+    static fn getClustersSumOfDistances(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_backward, Kmeans::var_sum_cluster_distances)!!;
+    }
+
+    /// Gets the avg distances in each cluster. This method can be called only after calculate_stats is called
+    static fn getClustersAvgOfDistances(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_stats, Kmeans::var_avg_cluster_distances)!!;
+    }
+
+    /// Gets the distances of clusters between each others, tensor dimension will be [nbCluster;nbCluster]. This method can be called only after calculate_stats is called
+    static fn getClustersDistancesToEachOther(engine: ComputeEngine): Tensor {
+        return engine.getVar(Kmeans::layer_stats, Kmeans::var_centroid_distances)!!;
+    }
+
+    //Meta meta learning runs 2 nested loops to discover the best number of clusters according to the stop ratio criteria.
+    //The stop ratio criteria states that if the improvement of adding a new cluster is not bigger than this ratio, the meta meta learning will stop.
+    static fn meta_meta_learning(tensor: Tensor, maxClusters: int, stopRatio: float, seed: int, metaRounds: int?, rounds: int?, calculateInterClusterStats: bool): KmeanMetaResult {
+        if (stopRatio >= 1.0 || stopRatio <= 0.0) {
+            throw "Stop ratio should be between 0.0 and 1.0";
+        }
+
+        var locNbCluster = 2;
+        var stop = false;
+        var result: KmeanMetaResult;
+        var clusterLosses = Array<float> {};
+        while (locNbCluster < maxClusters && !stop) {
+            var new_result = Kmeans::meta_learning(tensor, locNbCluster, seed, metaRounds, rounds, calculateInterClusterStats);
+            var ratio = 1.0;
+
+            if (clusterLosses.size() > 1) {
+                if (clusterLosses[clusterLosses.size() - 1] == 0) {
+                    stop = true;
+                } else {
+                    ratio = ((clusterLosses[clusterLosses.size() - 1] - new_result.bestResult!!.loss) / clusterLosses[clusterLosses.size() - 1]);
+                    //println("losses: ${clusterLosses} value: ${ratio} test: ${ ratio < stopRatio}");
+                    if (ratio < stopRatio) {
+                        //println("stop");
+                        stop = true;
+                    }
+                }
+            }
+            if (!stop) {
+                result = new_result;
+                clusterLosses.add(result.bestResult!!.loss);
+            }
+            locNbCluster++;
+        }
+        return result;
+    }
+
+    //Meta learning: for the same number of clusters, run several meta rounds to see if we get a better clustering with different run conditions
+    static fn meta_learning(tensor: Tensor, nbClusters: int, seed: int, metaRounds: int?, rounds: int?, calculateInterClusterStats: bool): KmeanMetaResult {
+        var result = KmeanMetaResult {
+            runDistances: Array<float> {},
+            bestResult: null,
+        };
+
+        var arr = tensor.initPos();
+        var featuresMin = tensor.get(arr) as float;
+        var featuresMax = tensor.get(arr)as float;
+        while (tensor.incPos(arr)) {
+            var v = tensor.get(arr) as float;
+            if (v < featuresMin) {
+                featuresMin = v;
+            } else if (v > featuresMax) {
+                featuresMax = v;
+            }
+        }
+        var random = Random { seed: seed };
+        var bestResult: KmeanResult = Kmeans::learning(tensor, nbClusters, random.uniform(0, int::max), rounds, featuresMin, featuresMax, calculateInterClusterStats);
+        for (var meta = 0; meta < metaRounds ?? Kmeans::default_meta_rounds - 1; meta++) {
+            var res = Kmeans::learning(tensor, nbClusters, random.uniform(0, int::max), rounds, featuresMin, featuresMax, calculateInterClusterStats);
+            if (res.loss < bestResult.loss) {
+                bestResult = res;
+                //println("meta: ${meta}, best loss: ${bestResult.loss}, centroid counts: ${TextFormatter::formatTensor1D_i64(bestResult.centroids_count!!)}");
+            }
+            result.runDistances.add(res.loss);
+        }
+
+        result.bestResult = bestResult;
+        return result;
+    }
+
+    //Learning: for the same number of clusters, and for the same seed, run several rounds to make the kmeans converges faster
+    static fn learning(tensor: Tensor, nbClusters: int, seed: int, rounds: int?, featuresMin: float, featuresMax: float, calculateInterClusterStats: bool): KmeanResult {
+        var features: int = tensor.shape()[1];
+        var batchSize = tensor.shape()[0];
+        var tensorType = TensorType::f64;
+        //info("Compute will take: ${memorySize} bytes for batch size of ${batchSize}");
+        var result: KmeanResult = KmeanResult {
+            loss: float::max,
+            roundsDistances: Array<float> {},
+        };
+
+        var engine: ComputeEngine = ComputeEngine{};
+        var model: ComputeModel = Kmeans::configure(nbClusters, features, tensorType, featuresMin, featuresMax, calculateInterClusterStats);
+        var memorySize: int = engine.compile(model, batchSize);
+
+        Kmeans::initialize(engine, seed);
+        var sumOfDistances = 0.0;
+        var nbRound = rounds ?? Kmeans::default_rounds + 1;
+        for (var round = 0; round < nbRound; round++) {
+            if (round > 1) {
+                Kmeans::replaceEmptyClusters(engine);
+                Kmeans::sortClusters(engine);
+            }
+            Kmeans::init_round(engine);
+            Kmeans::learn(engine, tensor);
+            if (round < nbRound - 1){
+                Kmeans::end_round(engine);
+                sumOfDistances = Kmeans::getSumOfDistances(engine).get(Array<int> {0}) as float;
+                result.roundsDistances.add(sumOfDistances);
+            }
+        }
+        Kmeans::calculate_stats(engine);
+
+        result.loss = sumOfDistances;
+        result.centroids = Kmeans::getClustersCentroids(engine);
+        result.clusters_count = Kmeans::getClustersCounts(engine);
+        result.clusters_sum_distance = Kmeans::getClustersSumOfDistances(engine);
+        result.assignment = Kmeans::getAssignment(engine);
+        result.distances = Kmeans::getBestDistances(engine);
+        result.clusters_avg_distance = Kmeans::getClustersAvgOfDistances(engine);
+
+        if (calculateInterClusterStats) {
+            result.clusterInterDistances = Kmeans::getClustersDistancesToEachOther(engine);
+        }
+        return result;
+    }
+
+    static fn getInferenceEngine(bestResult: KmeanResult, maxBatchSize: int, calculateInterClusterStats: bool): ComputeEngine {
+        var engine = ComputeEngine{};
+        if (bestResult.centroids != null) {
+            var nbClusters = bestResult.centroids.shape()[0];
+            var features = bestResult.centroids.shape()[1];
+            var tensorType = bestResult.centroids.type();
+            engine.configure(true);
+            engine.initialize();
+            var model: ComputeModel = Kmeans::configure(nbClusters, features, tensorType, 0.0, 1.0, calculateInterClusterStats);
+            var memorySize: int = engine.compile(model, maxBatchSize);
+            Kmeans::initialize(engine, 1234);
+            engine.getVar(Kmeans::layer_forward, Kmeans::varo_centroids)?.fill(bestResult.centroids);
+            return engine;
+        } else {
+            throw "Centroid is empty";
+        }
+    }
+}

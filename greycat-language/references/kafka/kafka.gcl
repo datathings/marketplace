@@ -1,0 +1,173 @@
+type KafkaReader<T> {
+    private conf: KafkaConf;
+    private topics: Array<String>;
+    /// `read()` will fail if blocking for more than this duration.
+    /// If `null`, a default timeout of `10s` is used.
+    timeout: duration?;
+
+    native fn read(): KafkaMsg<T>;
+}
+
+type KafkaMsg<T> {
+    /// Which topic the message came from
+    topic: String;
+    /// Which partition within the topic
+    partition: int;
+    /// Unique position within the partition
+    offset: int;
+    /// The actual payload of the message
+    value: T;
+}
+
+type KafkaWriter<T> {
+    private conf: KafkaConf;
+    private topic: String;
+
+    native fn write(value: T);
+    native fn flush();
+}
+
+type KafkaConf {
+    "acks": String?;
+    "allow.auto.create.topics": String?;
+    "api.version.fallback.ms": String?;
+    "api.version.request.timeout.ms": String?;
+    "api.version.request": String?;
+    "auto.commit.interval.ms": String?;
+    "auto.offset.reset": String?;
+    "batch.num.messages": String?;
+    "batch.size": String?;
+    /// Alias for `metadata.broker.list`
+    ///
+    /// Initial list of brokers as a comma separated list of `"host"` or `"host:port"`.
+    "bootstrap.servers": String;
+    "broker.address.family": String?;
+    "broker.address.ttl": String?;
+    "broker.version.fallback": String?;
+    "builtin.features": String?;
+    "check.crcs": String?;
+    "client.dns.lookup": String?;
+    "client.id": String?;
+    "client.rack": String?;
+    "compression.codec": String?;
+    "compression.level": String?;
+    "compression.type": String?;
+    "connect_cb": String?;
+    "connections.max.idle.ms": String?;
+    "consume_cb": String?;
+    "consume.callback.max.messages": String?;
+    "coordinator.query.interval.ms": String?;
+    "debug": String?;
+    "delivery.report.only.error": String?;
+    "delivery.timeout.ms": String?;
+    "enable.auto.offset.store": String?;
+    "enable.gapless.guarantee": String?;
+    "enable.idempotence": String?;
+    "enable.metrics.push": String?;
+    "enable.partition.eof": String?;
+    "enable.random.seed": String?;
+    "enable.sasl.oauthbearer.unsecure.jwt": String?;
+    "enable.ssl.certificate.verification": String?;
+    "enabled_events": String?;
+    "fetch.error.backoff.ms": String?;
+    "fetch.max.bytes": String?;
+    "fetch.message.max.bytes": String?;
+    "fetch.min.bytes": String?;
+    "fetch.queue.backoff.ms": String?;
+    "fetch.wait.max.ms": String?;
+    "group.id": String?;
+    "group.instance.id": String?;
+    "group.protocol.type": String?;
+    "group.protocol": String?;
+    "group.remote.assignor": String?;
+    "heartbeat.interval.ms": String?;
+    "interceptors": String?;
+    "internal.termination.signal": String?;
+    "isolation.level": String?;
+    "linger.ms": String?;
+    "log_level": String?;
+    "log.connection.close": String?;
+    "log.queue": String?;
+    "log.thread.name": String?;
+    "max.in.flight.requests.per.connection": String?;
+    "max.in.flight": String?;
+    "max.partition.fetch.bytes": String?;
+    "max.poll.interval.ms": String?;
+    "message.copy.max.bytes": String?;
+    "message.max.bytes": String?;
+    "message.send.max.retries": String?;
+    "message.timeout.ms": String?;
+    "metadata.broker.list": String?;
+    "metadata.max.age.ms": String?;
+    "partition.assignment.strategy": String?;
+    "partitioner": String?;
+    "plugin.library.paths": String?;
+    "queue.buffering.backpressure.threshold": String?;
+    "queue.buffering.max.kbytes": String?;
+    "queue.buffering.max.messages": String?;
+    "queue.buffering.max.ms": String?;
+    "queued.max.messages.kbytes": String?;
+    "queued.min.messages": String?;
+    "receive.message.max.bytes": String?;
+    "reconnect.backoff.jitter.ms": String?;
+    "reconnect.backoff.max.ms": String?;
+    "reconnect.backoff.ms": String?;
+    "request.required.acks": String?;
+    "request.timeout.ms": String?;
+    "retries": String?;
+    "retry.backoff.max.ms": String?;
+    "retry.backoff.ms": String?;
+    "sasl.kerberos.keytab": String?;
+    "sasl.kerberos.kinit.cmd": String?;
+    "sasl.kerberos.min.time.before.relogin": String?;
+    "sasl.kerberos.principal": String?;
+    "sasl.kerberos.service.name": String?;
+    "sasl.mechanism": String?;
+    "sasl.mechanisms": String?;
+    "sasl.oauthbearer.client.id": String?;
+    "sasl.oauthbearer.client.secret": String?;
+    "sasl.oauthbearer.config": String?;
+    "sasl.oauthbearer.extensions": String?;
+    "sasl.oauthbearer.method": String?;
+    "sasl.oauthbearer.scope": String?;
+    "sasl.oauthbearer.token.endpoint.url": String?;
+    "sasl.password": String?;
+    "sasl.username": String?;
+    "security.protocol": String?;
+    "session.timeout.ms": String?;
+    "socket.blocking.max.ms": String?;
+    "socket.connection.setup.timeout.ms": String?;
+    "socket.keepalive.enable": String?;
+    "socket.max.fails": String?;
+    "socket.nagle.disable": String?;
+    "socket.receive.buffer.bytes": String?;
+    "socket.send.buffer.bytes": String?;
+    "socket.timeout.ms": String?;
+    "ssl.ca.certificate.stores": String?;
+    "ssl.ca.location": String?;
+    "ssl.ca.pem": String?;
+    "ssl.certificate.location": String?;
+    "ssl.certificate.pem": String?;
+    "ssl.cipher.suites": String?;
+    "ssl.crl.location": String?;
+    "ssl.curves.list": String?;
+    "ssl.endpoint.identification.algorithm": String?;
+    "ssl.engine.id": String?;
+    "ssl.key.location": String?;
+    "ssl.key.password": String?;
+    "ssl.key.pem": String?;
+    "ssl.keystore.location": String?;
+    "ssl.keystore.password": String?;
+    "ssl.providers": String?;
+    "ssl.sigalgs.list": String?;
+    "statistics.interval.ms": String?;
+    "sticky.partitioning.linger.ms": String?;
+    "topic.blacklist": String?;
+    "topic.metadata.propagation.max.ms": String?;
+    "topic.metadata.refresh.fast.cnt": String?;
+    "topic.metadata.refresh.fast.interval.ms": String?;
+    "topic.metadata.refresh.interval.ms": String?;
+    "topic.metadata.refresh.sparse": String?;
+    "transaction.timeout.ms": String?;
+    "transactional.id": String?;
+}

@@ -1,0 +1,411 @@
+abstract type Writer<T> {
+    private path: String;
+    private append: bool?;
+    /// append the value v to the current writer.
+    abstract fn write(v: T);
+    /// flush buffer to disk, mandatory to open reader on same path
+    abstract fn flush();
+}
+
+abstract type Reader<T> {
+    private path: String;
+    pos: int?;
+
+    /// read a value from the reader.
+    abstract fn read(): T;
+    /// tells whether this reader has more to read
+    abstract fn can_read(): bool;
+    /// return the amount of available bytes in reader.
+    abstract fn available(): int;
+}
+
+type BinReader {
+    private path: String;
+    pos: int?;
+
+    /// read a 32-bit integer as int from the reader.
+    native fn read_i32(): int;
+    /// read a 64-bit integer as int from the reader.
+    native fn read_i64(): int;
+    /// read an IEEE 754 binary32 as float from the reader.
+    native fn read_f32(): float;
+    /// read an IEEE 754 binary64 as float from the reader.
+    native fn read_f64(): float;
+    /// read a tensor of value type and shape `shape` from the reader.
+    native fn read_tensor(etype: TensorType, shape: Array<int>): Tensor;
+    /// tells whether this reader has more to read
+    native fn can_read(): bool;
+    /// return the amount of available bytes in reader.
+    native fn available(): int;
+}
+
+/// GreyCat Binary (ABI encoded) writer utility can export a stream of serializable values to file.
+type GcbWriter<T> extends Writer<T> {
+    native fn write(v: T);
+    native fn flush();
+}
+
+/// GreyCat Binary (ABI encoded) reader utility can read/import a stream of serializable values from file.
+type GcbReader<T> extends Reader<T> {
+    native fn read(): T;
+    native fn can_read(): bool;
+    native fn available(): int;
+}
+
+/// Text writer utility can export values as text (utf-8), mostly used for line based format.
+type TextWriter<T> extends Writer<T> {
+    native fn write(v: T);
+    native fn flush();
+    /// write the v param as text in writer and add a line separator.
+    native fn writeln(v: T);
+}
+
+/// Text reader utility can read text file line by line (utf-8)
+type TextReader extends Reader<String> {
+    native fn read(): String;
+    native fn can_read(): bool;
+    native fn available(): int;
+}
+
+/// Text reader utility can read text file line by line (utf-8)
+type XmlReader<T> extends Reader<T> {
+    native fn read(): T;
+    native fn can_read(): bool;
+    native fn available(): int;
+}
+
+/// Json writer utility can export values as JSON (utf-8)
+type JsonWriter<T> extends Writer<T> {
+    native fn write(v: T);
+    native fn flush();
+    /// write the v param as json element in writer followed by a line separator.
+    native fn writeln(v: T);
+}
+
+/// Json reader utility can read/import a stream of serializable values from file (ndjson or line separated json)
+type JsonReader<T> extends Reader<T> {
+    native fn read(): T;
+    native fn can_read(): bool;
+    native fn available(): int;
+}
+
+type Json<T> {
+    /// Parses a JSON string into a GreyCat value.
+    ///
+    /// If a generic type `T` is provided, the parser attempts to deserialize
+    /// the input into that type. An error is thrown if the JSON does not
+    /// match `T`.
+    native fn parse(data: String): T;
+    /// Serializes a GreyCat value into its JSON string representation.
+    static native fn to_string(value: any?): String;
+}
+
+/// CSV writer utility can export a stream of GreyCat values as CSV lines (utf-8)
+///
+/// If the generic parameter is a non-primitive type, the field names of that type
+/// will be used as headers if `format.header_lines > 0`. The automatic headers will
+/// be lazily written. Which means the first call to `write()` will write the headers
+/// if the underlying file/buf is empty.
+type CsvWriter<T> extends Writer<T> {
+    private format: CsvFormat?;
+    native fn write(v: T);
+    /// Writes the given line as-is.
+    ///
+    /// If this method is called before any `write()` and with `format.header_lines > 0`
+    /// no headers will be added automatically based on the generic parameter type.
+    ///
+    /// No need to add a newline character (`'\n'`), it will be added automatically.
+    ///
+    /// *Note: if the given `String` contains newline character (`'\n'`) they will not
+    /// be escaped by this method and will be directly written to the underlying file/buf.*
+    native fn write_line(line: String);
+    native fn flush();
+}
+
+type CsvSharding {
+    /// The id of this shard
+    id: int;
+    /// The column offset used for hashing
+    column: int;
+    /// The count of unique value for the column
+    modulo: int;
+}
+
+/// CSV reader utility can read/import a stream of serializable values from CSV lines (utf-8)
+type CsvReader<T> extends Reader<T> {
+    private format: CsvFormat?;
+    private sharding: CsvSharding?;
+
+    /// Parses a line and returns a `T` only if valid
+    ///
+    /// If the parsed line does not comply with the given `T` type, the line is skipped
+    /// and an error is thrown.
+    native fn read(): T;
+
+    /// Returns the last line or `null` if the end of file is reached
+    native fn last_line(): String?;
+
+    native fn can_read(): bool;
+
+    native fn available(): int;
+
+    /// Changes the path to the underlying file.
+    /// It will reset the reader state to start reading from the start of the new file.
+    ///
+    /// *Re-using a reader might improve performance when dealing with many files as the buffers
+    /// and initialization of the format will be re-used instead of being re-created.*
+    native fn set_path(path: String);
+}
+
+type CsvFormat {
+    /// Number of header lines. `null` or `0` means none and is the default.
+    header_lines: int?;
+    /// The column separator character (can only be one-byte wide)
+    separator: char?;
+    /// Can only be one-byte wide, eg. `'"'`
+    string_delimiter: char?;
+    /// Can only be one-byte wide, eg. `','`
+    decimal_separator: char?;
+    /// Can only be one-byte wide, eg. `'_'`
+    thousands_separator: char?;
+    /// Whether or not to trim spaces (.ie ` `, `\t`, `\r` and `\n`) from start and end, defaults to `false`
+    trim: bool?;
+    /// The format to parse date in, defaults to ISO8601/epoch timestamp in milliseconds.
+    format: String?;
+    /// The timezone to interpret times in, defaults to the host global timezone.
+    tz: TimeZone?;
+    /// Whether or not to enable strict null checking. By default the parser will accept
+    /// any invalid value as a `null` as long as the target type for that column is nullable.
+    strict: bool?;
+    /// Whether or not to fallback to the nearest time when an invalid date is found, defaults to `false`
+    nearest_time: bool?;
+}
+
+type CsvColumnStatistics {
+    /// column name as in CSV header
+    name: String?;
+    /// one value
+    example: any?;
+    /// number of null values
+    null_count: int;
+    /// number of boolean values
+    bool_count: int;
+    /// number of integer values
+    int_count: int;
+    /// number of float values
+    float_count: int;
+    /// number of string values
+    string_count: int;
+    /// number of date values
+    date_count: int;
+    /// occurrence of each date format matched
+    date_format_count: Map<String, int>;
+    /// occurrences of the `enumerable_limit` values found
+    /// a value can be string, int or float
+    enumerable_count: Map<any, int>;
+    /// statistics on numeric values
+    profile: Gaussian;
+}
+
+type CsvStatistics {
+    header_lines: int?;
+    separator: char?;
+    string_delimiter: char?;
+    decimal_separator: char?;
+    thousands_separator: char?;
+    /// statistics per column
+    columns: Array<CsvColumnStatistics>;
+    /// accumulated analyzed (failed + parsed) rows for all accumulated CSV files
+    line_count: int;
+    /// accumulated number of failed lines for CSV files
+    fail_count: int;
+    /// number of CSV files explored
+    file_count: int;
+}
+
+type CsvAnalysisConfig {
+    static enumerable_limit_default: int = 100;
+    static date_check_limit_default: int = 100;
+    /// CsvAnalysis will try to detect header_lines if not set
+    header_lines: int?;
+    /// CsvAnalysis will try to detect separator if not set
+    separator: char?;
+    string_delimiter: char?;
+    decimal_separator: char?;
+    thousands_separator: char?;
+    /// `row_limit`:
+    /// maximum number of rows to parse for statistics collection
+    /// default value (when not set) means all rows are parsed
+    row_limit: int?;
+    /// `enumerable_limit`:
+    /// maximum number of enumerable elements to detect
+    /// default value (when not set) is 100 (enumerable_limit_default)
+    /// special values are 0: none, -1: all
+    enumerable_limit: int?;
+    /// `date_check_limit`:
+    /// check for dates for first 'date_check_limit' rows, but still keep statistics until 'row_limit'
+    /// default value (when not set) is 100 (date_check_limit_default)
+    /// special values are 0: none, -1: all
+    /// if a cell of a column matches, then continue until 'row_limit'
+    date_check_limit: int?;
+    /// date formats to look for, in addition to default formats
+    date_formats: Array<String>?;
+}
+
+type Csv {
+    /// Generates the necessary types and enums to read the records defined by this statistics
+    @expose
+    static native fn generate(stats: CsvStatistics): String;
+    /// Analyses a collection of csv files to infer statistics eventually to generate types
+    @expose
+    static native fn analyze(files: Array<File>, config: CsvAnalysisConfig?): CsvStatistics;
+    /// Aggregates reads into a `Table`
+    ///
+    /// By specifying `reader.pos` the reads will be made after the end of the line at that byte offset
+    @expose
+    static native fn sample(reader: CsvReader, max_lines: int?): Table;
+}
+
+/// represents a file entry within operating system file system, can be plain file or directory.
+type File {
+    /// path of the file entry
+    path: String;
+    /// size of the file, null if is directory
+    size: int?;
+    /// last modification of the file
+    last_modification: time?;
+    /// Returns the relative path to the directory for files
+    /// *Accessible remotely at `/files/`*
+    static native fn baseDir(): String;
+    /// Returns the relative path to the directory of the current user
+    /// *Accessible remotely at `/files/<user_id>/`*
+    static native fn userDir(): String;
+    /// Returns the relative path to the directory of the current task or request
+    /// *Accessible remotely at `/files/<user_id>/tasks/<task_id>/`*
+    /// *or for requests at `/files/<user_id>/requests/<timestamp>/`*
+    static native fn workingDir(): String;
+    /// Retrieve File from a path, return null if file not found
+    static native fn open(path: String): File?;
+    /// Deletes the file or directory from disk
+    static native fn delete(path: String): bool;
+    /// Rename the file or directory from disk
+    static native fn rename(old_path: String, new_path: String): bool;
+    /// Copy the file from disk
+    static native fn copy(src_path: String, target_path: String): bool;
+    /// Create directory and sub directory
+    static native fn mkdir(path: String): bool;
+    /// List all file, optionally filtered by ends_with suffix (e.g. select .csv extension), recursively or not
+    static native fn ls(path: String, ends_with: String?, recursive: bool): Array<File>;
+    /// Returns true in case the File describes a directory (therefore path ends with a '/'), false otherwise
+    native fn isDir(): bool;
+    /// Returns the name of the file
+    native fn name(): String;
+    /// Returns the name of the extension specific to the file
+    native fn extension(): String?;
+    /// Returns the sha256 of the file, null in case of directory
+    native fn sha256(): String?;
+}
+
+/// Utility to iterate over files and directory of a file system
+type FileWalker {
+    private path: String;
+    /// Return true if next() method will not return a file
+    native fn isEmpty(): bool;
+    /// Return the next file
+    native fn next(): File?;
+}
+
+/// Represents an URL string representation (e.g. `schema://host:port/path?param_key=paramValue#hash`)
+type Url {
+    protocol: String?;
+    host: String?;
+    port: int?;
+    path: String?;
+    params: Map<String, String>?;
+    hash: String?;
+    /// create an URL from a string representation
+    static native fn parse(url: String): Url;
+    /// Encode any object as x-www-form-urlencoded content-type
+    /// String are url encoded, objects and map are flatten and values are url encodded
+    static native fn encode(value: any): String;
+}
+
+enum HttpMethod {
+    GET,
+    HEAD,
+    POST,
+    PUT,
+    DELETE,
+    CONNECT,
+    OPTIONS,
+    TRACE,
+    PATCH;
+}
+
+/// Http request wrapper
+type HttpRequest {
+    method: HttpMethod;
+    url: String;
+    headers: Map<String, String>?;
+    body: String?;
+}
+
+/// Http response wrapper
+type HttpResponse<T> {
+    status_code: int;
+    headers: Map<String, String>;
+    content: T?;
+    error_msg: String?;
+}
+
+/// Utility to handle http request get, post or put
+type Http<T> {
+    native fn get(url: String, headers: Map<String, String>?): T;
+    native fn getFile(url: String, path: String, headers: Map<String, String>?);
+    native fn post(url: String, body: any?, headers: Map<String, String>?): T;
+    native fn put(url: String, body: any?, headers: Map<String, String>?): T;
+    native fn send(request: HttpRequest): HttpResponse<T>;
+}
+
+/// represent an email instance to be sent through SMTP utility
+type Email {
+    from: String;
+    subject: String;
+    body: String;
+    body_is_html: bool;
+    to: Array<String>;
+    cc: Array<String>?;
+    bcc: Array<String>?;
+}
+
+/// Smtp Encryption Mode
+enum SmtpMode {
+    /// plain exchange mode
+    plain(0);
+    /// ssl tls exchange mode
+    ssl_tls(1);
+    /// starttls exchange node
+    starttls(2);
+}
+
+/// Smtp authentication method
+enum SmtpAuth {
+    /// no authentication
+    none(0);
+    /// basic authentication method
+    plain(1);
+    /// login:pass authentication method
+    login(2);
+}
+
+/// Utility to send mail through smtp protocol
+type Smtp {
+    host: String;
+    port: int;
+    mode: SmtpMode?;
+    authenticate: SmtpAuth?;
+    user: String?;
+    pass: String?;
+    /// Send the parameter mail through smtp protocol
+    native fn send(email: Email);
+}
