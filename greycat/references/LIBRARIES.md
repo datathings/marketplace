@@ -13,41 +13,56 @@ Core types, collections, I/O, and runtime utilities:
 
 ## AI Library (ai)
 
-LLM integration via llama.cpp:
+**[📚 AI Library Guide](ai/README.md)** — Comprehensive LLM integration via llama.cpp for text generation, chat, embeddings, and fine-tuning with LoRA adapters.
 
-- **[ai/llm_model.gcl](ai/llm_model.gcl)** — Model type: Model::load, Model::info, embed, generate, chat, tokenize, detokenize, free, SplitMode, RopeScalingType, PoolingType, AttentionType
-- **[ai/llm_context.gcl](ai/llm_context.gcl)** — Context management: Context, ContextParams, ContextBatch, KvCacheView, KvCellInfo
-- **[ai/llm_sampler.gcl](ai/llm_sampler.gcl)** — Sampling strategies: Sampler, SamplerParams, SamplerChain, LogitBias, GrammarType
-- **[ai/llm_lora.gcl](ai/llm_lora.gcl)** — LoRA adapters: LoraAdapter, LoraParams
-- **[ai/llm_types.gcl](ai/llm_types.gcl)** — Common types: ModelParams, ChatMessage, ChatCompletionChunk, VocabType, LogLevel
+### Core API
+
+- **[llm_model.md](ai/llm_model.md)** | [llm_model.gcl](ai/llm_model.gcl) — Model loading, text generation, chat, embeddings, tokenization (Model, LLM, ModelParams, ContextParams)
+- **[llm_types.md](ai/llm_types.md)** | [llm_types.gcl](ai/llm_types.gcl) — Supporting types and parameters (GenerationParams, GenerationResult, ChatMessage, SamplerParams, ModelInfo, PerfData)
+
+### Advanced Control
+
+- **[llm_context.md](ai/llm_context.md)** | [llm_context.gcl](ai/llm_context.gcl) — Low-level context and KV cache management (Context, Batch, SeqId, StateData)
+- **[llm_sampler.md](ai/llm_sampler.md)** | [llm_sampler.gcl](ai/llm_sampler.gcl)** — Custom sampling strategies (SamplerChain, Sampler, TokenCandidates)
+- **[llm_lora.md](ai/llm_lora.md)** | [llm_lora.gcl](ai/llm_lora.gcl) — LoRA fine-tuning adapters (LoraAdapter, LoraParams)
 
 ## Algebra Library (algebra)
 
-Machine learning, neural networks, and numerical computing:
+**[📚 ALGEBRA Library Guide](algebra/README.md)** — Comprehensive machine learning, neural networks, and numerical computing with 163+ types for building production ML/NN applications.
 
-- **[algebra/ml.gcl](algebra/ml.gcl)** — Machine learning utilities
-- **[algebra/compute.gcl](algebra/compute.gcl)** — Computational operations
-- **[algebra/nn.gcl](algebra/nn.gcl)** — Neural network types and operations
-- **[algebra/nn_layers_names.gcl](algebra/nn_layers_names.gcl)** — Neural network layer naming conventions
-- **[algebra/patterns.gcl](algebra/patterns.gcl)** — Pattern recognition algorithms
-- **[algebra/transforms.gcl](algebra/transforms.gcl)** — Data transformation utilities
-- **[algebra/kmeans.gcl](algebra/kmeans.gcl)** — K-means clustering
-- **[algebra/climate.gcl](algebra/climate.gcl)** — Climate data modeling
+### Machine Learning & Neural Networks
+
+- **[ml.md](algebra/ml.md)** | [ml.gcl](algebra/ml.gcl) — Machine learning utilities (GaussianND, PCA, Polynomial regression, TimeSeriesDecomposition)
+- **[compute.md](algebra/compute.md)** | [compute.gcl](algebra/compute.gcl) — ComputeEngine, optimizers (Adam, SGD, RMSprop), layers (Dense, LSTM, Activation), initializers
+- **[nn.md](algebra/nn.md)** | [nn.gcl](algebra/nn.gcl) — Neural networks (RegressionNetwork, ClassificationNetwork, AutoEncoderNetwork, training/inference)
+
+### Pattern Recognition & Analysis
+
+- **[patterns.md](algebra/patterns.md)** | [patterns.gcl](algebra/patterns.gcl) — Pattern detection (Euclidean, DTW, FFT, SAX) for time series matching
+- **[transforms.md](algebra/transforms.md)** | [transforms.gcl](algebra/transforms.gcl) — FFT operations, frequency analysis, time series forecasting
+- **[kmeans.md](algebra/kmeans.md)** | [kmeans.gcl](algebra/kmeans.gcl) — K-means clustering with meta-learning and automatic cluster selection
+
+### Specialized Algorithms
+
+- **[climate.md](algebra/climate.md)** | [climate.gcl](algebra/climate.gcl) — UTCI climate index calculation and thermal comfort assessment
+- **[nn_layers_names.gcl](algebra/nn_layers_names.gcl)** — Neural network layer naming conventions
 
 ## Integration Libraries
 
-External system integrations:
+External system integrations for databases, messaging, storage, and industrial protocols:
 
-- **[kafka/kafka.gcl](kafka/kafka.gcl)** — Apache Kafka producer/consumer integration
-- **[sql/postgres.gcl](sql/postgres.gcl)** — PostgreSQL database integration
-- **[s3/s3.gcl](s3/s3.gcl)** — Amazon S3 object storage integration
-- **[opcua/opcua.gcl](opcua/opcua.gcl)** — OPC UA industrial protocol integration
-- **[useragent/useragent.gcl](useragent/useragent.gcl)** — User agent parsing utilities
+- **[kafka.md](kafka/kafka.md)** | [kafka.gcl](kafka/kafka.gcl) — Apache Kafka event streaming with type-safe producers/consumers (KafkaReader, KafkaWriter, KafkaConf with 172+ parameters)
+- **[postgres.md](sql/postgres.md)** | [postgres.gcl](sql/postgres.gcl) — PostgreSQL database with transactions, SQL execution, CSV import/export via COPY command (Postgres)
+- **[s3.md](s3/s3.md)** | [s3.gcl](s3/s3.gcl) — S3-compatible object storage for AWS S3 and MinIO (S3, S3Object, S3Bucket, upload/download/list)
+- **[opcua.md](opcua/opcua.md)** | [opcua.gcl](opcua/opcua.gcl) — OPC UA industrial automation protocol with read/write/subscribe, historical data, security modes (OpcuaClient)
+- **[useragent.md](useragent/useragent.md)** | [useragent.gcl](useragent/useragent.gcl) — User agent parsing for browser, OS, and device detection (UserAgent::parse)
 
 ## Domain-Specific Libraries
 
-- **[finance/finance.gcl](finance/finance.gcl)** — Financial modeling and calculations
-- **[powerflow/powerflow.gcl](powerflow/powerflow.gcl)** — Electrical power flow analysis
+Specialized libraries for specific industries and applications:
+
+- **[finance.md](finance/finance.md)** | [finance.gcl](finance/finance.gcl) — IBAN parsing and validation for payment processing (Iban::parse, country/bank/account extraction)
+- **[powerflow.md](powerflow/powerflow.md)** | [powerflow.gcl](powerflow/powerflow.gcl) — Electrical power network analysis and load flow computation (PowerNetwork, bus/line results, grid optimization)
 
 ## Using Libraries in Your Project
 
