@@ -637,6 +637,8 @@ native type String {
     native fn jarowinkler(v: String): float;
     /// compute the levenshtein distance
     native fn levenshtein(v: String): int;
+    /// compute the nfd normalized form and strip away special chars
+    native fn nfkd_casefold(): String;
 }
 
 /// Helper to store and manipulate binary blobs

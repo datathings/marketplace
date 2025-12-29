@@ -1,5 +1,5 @@
 {
-  "name": "greycat-language",
+  "name": "greycat",
   "version": "1.0.0",
   "description": "Comprehensive GreyCat backend development skill for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, React integration, and all standard libraries.",
   "author": "DataThings",
@@ -9,20 +9,58 @@
 
   "skills": [
     {
-      "id": "greycat-language",
-      "path": "greycat-language",
+      "id": "greycat",
+      "path": "greycat",
       "entry": "SKILL.md",
+      "category": "frameworks",
+      "keywords": [
+        "gcl",
+        "graph database",
+        "data persistence",
+        "node references",
+        "indexed collections",
+        "nodeIndex",
+        "nodeList",
+        "nodeTime",
+        "nodeGeo",
+        "@expose",
+        "@permission",
+        "@volatile",
+        "greycat serve",
+        "greycat test",
+        ".gcl files",
+        "evolving coded structures",
+        "backend framework",
+        "fullstack",
+        "@greycat/web",
+        "Jobs",
+        "await",
+        "time-series",
+        "geo-spatial"
+      ],
+      "examples": [
+        "Create a GreyCat data model for cities with nodeIndex",
+        "Implement parallel processing with Jobs and await",
+        "Set up React frontend with @greycat/web SDK",
+        "Build API endpoints with @expose and @permission",
+        "Work with time-series data using nodeTime"
+      ],
       "tags": [
         "greycat",
         "backend",
         "graph-database",
         "persistence",
         "time-series",
+        "geo-spatial",
         "react",
         "typescript",
+        "full-stack",
         "api-development",
         "parallel-processing",
-        "data-modeling"
+        "data-modeling",
+        "machine-learning",
+        "event-driven",
+        "integrations"
       ],
       "compatibility": {
         "assistant": "claude",

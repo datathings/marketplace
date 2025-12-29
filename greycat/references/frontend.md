@@ -2,6 +2,23 @@
 
 This section covers integrating React frontends with GreyCat backends using the official `@greycat/web` SDK.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation & Setup](#installation--setup)
+- [SDK Initialization](#sdk-initialization)
+- [TypeScript Type Generation](#typescript-type-generation)
+- [API Communication Patterns](#api-communication-patterns)
+- [Handling GreyCat Enums](#handling-greycat-enums)
+- [Authentication & Authorization](#authentication--authorization)
+- [Service Layer Architecture](#service-layer-architecture)
+- [React Query Integration](#react-query-integration)
+- [Error Handling](#error-handling)
+- [Best Practices](#best-practices)
+- [Common Pitfalls](#common-pitfalls)
+- [Integration Checklist](#integration-checklist)
+- [Time Usage in Frontend](#time-usage-in-frontend)
+
 ## Overview
 
 GreyCat provides an official frontend SDK (`@greycat/web`) that:

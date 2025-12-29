@@ -1,4 +1,4 @@
-# GreyCat Language Skill
+# GreyCat Skill
 
 A comprehensive skill for building GreyCat backend applications with the graph-based language and built-in persistence.
 
@@ -11,11 +11,71 @@ This skill provides expert guidance for developing with GreyCat - a unique langu
 GreyCat is a graph-based programming language with built-in persistence. Unlike traditional databases, GreyCat applications are **evolving coded structures** where your data model, business logic, and persistence are unified in a single codebase.
 
 **Key Features:**
-- Built-in graph persistence with node references
-- Time-series and geo-spatial indexing
-- Parallel execution with Job API
-- Type-safe with minimal boilerplate
-- React frontend integration via TypeScript SDK
+- **Unified persistence** - Data, schema, and logic in one evolving codebase (not a separate database)
+- **Graph-native references** - Lightweight 64-bit node references instead of heavy object graphs
+- **Built-in indexing** - nodeIndex (hash), nodeTime (time-series), nodeGeo (spatial), nodeList (ordered)
+- **Parallel execution** - Job API with fork-join pattern and automatic transaction merging
+- **Type-safe APIs** - @expose + @permission decorators with full TypeScript SDK generation
+- **Zero-config persistence** - No ORM, no migrations, no serialization - just code
+- **React integration** - Official @greycat/web SDK with automatic type generation
+
+## Skill Activation Triggers
+
+This skill automatically activates when you're working with:
+
+### File Types & Extensions
+- `.gcl` files (GreyCat source code)
+- GreyCat project structures with `project.gcl`
+- Files containing GreyCat syntax
+
+### Language Features
+- **Decorators**: `@expose`, `@permission`, `@volatile`, `@role`, `@library`, `@include`, `@test`, `@format_indent`
+- **Indexed Collections**: `nodeList`, `nodeIndex`, `nodeTime`, `nodeGeo`
+- **Node Operations**: Persisted nodes, transactions, node references (`node<Type>`)
+- **Abstract Types**: Service patterns, polymorphism, inheritance
+- **Parallel Processing**: Jobs, `await()`, `PeriodicTask`, fork-join patterns
+
+### Framework Components
+- **Backend**: Data models, services, API endpoints, persistence patterns
+- **Frontend**: `@greycat/web` SDK, React integration, TypeScript type generation
+- **Libraries**: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent
+
+### CLI Commands
+- `greycat serve` - Start development server
+- `greycat test` - Run tests
+- `greycat run import` - Execute import functions
+- `greycat install` - Download library dependencies
+- `greycat-lang lint` - Check for errors
+
+### Use Cases
+- Building graph-based data models
+- Creating time-series or geo-spatial applications
+- Implementing RBAC with permissions and roles
+- Developing full-stack applications with React frontends
+- Working with persistent node structures
+- Debugging GreyCat applications
+
+### When This Skill Does NOT Activate
+- General graph databases (Neo4j, ArangoDB, JanusGraph)
+- Generic React applications (without @greycat/web)
+- SQL databases (PostgreSQL, MySQL, SQLite)
+- Traditional ORM frameworks (Prisma, TypeORM, Sequelize)
+
+## Why This Skill?
+
+This skill transforms your AI assistant into a GreyCat development expert by providing:
+
+- **Complete language reference** - All GCL syntax, types, and patterns in one place
+- **Best practices** - Avoid common pitfalls with proven patterns (Services, Views, transactions)
+- **Full-stack guidance** - Both backend (.gcl) and frontend (React/TypeScript) development
+- **Library coverage** - Complete API references for all 10+ GreyCat libraries
+- **Progressive disclosure** - Core patterns immediately available, detailed references loaded only when needed
+
+**Perfect for:**
+- GreyCat beginners learning the fundamentals
+- Experienced developers building production applications
+- Full-stack teams integrating React frontends
+- Data engineers working with time-series and geo-spatial data
 
 ## When to Use This Skill
 
@@ -28,6 +88,28 @@ Use this skill when you need help with:
 - Integrating React frontends with `@greycat/web` SDK
 - Running GreyCat commands (serve, test, run import)
 - Debugging GreyCat projects
+
+## GreyCat vs. Traditional Stacks
+
+| Traditional Approach | GreyCat Approach |
+|---------------------|------------------|
+| Separate database (Postgres, MongoDB) | Built-in persistence in GCL |
+| ORM layer (Prisma, TypeORM) | Direct node references |
+| Manual indexing setup | nodeIndex, nodeTime, nodeGeo built-in |
+| Separate job queue (Bull, BeeQueue) | Job API with await() |
+| API framework (Express, Fastify) | @expose decorators |
+| Manual TypeScript types | Auto-generated from GCL |
+
+**When to use GreyCat:**
+- Building graph-based applications with complex relationships
+- Time-series or geo-spatial data with built-in indexing
+- Need persistence without ORM complexity
+- Want unified backend + frontend type safety
+
+**When NOT to use GreyCat:**
+- Standard CRUD apps (traditional frameworks may be simpler)
+- Existing database migration requirements
+- Team has no capacity to learn a new language/paradigm
 
 ## What's Included
 
@@ -81,7 +163,7 @@ greycat-language.skill/
 ├── README.md              # This file
 ├── marketplace.json       # Skill marketplace metadata
 ├── package.sh            # Packaging script
-└── greycat-language/     # Skill content
+└── greycat/              # Skill content
     ├── SKILL.md          # Main skill documentation
     └── references/       # Detailed reference files
         ├── frontend.md
@@ -106,7 +188,7 @@ To package the skill for distribution:
 
 The script:
 - Validates SKILL.md frontmatter
-- Packages all files from `greycat-language/` directory
+- Packages all files from `greycat/` directory
 - Creates a `.skill` file (zip archive with .skill extension)
 - Excludes development files (node_modules, cache, etc.)
 
@@ -115,8 +197,8 @@ The script:
 ### From Marketplace
 
 ```bash
-# Coming soon - install via skillsmp.com
-claude-code skills install greycat-language
+# Install via skills marketplace
+skills install greycat
 ```
 
 ### Manual Installation
@@ -125,12 +207,12 @@ claude-code skills install greycat-language
 git clone git@hub.datathings.com:greycat/skill/greycat-language.skill.git
 cd greycat-language.skill
 ./package.sh
-# Install greycat.skill file to your Claude Code skills directory
+# Install the greycat.skill file to your AI assistant's skills directory
 ```
 
 ## Usage Examples
 
-Once installed, Claude Code will automatically use this skill when you're working on GreyCat projects.
+Once installed, this skill will automatically activate when you're working on GreyCat projects.
 
 **Example interactions:**
 - "Create a GreyCat data model for a city with buildings and residents"
@@ -208,4 +290,4 @@ For issues or questions:
 
 ---
 
-**Built for Claude Code** - Enhancing AI-assisted GreyCat development
+**Built for AI-assisted development** - Enhancing GreyCat productivity

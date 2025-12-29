@@ -8,7 +8,7 @@ set -e
 # Configuration
 SKILL_NAME="greycat"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="${SCRIPT_DIR}/greycat-language"
+SKILL_DIR="${SCRIPT_DIR}/greycat"
 OUTPUT_FILE="${SKILL_NAME}.skill"
 OUTPUT_DIR="${SCRIPT_DIR}"
 
