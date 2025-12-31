@@ -1,2 +1,5 @@
-.claude/
-
+lib/
+webroot/
+bin/
+files/
+__pycache__/
