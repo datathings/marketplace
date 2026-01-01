@@ -1,6 +1,6 @@
 ---
 name: greycat
-description: GreyCat full-stack development for graph-based language with built-in persistence. Use when: (1) working with .gcl files or GreyCat projects, (2) using persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo), (3) creating data models, services, or abstract types, (4) writing API endpoints with @expose, @permission, or @volatile decorators, (5) implementing parallel processing with Jobs, await(), or PeriodicTask, (6) integrating React frontends with @greycat/web SDK or TypeScript type generation, (7) running GreyCat CLI commands (greycat serve/test/run/install/lint), (8) debugging GreyCat applications or working with transactions. NOT for: general graph databases (Neo4j, ArangoDB), generic React apps, or SQL databases.
+description: GreyCat full-stack development for graph-based language with built-in persistence. CRITICAL WORKFLOW - After generating or modifying ANY GreyCat backend code (.gcl files), IMMEDIATELY run 'greycat-lang lint' to get linting feedback and fix all errors before proceeding. Use when: (1) working with .gcl files or GreyCat projects, (2) using persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo), (3) creating data models, services, or abstract types, (4) writing API endpoints with @expose, @permission, or @volatile decorators, (5) implementing parallel processing with Jobs, await(), or PeriodicTask, (6) integrating React frontends with @greycat/web SDK or TypeScript type generation, (7) running GreyCat CLI commands (greycat serve/test/run/install/lint), (8) debugging GreyCat applications or working with transactions. NOT for: general graph databases (Neo4j, ArangoDB), generic React apps, or SQL databases.
 ---
 
 # GreyCat Backend Development
@@ -10,9 +10,31 @@ Graph-based language with built-in persistence. Not a database—an evolving cod
 ## Commands
 
 ```bash
-greycat install  # download libs
-greycat test     # run tests
-greycat serve    # start :8080
+greycat install      # download libs
+greycat test         # run tests
+greycat serve        # start :8080
+greycat-lang lint    # check for errors
+```
+
+## Development Workflow
+
+**⚠️ CRITICAL: Always lint after code generation**
+
+When generating or modifying GreyCat backend code (.gcl files):
+
+1. **Generate/modify** the code
+2. **Immediately run** `greycat-lang lint` to get linting feedback
+3. **Fix any errors** reported by the linter before proceeding
+
+This ensures code quality and catches errors early. **NEVER skip this step** when working with GreyCat backend code.
+
+```bash
+# Example workflow
+# 1. Make changes to backend/src/model/city.gcl
+# 2. Run linter immediately
+greycat-lang lint
+# 3. Fix any reported errors
+# 4. Continue development
 ```
 
 ## Architecture
