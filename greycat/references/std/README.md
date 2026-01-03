@@ -1,7 +1,7 @@
 # std
 
 ```gcl
-@library("std", "7.5.132-dev");
+@library("std", "7.5.138-dev");
 ```
 
 ## Modules

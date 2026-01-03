@@ -16,7 +16,7 @@ Built on llama.cpp, this library enables:
 ## Quick Start
 
 ```gcl
-@library("ai", "7.5.68-dev");
+@library("ai", "7.5.70-dev");
 
 // Load model with GPU acceleration
 var model = Model::load("my_model", "./Llama-3.2-1B.gguf", ModelParams {

@@ -20,7 +20,7 @@ This library is ideal for power system planning, grid optimization, renewable en
 Add the PowerFlow library to your GreyCat project:
 
 ```gcl
-@library("powerflow", "7.5.68-dev")
+@library("powerflow", "7.5.70-dev")
 ```
 
 ## Quick Start

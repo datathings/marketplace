@@ -330,6 +330,8 @@ type Crypto {
     static native fn sha256hex(content: String): String;
     static native fn sha256_sign_pkcs1(input: String, key_path: String): String;
     static native fn sha256_sign_pkcs1_hex(input: String, key_path: String): String;
+    /// Compute HMAC-SHA256 digest encoded as hex
+    static native fn sha256_hmac_hex(input: String, key: String): String;
     static native fn base64_encode(v: String): String;
     static native fn base64_decode(v: String): String;
     static native fn base64url_encode(v: String): String;

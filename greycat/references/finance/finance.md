@@ -20,7 +20,7 @@ This library is ideal for payment processing systems, banking applications, fina
 Add the Finance library to your GreyCat project:
 
 ```gcl
-@library("finance", "7.5.68-dev")
+@library("finance", "7.5.70-dev")
 ```
 
 ## Quick Start
