@@ -1,0 +1,42 @@
+{
+  "name": "datathings-marketplace",
+  "version": "1.0.0",
+  "description": "Claude Code skills for GreyCat development and local LLM inference",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": [
+    {
+      "name": "greycat",
+      "path": "./greycat",
+      "version": "1.0.0",
+      "description": "GreyCat full-stack development for graph-based language with built-in persistence"
+    },
+    {
+      "name": "greycat-c",
+      "path": "./greycat-c",
+      "version": "1.0.0",
+      "description": "GreyCat C API and Standard Library for native development"
+    },
+    {
+      "name": "llamacpp",
+      "path": "./llamacpp",
+      "version": "1.1.0",
+      "description": "Complete llama.cpp C/C++ API reference for local LLM inference"
+    }
+  ],
+  "keywords": [
+    "claude-code",
+    "skills",
+    "greycat",
+    "llama-cpp",
+    "agent-skills",
+    "llm",
+    "graph-database",
+    "time-series"
+  ]
+}
