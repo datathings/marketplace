@@ -219,4 +219,4 @@ This provides the C API reference, tensor operations, and native function implem
 
 ## License
 
-MIT
+Apache-2.0

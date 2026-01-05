@@ -12,19 +12,19 @@
   "skills": [
     {
       "name": "greycat",
-      "path": "./greycat",
+      "path": "./plugins/greycat/skills/greycat",
       "version": "1.0.0",
       "description": "GreyCat full-stack development for graph-based language with built-in persistence"
     },
     {
       "name": "greycat-c",
-      "path": "./greycat-c",
+      "path": "./plugins/greycat-c/skills/greycat-c",
       "version": "1.0.0",
       "description": "GreyCat C API and Standard Library for native development"
     },
     {
       "name": "llamacpp",
-      "path": "./llamacpp",
+      "path": "./plugins/llamacpp/skills/llamacpp",
       "version": "1.1.0",
       "description": "Complete llama.cpp C/C++ API reference for local LLM inference"
     }
