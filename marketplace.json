@@ -1,5 +1,5 @@
 {
-  "name": "datathings-marketplace",
+  "name": "datathings",
   "version": "1.0.0",
   "description": "Claude Code skills for GreyCat development and local LLM inference",
   "author": {
@@ -8,7 +8,7 @@
     "url": "https://datathings.com"
   },
   "repository": "https://github.com/datathings/marketplace",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "skills": [
     {
       "name": "greycat",
