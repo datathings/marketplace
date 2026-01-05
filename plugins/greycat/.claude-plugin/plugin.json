@@ -1,0 +1,14 @@
+{
+  "name": "greycat",
+  "version": "1.0.0",
+  "description": "Comprehensive GreyCat backend development skill for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, React integration, and all standard libraries.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["greycat", "backend", "graph-database", "persistence", "time-series", "geo-spatial", "react", "typescript", "full-stack", "api-development", "parallel-processing", "data-modeling", "machine-learning", "event-driven", "integrations"],
+  "skills": "./skills/",
+  "commands": "./.claude/commands/"
+}

@@ -1,0 +1,1749 @@
+/// wildcard meta type to define placeholders to store any other types, including primitives
+native type any {}
+
+/// meta type of null placeholder
+native type null {}
+
+/// meta type for reflexive usages
+native type type {
+    native static fn of(v: any?): type;
+    /// Return the number of field of this type
+    native fn nb_fields(): int;
+    /// Return all field descriptor from this type
+    native fn fields(): Array<field>;
+    /// Return field or null from this type and given a field name
+    native fn field_by_name(name: String): field?;
+    /// Return field offset or null from this type and given a field name
+    native fn field_offset_by_name(name: String): int?;
+    /// Return the number of values within an enumeration
+    native fn nb_enum_values(): int;
+    /// Return the values of an enumeration
+    native fn enum_values(): Array;
+    /// Return the enum value based on the given type and offset
+    native static fn enum_by_offset<T>(enum_type: typeof T, offset: int): T?;
+    /// Return the enum value based on the given type and name
+    native static fn enum_by_name<T>(enum_type: typeof T, name: String): T?;
+    /// Return the enum name based on the given value x which should be of type enum, null otherwise
+    native static fn enum_name(x: any): String;
+    /// Return the enum name based on the given value x which should be of type enum, null otherwise
+    native static fn enum_offset(x: any): int;
+    /// Assign all fields of src object to dst object, optional parameter to clone or transfer ownership
+    native static fn fields_set_from(dst: any, src: any, clone: bool);
+    /// Assign value to field by offset
+    native static fn field_set(target: any, offset: int, value: any?);
+    /// Retrieve value from field by offset
+    native static fn field_get(target: any, offset: int): any?;
+}
+
+/// Descriptor of a type field for meta programming
+native type field {
+    native fn name(): String;
+    native fn type(): type;
+    native fn is_nullable(): bool;
+    native fn offset(): int;
+}
+
+/// function pointer primitive type.
+native type function {}
+
+/// boolean primitive type, possible values are `true` or `false` literals.
+native type bool {}
+
+/// char primitive type, possible values are any ASCII or UTF-8 codepoint.
+native type char {}
+
+/// | Type      | Kind     | Size    | Min                      | Max                     |
+/// | -------   | -------- | ------- | ------------------------ | ----------------------- |
+/// | **int**   | signed   | 64 bits | -9223372036854775808     | 9223372036854775807     |
+///
+/// If you want to deal with floating pointer numbers, use the [float](std::core::float) type.
+native type int {
+    static min: int = -9223372036854775808;
+    static max: int = 9223372036854775807;
+    static native fn to_string(value: int, thousands_separator: char);
+}
+
+/// | Type      | Kind     | Size    | Min                      | Max                     |
+/// | -------   | -------- | ------- | ------------------------ | ----------------------- |
+/// | **float** | float    | 64 bits | -1.7976931348623157e+308 | 1.7976931348623157e+308 |
+///
+/// If you want to deal with integers, use the [int](std::core::int) type.
+native type float {
+    static min: float = -1.7976931348623157e+308_f;
+    static max: float = 1.7976931348623157e+308_f;
+    /// Format float as string
+    static native fn to_string(
+        value: float,
+        separator: char,
+        thousands_separator: char?,
+        max_digit: int,
+        e_notation: bool
+    ): String;
+}
+
+/// Definition of expected kept precision to compress float values
+enum FloatPrecision {
+    p1(1.0);
+    p10(0.1);
+    p100(0.01);
+    p1000(0.001);
+    p10000(0.0001);
+    p100000(0.00001);
+    p1000000(0.000001);
+    p10000000(0.0000001);
+    p100000000(0.00000001);
+    p1000000000(0.000000001);
+    p10000000000(0.0000000001);
+}
+
+/// nodeTime primitive type handle temporal series of values.
+/// Generic type param can specialize the contains values.
+/// As any nodes, nodeTime are stored to disk and compose the sets of Graph Nodes.
+@iterable
+@deref("resolve")
+native type nodeTime<T> {
+    /// Return the content of the last entry in the timeserie. It achieves the same result as `*this`.
+    native fn resolve(): T?;
+    /// Return the content at the timestamp `reqTime` in the timeserie.
+    /// If `reqTime` does not exist, it returns the content of the closest previous timestamp found, returns `null` otherwise.
+    native fn resolveAt(reqTime: time): T?;
+    /// Return the content at the timestamp `reqTime` with error margin of `max_dephase` in the timeserie.
+    /// If `reqTime` does not exist, it returns the content of the closest previous timestamp found within `reqTime` and `reqTime - max_dephase`, returns `null` otherwise.
+    native fn resolveAtWithin(reqTime: time, max_dephase: duration): T?;
+    /// Return the timestamp referent to `reqTime` in the timeserie.
+    /// If `reqTime` does not exist, it returns the closest previous timestamp found, returns `null` otherwise.
+    native fn resolveTimeAt(reqTime: time): time?;
+    /// Return a tuple `(timestamp, content)` referent to `reqTime` in the timeserie.
+    /// If `reqTime` does not exist, it returns the closest previous timestamp found and its content, returns `null` otherwise.
+    native fn resolveTimeValueAt(reqTime: time): Tuple<time, T>?;
+    /// Return the content at the timestamp `exactTime` in the timeserie.
+    /// If `exactTime` does not exist, returns `null`.
+    native fn getAt(exactTime: time): T?;
+    /// Remove element referent to timestamp `exactTime` from the timeserie.
+    native fn removeAt(exactTime: time);
+    /// Set `value` to timestamp `exactTime` to the timeserie. Return the `value` set.
+    /// If `exactTime` already exists, it overwrites the previous content with `value`, else a new `(timestamp, content)` pair is added to the timeserie.
+    native fn setAt(exactTime: time, value: T): T;
+    /// Batch insert values
+    native fn setAll(exactTime: time, values: Array<T>, delta: duration);
+    /// Return the number of elements of the timeserie that are within the time interval [`from`,`to`].
+    native fn rangeSize(from: time, to: time): int;
+    /// Return the size of the timeserie.
+    native fn size(): int;
+    /// Return the first/smallest timestamp in the timeserie.
+    native fn firstTime(): time?;
+    /// Return the content of the first/smallest timestamp in the timeserie
+    native fn first(): T?;
+    /// Return the last/biggest timestamp in the timeserie.
+    native fn lastTime(): time?;
+    /// Return the content of the last/biggest timestamp in the timeserie.
+    native fn last(): T?;
+    /// Return the previous existing timestamp of `v`. If a previous element does not exist, return `null`.
+    native fn prev(v: time): time?;
+    /// Return the next existing timestamp of `v`.
+    /// If a next element does not exist, return `null`.
+    native fn next(v: time): time?;
+    /// Remove all elements from the timeserie.
+    native fn removeAll();
+    /// Sample, using `mode` sampling, the nodeTimes in `refs` within the interval [`from`, `to`].
+    /// Also set that at most `maxRows` rows are allowed to the resulting Table and the max dephasing of points is `maxDephasing`.
+    @expose
+    @permission("debug")
+    static native fn sample(
+        refs: Array<nodeTime>,
+        from: time?,
+        to: time?,
+        maxRows: int,
+        mode: SamplingMode,
+        maxDephasing: duration?,
+        tz: TimeZone?
+    ): Table;
+    /// Returns the NodeInfo of all the nodeTime passed as input parameters.
+    /// The return Array will have exactly the same size as input and every NodeInfo result will be positioned at the same offset than nodeTime in input array parameter.
+    @expose
+    @permission("debug")
+    static native fn info(nodes: Array<nodeTime>): Array<NodeInfo<time>>;
+}
+
+/// Statistics data about any graph nodes, in particular size and values range, can be generally parameterize by `T`
+type NodeInfo<T> {
+    /// size of the requested node series
+    size: int;
+    /// first value (inclusive) of the node under evaluation, follow the generic type `T`.
+    from: T?;
+    /// last value (inclusive) of the node under evaluation, follow the generic type `T`.
+    to: T?;
+}
+
+/// Iterator to walk over value of nodeTime series. This utility type is very useful to create custom sampling methods.
+/// this type can be parameterize by generic type `T` to specialize the return of current value.
+type nodeTimeCursor<T> {
+    /// nodeTime we are walking over
+    private n: nodeTime<T>;
+    /// current requested time
+    private req_time: time?;
+    /// set cursor to the first value of nodeTime
+    native fn first();
+    /// set cursor to the last value of nodeTime
+    native fn last();
+    /// set cursor to the next value starting from current one
+    native fn next();
+    /// set cursor to the previous value starting from current one
+    native fn previous();
+    /// set cursor to the previous value, lower or equal to t
+    native fn lessOrEq(t: time);
+    /// jump over the n next values
+    native fn skip_values(nb: int);
+    /// jump over the n next values
+    native fn skip_duration(d: duration);
+    /// get the time of the current selected value in the time series.
+    native fn currentTime(): time?;
+    /// get the value of the current selected value in the time series.
+    native fn current(): T?;
+}
+
+/// node primitive type handle singleton value that must be stored to graph.
+/// Generic type param can specialize the contains values.
+/// As any nodes, node are stored to disk and compose the sets of Graph Nodes.
+/// Node are useful to create a reference from an heavy object to be store as a light primitive value.
+@deref("resolve")
+native type node<T> {
+    /// Return the content of the address pointed by the node.
+    native fn resolve(): T;
+    /// Return an array with the contents of the addresses pointed by the nodes in the array `n`
+    @expose
+    @permission("debug")
+    static native fn resolve_all(n: Array<node?>): Array<any?>;
+    /// Sets `value` to the content of the address pointed by the node.
+    native fn set(value: T);
+}
+
+private type nodeIndexBucket<K, V> {
+    key: K;
+    value: V;
+    next: nodeIndexBucket<K, V>?;
+}
+
+/// nodeIndex primitive type handle large series of values, indexed by their key.
+/// Generic type params can specialize the contains values (V) and associated key (K).
+/// As any nodes, nodeIndex are stored to disk and compose the sets of Graph Nodes.
+/// nodeIndex offer a direct retrieval in o(log(n)) by using the key.
+@iterable
+native type nodeIndex<K, V> {
+    /// Returns the size of the `nodeIndex`.
+    native fn size(): int;
+    /// Sets a `(key, value)` pair into the map and returns the given `value`.
+    /// If a value is already associated with that `key`, the previous value is overwritten.
+    native fn set(key: K, value: V): V;
+    /// Returns the value associated with the `key` or `null`
+    native fn get(key: K): V?;
+    /// Removes entry at `key`
+    native fn remove(key: K);
+    /// Removes all elements from the Node map.
+    native fn removeAll();
+
+    /// Using `mode` sampling, samples maxRows elements from nodeIndexes in `refs`, starting from the key: from.
+    @expose
+    @permission("debug")
+    static native fn sample(refs: Array<nodeIndex>, from: any?, maxRows: int, mode: SamplingMode): Table;
+    /// Returns the NodeInfo of all the nodeIndex passed as input parameters.
+    /// The return Array will have exactly the same size as input and every NodeInfo result will be positioned at the same offset than nodeIndex in input array parameter.
+    @expose
+    @permission("debug")
+    static native fn info(nodes: Array<nodeIndex>): Array<NodeInfo>;
+
+    native fn search(key: K, max: int): Array<SearchResult<K, V>>;
+
+    @expose
+    @permission("debug")
+    static native fn search_closest(i: nodeIndex, key: any, max: int): Array<SearchResult>;
+}
+
+@volatile
+type SearchResult<K, V> {
+    key: K;
+    value: V;
+    distance: float;
+}
+
+/// nodeList primitive type handle large series of values, eventually sparse.
+/// Generic type params can specialize the contains values (V).
+/// As any nodes, nodeList are stored to disk and compose the sets of Graph Nodes.
+/// nodeList can handle very large series even if key are sparse and spread over the full int spectrum.
+@iterable
+native type nodeList<T> {
+    /// Returns the size of the `nodeList`.
+    native fn size(): int;
+    /// Returns the value at `index` or `null`
+    native fn get(index: int): T?;
+    /// Sets `value` at `index` in the nodeList. If a value is already inserted at `index` it is overwritten.
+    /// Returns the given `value`.
+    native fn set(index: int, value: T): T;
+    /// Adds a new `(index, value)` pair to the nodeList. The index corresponds to the index following the last set element of the list.
+    native fn add(value: T): T;
+    /// Returns the number of elements which have been set or added to the nodeList and which index is contained within the interval `[from, to]`.
+    native fn rangeSize(from: int, to: int): int;
+    /// Returns the value associated with the given `index` in the list.
+    /// If there is not value at the given `index`, resolve will return the closest non-`null` value with a smaller index than `index`.
+    native fn resolve(index: int): T?;
+    /// Returns the key and the value associated with the given `index` in the list.
+    /// If there is not value at the given `index`, resolve will return the closest non-`null` value with a smaller index than `index`.
+    native fn resolveEntry(index: int): Tuple<int, T>?;
+    /// Removes the element referent at index `index` from the nodeList.
+    native fn remove(index: int): bool;
+    /// Removes all elements from the nodeList.
+    native fn removeAll();
+    /// Returns the first index of the nodeList.
+    native fn firstIndex(): int?;
+    /// Returns the value associated with the first element of the nodeList.
+    native fn first(): T?;
+    /// Returns the las index of the nodeList.
+    native fn lastIndex(): int?;
+    /// Returns the value associated with the last element of the nodeList.
+    native fn last(): T?;
+    /// Sample, using `mode` sampling, the nodeLists in `refs` within the interval `[from, to]`.
+    /// Also set that at most `maxRows` rows are allowed to the resulting Table and the max dephasing of points is `maxDephasing`.
+    @expose
+    @permission("debug")
+    static native fn sample(
+        refs: Array<nodeList>,
+        from: int?,
+        to: int?,
+        maxRows: int,
+        mode: SamplingMode,
+        maxDephasing: int?
+    ): Table;
+    /// Returns the NodeInfo of all the nodeList passed as input parameters.
+    /// The return Array will have exactly the same size as input and every NodeInfo result will be positioned at the same offset than nodeList in input array parameter.
+    @expose
+    @permission("debug")
+    static native fn info(nodes: Array<nodeList>): Array<NodeInfo<int>>;
+}
+
+/// VectorIndex handles vector-keyed of values in a persistant placeholders offering distance-based search methods
+type VectorIndex<T> {
+    private values: nodeIndex<node<Tensor>, T>?;
+    private count: int?;
+    private max_level: int?;
+    private entry_node_ref: node<VectorVertex>?;
+    /// Set this on instantiation for reproducible behaviour on set() calls; if left null, defaults to Random{seed: 0}
+    private rng: Random?;
+    /// Distance used to add and search vectors. Defaults to TensorDistance::l2sq
+    private distance: TensorDistance?;
+    /// Index a new vector in the VectorIndex
+    native fn add(vector: node<Tensor>, value: T);
+    /// Search up to `wanted` (within [1..int::max]; defaults to 1) nearest vectors in the database
+    native fn search(query: Tensor, wanted: int?): Array<SearchResult<Tensor, T>>;
+    /// Total size of indexed values
+    native fn size(): int;
+    /// Wrap an array of floats to a 1D-tensor (aka vector)
+    native static fn wrap(values: Array<float>, type: TensorType): Tensor;
+}
+
+/// vectorIndex internal use only
+private type VectorVertex {
+    private vector: node<Tensor>;
+    private level_sizes: Array<int>;
+    private neighbour_nodes: Array<node<VectorVertex>?>;
+}
+
+/// primitive type that represent the difference between two time, especially useful to measure the difference between two event
+native type duration {
+    /// Returns a new duration using the given int value and time unit
+    static native fn new(v: int, unit: DurationUnit): duration;
+    /// Returns a new duration using the given float value and time unit
+    static native fn newf(v: float, unit: DurationUnit): duration;
+    /// Returns the current duration as an int in the specified time unit.
+    native fn to(unit: DurationUnit): int;
+    /// Returns the current duration as a float in the specified time unit.
+    native fn tof(unit: DurationUnit): float;
+    /// Adds the given value to the current duration using the `unit`.
+    native fn add(value: int, unit: DurationUnit): duration;
+    /// Subtracts the given value to the current duration using the `unit`.
+    native fn subtract(value: int, unit: DurationUnit): duration;
+}
+
+/// Defines time units of calendars
+enum CalendarUnit {
+    year(0);
+    month(1);
+    day(2);
+    hour(3);
+    minute(4);
+    second(5);
+    microsecond(6);
+}
+
+/// `time` represent a universal and precise moment in time. It has to be opposed to date that represent a moment in human calendar and that can be mapped eventually to several time.
+///
+/// There are 2 ways to create a `time` value:
+/// - using the static `time::new(1738856906595, DurationUnit::milliseconds)` method conventionally
+/// - using the literal notation (eg. `'2025-05-06T16:47:42Z'`)
+native type time {
+    /// the minimal time that be handle in GreyCat
+    static min: time = -9223372036854775808_time;
+    /// the maximal time that be handle in GreyCat
+    static max: time = 9223372036854775807_time;
+    /// Returns the current contextual time, defaults to `time::min`
+    static native fn current(): time;
+    /// Returns the current system time
+    static native fn now(): time;
+    /// Returns a new time object, which date is set to `epoch` time units `unit` away from 1970-01-01T00:00:00Z. `epoch` can be signed.
+    /// The DurationUnit unit is a constant amount of microseconds, and not a date time unit, use calendar_add/floor/ceiling for operations on date time units.
+    static native fn new(epoch: int, unit: DurationUnit): time;
+    /// Returns the time of the object converted to the time unit `unit`. This correspond to an epoch definition adapted to the DurationUnit.
+    native fn to(unit: DurationUnit): int;
+    /// Returns a new `time` object set to the start of a unit of time.
+    native fn floor(unit: DurationUnit): time;
+    /// New time from translation (add or subtract with sign of value).
+    ///
+    /// For months and years edge cases, never go beyond the end of the target month; e.g.:
+    /// - adding 1 month to January [28..31], 2011 all result in February 28, 2011
+    /// - adding 1 year to February 29, 2012 results in February 28, 2013
+    /// - adding 1 month to February 28 always results in March 28; chain with calendar_ceiling(DurationUnit::months, tz) to make sure to align
+    ///
+    /// If adding would result in an illegal date (e.g. 2020-03-29T02:00:00.000000 for Europe/Luxembourg):
+    /// - resolves to after the timeshift if value is positive (i.e. 2020-03-29T03:00:00.000000)
+    /// - resolves to before the timeshift if value is negative (i.e. 2020-03-29T01:00:00.000000)
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn calendar_add(value: int, unit: CalendarUnit, tz: TimeZone?): time;
+    /// New time by flooring it to the first instant of the current passed unit of time.
+    ///
+    /// Examples for `var t = time::now()`:
+    /// - `t.calendar_floor(CalendarUnit::day, null)` new time of today, 00:00:00.000000
+    /// - `t.calendar_floor(CalendarUnit::year, null)` new time of this year’s January 1st, 00:00:00.000000
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn calendar_floor(unit: CalendarUnit, tz: TimeZone?): time;
+    /// New time by ceiling it to the last instant of the current passed unit of time.
+    ///
+    /// Examples for `var t = time::now()`:
+    /// - `t.calendar_ceiling(CalendarUnit::days, null)` new time of today, 23:59:59.999999
+    /// - `t.calendar_ceiling(CalendarUnit::years, null)` new time of this year’s first December 31st, 23:59:59.999999
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn calendar_ceiling(unit: CalendarUnit, tz: TimeZone?): time;
+    /// Parses the string parameter as a time definition according to the format definition.
+    /// [Here](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html) is the format available options.
+    ///
+    /// Throws an error if the string does not comply the defined format.
+    /// In case the format parameter is null, ISO 8601 will be used.
+    static native fn parse(value: String, format: String?): time;
+    /// year's day from 0 to 365.
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn dayOfYear(tz: TimeZone?): int;
+    /// weekday from 0 (Sunday) to 6 (Saturday).
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn dayOfWeek(tz: TimeZone?): int;
+    /// year's week from 1 to 53 according to ISO 8601
+    native fn weekOfYear(tz: TimeZone?): int;
+    /// number of days in this time's month (28 to 31).
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn daysInMonth(tz: TimeZone?): int;
+    /// true if parameter year is a leap year
+    static native fn isLeap(year: int): bool;
+    /// number of days in parameter year (365 or 366)
+    static native fn totalDaysInYear(year: int): int;
+    /// number of days in parameter month of parameter year (28 to 31)
+    static native fn totalDaysInMonth(month: int, year: int): int;
+    /// New time by setting it to the start of the week, with respect to the time zone.
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn startOfWeek(tz: TimeZone?): time;
+    /// New time by setting it to the end of the week, with respect to the time zone.
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn endOfWeek(tz: TimeZone?): time;
+    /// Creates a `Date` based on the current `time` and the given `tz`.
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn toDate(tz: TimeZone?): Date;
+    /// Formats the time as a string using [strftime] specifiers (eg. "%+" is ISO8601/RFC339 date & time format).
+    ///
+    /// If `tz` is `null` then the global timezone is used.
+    native fn format(format: String, tz: TimeZone?): String;
+}
+
+/// When an error is thrown at runtime by GreyCat, the `code` property of the error will be one of this enumeration's value.
+/// The `int` literal of each field represents the code that should be returned by the runtime process on exit.
+/// The only way to create an [Error](/libs/std/core/type.Error.html) is by throwing.
+enum ErrorCode {
+    none(0);
+    interrupted(1);
+    await(2);
+    timeout(6);
+    forbidden(7);
+    runtime_error(8);
+}
+
+/// Error frames composing stacktraces of errors
+type ErrorFrame {
+    module: String?;
+    function: String;
+    line: int;
+    column: int;
+}
+
+/// Error type that encapsulate the instance passed to catch block or more generally throw to upper context in case of error.
+type Error {
+    message: String?;
+    stack: Array<ErrorFrame>;
+}
+
+/// sampling mode used to parameterize the sample function on nodes.
+/// sampling mode define the shape of result of sampling methods.
+enum SamplingMode {
+    /// extract elements in range respecting a fixed delta between index values.
+    /// warning this can lead to large resultset, defines the bounds with care.
+    fixed(0);
+    /// extract elements in range respecting a fixed delta between index values.
+     // in addition to fixed mode, fixed_reg extrapolate numerical values with a linear regression between the previous and next available stored elements to smooth the resulting values.
+    /// warning this can lead to large resultset, defines the bounds with care.
+    fixed_reg(1);
+    /// extract elements in range without respecting a fixed delta between index values.
+    /// in contrary to fixed mode, adaptative sample by ensuring and number of skipped elements between the resulting values.
+    /// this mode is useful for none monotonic series where difference between measure are more important than difference between times.
+    adaptative(2);
+    /// extract all elements between define range, without loosing any elements in between.
+    dense(3);
+}
+
+/// Order for sort operation
+enum SortOrder {
+    asc;
+    desc;
+}
+
+/// Table are specialize data structure to organize elements of any type in a two dimensional structure.
+/// Can be specialize be a generic type T.
+native type Table<T> {
+    /// Returns the number of columns of the table.
+    native fn cols(): int;
+    /// Returns the number of rows of the table. This number is based on the maximum index of a set column in the table, regardless of the skipped indices.
+    native fn rows(): int;
+    /// Sets `value` at row `row` and column `col`. Col can be integer or field.
+    native fn set_cell(row: int, col: any, value: any?);
+    /// Returns the value located at row `row` and column `col` of the table. Col can be integer or field.
+    native fn get_cell(row: int, col: any): any?;
+    /// Destructure a typed object into cells at the given row.
+    native fn set_row(row: int, v: T);
+    /// Restructure cells into a object given row.
+    native fn get_row(row: int): T;
+    /// Destructure a typed object into cells and create a row out of it
+    native fn add_row(v: T);
+    /// Removes rows which indexes are within the interval `[from, to[`.
+    native fn remove_row(row: int);
+    /// Sorts rows of the table by values of column `col`. Col can be integer or field.
+    native fn sort(col: any, order: SortOrder);
+    /// Sorts rows of the table by values of column `col`. Col can be integer or field.
+    /// If selected col contains object, ordering will be done by using object field value.
+    native fn sort_by(col: any, cell_field: field, order: SortOrder);
+    /// initialize capacity without impacting cols and rows method.
+    native fn init(rows: int, cols: int);
+
+    /// Produces a new table by applying mappings to columns.
+    @expose
+    @permission("debug")
+    static native fn applyMappings(table: Table, mappings: Array<TableColumnMapping>): Table;
+}
+
+/// Describes a series of extractors to apply to a specific column on a table
+type TableColumnMapping {
+    /// The targeted column offset (zero-based)
+    column: int;
+    /// A list of extractors to execute sequentially on the targeted `column`'s value:
+    ///
+    /// | Value    | Extractor | Description                            |
+    /// | -------- | --------- | -------------------------------------- |
+    /// | `node`   | `"*"`     | Resolve the node (eg. `*n`)            |
+    /// | `node`   | `"ident"` | Resolve the field (eg. `n->ident`)     |
+    /// | `object` | `"ident"` | Resolve the field (eg. `o.ident`)      |
+    /// | `Map`    | `key`     | Resolve the key (eg. `m.get(key)`)     |
+    /// | `Array`  | `1`       | Resolve the offset (eg. `a[1]`)        |
+    extractors: Array<any>;
+}
+
+/// enumeration of duration units commonly used, functions that manipulate
+/// [time](/libs/std/core/type.time.html), [Date](/libs/std/core/type.Date.html) or [Duration](/libs/std/core/type.Duration.html).
+enum DurationUnit {
+    microseconds(1);
+    milliseconds(1e3);
+    seconds(1e6);
+    minutes(60e6);
+    hours(3600e6);
+    days(86400e6);
+}
+
+/// Strings in GreyCat are not very different from other languages
+/// They however offer an additional feature to conveniently generate strings integrating business elements with an integrating templating system
+///
+/// Strings are immutable and are auto-cloned if they are attached to a container while already owned by another
+native type String {
+    /// Compare the string with `v`.
+    /// If the string is less than `v`, `-1` is returned
+    /// If the string is more than `v`, `1` is returned
+    /// If the string is equal to `v`, `0` is returned
+    native fn compare(v: String): int;
+    /// Verify if the string starts with the substring `v`
+    /// Returns `true` if the string starts with `v`, else returns `false`
+    native fn startsWith(v: String): bool;
+    /// Verify if the string ends with the substring `v`
+    /// Returns `true` if the string ends with `v`, else returns `false`
+    native fn endsWith(v: String): bool;
+    /// Verify if the string contains the substring `v`
+    /// Returns `true` if the string contains `v`, else returns `false`
+    native fn contains(v: String): bool;
+    /// Return the char referent to offset `v`
+    /// Offset `v` needs to be within the string bounds, else it throws an `out of bounds` exception
+    native fn get(v: int): char;
+    /// Returns the index of the first appearance of the char `v` in the string
+    /// If the char is not found in the string, return `-1`
+    native fn indexOf(v: char): int;
+    /// Returns the index of the first appearance of the char `v` in the string, starting from offset `i`
+    /// If the char is not found in the string, return `-1`
+    native fn indexOfFrom(v: char, i: int): int;
+    /// Returns the index of the last appearance of the char `v` in the string
+    /// If the char is not found in the string, return `-1`
+    native fn lastIndexOf(v: char): int;
+    /// Returns a new string containing the section of the original string from `from` (inclusive) to `to` (exclusive).
+    /// - If `from` is not less than `to`, an empty string is returned.
+    /// - If `to` is greater than the string length, an empty string is returned.
+    /// - Both `from` and `to` must be positive integers; otherwise, an exception is thrown.
+    native fn slice(from: int, to: int): String;
+    /// Returns a new string where the leading and trailing whitespaces are removed
+    native fn trim(): String;
+    /// Returns a new string with the letters in it formatted to lowercase
+    native fn lowercase(): String;
+    /// Return a new string with the letters in it formatted to uppercase
+    native fn uppercase(): String;
+    /// Returns the size of the string
+    native fn size(): int;
+    /// Returns a new string in which all occurrences of `s` are replaced with `s2`
+    native fn replace(s: String, s2: String): String;
+    /// Returns the position of `v` in the string. If `v` is not a part of the string returns `-1`
+    native fn indexOfString(v: String): int;
+    /// Returns the position of `v` in the string starting at offset `i`
+    /// If `v` is not a part of the string after that position it returns `-1`
+    native fn indexOfStringFrom(v: String, i: int): int;
+    /// Splits the string into parts using the char delimiter
+    native fn split(c: char): Array<String>;
+    /// compute the jaro distance
+    native fn jaro(v: String): float;
+    /// compute the jaro-winkler similariy
+    native fn jarowinkler(v: String): float;
+    /// compute the levenshtein distance
+    native fn levenshtein(v: String): int;
+    /// compute the nfd normalized form and strip away special chars
+    native fn nfkd_casefold(): String;
+}
+
+/// Helper to store and manipulate binary blobs
+native type Buffer {
+    /// Adds an element `v` at the end of the buffer, formatted as a string.
+    native fn add(v: any?);
+    /// Adds at most `max` elements of `v` at the end of the buffer.
+    /// If `v` has less than `max` elements, fills the remaining places with `pad`.
+    native fn add_and_pad(v: any?, max: int, pad: char);
+    /// Returns the `i`th element of the buffer.
+    native fn get(i: int): char;
+    /// Returns the size of the buffer in number of characters.
+    native fn size(): int;
+    /// Removes every element from the buffer.
+    native fn clear();
+    /// Returns the content of the entire buffer formatted as a string.
+    native fn toString(): String;
+}
+
+/// Generic ordered container of elements
+@iterable
+native type Array<T> {
+    /// Initializes the array to the given size and repeats the default value for every elements.
+    native fn fill(size: int, default_value: T);
+    /// Adds `value` to the end of the array, expanding it by one element.
+    native fn add(value: T);
+    /// Adds all elements in `values` to the end of the array in the same order, expanding it by `values.size()` elements.
+    native fn add_all(values: Array<T>);
+    /// Returns the element referent to position `i` in the array.
+    /// Offset `i` needs to be within the array bounds, else it throws an `out of bounds` exception.
+    native fn get(i: int): T;
+    /// Sets `value` to the position `i` of the array. Also return the `value` set.
+    /// Offset `i` needs to be within the array bounds, else it throws an `out of bounds` exception.
+    native fn set(i: int, value: T): T;
+    /// Swaps the content of elements in the array between offset `i` and `j`.
+    /// Offset `i` and `j` need to be within the array bounds, else it throws an `out of bounds` exception.
+    native fn swap(i: int, j: int);
+    /// Sorts the array.
+    native fn sort(order: SortOrder);
+    /// Sorts the array using a field of contained objects for ordering.
+    native fn sort_by(field: field, order: SortOrder);
+    /// Returns the size of the array.
+    native fn size(): int;
+    /// Returns the index of the first appearance of `value` in the array.
+    /// If it is not found in the array, return `-1`.
+    native fn index_of(value: T): int;
+    /// Removes the array element in the index `i`, decreasing the array by one position.
+    /// Offset `i` needs to be within the array bounds, else it throws an exception.
+    native fn remove(i: int): T;
+    /// Removes the first element, throws an exception if empty
+    native fn remove_first(): T;
+    /// Removes the first array element, throws an exception if empty
+    native fn remove_last(): T;
+    /// Allocates the given capacity, size remains unchanged
+    native fn set_capacity(value: int);
+    /// Returns true if each element of the array between `start` and `end` is equal to `v`.
+    native fn range_equals(start: int, end: int, v: any?): bool;
+}
+
+/// Type that define numerical precision of Tensor data structure
+enum TensorType {
+    i32(4);
+    i64(8);
+    f32(4);
+    f64(8);
+    c64(8);
+    c128(16);
+}
+
+enum TensorDistance {
+    /// aka l2
+    euclidean;
+    l2sq;
+    cosine;
+}
+
+/// Data structure specialize for numerical value.
+/// Can handle any dimensions number and created by a shape parameter based in a list of dimension and their associated size.
+native type Tensor {
+    /// Initializes a Tensor object with value type `etype` and shape `shape`. Sets all values to 0 by default.
+    native fn init(etype: TensorType, shape: Array<int>);
+    /// Returns the element of the tensor stored in position `pos`. `pos` should be of same length as the shape of the tensor.
+    native fn get(pos: Array<int>): any;
+    /// Returns the imaginary part of the element of the tensor stored in position `pos`. `pos` should be of same length as the shape of the tensor.
+    native fn getImag(pos: Array<int>): any;
+    /// Sets `value` to position `pos` in the tensor.
+    native fn set(pos: Array<int>, value: any);
+    /// Sets the imaginary part of the element of the tensor stored in position `pos`. `pos` should be of same length as the shape of the tensor.
+    native fn setImag(pos: Array<int>, value: any);
+    /// Adds `value` to the element from the tensor in position `pos`.
+    native fn add(pos: Array<int>, value: any);
+    /// can be value for 1d tensor, array for 2d tensor, or tensor in general with -1 dim
+    native fn append(value: any);
+    /// can be value for 1d tensor, array, or tensor to copy from
+    native fn fill(value: any);
+    /// method to set capacity in number of elements, to avoid several resizes from append. Does not change the shape.
+    native fn setCapacity(value: int);
+    /// Returns the sum of all elements from the tensor. Only works with f64, f32, i64, i64 tensors.
+    native fn sum(): float;
+    /// Returns the number of elements in the tensor.
+    native fn size(): int;
+    /// Returns the type of the tensor.
+    native fn type(): TensorType;
+    /// Returns an array representing the shape of the tensor.
+    native fn shape(): Array<int>;
+    /// Returns the number of dimensions used in the tensor
+    native fn dim(): int;
+    /// Returns the default starting position of the tensor.
+    native fn initPos(): Array<int>;
+    /// Returns true if the position `pos` can still be incremented by one unit, false otherwise. If true, automatically modifies `pos` to next position.
+    native fn incPos(pos: Array<int>): bool;
+    ///Convert a f64 normal tensor to complex tensor for FFT
+    native fn to_complex_tensor(): Tensor;
+    ///Get real part of the tensor - method to be moved on tensor
+    native fn get_real_tensor(): Tensor;
+    ///Get imaginary part of the tensor - method to be moved on tensor
+    native fn get_imaginary_tensor(): Tensor;
+    ///Get absolute part of the tensor - method to be moved on tensor
+    native fn get_absolute_tensor(): Tensor;
+    ///Get the angle phase - method to be moved on tensor
+    native fn get_phase_tensor(inDegrees: bool): Tensor;
+    /// Reshape `this`
+    /// `Π(shape)` must exactly equals `this.size()`
+    native fn reshape(shape: Array<int>);
+    ///Scale a tensor by a value, if inPlace = false => a copy of the tensor is returned
+    native fn scale(value: any, inPlace: float): Tensor;
+    /// Extracts a slice of size `size` at position `pos`
+    /// Both `size` and `pos` must have the same dimensions as `this.shape()`
+    /// They must have non-negative values only such that `pos[d] + shape[d] <= this.shape()[d]` for `d` in `this.dim()`
+    native fn slice(pos: Array<int>, size: Array<int>): Tensor;
+    /// Slide tensor steps side across the first dimension, useful for sequences, sliding window, lstm, fourier
+    native fn slide(steps: int);
+    /// Copies `nbElem` elements of `src` from position `startPos` into tensor starting at position `destinationPos`.
+    /// Throws an error if `destinationPos`+`nbElem` does not fit into tensor shape.
+    native fn copyElementsFrom(src: Tensor, startPos: int, nbElem: int, destinationPos: int);
+    /// compute distance between two tensors, dimension should equals
+    native fn distance(v: Tensor, d: TensorDistance): float;
+    /// Resets the tensor by deleting all its attributes.
+    native fn reset();
+    /// Convert a 1D or 2D tensor to a table
+    native fn toTable(): Table;
+    native fn toString(): String;
+    /// Convert array into 1D Tensor
+    static native fn wrap_1d(etype: TensorType, values: Array): Tensor;
+}
+
+/// Maps can be used to store and fetch values using a key.
+@iterable
+native type Map<K, V> {
+    /// Set the `(key, value)` pair into the map. Also return the `value` set.
+    /// Key `key` needs to be a primitive object or a String, else it throws a `wrong parameters` exception.
+    native fn set(key: K, value: V): V;
+    /// Return the value referent to key `key` in the map.
+    native fn get(key: K): V?;
+    /// Return true if `key` is contained in the map, false otherwise.
+    native fn contains(key: K): bool;
+    /// Removes the `(key, value)` pair referent to key `key` from the map, decreasing its size by one.
+    native fn remove(key: K);
+    /// Returns the size of the map.
+    native fn size(): int;
+    /// Returns the values of the `(key, value)` pairs in the map as an array.
+    native fn values(): Array<V>;
+}
+
+/// Simple association data structure to handle couple of values.
+/// Can be specialize by generic type T and U respectively for left and right hand values.
+type Tuple<T, U> {
+    x: T;
+    y: U;
+}
+
+/// GreyCat does not only provide for temporal data, but also for geographical data.
+/// In several occasions, data are not only recorded with their position in time, but also in space. Think for instance of mobility data.
+/// The `geo` type family provides base mechanisms to deal with geo locations.
+///
+/// A `geo` is used to represent a precise location on the planet using latitude and longitude in decimal format.
+/// For instance, DataThings SA headquarters are located at `geo{49.59640167862028, 6.128662935665594};`.
+native type geo {
+    static min: geo = geo { -85.0511287602, -179.9999999581 };
+    static max: geo = geo { 85.0511287602, 179.9999999581 };
+    /// Returns the latitude of a geo point.
+    native fn lat(): float;
+    /// Returns the longitude of geo point.
+    native fn lng(): float;
+    /// Returns the distance in meters separating the geo point and `value`.
+    native fn distance(value: geo): float;
+    /// Returns a string containing the coordinates of the geo point (eg. '49.999999988,6.00000002').
+    native fn toString(): String;
+    /// Returns a string containing the GeoHash of the geo point coordinates.
+    native fn toGeohash(): String;
+}
+
+/// GeoCircles are used to represent a circular region of the globe. This can be used to define research zones for instance.
+/// Circles are created using one GeoPoint as center, and a radius in meters.
+type GeoCircle {
+    center: geo;
+    radius: float;
+    /// Returns true if the `GeoCircle` contains the geo point geo, returns false otherwise.
+    native fn contains(point: geo): bool;
+    /// Returns the South-West geo point of the bounding box containing the `GeoCircle`.
+    native fn sw(): geo;
+    /// Returns the North-East geo point of the bounding box containing the `GeoCircle`.
+    native fn ne(): geo;
+}
+
+/// GeoPoly are used to represent a region of the globe in the form of a polygon. This can be used to define research zones for instance.
+/// Polygons are created using an array of GeoPoint, each pont representing a vertice of the polygon.
+type GeoPoly {
+    points: Array<geo>;
+    /// Returns true if the `GeoPoly` contains the geo point `geo`, returns false otherwise.
+    native fn contains(point: geo): bool;
+    /// Returns the South-West point of the bounding box containing the GeoPoly.
+    native fn sw(): geo;
+    /// Returns the North-East point of the bounding box containing the GeoPoly.
+    native fn ne(): geo;
+}
+
+/// GeoBoxes are used to represent a rectangular region of the globe. This can be used to define research zones for instance.
+/// Boxes are created using two GeoPoint, the point located in the South-West of the box, and the point located at the North-East.
+type GeoBox {
+    sw: geo;
+    ne: geo;
+    /// Returns true if the `GeoBox` contains the geo point `geo`, returns false otherwise.
+    native fn contains(point: geo): bool;
+}
+
+/// nodeGeo primitive type handle large series of geographical indexed values, eventually sparse.
+/// Generic type params can specialize the contains values (V).
+/// As any nodes, nodeGeo are stored to disk and compose the sets of Graph Nodes.
+/// nodeGeo can handle very large series even if key are sparse and spread over the full geo spectrum.
+@iterable
+native type nodeGeo<T> {
+    /// Returns the size of the nodeGeo.
+    native fn size(): int;
+    /// Returns the number of elements from the nodeGeo which coordinates are located inside the `GeoBox` defined by `from` and `to`.
+    native fn rangeSize(from: geo, to: geo): int;
+    /// Returns the value of the element referring to the coordinates `index` in the nodeGeo. If `index` does not exist, returns null.
+    native fn get(index: geo): T?;
+    /// Sets to `value` the value of the element referring to the coordinates `index` in the nodeGeo.
+    /// If `index` does not exist, adds the corresponding `(index, value)` pair to the graph.
+    native fn set(index: geo, value: T): T;
+    /// Returns the value of the element referring to the coordinates `index` in the nodeGeo. If `index` is not resolved, returns null.
+    native fn resolve(index: geo): T?;
+    /// Returns the key and the value associated with the given `index` in the list.
+    /// If there is not value at the given `index`, resolve will return the closest non-`null` value with a smaller index than `index`.
+    native fn resolveEntry(index: int): Tuple<geo, T>?;
+    /// Removes the element referring to the coordinates `index` in the nodeGeo.
+    native fn remove(index: geo);
+    /// Removes all elements from the nodeGeo.
+    native fn removeAll();
+    /// Returns the geographic coordinates of the nodeGeo which is located the most South-West.
+    native fn firstIndex(): geo?;
+    /// Returns the value associated with the nodeGeo which is located the most South-West.
+    native fn first(): T?;
+    /// Returns the geographic coordinates of the nodeGeo which is located the most North-East.
+    native fn lastIndex(): geo?;
+    /// Returns the value associated with the nodeGeo which is located the most North-East.
+    native fn last(): T?;
+    /// Sample, using `mode` sampling, the nodeLists in `refs` within the `GeoBox` initialized with the geo points `from` and `to`.
+    /// Also set that at most `maxRows` rows are allowed to the resulting Table and the max dephasing of points is `maxDephasing`.
+    @expose
+    @permission("debug")
+    static native fn sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: SamplingMode): Table;
+    /// Returns the NodeInfo of all the nodeGeo passed as input parameters.
+    /// The return Array will have exactly the same size as input and every NodeInfo result will be positioned at the same offset than nodeGeo in input array parameter.
+    @expose
+    @permission("debug")
+    static native fn info(nodes: Array<nodeGeo>): Array<NodeInfo<geo>>;
+}
+
+/// Returns the value associated with the enumeration field.
+/// If the field was declared without a value, `null` is returned.
+///
+/// ```gcl
+/// use util;
+///
+/// fn main() {
+///   Assert::equals(valueOf(ErrorCode::none), 0);
+/// }
+/// ```make
+native fn valueOf(en: any): any?;
+
+/// Tries to parse a [`String`](/libs/std/core/type.String.html) and returns either a [`float`](/libs/std/core/type.float.html) or an [`int`](/libs/std/core/type.int.html).
+///
+/// If the parse fails, an [`Error`](/lib/std/core/type.Error.html) is thrown with a `code` of [`ErrorCode::runtime_error(20)`](/libs/std/core/enum.ErrorCode.html#runtime-error-20)
+native fn parseNumber(value: String): any;
+
+native fn parseHex(value: String): int;
+
+/// Returns a clone of the given value.
+native fn clone<T>(v: T): T;
+
+/// precise moment in calendar.
+/// time are universal and unique, Date are related to human activity.
+type Date {
+    /// year: valid gregorian calendar year
+    year: int;
+    /// month: year's month from 1 to 12
+    month: int;
+    /// day: month's day from 1 to 31
+    day: int;
+    /// hour: day's hour from 0 to 23
+    hour: int;
+    /// minute: hour's minute from 0 to 59
+    minute: int;
+    /// second: minute's second from 0 to 59
+    second: int;
+    /// microsecond_offset: offset to the microsecond, from 0 to 999,999
+    microsecond: int;
+    /// Constructs a Date from given time and time zone (or UTC if null)
+    static native fn from_time(time: time, tz: TimeZone?): Date;
+    /// Exports date back to time, according to time zone (or UTC if null).
+    /// Raises an exception if date is illegal in passed time zone.
+    native fn to_time(tz: TimeZone?): time;
+    /// Exports date back to time, according to time zone.
+    /// If date is invalid in passed time zone, returns the time corresponding to the first following valid instant.
+    native fn to_nearest_time(tz: TimeZone): time;
+    /// Parses the string parameter as a time definition according to the format definition.
+    /// [Here](https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html) is the format available options.
+    ///
+    /// Throws an error if the string does not comply the defined format.
+    /// If the format parameter is null, ISO 8601 will be used.
+    /// If the requested time zone is set to null, then UTC is used.
+    static native fn parse(value: String, format: String?): Date;
+}
+
+/// Print the value and a line break to the default console (or file output for task)
+native fn println(v: any?);
+
+/// Print the value without line break to the default console (or file output for task)
+native fn pprint(v: any?);
+
+/// Pretty Print the value with line breaks to the default console (or file output for task)
+native fn print(v: any?);
+
+/// Print formatted error log to output log file if log level is greater or equals to error
+native fn error(v: any?);
+
+/// Print formatted warning log to output log file if log level is greater or equals to warn
+native fn warn(v: any?);
+
+/// Print formatted info log to output log file if log level is greater or equals to info
+native fn info(v: any?);
+
+/// Print formatted perf log to output log file if log level is greater or equals to perf
+native fn perf(v: any?);
+
+/// Print formatted trace log to output log file if log level is greater or equals to trace
+native fn trace(v: any?);
+
+/// primitive tuple encoding 2 int as single ordered primitive integer
+native type t2 {
+    /// extract the value of dimension 0
+    native fn x0(): int;
+    /// extract the value of dimension 1
+    native fn x1(): int;
+}
+
+/// primitive tuple encoding 3 int as single ordered primitive integer
+native type t3 {
+    /// extract the value of dimension 0
+    native fn x0(): int;
+    /// extract the value of dimension 1
+    native fn x1(): int;
+    /// extract the value of dimension 2
+    native fn x2(): int;
+}
+
+/// primitive tuple encoding 4 int as single ordered primitive integer
+native type t4 {
+    /// extract the value of dimension 0
+    native fn x0(): int;
+    /// extract the value of dimension 1
+    native fn x1(): int;
+    /// extract the value of dimension 2
+    native fn x2(): int;
+    /// extract the value of dimension 3
+    native fn x3(): int;
+}
+
+/// primitive string that must fit on 8 bytes which makes it a maximum of 10 characters long
+/// with the added constraint that the characters must only be lowercase-ASCII.
+///
+/// *`str` is especially efficient for indexing compared to `String`*
+native type str {}
+
+/// primitive tuple encoding 2 float as single ordered primitive integer
+native type t2f {
+    /// extract the value of dimension 0
+    native fn x0(): float;
+    /// extract the value of dimension 1
+    native fn x1(): float;
+}
+
+/// primitive tuple encoding 3 float as single ordered primitive integer
+native type t3f {
+    /// extract the value of dimension 0
+    native fn x0(): float;
+    /// extract the value of dimension 1
+    native fn x1(): float;
+    /// extract the value of dimension 2
+    native fn x2(): float;
+}
+
+/// primitive tuple encoding 4 float as single ordered primitive integer
+native type t4f {
+    /// extract the value of dimension 0
+    native fn x0(): float;
+    /// extract the value of dimension 1
+    native fn x1(): float;
+    /// extract the value of dimension 2
+    native fn x2(): float;
+    /// extract the value of dimension 3
+    native fn x3(): float;
+}
+
+type MathConstants {
+    static e: float = 2.7182818284590452354_f;
+    static log_2e: float = 1.4426950408889634074_f;
+    static log_10e: float = 0.43429448190325182765_f;
+    static ln2: float = 0.69314718055994530942_f;
+    static ln10: float = 2.30258509299404568402_f;
+    static pi: float = 3.14159265358979323846_f;
+    static pi_2: float = 1.57079632679489661923_f;
+    static pi_4: float = 0.78539816339744830962_f;
+    static m1_pi: float = 0.31830988618379067154_f;
+    static m2_pi: float = 0.63661977236758134308_f;
+    static m2_sqrt_pi: float = 1.12837916709551257390_f;
+    static sqrt2: float = 1.41421356237309504880_f;
+    static sqrt1_2: float = 0.70710678118654752440_f;
+}
+
+/// return the value of e (the base of natural logarithms) raised to the power of x.
+native fn exp(x: float): float;
+
+/// return the cosine of x, where x is given in radians.
+native fn cos(x: float): float;
+
+/// return the sine of x, where x is given in radians.
+native fn sin(x: float): float;
+
+/// return the tangent of x, where x is given in radians.
+native fn tan(x: float): float;
+
+/// return the nonnegative square root of x.
+native fn sqrt(x: float): float;
+
+/// return the largest integral value that is not greater than x.
+/// for example, floor(0.5) is 0.0, and floor(-0.5) is -1.0.
+native fn floor(x: float): float;
+
+/// return the smallest integral value that is not less than x.
+/// for example, ceil(0.5) is 1.0, and ceil(-0.5) is 0.0.
+native fn ceil(x: float): float;
+
+/// return the hyperbolic cosine of x, which is defined mathematically as: cosh(x) = (exp(x) + exp(-x)) / 2
+native fn cosh(x: float): float;
+
+/// return the hyperbolic sine of x, which is defined mathematically as: sinh(x) = (exp(x) - exp(-x)) / 2
+native fn sinh(x: float): float;
+
+/// return the hyperbolic tangent of x, which is defined mathematically as: tanh(x) = sinh(x) / cosh(x)
+native fn tanh(x: float): float;
+
+/// calculate the arc cosine of x; that is the value whose cosine is x.
+native fn acos(x: float): float;
+
+/// calculate the principal value of the arc sine of x; that is the value whose sine is x.
+native fn asin(x: float): float;
+
+/// calculate the principal value of the arc tangent of x; that is the value whose tangent is x.
+native fn atan(x: float): float;
+
+/// return the natural logarithm of x.
+native fn log(x: float): float;
+
+/// return the base-2 logarithm of x.
+native fn log2(x: float): float;
+
+/// return the base-10 logarithm of x.
+native fn log10(x: float): float;
+
+/// return the value of x raised to the power of y.
+native fn pow(x: float, y: float): float;
+
+/// round x to the nearest integer value that is not larger in magnitude than x.
+native fn trunc(x: float): float;
+
+/// round x to the nearest integer, but round halfway cases away from zero
+/// for example, round(0.5) is 1.0, and round(-0.5) is -1.0.
+native fn round(x: float): float;
+
+/// computes the absolute value of the integer argument j.
+native fn abs<T>(x: T): T;
+
+/// return the minimum of a and b.
+native fn min<T>(x: T, y: T): T;
+
+/// return the maximum of a and b.
+native fn max<T>(x: T, y: T): T;
+
+/// return true is v parameter is a NaN, false otherwise.
+native fn isNaN(v: float): bool;
+
+/// round a float value to the closest p floating decimal
+native fn roundp(x: float, p: int): float;
+
+/// covered time zones to convert time to date and conversely
+enum TimeZone {
+    "UTC";
+    "Africa/Abidjan";
+    "Africa/Accra";
+    "Africa/Addis_Ababa";
+    "Africa/Algiers";
+    "Africa/Asmara";
+    "Africa/Asmera";
+    "Africa/Bamako";
+    "Africa/Bangui";
+    "Africa/Banjul";
+    "Africa/Bissau";
+    "Africa/Blantyre";
+    "Africa/Brazzaville";
+    "Africa/Bujumbura";
+    "Africa/Cairo";
+    "Africa/Casablanca";
+    "Africa/Ceuta";
+    "Africa/Conakry";
+    "Africa/Dakar";
+    "Africa/Dar_es_Salaam";
+    "Africa/Djibouti";
+    "Africa/Douala";
+    "Africa/El_Aaiun";
+    "Africa/Freetown";
+    "Africa/Gaborone";
+    "Africa/Harare";
+    "Africa/Johannesburg";
+    "Africa/Juba";
+    "Africa/Kampala";
+    "Africa/Khartoum";
+    "Africa/Kigali";
+    "Africa/Kinshasa";
+    "Africa/Lagos";
+    "Africa/Libreville";
+    "Africa/Lome";
+    "Africa/Luanda";
+    "Africa/Lubumbashi";
+    "Africa/Lusaka";
+    "Africa/Malabo";
+    "Africa/Maputo";
+    "Africa/Maseru";
+    "Africa/Mbabane";
+    "Africa/Mogadishu";
+    "Africa/Monrovia";
+    "Africa/Nairobi";
+    "Africa/Ndjamena";
+    "Africa/Niamey";
+    "Africa/Nouakchott";
+    "Africa/Ouagadougou";
+    "Africa/Porto-Novo";
+    "Africa/Sao_Tome";
+    "Africa/Timbuktu";
+    "Africa/Tripoli";
+    "Africa/Tunis";
+    "Africa/Windhoek";
+    "America/Adak";
+    "America/Anchorage";
+    "America/Anguilla";
+    "America/Antigua";
+    "America/Araguaina";
+    "America/Argentina/Buenos_Aires";
+    "America/Argentina/Catamarca";
+    "America/Argentina/ComodRivadavia";
+    "America/Argentina/Cordoba";
+    "America/Argentina/Jujuy";
+    "America/Argentina/La_Rioja";
+    "America/Argentina/Mendoza";
+    "America/Argentina/Rio_Gallegos";
+    "America/Argentina/Salta";
+    "America/Argentina/San_Juan";
+    "America/Argentina/San_Luis";
+    "America/Argentina/Tucuman";
+    "America/Argentina/Ushuaia";
+    "America/Aruba";
+    "America/Asuncion";
+    "America/Atikokan";
+    "America/Atka";
+    "America/Bahia";
+    "America/Bahia_Banderas";
+    "America/Barbados";
+    "America/Belem";
+    "America/Belize";
+    "America/Blanc-Sablon";
+    "America/Boa_Vista";
+    "America/Bogota";
+    "America/Boise";
+    "America/Buenos_Aires";
+    "America/Cambridge_Bay";
+    "America/Campo_Grande";
+    "America/Cancun";
+    "America/Caracas";
+    "America/Catamarca";
+    "America/Cayenne";
+    "America/Cayman";
+    "America/Chicago";
+    "America/Chihuahua";
+    "America/Ciudad_Juarez";
+    "America/Coral_Harbour";
+    "America/Cordoba";
+    "America/Costa_Rica";
+    "America/Coyhaique";
+    "America/Creston";
+    "America/Cuiaba";
+    "America/Curacao";
+    "America/Danmarkshavn";
+    "America/Dawson";
+    "America/Dawson_Creek";
+    "America/Denver";
+    "America/Detroit";
+    "America/Dominica";
+    "America/Edmonton";
+    "America/Eirunepe";
+    "America/El_Salvador";
+    "America/Ensenada";
+    "America/Fort_Nelson";
+    "America/Fort_Wayne";
+    "America/Fortaleza";
+    "America/Glace_Bay";
+    "America/Godthab";
+    "America/Goose_Bay";
+    "America/Grand_Turk";
+    "America/Grenada";
+    "America/Guadeloupe";
+    "America/Guatemala";
+    "America/Guayaquil";
+    "America/Guyana";
+    "America/Halifax";
+    "America/Havana";
+    "America/Hermosillo";
+    "America/Indiana/Indianapolis";
+    "America/Indiana/Knox";
+    "America/Indiana/Marengo";
+    "America/Indiana/Petersburg";
+    "America/Indiana/Tell_City";
+    "America/Indiana/Vevay";
+    "America/Indiana/Vincennes";
+    "America/Indiana/Winamac";
+    "America/Indianapolis";
+    "America/Inuvik";
+    "America/Iqaluit";
+    "America/Jamaica";
+    "America/Jujuy";
+    "America/Juneau";
+    "America/Kentucky/Louisville";
+    "America/Kentucky/Monticello";
+    "America/Knox_IN";
+    "America/Kralendijk";
+    "America/La_Paz";
+    "America/Lima";
+    "America/Los_Angeles";
+    "America/Louisville";
+    "America/Lower_Princes";
+    "America/Maceio";
+    "America/Managua";
+    "America/Manaus";
+    "America/Marigot";
+    "America/Martinique";
+    "America/Matamoros";
+    "America/Mazatlan";
+    "America/Mendoza";
+    "America/Menominee";
+    "America/Merida";
+    "America/Metlakatla";
+    "America/Mexico_City";
+    "America/Miquelon";
+    "America/Moncton";
+    "America/Monterrey";
+    "America/Montevideo";
+    "America/Montreal";
+    "America/Montserrat";
+    "America/Nassau";
+    "America/New_York";
+    "America/Nipigon";
+    "America/Nome";
+    "America/Noronha";
+    "America/North_Dakota/Beulah";
+    "America/North_Dakota/Center";
+    "America/North_Dakota/New_Salem";
+    "America/Nuuk";
+    "America/Ojinaga";
+    "America/Panama";
+    "America/Pangnirtung";
+    "America/Paramaribo";
+    "America/Phoenix";
+    "America/Port-au-Prince";
+    "America/Port_of_Spain";
+    "America/Porto_Acre";
+    "America/Porto_Velho";
+    "America/Puerto_Rico";
+    "America/Punta_Arenas";
+    "America/Rainy_River";
+    "America/Rankin_Inlet";
+    "America/Recife";
+    "America/Regina";
+    "America/Resolute";
+    "America/Rio_Branco";
+    "America/Rosario";
+    "America/Santa_Isabel";
+    "America/Santarem";
+    "America/Santiago";
+    "America/Santo_Domingo";
+    "America/Sao_Paulo";
+    "America/Scoresbysund";
+    "America/Shiprock";
+    "America/Sitka";
+    "America/St_Barthelemy";
+    "America/St_Johns";
+    "America/St_Kitts";
+    "America/St_Lucia";
+    "America/St_Thomas";
+    "America/St_Vincent";
+    "America/Swift_Current";
+    "America/Tegucigalpa";
+    "America/Thule";
+    "America/Thunder_Bay";
+    "America/Tijuana";
+    "America/Toronto";
+    "America/Tortola";
+    "America/Vancouver";
+    "America/Virgin";
+    "America/Whitehorse";
+    "America/Winnipeg";
+    "America/Yakutat";
+    "America/Yellowknife";
+    "Antarctica/Casey";
+    "Antarctica/Davis";
+    "Antarctica/DumontDUrville";
+    "Antarctica/Macquarie";
+    "Antarctica/Mawson";
+    "Antarctica/McMurdo";
+    "Antarctica/Palmer";
+    "Antarctica/Rothera";
+    "Antarctica/South_Pole";
+    "Antarctica/Syowa";
+    "Antarctica/Troll";
+    "Antarctica/Vostok";
+    "Arctic/Longyearbyen";
+    "Asia/Aden";
+    "Asia/Almaty";
+    "Asia/Amman";
+    "Asia/Anadyr";
+    "Asia/Aqtau";
+    "Asia/Aqtobe";
+    "Asia/Ashgabat";
+    "Asia/Ashkhabad";
+    "Asia/Atyrau";
+    "Asia/Baghdad";
+    "Asia/Bahrain";
+    "Asia/Baku";
+    "Asia/Bangkok";
+    "Asia/Barnaul";
+    "Asia/Beirut";
+    "Asia/Bishkek";
+    "Asia/Brunei";
+    "Asia/Calcutta";
+    "Asia/Chita";
+    "Asia/Choibalsan";
+    "Asia/Chongqing";
+    "Asia/Chungking";
+    "Asia/Colombo";
+    "Asia/Dacca";
+    "Asia/Damascus";
+    "Asia/Dhaka";
+    "Asia/Dili";
+    "Asia/Dubai";
+    "Asia/Dushanbe";
+    "Asia/Famagusta";
+    "Asia/Gaza";
+    "Asia/Harbin";
+    "Asia/Hebron";
+    "Asia/Ho_Chi_Minh";
+    "Asia/Hong_Kong";
+    "Asia/Hovd";
+    "Asia/Irkutsk";
+    "Asia/Istanbul";
+    "Asia/Jakarta";
+    "Asia/Jayapura";
+    "Asia/Jerusalem";
+    "Asia/Kabul";
+    "Asia/Kamchatka";
+    "Asia/Karachi";
+    "Asia/Kashgar";
+    "Asia/Kathmandu";
+    "Asia/Katmandu";
+    "Asia/Khandyga";
+    "Asia/Kolkata";
+    "Asia/Krasnoyarsk";
+    "Asia/Kuala_Lumpur";
+    "Asia/Kuching";
+    "Asia/Kuwait";
+    "Asia/Macao";
+    "Asia/Macau";
+    "Asia/Magadan";
+    "Asia/Makassar";
+    "Asia/Manila";
+    "Asia/Muscat";
+    "Asia/Nicosia";
+    "Asia/Novokuznetsk";
+    "Asia/Novosibirsk";
+    "Asia/Omsk";
+    "Asia/Oral";
+    "Asia/Phnom_Penh";
+    "Asia/Pontianak";
+    "Asia/Pyongyang";
+    "Asia/Qatar";
+    "Asia/Qostanay";
+    "Asia/Qyzylorda";
+    "Asia/Rangoon";
+    "Asia/Riyadh";
+    "Asia/Saigon";
+    "Asia/Sakhalin";
+    "Asia/Samarkand";
+    "Asia/Seoul";
+    "Asia/Shanghai";
+    "Asia/Singapore";
+    "Asia/Srednekolymsk";
+    "Asia/Taipei";
+    "Asia/Tashkent";
+    "Asia/Tbilisi";
+    "Asia/Tehran";
+    "Asia/Tel_Aviv";
+    "Asia/Thimbu";
+    "Asia/Thimphu";
+    "Asia/Tokyo";
+    "Asia/Tomsk";
+    "Asia/Ujung_Pandang";
+    "Asia/Ulaanbaatar";
+    "Asia/Ulan_Bator";
+    "Asia/Urumqi";
+    "Asia/Ust-Nera";
+    "Asia/Vientiane";
+    "Asia/Vladivostok";
+    "Asia/Yakutsk";
+    "Asia/Yangon";
+    "Asia/Yekaterinburg";
+    "Asia/Yerevan";
+    "Atlantic/Azores";
+    "Atlantic/Bermuda";
+    "Atlantic/Canary";
+    "Atlantic/Cape_Verde";
+    "Atlantic/Faeroe";
+    "Atlantic/Faroe";
+    "Atlantic/Jan_Mayen";
+    "Atlantic/Madeira";
+    "Atlantic/Reykjavik";
+    "Atlantic/South_Georgia";
+    "Atlantic/St_Helena";
+    "Atlantic/Stanley";
+    "Australia/ACT";
+    "Australia/Adelaide";
+    "Australia/Brisbane";
+    "Australia/Broken_Hill";
+    "Australia/Canberra";
+    "Australia/Currie";
+    "Australia/Darwin";
+    "Australia/Eucla";
+    "Australia/Hobart";
+    "Australia/LHI";
+    "Australia/Lindeman";
+    "Australia/Lord_Howe";
+    "Australia/Melbourne";
+    "Australia/NSW";
+    "Australia/North";
+    "Australia/Perth";
+    "Australia/Queensland";
+    "Australia/South";
+    "Australia/Sydney";
+    "Australia/Tasmania";
+    "Australia/Victoria";
+    "Australia/West";
+    "Australia/Yancowinna";
+    "Brazil/Acre";
+    "Brazil/DeNoronha";
+    "Brazil/East";
+    "Brazil/West";
+    "CET";
+    "CST6CDT";
+    "Canada/Atlantic";
+    "Canada/Central";
+    "Canada/Eastern";
+    "Canada/Mountain";
+    "Canada/Newfoundland";
+    "Canada/Pacific";
+    "Canada/Saskatchewan";
+    "Canada/Yukon";
+    "Chile/Continental";
+    "Chile/EasterIsland";
+    "Cuba";
+    "EET";
+    "EST";
+    "EST5EDT";
+    "Egypt";
+    "Eire";
+    "Etc/GMT";
+    "Etc/GMT+0";
+    "Etc/GMT+1";
+    "Etc/GMT+10";
+    "Etc/GMT+11";
+    "Etc/GMT+12";
+    "Etc/GMT+2";
+    "Etc/GMT+3";
+    "Etc/GMT+4";
+    "Etc/GMT+5";
+    "Etc/GMT+6";
+    "Etc/GMT+7";
+    "Etc/GMT+8";
+    "Etc/GMT+9";
+    "Etc/GMT-0";
+    "Etc/GMT-1";
+    "Etc/GMT-10";
+    "Etc/GMT-11";
+    "Etc/GMT-12";
+    "Etc/GMT-13";
+    "Etc/GMT-14";
+    "Etc/GMT-2";
+    "Etc/GMT-3";
+    "Etc/GMT-4";
+    "Etc/GMT-5";
+    "Etc/GMT-6";
+    "Etc/GMT-7";
+    "Etc/GMT-8";
+    "Etc/GMT-9";
+    "Etc/GMT0";
+    "Etc/Greenwich";
+    "Etc/UCT";
+    "Etc/UTC";
+    "Etc/Universal";
+    "Etc/Zulu";
+    "Europe/Amsterdam";
+    "Europe/Andorra";
+    "Europe/Astrakhan";
+    "Europe/Athens";
+    "Europe/Belfast";
+    "Europe/Belgrade";
+    "Europe/Berlin";
+    "Europe/Bratislava";
+    "Europe/Brussels";
+    "Europe/Bucharest";
+    "Europe/Budapest";
+    "Europe/Busingen";
+    "Europe/Chisinau";
+    "Europe/Copenhagen";
+    "Europe/Dublin";
+    "Europe/Gibraltar";
+    "Europe/Guernsey";
+    "Europe/Helsinki";
+    "Europe/Isle_of_Man";
+    "Europe/Istanbul";
+    "Europe/Jersey";
+    "Europe/Kaliningrad";
+    "Europe/Kiev";
+    "Europe/Kirov";
+    "Europe/Kyiv";
+    "Europe/Lisbon";
+    "Europe/Ljubljana";
+    "Europe/London";
+    "Europe/Luxembourg";
+    "Europe/Madrid";
+    "Europe/Malta";
+    "Europe/Mariehamn";
+    "Europe/Minsk";
+    "Europe/Monaco";
+    "Europe/Moscow";
+    "Europe/Nicosia";
+    "Europe/Oslo";
+    "Europe/Paris";
+    "Europe/Podgorica";
+    "Europe/Prague";
+    "Europe/Riga";
+    "Europe/Rome";
+    "Europe/Samara";
+    "Europe/San_Marino";
+    "Europe/Sarajevo";
+    "Europe/Saratov";
+    "Europe/Simferopol";
+    "Europe/Skopje";
+    "Europe/Sofia";
+    "Europe/Stockholm";
+    "Europe/Tallinn";
+    "Europe/Tirane";
+    "Europe/Tiraspol";
+    "Europe/Ulyanovsk";
+    "Europe/Uzhgorod";
+    "Europe/Vaduz";
+    "Europe/Vatican";
+    "Europe/Vienna";
+    "Europe/Vilnius";
+    "Europe/Volgograd";
+    "Europe/Warsaw";
+    "Europe/Zagreb";
+    "Europe/Zaporozhye";
+    "Europe/Zurich";
+    "Factory";
+    "GB";
+    "GB-Eire";
+    "GMT";
+    "GMT+0";
+    "GMT-0";
+    "GMT0";
+    "Greenwich";
+    "HST";
+    "Hongkong";
+    "Iceland";
+    "Indian/Antananarivo";
+    "Indian/Chagos";
+    "Indian/Christmas";
+    "Indian/Cocos";
+    "Indian/Comoro";
+    "Indian/Kerguelen";
+    "Indian/Mahe";
+    "Indian/Maldives";
+    "Indian/Mauritius";
+    "Indian/Mayotte";
+    "Indian/Reunion";
+    "Iran";
+    "Israel";
+    "Jamaica";
+    "Japan";
+    "Kwajalein";
+    "Libya";
+    "MET";
+    "MST";
+    "MST7MDT";
+    "Mexico/BajaNorte";
+    "Mexico/BajaSur";
+    "Mexico/General";
+    "NZ";
+    "NZ-CHAT";
+    "Navajo";
+    "PRC";
+    "PST8PDT";
+    "Pacific/Apia";
+    "Pacific/Auckland";
+    "Pacific/Bougainville";
+    "Pacific/Chatham";
+    "Pacific/Chuuk";
+    "Pacific/Easter";
+    "Pacific/Efate";
+    "Pacific/Enderbury";
+    "Pacific/Fakaofo";
+    "Pacific/Fiji";
+    "Pacific/Funafuti";
+    "Pacific/Galapagos";
+    "Pacific/Gambier";
+    "Pacific/Guadalcanal";
+    "Pacific/Guam";
+    "Pacific/Honolulu";
+    "Pacific/Johnston";
+    "Pacific/Kanton";
+    "Pacific/Kiritimati";
+    "Pacific/Kosrae";
+    "Pacific/Kwajalein";
+    "Pacific/Majuro";
+    "Pacific/Marquesas";
+    "Pacific/Midway";
+    "Pacific/Nauru";
+    "Pacific/Niue";
+    "Pacific/Norfolk";
+    "Pacific/Noumea";
+    "Pacific/Pago_Pago";
+    "Pacific/Palau";
+    "Pacific/Pitcairn";
+    "Pacific/Pohnpei";
+    "Pacific/Ponape";
+    "Pacific/Port_Moresby";
+    "Pacific/Rarotonga";
+    "Pacific/Saipan";
+    "Pacific/Samoa";
+    "Pacific/Tahiti";
+    "Pacific/Tarawa";
+    "Pacific/Tongatapu";
+    "Pacific/Truk";
+    "Pacific/Wake";
+    "Pacific/Wallis";
+    "Pacific/Yap";
+    "Poland";
+    "Portugal";
+    "ROC";
+    "ROK";
+    "Singapore";
+    "Turkey";
+    "UCT";
+    "US/Alaska";
+    "US/Aleutian";
+    "US/Arizona";
+    "US/Central";
+    "US/East-Indiana";
+    "US/Eastern";
+    "US/Hawaii";
+    "US/Indiana-Starke";
+    "US/Michigan";
+    "US/Mountain";
+    "US/Pacific";
+    "US/Samoa";
+    "Universal";
+    "W-SU";
+    "WET";
+    "Zulu";
+}

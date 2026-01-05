@@ -1,0 +1,69 @@
+//enum PowerSwitchType {
+//  ls;
+//  cb;
+//  lbs;
+//  ds;
+//}
+//
+//enum PowerElementType {
+//  l;
+//  t;
+//  t3;
+//  b;
+//}
+
+type PowerBusResult {
+  abs: float;
+  angle_radians: float;
+  voltage: float;
+  voltage_img: float;
+  current: float;
+  current_img: float;
+}
+
+type PowerLineResult {
+  /// active power flow into the line at “from” bus [MW]
+  p_from_mw: float;
+  /// reactive power flow into the line at “from” bus [MVar]
+  q_from_mvar: float;
+  ///active power flow into the line at “to” bus [MW] ///
+  p_to_mw: float;
+  ///reactive power flow into the line at “to” bus [MVar] ///
+  q_to_mvar: float;
+  ///active power losses of the line [MW] ///
+  pl_mw: float;
+  ///reactive power consumption of the line [MVar] ///
+  ql_mvar: float;
+  ///Current at from bus [kA] ///
+  i_from_ka: float;
+  ///Current at to bus [kA] ///
+  i_to_ka: float;
+  ///Maximum of i_from_ka and i_to_ka [kA] ///
+  i_ka: float;
+  ///voltage magnitude at from bus ///
+  vm_from_pu: float;
+  ///voltage magnitude at to bus ///
+  vm_to_pu: float;
+  ///voltage angle at from bus [radians] ///
+  va_from_radians: float;
+  ///voltage angle at to bus [radians] ///
+  va_to_radians: float;
+  ///line loading [%] ///
+  loading_percent: float;
+}
+
+type PowerNetwork {
+  private tolerance: float?;
+  private max_iteration: int?;
+
+  native fn configure(nb_bus: int, nb_lines: int, nb_ext_grids: int);
+  native fn createBus(bus_id: int, vn_kv: float);
+  native fn createLoad(bus_id: int, p_mw: float, q_mvar: float);
+  native fn createLine(line_id: int, from_bus_id: int, to_bus_id: int, lenght_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float);
+  native fn createExtGrid(bus_id: int, vm_p_u: float);
+
+  native fn compute();
+  native fn getBusResult(bus_id: int): PowerBusResult;
+  native fn getLineResult(line_id: int): PowerLineResult;
+  native fn getCheckSum(): Array<float>;
+}

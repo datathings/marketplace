@@ -1,0 +1,347 @@
+/// An optionally bounded FIFO collection
+type Queue<T> {
+    /// Internal array of values laid out as `[<front>, ..., <back>]`
+    private values: Array<T>?;
+    /// If non-null, the queue elements will be dropped when the size reaches the capacity.
+    private capacity: int?;
+
+    /// Add element to queue back, if values size equals capacity, one element at front is removed.
+    native fn push(value: T);
+    /// Gets and removes the element at queue front.
+    native fn pop(): T?;
+    /// Returns the element at the back of the queue. Does not remove the element from the queue.
+    native fn front(): T?;
+    /// Returns the element at the front of the queue. Does not remove the element from the queue.
+    native fn back(): T?;
+    /// Clears the queue of all its content.
+    native fn clear();
+}
+
+/// A LIFO collection.
+type Stack<T> {
+    /// Internal array of values laid out as `[<first>, ..., <last>]`
+    private values: Array<T>?;
+
+    /// Adds an element at queue back. If values size is over capacity, element at front is removed.
+    native fn push(value: T);
+    /// Gets and removes the element at queue front.
+    native fn pop(): T?;
+    /// Returns the element at the back of the queue. Does not remove the element from the queue.
+    native fn first(): T?;
+    /// Returns the element at the front of the queue. Does not remove the element from the queue.
+    native fn last(): T?;
+    /// Clears the queue of all its content.
+    native fn clear();
+}
+
+/// A FiFO collection to compute moving average over a fixed number of values.
+/// Use this collection during iterations to efficiently obtain avg and std while regularly adding values.
+type SlidingWindow<T> {
+    /// Internal array of values laid out as FIFO
+    private values: Array<T>?;
+    /// The maximum number of elements in the window
+    span: int;
+    sum: float?;
+    sumsq: float?;
+    /// Field to extract numerical value taken into account in the moving average
+    private field: field?;
+
+    /// Adds a new value value to the window. Following this addition, the last value in the window is discarded if the maximum size is reached.
+    native fn add(value: T);
+    /// Clears the window of all its values.
+    native fn clear();
+    /// Returns the median of the values contained in the window.
+    native fn median(): float?;
+    /// Returns the min of the values contained in the window.
+    native fn min(): T?;
+    /// Returns the min of the values contained in the window.
+    native fn max(): T?;
+    /// Returns the standard deviation of the values contained in the window.
+    native fn std(): float?;
+    /// Returns the average of the values contained in the window.
+    native fn avg(): float?;
+    /// Return number of current values stored in backend Array
+    native fn size(): int;
+}
+
+/// A FIFO collection to compute moving average over values spaced by a maximum period of time.
+/// Use this collection during iteration to efficiently obtain avg and std while regularly adding values.
+type TimeWindow<T> {
+    /// Internal array of values laid out as FIFO
+    private values: Table<Tuple<time, T>>?;
+    /// The maximum window span as a `duration` between the first and the last time.
+    span: duration;
+    sum: float?;
+    sumsq: float?;
+    /// Field to extract numerical value taken into account in the moving average
+    private field: field?;
+
+    /// Adds a new value `value` to the window at time `t`.
+    /// Following this addition, any value which exceeds the period of time configured from the most recent timepoint will be discarded from the window.
+    native fn add(t: time, value: T);
+    /// Moves the time window in time, so the window contains the time `t` given in parameter, without needing to add a value.
+    native fn update(t: time);
+    /// Clears the window of all its values.
+    native fn clear();
+    /// Returns the minimum of the values contained in the window.
+    native fn min(): Tuple<time, T>?;
+    /// Returns the maximum of the values contained in the window.
+    native fn max(): Tuple<time, T>?;
+    /// Returns the median of the values contained in the window.
+    native fn median(): float?;
+    /// Returns the standard deviation of the values contained in the window.
+    native fn std(): float?;
+    /// Returns the average of the values contained in the window.
+    native fn avg(): float?;
+    /// Return number of current values stored in backend Array
+    native fn size(): int;
+}
+
+/// Structure to compute and update live gaussian distribution
+type Gaussian<T> {
+    sum: float?;
+    sumsq: float?;
+    count: int?;
+    min: T?;
+    max: T?;
+
+    /// Adds a new value to the profile. Returns true if the value has successfully been added, false otherwise.
+    native fn add(value: T?);
+    /// Adds a new value to the profile count number of times. Returns true if the value has successfully been added, false otherwise.
+    native fn addx(value: T?, count: int);
+    /// Adds another gaussian in this one. Returns true if the value has successfully been added, false otherwise.
+    native fn add_gaussian(value: Gaussian<T>);
+
+    /// Returns the standard deviation of the accepted values in the profile.
+    native fn std(): T?;
+    /// Returns the average of the accepted values in the profile.
+    native fn avg(): T?;
+
+    /// Does (value-min)/(max-min)
+    native fn normalize(value: T): float?;
+    /// Does value*(max-min)+min
+    native fn inverse_normalize(value: float): T;
+    /// Does (value-avg)/(std)
+    native fn standardize(value: T): float;
+    /// Does (value*std)+avg
+    native fn inverse_standardize(value: float): T;
+    /// Return the confidence given a value
+    native fn confidence(value: T): float;
+    /// Returns the probability distribution function (PDF) at a certain `value`
+    native fn pdf(value: T): float;
+    /// Returns the cumulative distribution function (CDF) at a certain value
+    native fn cdf(value: T): float;
+}
+
+/// Random generator state can be initialized by setting the seed to stable value
+type Random {
+    seed: int?;
+    private v: float?;
+
+    /// Generates a random char between 'a' and 'z'.
+    native fn char(): char;
+    /// Generates a random int between the interval [min,max[.
+    native fn uniform(min: int, max: int): int;
+    /// Generates a random float between the interval [min,max[.
+    native fn uniformf(min: float, max: float): float;
+    /// Generates a random geo between the interval [min,max[.
+    native fn uniformGeo(min: geo, max: geo): geo;
+    /// Generates a random float from the normal distribution with average `avg` and standard deviation `std`.
+    native fn normal(avg: float, std: float): float;
+    /// Generates a random float from the gaussian `profile`.
+    native fn gaussian(profile: Gaussian): float;
+    /// Fill target structure with random uniform values
+    native fn fill<T>(target: any, nb: int, min: T, max: T);
+}
+
+/// `Assert` is mainly used for testing purposes.
+/// It verifies that assertions you make on the state of your data is correct, or throws an `Error`.
+type Assert {
+    /// Verifies that `a` is equal to `b`, throws an error if not. `a` and `b` can be of any type.
+    static native fn equals(a: any?, b: any?);
+    /// Verifies that `a` is equal to `b`, throws an error if not. `a` and `b` must be floats.
+    static native fn equalsd(a: float, b: float, epsilon: float);
+    /// Verifies that `a` is equal to `b`, throws an error if not. `a` and `b` must be tensors.
+    static native fn equalst(a: Tensor, b: Tensor, epsilon: float);
+    /// Verifies that `v` is true, throws an error if not.
+    static native fn isTrue(v: bool);
+    /// Verifies that `v` is false, throws an error if not.
+    static native fn isFalse(v: bool);
+    /// Verifies that `v` is null, throws an error if not.
+    static native fn isNull(v: any?);
+    /// Verifies that `v` is not null, throws an error if not.
+    static native fn isNotNull(v: any?);
+    // Verifies that `v` is not null, throws an error if not.")
+    //static native fn fail(f: core::function);
+}
+
+/// The `ProgressTracker` is used to monitor the progress of a computation, hence its performance.
+/// It gives an overall performance measure since it's been started, and interim performances between two updates (laps).
+type ProgressTracker {
+    /// the start time of the tracker
+    start: time;
+    /// the maximum expected updates
+    total: int?;
+    /// sum of all updates
+    counter: int?;
+    /// overall duration of the tracker
+    duration: duration?;
+    /// ratio of progress from `0.0` to `1.0`
+    progress: float?;
+    /// recorded speed in counter per / s
+    speed: float?;
+    /// expected remaining duration until the end
+    remaining: duration?;
+
+    /// Updates the status of the progress by adding `nb` unit steps to the tracker and updating the time elapsed since last update.
+    native fn update(nb: int);
+}
+
+type QuantizerSlotBound<T> {
+    min: T;
+    max: T;
+    center: T;
+}
+
+type HistogramBin<T> {
+    bin: QuantizerSlotBound<T>;
+    count: int;
+    ratio: float;
+    cumulative_count: int;
+    cumulative_ratio: float;
+}
+
+abstract type Quantizer<T> {
+    abstract fn size(): int;
+    abstract fn quantize(value: T): int;
+    abstract fn bounds(slot: int): QuantizerSlotBound<T>;
+}
+
+/// Defines a dense (uniform) dimension.
+type LinearQuantizer<T> extends Quantizer<T> {
+    min: T;
+    max: T;
+    bins: int;
+    open: bool?;
+
+    native fn size(): int;
+    native fn quantize(value: T): int;
+    native fn bounds(slot: int): QuantizerSlotBound<T>;
+}
+
+type LogQuantizer<T> extends Quantizer<T> {
+    min: T;
+    max: T;
+    bins: int;
+    open: bool?;
+
+    native fn size(): int;
+    native fn quantize(value: T): int;
+    native fn bounds(slot: int): QuantizerSlotBound<T>;
+}
+
+/// Defines a sparse dimension defined by enumerating step values.
+type CustomQuantizer<T> extends Quantizer<T> {
+    min: T;
+    max: T;
+    step_starts: Array<T>;
+    open: bool?;
+
+    native fn size(): int;
+    native fn quantize(value: T): int;
+    native fn bounds(slot: int): QuantizerSlotBound<T>;
+}
+
+type MultiQuantizer<T> extends Quantizer<Array<T>> {
+    quantizers: Array<Quantizer<T>>;
+
+    native fn size(): int;
+    native fn quantize(value: Array<T>): int;
+    native fn bounds(slot: int): QuantizerSlotBound<Array<T>>;
+    native fn slot_vector(slot: int): Array<int>;
+}
+
+type GaussianProfileSlot {
+    sum: int;
+    sumsq: int;
+    count: int;
+}
+
+type GaussianProfile<T> {
+    quantizer: Quantizer<T>;
+    private precision: FloatPrecision;
+    private bins: Table<GaussianProfileSlot?>?;
+    value_min: float?;
+    nb_rejected: int?;
+
+    native fn add(key: T, value: float);
+    native fn avg(key: T): float;
+    native fn std(key: T): float;
+    native fn sum(key: T): float;
+    native fn count(key: T): int;
+}
+
+type Histogram<T> {
+    quantizer: Quantizer<T>;
+    bins: Array<int?>?;
+    nb_rejected: int?;
+    nb_accepted: int?;
+    min: T?;
+    max: T?;
+    sum: float?;
+    sumsq: float?;
+
+    native fn add(value: T);
+    /// similar to add but increase the weight of value by count times
+    native fn addx(value: T, count: int);
+    native fn stats(): HistogramStats<T>?;
+    native fn percentile(ratio: float): T?;
+    native fn ratio_under(value: T): float;
+    native fn get_bins(): Array<HistogramBin<T>>;
+}
+
+type HistogramStats<T> {
+    min: T;
+    max: T;
+    whisker_low: T;
+    whisker_high: T;
+    percentile1: T;
+    percentile5: T;
+    percentile10: T;
+    percentile20: T;
+    percentile25: T;
+    percentile50: T;
+    percentile75: T;
+    percentile80: T;
+    percentile90: T;
+    percentile95: T;
+    percentile99: T;
+
+    sum: float;
+    avg: T;
+    std: T;
+    size: int;
+}
+
+type Crypto {
+    static native fn sha1(content: String): String;
+    static native fn sha1hex(content: String): String;
+    static native fn sha256(content: String): String;
+    static native fn sha256hex(content: String): String;
+    static native fn sha256_sign_pkcs1(input: String, key_path: String): String;
+    static native fn sha256_sign_pkcs1_hex(input: String, key_path: String): String;
+    /// Compute HMAC-SHA256 digest encoded as hex
+    static native fn sha256_hmac_hex(input: String, key: String): String;
+    static native fn base64_encode(v: String): String;
+    static native fn base64_decode(v: String): String;
+    static native fn base64url_encode(v: String): String;
+    static native fn base64url_decode(v: String): String;
+    static native fn hex_encode(v: String): String;
+    static native fn hex_decode(v: String): String;
+    static native fn url_encode(v: String): String;
+    static native fn url_decode(v: String): String;
+}
+
+type Plot {
+    static native fn scatter_plot(t: Table, x_col: int, y_cols: Array<int>, p: String);
+}

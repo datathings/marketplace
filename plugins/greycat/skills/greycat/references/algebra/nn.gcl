@@ -1,0 +1,1544 @@
+
+enum ComputeActivations {
+    relu("Relu");
+    leaky_relu("Leaky Relu");
+    sigmoid("Sigmoid");
+    hard_sigmoid("Hard Sigmoid");
+    //hard_max("Hard Max"); //missing implementation
+    exp("Exp");
+    soft_max("Soft Max");
+    soft_plus("Soft Plus");
+    soft_sign("Soft Sign");
+    tanh("Tanh");
+    selu("Selu");
+    elu("Elu");
+    celu("Celu");
+}
+enum ComputeOptimizers {
+    ada_delta("Ada Delta");
+    ada_grad("Ada Grad");
+    adam("Adam");
+    ada_max("Ada Max");
+    nadam("NAdam");
+    ftrl("Ftrl");
+    sgd("Stochastic Gradient Descent");
+    rms_prop("RMS Prop");
+    momentum("Momentum");
+    nesterov("Nesterov");
+}
+
+enum ComputeLayerTypes {
+    linear("Linear");
+    dense("Dense");
+    activation("Activation");
+    lstm("LSTM");
+    loss("Loss");
+    filter("Filter");
+}
+
+enum ComputeInitializers {
+    none("None");
+    constant("Constant");
+    sigmoid_uniform("SigmoidUniform");
+    lecun_uniform("LeCunUniform");
+    xavier("Xavier");
+    xavier_uniform("XavierUniform");
+    relu("Relu");
+    relu_uniform("ReluUniform");
+    normal("Normal");
+    normal_in("NormalIn");
+    normal_out("NormalOut");
+    normal_avg("NormalAvg");
+    uniform("Uniform");
+    uniform_in("UniformIn");
+    uniform_out("UniformOut");
+    uniform_avg("UniformAvg");
+    identity("Identity");
+    pytorch("Pytorch");
+}
+
+enum PreProcessType {
+    none("None");
+    min_max_scaling("Min/Max Scaling");
+    standard_scaling("Standard Scaling");
+    pca_scaling("PCA Scaling");
+}
+
+enum PostProcessType {
+    none("None");
+    min_max_scaling("Min/Max Scaling");
+    standard_scaling("Standard Scaling");
+}
+
+
+type InitializerConfig {
+    weight_initializer: ComputeInitializer?;
+    weight_regularizer: ComputeRegularizer?;
+    bias_initializer: ComputeInitializer?;
+    bias_regularizer: ComputeRegularizer?;
+}
+
+type BindingsResult {
+    previousLayerName: String;
+    previousLayerOutput: String;
+
+    expectedLayerName: String;
+    expectedLayerOutput: String;
+    postLayer: ComputeLayer?;
+}
+
+abstract type NeuralNetwork {
+    static err_negative_in_out: String = "Inputs or outputs can't be negative";
+    static err_last_layer_wrong: String = "Last layer has different number of outputs than declared";
+    static err_incompatible_loss: String = "Incompatible loss function";
+    static err_layer_not_supported: String = "Some NN layers are not currently supported";
+    static err_tensor_type_not_supported: String = "Tensor Type not currently supported";
+    static err_minimum_layers: String = "NN should contain at least 1 layer";
+
+    static layer_placeholders_name: String = "layer placeholders";
+    static layer_classification_name: String = "layer classification";
+
+    static layer_preprocess_name: String = "layer preprocess";
+    static layer_postprocess_learn_name: String = "layer postprocess learn";
+    static layer_main_layers_name: String = "layer main";
+    static layer_loss_learn_name: String = "layer loss learn";
+    static layer_loss_display_name: String = "layer loss display";
+    static layer_postprocess_display_name: String = "layer postprocess display";
+    static layer_confusion_name: String = "layer confusion";
+
+    static seq_predict: String = "seq predict";
+    static seq_post_process: String = "seq postprocess";
+    static seq_learn: String = "seq learn";
+    static seq_loss_display: String = "seq loss display";
+    static seq_encode: String = "seq encode";
+    static seq_decode: String = "seq decode";
+    static seq_confusion: String = "seq confusion";
+
+    static var_inputs_name: String = "var input";
+    static var_enc_inputs_name: String = "var enc input";
+    static var_targets_name: String = "var targets";
+    static var_classifier_classes: String = "var Classifier classes";
+    static var_classifier_probabilities: String = "var Classifier probabilities";
+    static var_classifier_class_weights: String = "var Classifier class weights";
+    static var_classifier_confusion: String = "var Classifier confusion";
+
+    static var_input_avg: String = "var input avg";
+    static var_input_min: String = "var input min";
+    static var_input_max: String = "var input max";
+    static var_input_std: String = "var input std";
+    static var_input_space: String = "var input space";
+    static var_output_avg: String = "var output avg";
+    static var_output_min: String = "var output min";
+    static var_output_max: String = "var output max";
+    static var_output_std: String = "var output std";
+
+    inputs: int;
+    inputs_gradients: bool;
+    outputs: int;
+    fixed_batch_size: int;
+    inputs_sequences: int;
+    outputs_sequences: int;
+    tensor_type: TensorType;
+    seed: int;
+    randomizeSeed: bool;
+    layers: Array<ComputeLayer>?;
+    preProcessType: PreProcessType?;
+    preProcessObject: any?;
+    postProcessType: PostProcessType?;
+    postProcessObject: any?;
+    optimizer: ComputeOptimizer;
+    lossLayer: ComputeLayerLoss?;
+
+    //Private fields, shouldn't be set from the outside
+    _lastLayer: String?;
+    _lastOutput: String?;
+
+    fn setPreProcess(preProcess: PreProcessType, object: any?) {
+        this.preProcessType = preProcess;
+        if (preProcess == PreProcessType::min_max_scaling) {
+            if (!(object is GaussianND)) {
+                throw "Gaussian ND object should be passed";
+            } else {
+                this.preProcessObject = clone(object);
+            }
+        } else if (preProcess == PreProcessType::standard_scaling) {
+            if (!(object is GaussianND)) {
+                throw "Gaussian ND object should be passed";
+            } else {
+                this.preProcessObject = clone(object);
+            }
+        } else if (preProcess == PreProcessType::pca_scaling) {
+            if (!(object is PCA)) {
+                throw "PCA object should be passed";
+            } else {
+                this.preProcessObject = clone(object);
+            }
+        } else {
+            this.preProcessObject = null;
+        }
+    }
+
+    fn setPostProcess(postProcess: PostProcessType, object: any?) {
+        this.postProcessType = postProcess;
+        if (postProcess == PostProcessType::min_max_scaling) {
+            if (!(object is GaussianND)) {
+                throw "Gaussian ND object should be passed";
+            } else {
+                this.postProcessObject = clone(object);
+            }
+        } else if (postProcess == PostProcessType::standard_scaling) {
+            if (!(object is GaussianND)) {
+                throw "Gaussian ND object should be passed";
+            } else {
+                this.postProcessObject = clone(object);
+            }
+        } else {
+            this.postProcessObject = null;
+        }
+    }
+
+    fn addLinearLayer(output: int, use_bias: bool, config: InitializerConfig?) {
+        if (output <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+
+        this.layers?.add(ComputeLayerLinear {
+                name: "",
+                type: this.tensor_type,
+                inputs: 0,
+                outputs: output,
+                use_bias: use_bias,
+                weight_initializer: config?.weight_initializer,
+                weight_regularizer: config?.weight_regularizer,
+                bias_initializer: config?.bias_initializer,
+                bias_regularizer: config?.bias_regularizer,
+            });
+    }
+
+    fn addDenseLayer(output: int, use_bias: bool, activation: ComputeActivation?, config: InitializerConfig?) {
+        if (output <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+
+        this.layers?.add(ComputeLayerDense {
+                name: "",
+                type: this.tensor_type,
+                inputs: 0,
+                outputs: output,
+                use_bias: use_bias,
+                activation: activation,
+                weight_initializer: config?.weight_initializer,
+                weight_regularizer: config?.weight_regularizer,
+                bias_initializer: config?.bias_initializer,
+                bias_regularizer: config?.bias_regularizer,
+            });
+    }
+
+    fn addFilterLayer(output: int, maskValues: Array<int>) {
+        var count = 0;
+        for (var i = 0; i < maskValues.size(); i++) {
+            if (maskValues[i] != 0) {
+                count++;
+            }
+        }
+        if (count != output) {
+            throw "mask values should have exactly ${output} non zero elements";
+        } else {
+            this.layers?.add(ComputeLayerFilter {
+                    name: "",
+                    inputs: 0,
+                    outputs: output,
+                    type: this.tensor_type,
+                    maskValues: clone(maskValues) as Array<int>,
+                });
+        }
+    }
+
+    fn addLSTMLayer(output: int, layers: int, sequences: int, use_bias: bool, return_sequences: bool, bidirectional: bool, config: InitializerConfig?) {
+        if (output <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+        if (this.inputs_sequences == 0) {
+            this.inputs_sequences = sequences;
+        }
+        if (return_sequences) {
+            this.outputs_sequences = sequences;
+        } else {
+            this.outputs_sequences = 0;
+        }
+
+        this.layers?.add(ComputeLayerLSTM {
+                name: "",
+                type: this.tensor_type,
+                use_bias: use_bias,
+                return_sequences: return_sequences,
+                bidirectional: bidirectional,
+                inputs: 0,
+                outputs: output,
+                layers: layers,
+                sequences: sequences,
+            });
+    }
+
+    fn addActivationLayer(activation: ComputeActivation) {
+        this.layers?.add(ComputeLayerActivation {
+                name: "",
+                activation: activation
+            });
+    }
+
+    static fn createBindings(nn: NeuralNetwork, learningMode: bool): ComputeModel {
+        var preProcessLayer: ComputeLayer?;
+        var postProcessLearningLayer: ComputeLayer?;
+        var postProcessDisplayLayer: ComputeLayer?;
+        var lossDisplayLayer: ComputeLayerLoss?;
+        var placeholders: ComputeLayerCustom?;
+
+        if (nn.preProcessType == PreProcessType::min_max_scaling) {
+            preProcessLayer = ComputeLayerMinMaxScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: false,
+            };
+        } else if (nn.preProcessType == PreProcessType::standard_scaling) {
+            preProcessLayer = ComputeLayerStandardScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: false,
+            };
+        } else if (nn.preProcessType == PreProcessType::pca_scaling) {
+            preProcessLayer = ComputeLayerPCAScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: false,
+            };
+        }
+
+        if (nn.postProcessType == PostProcessType::min_max_scaling) {
+            postProcessLearningLayer = ComputeLayerMinMaxScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: false,
+            };
+            postProcessDisplayLayer = ComputeLayerMinMaxScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: true,
+            };
+        } else if (nn.postProcessType == PostProcessType::standard_scaling) {
+            postProcessLearningLayer = ComputeLayerStandardScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: false,
+            };
+            postProcessDisplayLayer = ComputeLayerStandardScaler {
+                name: "",
+                type: nn.tensor_type,
+                inverse_transform: true,
+            };
+        }
+
+        var previousLayerName: String;
+        var previousLayerOutput: String;
+        var previousLayerNbOutput: int;
+        var computeLayerCall: ComputeLayerCall;
+
+        //For loss layer
+        var expectedLayerName: String = NeuralNetwork::layer_placeholders_name;
+        var expectedLayerOutput: String = NeuralNetwork::var_targets_name;
+
+        //Common
+        var learnSequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: NeuralNetwork::seq_learn,
+            calls: Array<ComputeLayerCall> {},
+            optimizer: nn.optimizer
+        };
+
+        var postProcessSequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: NeuralNetwork::seq_post_process,
+            calls: Array<ComputeLayerCall> {},
+            optimizer: nn.optimizer
+        };
+
+        //Regressions & classifications
+        var predictSequence: ComputeLayerSeq?;
+
+        //For auto-encoder
+        var encodeSequence: ComputeLayerSeq?;
+        var decodeSequence: ComputeLayerSeq?;
+        var aeNet: AutoEncoderNetwork?;
+
+        if (nn is AutoEncoderNetwork) {
+            aeNet = nn;
+            encodeSequence = ComputeLayerSeq {
+                name: NeuralNetwork::seq_encode,
+                calls: Array<ComputeLayerCall> {}
+            };
+            decodeSequence = ComputeLayerSeq {
+                name: NeuralNetwork::seq_decode,
+                calls: Array<ComputeLayerCall> {}
+            };
+        } else {
+            predictSequence = ComputeLayerSeq {
+                name: NeuralNetwork::seq_predict,
+                calls: Array<ComputeLayerCall> {}
+            };
+        }
+
+        //Update outputsSequences
+        nn.outputs_sequences = 0;
+        for (i: int, layer: ComputeLayer in nn.layers!!) {
+            if (layer is ComputeLayerLSTM) {
+                if (layer.return_sequences != null && layer.return_sequences == true) {
+                    nn.outputs_sequences = nn.inputs_sequences;
+                } else {
+                    nn.outputs_sequences = 0;
+                }
+            }
+        }
+
+        if (nn.inputs_sequences > 0 && nn.outputs_sequences > 0 && nn.inputs_sequences != nn.outputs_sequences) {
+            throw "input and output sequences should be the same value";
+        }
+
+        //Add layer placeholder
+        if (nn is ClassificationNetwork) {
+            var class_type = TensorType::i64;
+            if (nn.tensor_type == TensorType::f32) {
+                class_type = TensorType::i32;
+            }
+            var lossType = ComputeClassificationLoss::sparse_categorical_cross_entropy;
+            if (nn.lossLayer != null) {
+                lossType = (nn.lossLayer as ComputeLayerLossClassification).loss_type;
+            }
+            if (lossType == ComputeClassificationLoss::sparse_categorical_cross_entropy) {
+                if (nn.inputs_sequences == 0 && nn.outputs_sequences == 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences != 0 && nn.outputs_sequences == 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences != 0 && nn.outputs_sequences != 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences == 0 && nn.outputs_sequences != 0) {
+                    throw "output sequences should be 0 if input sequence is 0";
+                }
+            } else if (lossType == ComputeClassificationLoss::categorical_cross_entropy) {
+                if (nn.inputs_sequences == 0 && nn.outputs_sequences == 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences != 0 && nn.outputs_sequences == 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences != 0 && nn.outputs_sequences != 0) {
+                    placeholders = ComputeLayerCustom {
+                        name: NeuralNetwork::layer_placeholders_name,
+                        vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_classes, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, 1}, type: class_type }, ComputeVarInOut {name: NeuralNetwork::var_classifier_confusion, with_grad: false, shape: Array<int> {nn.outputs, nn.outputs}, type: class_type }}, ops: Array<ComputeOperation> {}
+                    };
+                } else if (nn.inputs_sequences == 0 && nn.outputs_sequences != 0) {
+                    throw "output sequences should be 0 if input sequence is 0";
+                }
+            }
+
+            if (nn.calculate_probabilities) {
+                if (nn.outputs_sequences != 0) {
+                    placeholders!!.vars.add(ComputeVarInOut { name: NeuralNetwork::var_classifier_probabilities, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type });
+                } else {
+                    placeholders!!.vars.add(ComputeVarInOut { name: NeuralNetwork::var_classifier_probabilities, with_grad: false, shape: Array<int> {nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type });
+                }
+            }
+
+            if (nn.has_class_weights) {
+                placeholders!!.vars.add(ComputeVarInOut { name: NeuralNetwork::var_classifier_class_weights, with_grad: false, shape: Array<int> {nn.outputs}, type: nn.tensor_type });
+            }
+        } else {
+            if (nn.inputs_sequences == 0 && nn.outputs_sequences == 0) {
+                placeholders = ComputeLayerCustom {
+                    name: NeuralNetwork::layer_placeholders_name,
+                    vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }}, ops: Array<ComputeOperation> {}
+                };
+            } else if (nn.inputs_sequences != 0 && nn.outputs_sequences == 0) {
+                placeholders = ComputeLayerCustom {
+                    name: NeuralNetwork::layer_placeholders_name,
+                    vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }}, ops: Array<ComputeOperation> {}
+                };
+            } else if (nn.inputs_sequences != 0 && nn.outputs_sequences != 0) {
+                placeholders = ComputeLayerCustom {
+                    name: NeuralNetwork::layer_placeholders_name,
+                    vars: Array<ComputeVariable> {ComputeVarInOut {name: NeuralNetwork::var_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, nn.inputs}, type: nn.tensor_type }, ComputeVarInOut {name: NeuralNetwork::var_targets_name, with_grad: false, shape: Array<int> {nn.outputs_sequences, nn.fixed_batch_size, nn.outputs}, type: nn.tensor_type }}, ops: Array<ComputeOperation> {}
+                };
+            } else if (nn.inputs_sequences == 0 && nn.outputs_sequences != 0) {
+                throw "output sequences should be 0 if input sequence is 0";
+            }
+        }
+
+
+        computeLayerCall = ComputeLayerCall {
+            layer_name: NeuralNetwork::layer_placeholders_name,
+            bindings: Array<ComputeBinding> {}
+        };
+        learnSequence.calls.add(computeLayerCall);
+        predictSequence?.calls?.add(computeLayerCall);
+        encodeSequence?.calls?.add(computeLayerCall);
+        decodeSequence?.calls?.add(computeLayerCall);
+
+        previousLayerName = NeuralNetwork::layer_placeholders_name;
+        previousLayerOutput = NeuralNetwork::var_inputs_name;
+        previousLayerNbOutput = nn.inputs;
+
+
+        if (preProcessLayer != null) {
+            preProcessLayer.name = NeuralNetwork::layer_preprocess_name;
+
+            if (preProcessLayer is ComputeLayerPCAScaler) {
+                var pca_inputs = (nn.preProcessObject!! as PCA).selected_dimension;
+                //Add variables needed to placeholders layer:
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_avg, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_std, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_space, shape: Array<int> {pca_inputs!!, nn.inputs}, type: nn.tensor_type });
+
+                computeLayerCall = ComputeLayerCall {
+                    layer_name: preProcessLayer.name,
+                    bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_inputs_name, target_var_name: ComputeLayerPCAScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_avg, target_var_name: ComputeLayerPCAScaler::var_avg_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_std, target_var_name: ComputeLayerPCAScaler::var_std_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_space, target_var_name: ComputeLayerPCAScaler::var_space_name }}
+                };
+
+                previousLayerName = preProcessLayer.name;
+                previousLayerOutput = ComputeLayerPCAScaler::var_output_name;
+                previousLayerNbOutput = pca_inputs!!;
+            } else if (preProcessLayer is ComputeLayerMinMaxScaler) {
+                //Add variables needed to placeholders layer:
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_min, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_max, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+
+                computeLayerCall = ComputeLayerCall {
+                    layer_name: preProcessLayer.name,
+                    bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_inputs_name, target_var_name: ComputeLayerMinMaxScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_min, target_var_name: ComputeLayerMinMaxScaler::var_min_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_max, target_var_name: ComputeLayerMinMaxScaler::var_max_name }}
+                };
+
+                previousLayerName = preProcessLayer.name;
+                previousLayerOutput = ComputeLayerMinMaxScaler::var_output_name;
+                previousLayerNbOutput = nn.inputs;
+            } else if (preProcessLayer is ComputeLayerStandardScaler) {
+                //Add variables needed to placeholders layer:
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_avg, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+                placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_input_std, shape: Array<int> {nn.inputs}, type: nn.tensor_type });
+
+                computeLayerCall = ComputeLayerCall {
+                    layer_name: preProcessLayer.name,
+                    bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_inputs_name, target_var_name: ComputeLayerStandardScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_avg, target_var_name: ComputeLayerStandardScaler::var_avg_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_input_std, target_var_name: ComputeLayerStandardScaler::var_std_name }}
+                };
+
+                previousLayerName = preProcessLayer.name;
+                previousLayerOutput = ComputeLayerStandardScaler::var_output_name;
+                previousLayerNbOutput = nn.inputs;
+            }
+
+            learnSequence.calls.add(computeLayerCall);
+            predictSequence?.calls?.add(computeLayerCall);
+            encodeSequence?.calls?.add(computeLayerCall);
+        }
+
+        var postLayerLearning: ComputeLayer?;
+        var postLayerCallLearning: ComputeLayerCall?;
+
+
+        if (postProcessLearningLayer is ComputeLayerMinMaxScaler) {
+            //Add variables needed to placeholders layer:
+            placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_output_min, shape: Array<int> {nn.outputs}, type: nn.tensor_type });
+            placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_output_max, shape: Array<int> {nn.outputs}, type: nn.tensor_type });
+
+            postLayerLearning = clone(postProcessLearningLayer);
+            postLayerLearning.inverse_transform = false;
+            postLayerLearning.name = NeuralNetwork::layer_postprocess_learn_name;
+
+            postLayerCallLearning = ComputeLayerCall {
+                layer_name: postLayerLearning.name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_targets_name, target_var_name: ComputeLayerMinMaxScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_min, target_var_name: ComputeLayerMinMaxScaler::var_min_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_max, target_var_name: ComputeLayerMinMaxScaler::var_max_name }}
+            };
+            var loss = (nn.lossLayer!! as ComputeLayerLossRegression);
+            lossDisplayLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_display_name, loss_type: loss.loss_type, reduction: loss.reduction };
+        } else if (postProcessLearningLayer is ComputeLayerStandardScaler) {
+            //Add variables needed to placeholders layer:
+            placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_output_avg, shape: Array<int> {nn.outputs}, type: nn.tensor_type });
+            placeholders!!.vars.add(ComputeVarConst { name: NeuralNetwork::var_output_std, shape: Array<int> {nn.outputs}, type: nn.tensor_type });
+            postLayerLearning = clone(postProcessLearningLayer);
+            postLayerLearning.inverse_transform = false;
+            postLayerLearning.name = NeuralNetwork::layer_postprocess_learn_name;
+
+            postLayerCallLearning = ComputeLayerCall {
+                layer_name: postLayerLearning.name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_targets_name, target_var_name: ComputeLayerStandardScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_avg, target_var_name: ComputeLayerStandardScaler::var_avg_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_std, target_var_name: ComputeLayerStandardScaler::var_std_name }}
+            };
+            var loss = (nn.lossLayer!! as ComputeLayerLossRegression);
+            lossDisplayLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_display_name, loss_type: loss.loss_type, reduction: loss.reduction };
+        }
+
+        if (postLayerCallLearning != null) {
+            learnSequence.calls.add(postLayerCallLearning);
+        }
+
+
+
+        var hasLstmInDecode = false;
+        if (aeNet != null) {
+            for (i: int, layer: ComputeLayer in nn.layers?]aeNet.encoder_layer_idx..]) {
+                if (layer is ComputeLayerLSTM) {
+                    hasLstmInDecode = true;
+                    break;
+                }
+            }
+        }
+
+        //Add all layers on both sequences
+        for (i: int, layer: ComputeLayer in nn.layers?) {
+            var temp = type::enum_by_offset(nn_layers_names::NNLayersNames, i) as NNLayersNames?;
+            if (temp != null && temp is NNLayersNames) {
+                layer.name = valueOf(temp);
+            }
+
+            var computeLayerCall: ComputeLayerCall = ComputeLayerCall {
+                layer_name: layer.name,
+                bindings: Array<ComputeBinding> {}
+            };
+
+            if (layer is ComputeLayerLinear) {
+                //Linear layer
+                computeLayerCall.bindings.add(ComputeBinding {
+                        src_layer_name: previousLayerName,
+                        src_var_name: previousLayerOutput,
+                        target_var_name: ComputeLayerLinear::var_input_name
+                    });
+                previousLayerOutput = ComputeLayerLinear::var_output_name;
+                layer.inputs = previousLayerNbOutput;
+                previousLayerNbOutput = layer.outputs;
+            } else if (layer is ComputeLayerDense) {
+                //Dense layer
+                computeLayerCall.bindings.add(ComputeBinding {
+                        src_layer_name: previousLayerName,
+                        src_var_name: previousLayerOutput,
+                        target_var_name: ComputeLayerDense::var_input_name
+                    });
+                previousLayerOutput = ComputeLayerDense::var_output_name;
+                layer.inputs = previousLayerNbOutput;
+                previousLayerNbOutput = layer.outputs;
+            } else if (layer is ComputeLayerActivation) {
+                //Activation layer
+                computeLayerCall.bindings.add(ComputeBinding {
+                        src_layer_name: previousLayerName,
+                        src_var_name: previousLayerOutput,
+                        target_var_name: ComputeLayerActivation::var_input_name
+                    });
+                previousLayerOutput = ComputeLayerActivation::var_output_name;
+            } else if (layer is ComputeLayerLSTM) {
+                //LSTM layer
+                computeLayerCall.bindings.add(ComputeBinding {
+                        src_layer_name: previousLayerName,
+                        src_var_name: previousLayerOutput,
+                        target_var_name: ComputeLayerLSTM::var_input_name
+                    });
+                previousLayerOutput = ComputeLayerLSTM::var_output_name;
+                layer.inputs = previousLayerNbOutput;
+                previousLayerNbOutput = layer.outputs;
+            } else if (layer is ComputeLayerFilter) {
+                //Filter layer
+                computeLayerCall.bindings.add(ComputeBinding {
+                        src_layer_name: previousLayerName,
+                        src_var_name: previousLayerOutput,
+                        target_var_name: ComputeLayerFilter::var_input_name
+                    });
+                previousLayerOutput = ComputeLayerFilter::var_output_name;
+                layer.inputs = previousLayerNbOutput;
+                previousLayerNbOutput = layer.outputs;
+            } else {
+                println(layer);
+                throw NeuralNetwork::err_layer_not_supported;
+            }
+
+            if (aeNet != null) {
+                if (i <= aeNet.encoder_layer_idx) {
+                    encodeSequence?.calls?.add(computeLayerCall);
+                    if (i == aeNet.encoder_layer_idx) {
+                        aeNet.encoder_layer_name = computeLayerCall.layer_name;
+                        aeNet.encoder_layer_var = previousLayerOutput;
+                        if (hasLstmInDecode || nn.outputs_sequences > 0) {
+                            placeholders!!.vars.add(ComputeVarInOut {
+                                    name: NeuralNetwork::var_enc_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.inputs_sequences, nn.fixed_batch_size, previousLayerNbOutput}, type: nn.tensor_type
+                                });
+                        } else {
+                            placeholders!!.vars.add(ComputeVarInOut {
+                                    name: NeuralNetwork::var_enc_inputs_name, with_grad: nn.inputs_gradients, shape: Array<int> {nn.fixed_batch_size, previousLayerNbOutput}, type: nn.tensor_type
+                                });
+                        }
+                    }
+                } else {
+                    if (i == aeNet.encoder_layer_idx + 1) {
+                        //Add binding call to inputs
+                        decodeSequence?.calls?.add(ComputeLayerCall {
+                                layer_name: computeLayerCall.layer_name,
+                                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_enc_inputs_name, target_var_name: computeLayerCall.bindings[0].target_var_name }}
+                            });
+                    } else {
+                        decodeSequence?.calls?.add(computeLayerCall);
+                    }
+                }
+            }
+            learnSequence.calls.add(computeLayerCall);
+            predictSequence?.calls?.add(computeLayerCall);
+            previousLayerName = layer.name;
+        }
+
+        //Add postProcess in learn and predict
+        nn._lastLayer = previousLayerName;
+        nn._lastOutput = previousLayerOutput;
+
+        if (previousLayerNbOutput != nn.outputs) {
+            throw NeuralNetwork::err_last_layer_wrong;
+        }
+
+
+        var layersWithSequences = Array<ComputeLayer> {};
+
+        var lossDisplaySequence: ComputeLayerSeq = ComputeLayerSeq {
+            name: NeuralNetwork::seq_loss_display,
+            calls: Array<ComputeLayerCall> {},
+            optimizer: nn.optimizer
+        };
+
+
+        var postLayerDisplay: ComputeLayer?;
+        var postLayerCallDisplay: ComputeLayerCall?;
+        var confusionLayerCall: ComputeLayerCall;
+
+        if (postProcessDisplayLayer is ComputeLayerMinMaxScaler) {
+            postLayerDisplay = clone(postProcessDisplayLayer);
+            postLayerDisplay.inverse_transform = true;
+            postLayerDisplay.name = NeuralNetwork::layer_postprocess_display_name;
+
+            postLayerCallDisplay = ComputeLayerCall {
+                layer_name: postLayerDisplay.name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: previousLayerName, src_var_name: previousLayerOutput, target_var_name: ComputeLayerMinMaxScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_min, target_var_name: ComputeLayerMinMaxScaler::var_min_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_max, target_var_name: ComputeLayerMinMaxScaler::var_max_name }}
+            };
+            expectedLayerName = NeuralNetwork::layer_postprocess_learn_name;
+            expectedLayerOutput = ComputeLayerMinMaxScaler::var_output_name;
+
+            var lossCallDisplay = ComputeLayerCall {
+                layer_name: NeuralNetwork::layer_loss_display_name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: postLayerDisplay.name, src_var_name: ComputeLayerMinMaxScaler::var_output_name, target_var_name: ComputeLayerLoss::var_computed_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_targets_name, target_var_name: ComputeLayerLoss::var_expected_name }}
+            };
+
+            lossDisplaySequence.calls.add(postLayerCallDisplay);
+            lossDisplaySequence.calls.add(lossCallDisplay);
+        } else if (postProcessDisplayLayer is ComputeLayerStandardScaler) {
+            postLayerDisplay = clone(postProcessDisplayLayer);
+            postLayerDisplay.inverse_transform = true;
+            postLayerDisplay.name = NeuralNetwork::layer_postprocess_display_name;
+
+            postLayerCallDisplay = ComputeLayerCall {
+                layer_name: postLayerDisplay.name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: previousLayerName, src_var_name: previousLayerOutput, target_var_name: ComputeLayerStandardScaler::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_avg, target_var_name: ComputeLayerStandardScaler::var_avg_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_output_std, target_var_name: ComputeLayerStandardScaler::var_std_name }}
+            };
+            expectedLayerName = NeuralNetwork::layer_postprocess_learn_name;
+            expectedLayerOutput = ComputeLayerStandardScaler::var_output_name;
+
+            var lossCallDisplay = ComputeLayerCall {
+                layer_name: NeuralNetwork::layer_loss_display_name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: postLayerDisplay.name, src_var_name: ComputeLayerStandardScaler::var_output_name, target_var_name: ComputeLayerLoss::var_computed_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_targets_name, target_var_name: ComputeLayerLoss::var_expected_name }}
+            };
+
+            lossDisplaySequence.calls.add(postLayerCallDisplay);
+            lossDisplaySequence.calls.add(lossCallDisplay);
+        }
+
+        //Add loss layer on learn sequence
+        var lossCall: ComputeLayerCall = ComputeLayerCall {
+            layer_name: NeuralNetwork::layer_loss_learn_name,
+            bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: nn._lastLayer, src_var_name: nn._lastOutput, target_var_name: ComputeLayerLoss::var_computed_name }, ComputeBinding {src_layer_name: expectedLayerName, src_var_name: expectedLayerOutput, target_var_name: ComputeLayerLoss::var_expected_name }}
+        };
+        var confusionLayer: ComputeLayerConfusion;
+        var confusionSequence: ComputeLayerSeq;
+
+        if (nn is ClassificationNetwork) {
+            lossCall.bindings.add(ComputeBinding {
+                    src_layer_name: NeuralNetwork::layer_placeholders_name,
+                    src_var_name: NeuralNetwork::var_classifier_classes,
+                    target_var_name: ComputeLayerLossClassification::var_predicted_classes_name
+                });
+            if (nn.calculate_probabilities) {
+                lossCall.bindings.add(ComputeBinding {
+                        src_layer_name: NeuralNetwork::layer_placeholders_name,
+                        src_var_name: NeuralNetwork::var_classifier_probabilities,
+                        target_var_name: ComputeLayerLossClassification::var_probabilities_name
+                    });
+            }
+            if (nn.has_class_weights) {
+                lossCall.bindings.add(ComputeBinding {
+                        src_layer_name: NeuralNetwork::layer_placeholders_name,
+                        src_var_name: NeuralNetwork::var_classifier_class_weights,
+                        target_var_name: ComputeLayerLossClassification::var_class_weights_name
+                    });
+            }
+
+            //todo work only on sparse for now
+            confusionLayer = ComputeLayerConfusion { name: NeuralNetwork::layer_confusion_name, nbClass: nn.outputs };
+            confusionLayerCall = ComputeLayerCall {
+                layer_name: NeuralNetwork::layer_confusion_name,
+                bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_classifier_classes, target_var_name: ComputeLayerConfusion::var_computed_name }, ComputeBinding {src_layer_name: expectedLayerName, src_var_name: expectedLayerOutput, target_var_name: ComputeLayerConfusion::var_expected_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_classifier_confusion, target_var_name: ComputeLayerConfusion::var_confusion_name }}
+            };
+            confusionSequence = ComputeLayerSeq {
+                name: NeuralNetwork::seq_confusion,
+                calls: Array<ComputeLayerCall> {},
+            };
+        }
+        learnSequence.calls.add(lossCall);
+
+
+        layersWithSequences.add(placeholders!!);
+        if (preProcessLayer != null) {
+            layersWithSequences.add(preProcessLayer);
+        }
+        if (postProcessLearningLayer != null) {
+            layersWithSequences.add(postLayerLearning!!);
+        }
+        for (_, layer: ComputeLayer in nn.layers?) {
+            layersWithSequences.add(layer);
+        }
+        if (postProcessDisplayLayer != null) {
+            layersWithSequences.add(postLayerDisplay!!);
+        }
+        if (nn.lossLayer != null) {
+            layersWithSequences.add(nn.lossLayer);
+        }
+        layersWithSequences.add(learnSequence);
+        if (aeNet != null) {
+            layersWithSequences.add(encodeSequence!!);
+            layersWithSequences.add(decodeSequence!!);
+        } else {
+            if (nn is ClassificationNetwork) {
+                var classification = ComputeLayerClassification {
+                    name: NeuralNetwork::layer_classification_name,
+                    calculate_probabilities: nn.calculate_probabilities,
+                    from_logits: nn.from_logits,
+                };
+                layersWithSequences.add(classification);
+                layersWithSequences.add(confusionLayer);
+
+                var classificationLayerCall: ComputeLayerCall = ComputeLayerCall {
+                    layer_name: NeuralNetwork::layer_classification_name,
+                    bindings: Array<ComputeBinding> {ComputeBinding {src_layer_name: nn._lastLayer, src_var_name: nn._lastOutput, target_var_name: ComputeLayerClassification::var_input_name }, ComputeBinding {src_layer_name: NeuralNetwork::layer_placeholders_name, src_var_name: NeuralNetwork::var_classifier_classes, target_var_name: ComputeLayerClassification::var_predicted_classes_name }}
+                };
+
+                if (nn.calculate_probabilities) {
+                    classificationLayerCall.bindings.add(ComputeBinding {
+                            src_layer_name: NeuralNetwork::layer_placeholders_name,
+                            src_var_name: NeuralNetwork::var_classifier_probabilities,
+                            target_var_name: ComputeLayerClassification::var_probabilities_name,
+                        });
+                }
+                predictSequence!!.calls.add(classificationLayerCall);
+                confusionSequence.calls.add(classificationLayerCall);
+                confusionSequence.calls.add(confusionLayerCall);
+                layersWithSequences.add(confusionSequence);
+            }
+            layersWithSequences.add(predictSequence!!);
+        }
+
+        if (postProcessDisplayLayer != null) {
+            if (predictSequence != null) {
+                predictSequence.calls.add(postLayerCallDisplay!!);
+                postProcessSequence.calls.add(postLayerCallDisplay!!);
+                layersWithSequences.add(lossDisplayLayer!!);
+                layersWithSequences.add(lossDisplaySequence);
+                layersWithSequences.add(postProcessSequence);
+            } else if (decodeSequence != null) {
+                decodeSequence.calls.add(postLayerCallDisplay!!);
+                postProcessSequence.calls.add(postLayerCallDisplay!!);
+                layersWithSequences.add(lossDisplayLayer!!);
+                layersWithSequences.add(lossDisplaySequence);
+                layersWithSequences.add(postProcessSequence);
+            }
+        }
+
+        return ComputeModel {
+            layers: clone(layersWithSequences) as Array<ComputeLayer>
+        };
+    }
+    abstract fn setOptimizer(optimizer: ComputeOptimizer?);
+    abstract fn checkConfiguration(): Array<String>?;
+
+    fn build(learningMode: bool): ComputeModel {
+        var configurationErrors = this.checkConfiguration();
+        if (configurationErrors != null) {
+            throw "Configuration errors ${configurationErrors}";
+        }
+
+        if (learningMode == true) {
+            if (this is RegressionNetwork) {
+                if (this.lossLayer == null) {
+                    this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeRegressionLoss::square, reduction: null };
+                }
+            }
+            if (this is AutoEncoderNetwork) {
+                if (this.lossLayer == null) {
+                    this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeRegressionLoss::square, reduction: null };
+                }
+            }
+            if (this is ClassificationNetwork) {
+                if (this.lossLayer == null) {
+                    this.lossLayer = ComputeLayerLossClassification { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeClassificationLoss::sparse_categorical_cross_entropy, reduction: null, has_class_weights: false, calculate_probabilities: true, from_logits: true };
+                }
+            }
+        }
+
+        //Add basic layers on both sequences
+        return NeuralNetwork::createBindings(this, learningMode);
+    }
+    //returns batchSize
+    fn initWithMemory(model: ComputeModel?, engine: ComputeEngine, state: ComputeState?, maxMemory: int): int {
+        engine.configure(false);
+
+        var maxBatchSize = engine.compileUsing(model ?? this.build(true), maxMemory);
+        if (state == null) {
+            engine.setSeed(this.seed);
+            engine.initialize();
+        } else {
+            engine.loadState(state);
+        }
+        this.initPrePost(engine);
+        this.initFilter(engine, model);
+        return maxBatchSize;
+    }
+
+    fn initWithBatch(model: ComputeModel?, engine: ComputeEngine, state: ComputeState?, batch: int): int {
+        engine.configure(false);
+        var maxBatchSize = engine.compile(model ?? this.build(true), batch);
+        if (state == null) {
+            engine.setSeed(this.seed);
+            engine.initialize();
+        } else {
+            engine.loadState(state);
+        }
+        this.initPrePost(engine);
+        this.initFilter(engine, model);
+        return maxBatchSize;
+    }
+
+    fn initForPrediction(model: ComputeModel?, engine: ComputeEngine, state: ComputeState, batchSize: int) {
+        engine.configure(true);
+        engine.compile(model ?? this.build(false), batchSize);
+        engine.loadState(state);
+        this.initPrePost(engine);
+        this.initFilter(engine, model);
+    }
+
+    fn initFilter(engine: ComputeEngine, model: ComputeModel?) {
+        if (model != null) {
+            for (i, v in model.layers) {
+                if (v is ComputeLayerFilter) {
+                    if (v.maskValues.size() != v.inputs) {
+                        throw "mask values size should be the same as input";
+                    } else {
+                        var t = engine.getVar(v.name, ComputeLayerFilter::var_mask_name);
+                        for (var i = 0; i < v.maskValues.size(); i++) {
+                            t?.set(Array<int> {i}, v.maskValues[i]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn initPrePost(engine: ComputeEngine) {
+        if (this.preProcessType == PreProcessType::min_max_scaling) {
+            var profile: GaussianND = this.preProcessObject!! as GaussianND;
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_min)!!.fill(profile.min!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_max)!!.fill(profile.max!!);
+        } else if (this.preProcessType == PreProcessType::standard_scaling) {
+            var profile: GaussianND = this.preProcessObject!! as GaussianND;
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_avg)!!.fill(profile.avg()!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_std)!!.fill(profile.std()!!);
+        } else if (this.preProcessType == PreProcessType::pca_scaling) {
+            var pca: PCA = this.preProcessObject!! as PCA;
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_avg)!!.fill(pca.avg!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_std)!!.fill(pca.std!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_input_space)!!.fill(pca.space!!);
+        }
+
+        if (this.postProcessType == PostProcessType::min_max_scaling) {
+            var profile: GaussianND = this.postProcessObject!! as GaussianND;
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_output_min)!!.fill(profile.min!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_output_max)!!.fill(profile.max!!);
+        } else if (this.postProcessType == PostProcessType::standard_scaling) {
+            var profile: GaussianND = this.postProcessObject!! as GaussianND;
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_output_avg)!!.fill(profile.avg()!!);
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_output_std)!!.fill(profile.std()!!);
+        }
+    }
+
+    fn getInput(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_inputs_name)!!;
+    }
+
+    fn getTarget(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_targets_name)!!;
+    }
+
+    //return loss
+    fn miniBatch(engine: ComputeEngine): Tensor {
+        engine.forward(NeuralNetwork::seq_learn);
+        engine.derive(NeuralNetwork::seq_learn);
+        engine.backward(NeuralNetwork::seq_learn);
+
+        if (this is ClassificationNetwork) {
+            engine.forward(NeuralNetwork::seq_confusion);
+        }
+        return engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+    }
+
+    //return loss
+    fn train(engine: ComputeEngine): Tensor {
+        engine.forward(NeuralNetwork::seq_learn);
+        engine.derive(NeuralNetwork::seq_learn);
+        engine.backward(NeuralNetwork::seq_learn);
+        engine.optimize(NeuralNetwork::seq_learn);
+
+        if (this is ClassificationNetwork) {
+            engine.forward(NeuralNetwork::seq_confusion);
+        }
+        var loss = engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+        return loss;
+    }
+
+    fn validation(engine: ComputeEngine): Tensor {
+        engine.forward(NeuralNetwork::seq_learn);
+        if (this is ClassificationNetwork) {
+            engine.forward(NeuralNetwork::seq_confusion);
+        }
+        var loss = engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+        return loss;
+    }
+
+    fn test(engine: ComputeEngine): Tensor {
+        engine.forward(NeuralNetwork::seq_learn);
+        if (this is ClassificationNetwork) {
+            engine.forward(NeuralNetwork::seq_confusion);
+        }
+        var loss = engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+        return loss;
+    }
+
+    fn optimize(engine: ComputeEngine) {
+        engine.optimize(NeuralNetwork::seq_learn);
+    }
+
+    fn endEpoch(engine: ComputeEngine) {
+        engine.endEpoch(NeuralNetwork::seq_learn);
+    }
+}
+
+type RegressionNetwork extends NeuralNetwork {
+    static fn new(inputs: int, outputs: int, tensor_type: TensorType, inputs_gradients: bool?, fixed_batch_size: int?, seed: int?): RegressionNetwork {
+        if (inputs <= 0 || outputs <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+
+        if (tensor_type != TensorType::f32 && tensor_type != TensorType::f64) {
+            throw NeuralNetwork::err_tensor_type_not_supported;
+        }
+        var rand = Random {};
+        return RegressionNetwork {
+            randomizeSeed: false,
+            seed: seed ?? rand.uniform(0, int::max),
+            inputs: inputs,
+            outputs: outputs,
+            inputs_sequences: 0,
+            outputs_sequences: 0,
+            inputs_gradients: inputs_gradients ?? false,
+            fixed_batch_size: fixed_batch_size ?? 0,
+            tensor_type: tensor_type,
+            layers: Array<ComputeLayer> {},
+            optimizer: ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            }
+        };
+    }
+
+    fn setLoss(loss_type: ComputeRegressionLoss?, reduction: ComputeReduction?) {
+        //Set default loss as square
+
+        if (loss_type != null) {
+            if (loss_type == ComputeRegressionLoss::square || loss_type == ComputeRegressionLoss::abs) {
+                this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: loss_type, reduction: reduction };
+            } else {
+                throw NeuralNetwork::err_incompatible_loss;
+            }
+        } else {
+            this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeRegressionLoss::square, reduction: reduction };
+        }
+    }
+
+    fn setOptimizer(optimizer: ComputeOptimizer?) {
+        //Set default optimizer
+
+        if (optimizer != null) {
+            this.optimizer = optimizer;
+        } else {
+            this.optimizer = ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            };
+        }
+    }
+
+    fn checkConfiguration(): Array<String>? {
+        var errors = Array<String> {};
+
+        if (this.layers!!.size() == 0) {
+            errors.add(NeuralNetwork::err_minimum_layers);
+        }
+
+        if (errors.size() == 0) {
+            return null;
+        } else {
+            return errors;
+        }
+    }
+
+    fn getDisplayLoss(engine: ComputeEngine): Tensor {
+        try {
+            engine.forward(NeuralNetwork::seq_loss_display);
+            var loss = engine.getVar(NeuralNetwork::layer_loss_display_name, ComputeLayerLoss::var_loss_name)!!;
+            return loss;
+        } catch (ex) {
+            var loss = engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+            return loss;
+        }
+    }
+
+    fn predict(engine: ComputeEngine, input: Tensor?): Tensor {
+        if (input != null) {
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_inputs_name)!!.fill(input);
+        }
+        engine.forward(NeuralNetwork::seq_predict);
+        if (this.postProcessType != null) {
+            if (this.postProcessType == PostProcessType::min_max_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerMinMaxScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::standard_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerStandardScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::none) {
+                return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+            }
+        } else {
+            return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+        }
+    }
+
+    fn getPrediction(engine: ComputeEngine): Tensor {
+        if (this.postProcessType != null && this.postProcessType != PostProcessType::none) {
+            engine.forward(NeuralNetwork::seq_post_process);
+            if (this.postProcessType == PostProcessType::min_max_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerMinMaxScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::standard_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerStandardScaler::var_output_name)!!;
+            }
+        } else {
+            return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+        }
+    }
+}
+
+type ClassificationMetrics {
+    precision: Array<float?>;
+    recall: Array<float?>;
+    f1Score: Array<float?>;
+}
+
+type ClassificationNetwork extends NeuralNetwork {
+    calculate_probabilities: bool;
+    has_class_weights: bool;
+    from_logits: bool;
+
+    static fn new(inputs: int, classes: int, tensor_type: TensorType, inputs_gradients: bool?, fixed_batch_size: int?, seed: int?, calculate_probabilities: bool, from_logits: bool, has_class_weights: bool): ClassificationNetwork {
+        if (inputs <= 0 || classes <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+
+        if (tensor_type != TensorType::f32 && tensor_type != TensorType::f64) {
+            throw NeuralNetwork::err_tensor_type_not_supported;
+        }
+        var rand = Random {};
+        return ClassificationNetwork {
+            randomizeSeed: false,
+            seed: seed ?? rand.uniform(0, int::max),
+            inputs: inputs,
+            outputs: classes,
+            inputs_sequences: 0,
+            outputs_sequences: 0,
+            calculate_probabilities: calculate_probabilities,
+            from_logits: from_logits,
+            inputs_gradients: false,
+            has_class_weights: has_class_weights,
+            fixed_batch_size: fixed_batch_size ?? 0,
+            tensor_type: tensor_type,
+            layers: Array<ComputeLayer> {},
+            optimizer: ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            }
+        };
+    }
+
+
+    fn setLoss(loss_type: ComputeClassificationLoss?, reduction: ComputeReduction?) {
+        if (loss_type != null) {
+            if (loss_type == ComputeClassificationLoss::categorical_cross_entropy || loss_type == ComputeClassificationLoss::sparse_categorical_cross_entropy) {
+                this.lossLayer = ComputeLayerLossClassification { name: NeuralNetwork::layer_loss_learn_name, loss_type: loss_type, reduction: reduction, has_class_weights: this.has_class_weights, calculate_probabilities: this.calculate_probabilities, from_logits: this.from_logits };
+            } else {
+                throw NeuralNetwork::err_incompatible_loss;
+            }
+        } else {
+            this.lossLayer = ComputeLayerLossClassification { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeClassificationLoss::sparse_categorical_cross_entropy, reduction: reduction, has_class_weights: this.has_class_weights, calculate_probabilities: this.calculate_probabilities, from_logits: this.from_logits };
+        }
+    }
+
+    fn setOptimizer(optimizer: ComputeOptimizer?) {
+        if (optimizer != null) {
+            this.optimizer = optimizer;
+        } else {
+            this.optimizer = ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            };
+        }
+    }
+
+    fn checkConfiguration(): Array<String>? {
+        var errors = Array<String> {};
+
+        var layers = this.layers;
+        if (layers != null) {
+            var layersSize = layers.size();
+            if (layersSize == 0) {
+                errors.add(NeuralNetwork::err_minimum_layers);
+            }
+        } else {
+            errors.add(NeuralNetwork::err_minimum_layers);
+        }
+        if (errors.size() == 0) {
+            return null;
+        } else {
+            return errors;
+        }
+    }
+
+    fn getPrediction(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_classes)!!;
+    }
+
+    fn getProbability(engine: ComputeEngine): Tensor {
+        if (this.calculate_probabilities) {
+            return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_probabilities)!!;
+        } else {
+            throw "Set calculate probability to true in the classifier";
+        }
+    }
+
+    fn getClassWeights(engine: ComputeEngine): Tensor {
+        if (this.has_class_weights) {
+            return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_class_weights)!!;
+        } else {
+            throw "Set has class weights to true in the classifier";
+        }
+    }
+
+
+    fn predict(engine: ComputeEngine, input: Tensor?): Tensor {
+        if (input != null) {
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_inputs_name)!!.fill(input);
+        }
+        engine.forward(NeuralNetwork::seq_predict);
+        if (this.calculate_probabilities) {
+            return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_probabilities)!!;
+        } else {
+            return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_class_weights)!!;
+        }
+    }
+
+    fn getConfusion(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_confusion)!!;
+    }
+
+    fn resetConfusion(engine: ComputeEngine) {
+        engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_classifier_confusion)!!.fill(0);
+    }
+
+    static fn getClassificationMetrics(confusionMatrix: Tensor): ClassificationMetrics {
+        var numClasses = confusionMatrix.shape().get(0);
+
+        var precision = Array<float?> {};
+        var recall = Array<float?> {};
+        var f1 = Array<float?> {};
+        var tp = Array<float> {};
+        var fp = Array<float> {};
+        var falseNegative = Array<float> {};
+
+        // compute tp, fp, fn
+        for (var i = 0; i < numClasses; i = i + 1) {
+            tp.add((confusionMatrix.get(Array<int> {i, i}) as int) * 1.0);
+            fp.add(0.0);
+            falseNegative.add(0.0);
+        }
+        for (var i = 0; i < numClasses; i = i + 1) {
+            for (var j = 0; j < numClasses; j = j + 1) {
+                if (i != j) {
+                    fp.set(i, fp.get(i) + (confusionMatrix.get(Array<int> {j, i}) as int));
+                    falseNegative.set(i, falseNegative.get(i) + (confusionMatrix.get(Array<int> {i, j}) as int));
+                }
+            }
+        }
+
+        var precisionSum = 0.0;
+        var recallSum = 0.0;
+        var f1Sum = 0.0;
+        var precisionCount = 0;
+        var recallCount = 0;
+        var f1Count = 0;
+
+        // compute precision, recall, f1
+        for (var i = 0; i < numClasses; i = i + 1) {
+            if (tp[i] + fp[i] != 0) {
+                precision.add(tp[i] / (tp[i] + fp[i]));
+                precisionCount = precisionCount + 1;
+                precisionSum = precisionSum + precision[i] ?? 0.0;
+            } else {
+                precision.add(null);
+            }
+            if (tp[i] + falseNegative[1] != 0) {
+                recall.add(tp[i] / (tp[i] + falseNegative[i]));
+                recallCount = recallCount + 1;
+                recallSum = recallSum + recall[i] ?? 0.0;
+            } else {
+                recall.add(null);
+            }
+            if (precision[i] != null && recall[i] != null && (precision[i] + recall[i]) != 0) {
+                f1.add(2 * (precision[i] * recall[i]) / (precision[i] + recall[i]));
+                f1Count = f1Count + 1;
+                f1Sum = f1Sum + f1[i] ?? 0.0;
+            } else {
+                f1.add(null);
+            }
+        }
+
+        // average precision, recall, f1
+        precision.add(precisionSum / precisionCount);
+        recall.add(recallSum / recallCount);
+        f1.add(f1Sum / f1Count);
+        var result = ClassificationMetrics {
+            precision: precision,
+            recall: recall,
+            f1Score: f1,
+        };
+        return result;
+    }
+
+    static fn getDefaultClassWeights(classDistribution: Array<int>, normalize: bool): Array<float> {
+        var default_train_weights = Array<float> {};
+        var total = 0;
+        var normSum: float = 0.0;
+        for (i, value in classDistribution) {
+            total = total + value;
+        }
+        for (i, value in classDistribution) {
+            var weight = 0.0;
+            if (value != 0) {
+                weight = total as float / value as float;
+            }
+
+            default_train_weights.add(weight);
+            normSum = normSum + weight;
+        }
+        // normalize
+        if (normalize && normSum != 0.0) {
+            for (i, value in default_train_weights) {
+                var val = value / normSum;
+                default_train_weights.set(i, val);
+            }
+        }
+        return default_train_weights;
+    }
+}
+
+type AutoEncoderNetwork extends NeuralNetwork {
+    encoder_layer_idx: int;
+    encoder_layer_name: String?;
+    encoder_layer_var: String?;
+
+    static fn new(inputs: int, tensor_type: TensorType, inputs_gradients: bool?, fixed_batch_size: int?, seed: int?): AutoEncoderNetwork {
+        if (inputs <= 0) {
+            throw NeuralNetwork::err_negative_in_out;
+        }
+
+        if (tensor_type != TensorType::f32 && tensor_type != TensorType::f64) {
+            throw NeuralNetwork::err_tensor_type_not_supported;
+        }
+        var rand = Random {};
+        return AutoEncoderNetwork {
+            randomizeSeed: false,
+            seed: seed ?? rand.uniform(0, int::max),
+            inputs: inputs,
+            outputs: inputs,
+            inputs_sequences: 0,
+            outputs_sequences: 0,
+            inputs_gradients: inputs_gradients ?? false,
+            fixed_batch_size: fixed_batch_size ?? 0,
+            tensor_type: tensor_type,
+            layers: Array<ComputeLayer> {},
+            encoder_layer_idx: 0,
+            optimizer: ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            }
+        };
+    }
+
+    fn setEncoderLayer(layerIndex: int) {
+        if (this.layers == null) {
+            throw "Layers not initialized.";
+        } else {
+            var layersSize = this.layers.size();
+            if (layerIndex < 0 || layerIndex >= layersSize) {
+                throw "Layer index ${layerIndex} out of bounds (max: ${layersSize - 1})";
+            }
+            this.encoder_layer_idx = layerIndex;
+        }
+    }
+
+    fn setLoss(loss_type: ComputeRegressionLoss?, reduction: ComputeReduction?) {
+        if (loss_type != null) {
+            if (loss_type == ComputeRegressionLoss::square || loss_type == ComputeRegressionLoss::abs) {
+                this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: loss_type, reduction: reduction };
+            } else {
+                throw NeuralNetwork::err_incompatible_loss;
+            }
+        } else {
+            this.lossLayer = ComputeLayerLossRegression { name: NeuralNetwork::layer_loss_learn_name, loss_type: ComputeRegressionLoss::square, reduction: reduction };
+        }
+    }
+
+    fn setOptimizer(optimizer: ComputeOptimizer?) {
+        if (optimizer != null) {
+            this.optimizer = optimizer;
+        } else {
+            this.optimizer = ComputeOptimizerAdam {
+                learning_rate: ComputeOptimizerAdam::learning_rate_def,
+                beta1: ComputeOptimizerAdam::beta1_def,
+                beta2: ComputeOptimizerAdam::beta2_def,
+                smooth_epsilon: ComputeOptimizerAdam::smooth_epsilon_def,
+            };
+        }
+    }
+
+    fn checkConfiguration(): Array<String>? {
+        var errors = Array<String> {};
+
+        var layersSize = this.layers!!.size();
+        if (layersSize < 2) {
+            errors.add(NeuralNetwork::err_minimum_layers);
+        }
+
+        if (this.encoder_layer_idx < 0 || this.encoder_layer_idx >= layersSize) {
+            throw "Encoder layer index ${this.encoder_layer_idx} out of bounds (max: ${layersSize - 1})";
+        }
+
+        if (errors.size() == 0) {
+            return null;
+        } else {
+            return errors;
+        }
+    }
+
+    fn encode(engine: ComputeEngine, input: Tensor?): Tensor {
+        if (input != null) {
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_inputs_name)!!.fill(input);
+        }
+        engine.forward(NeuralNetwork::seq_encode);
+        return engine.getVar(this.encoder_layer_name!!, this.encoder_layer_var!!)!!;
+    }
+
+    fn decode(engine: ComputeEngine, input: Tensor?): Tensor {
+        if (input != null) {
+            engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_enc_inputs_name)!!.fill(input);
+        }
+        engine.forward(NeuralNetwork::seq_decode);
+
+        if (this.postProcessType != null) {
+            if (this.postProcessType == PostProcessType::min_max_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerMinMaxScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::standard_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerStandardScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::none) {
+                return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+            }
+        } else {
+            return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+        }
+    }
+
+
+    fn getEncoderInput(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_inputs_name)!!;
+    }
+
+    fn getDecoderInput(engine: ComputeEngine): Tensor {
+        return engine.getVar(NeuralNetwork::layer_placeholders_name, NeuralNetwork::var_enc_inputs_name)!!;
+    }
+
+    fn getEncoding(engine: ComputeEngine): Tensor {
+        return engine.getVar(this.encoder_layer_name!!, this.encoder_layer_var!!)!!;
+    }
+
+    fn getDecoding(engine: ComputeEngine): Tensor {
+        if (this.postProcessType != null && this.postProcessType != PostProcessType::none) {
+            engine.forward(NeuralNetwork::seq_post_process);
+            if (this.postProcessType == PostProcessType::min_max_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerMinMaxScaler::var_output_name)!!;
+            } else if (this.postProcessType == PostProcessType::standard_scaling) {
+                return engine.getVar(NeuralNetwork::layer_postprocess_display_name, ComputeLayerStandardScaler::var_output_name)!!;
+            }
+        } else {
+            return engine.getVar(this._lastLayer!!, this._lastOutput!!)!!;
+        }
+    }
+
+    fn getDisplayLoss(engine: ComputeEngine): Tensor {
+        try {
+            engine.forward(NeuralNetwork::seq_loss_display);
+            var loss = engine.getVar(NeuralNetwork::layer_loss_display_name, ComputeLayerLoss::var_loss_name)!!;
+            return loss;
+        } catch (ex) {
+            var loss = engine.getVar(NeuralNetwork::layer_loss_learn_name, ComputeLayerLoss::var_loss_name)!!;
+            return loss;
+        }
+    }
+}

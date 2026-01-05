@@ -1,0 +1,14 @@
+{
+  "greycat": {
+    "command": "greycat-lang",
+    "args": ["server"],
+    "extensionToLanguage": {
+      ".gcl": "greycat"
+    },
+    "transport": "stdio",
+    "startupTimeout": 2000,
+    "shutdownTimeout": 5000,
+    "restartOnCrash": true,
+    "maxRestarts": 3
+  }
+}

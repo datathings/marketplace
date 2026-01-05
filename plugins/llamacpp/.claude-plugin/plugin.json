@@ -1,0 +1,14 @@
+{
+  "name": "llamacpp",
+  "version": "1.1.0",
+  "description": "Complete llama.cpp C/C++ API reference (v b7572) covering 163 functions: model loading, inference, text generation, embeddings, chat, advanced sampling (XTC, DRY, infill), per-sequence state management, model type detection, and more. For GGUF models, local LLM inference, and C/C++ AI development.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["llm", "llama.cpp", "llamacpp", "inference", "c-api", "cpp", "c", "embeddings", "text-generation", "chat", "gguf", "local-ai", "model-inference", "quantization", "lora", "developer-tools"],
+  "skills": "./skills/",
+  "commands": "./.claude/commands/"
+}

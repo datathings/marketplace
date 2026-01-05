@@ -1,0 +1,33 @@
+{
+  "name": "datathings",
+  "owner": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "plugins": [
+    {
+      "name": "llamacpp",
+      "source": "./plugins/llamacpp",
+      "description": "llama.cpp C API reference skill - Complete documentation for 163 functions covering local LLM inference",
+      "version": "1.1.0"
+    },
+    {
+      "name": "greycat-c",
+      "source": "./plugins/greycat-c",
+      "description": "GreyCat C API & Standard Library skill - Native C SDK documentation for GreyCat",
+      "version": "1.0.0"
+    },
+    {
+      "name": "greycat",
+      "source": "./plugins/greycat",
+      "description": "Full-stack GreyCat development skill - GCL language, backend development, and React frontend integration",
+      "version": "1.0.0"
+    },
+    {
+      "name": "greycat-lsp",
+      "source": "./plugins/greycat-lsp",
+      "description": "GreyCat Language Server Protocol plugin - LSP support for .gcl files",
+      "version": "0.1.0"
+    }
+  ]
+}

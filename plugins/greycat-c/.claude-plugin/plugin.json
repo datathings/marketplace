@@ -1,0 +1,13 @@
+{
+  "name": "greycat-c",
+  "version": "1.0.0",
+  "description": "Comprehensive reference for GreyCat C API and GCL Standard Library. Covers native function implementation, tensor operations, scheduling, I/O, statistics, and all std modules.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["greycat", "c-api", "standard-library", "native-development", "gcl", "tensor", "scheduler", "data-processing", "io-operations", "statistics"],
+  "skills": "./skills/"
+}

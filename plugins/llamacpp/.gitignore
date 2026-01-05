@@ -1,0 +1,4 @@
+*.skill
+llama.cpp/
+__pycache__/
+*.pyc

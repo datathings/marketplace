@@ -1,0 +1,730 @@
+
+/// ComputeOptimizer is an abstract class of optimizers for neural networks. 
+/// As minimalistic common attributes, it hosts the learning rate with default value 0.001.
+/// The difference is the 1/BatchSize ratio which can be seen as increasing the learning rate to BatchSize x learning rate.
+abstract type ComputeOptimizer {
+  /// The learning rate. Defaults to 0.001.
+  learning_rate: float?;
+}
+
+/// Optimizer that implements the [Adam algorithm](https://keras.io/api/optimizers/adam/).
+/// Adam optimization is a stochastic gradient descent method that is based on adaptive estimation of first-order and second-order moments.
+/// According to [Kingma et al., 2014](https://arxiv.org/abs/1412.6980), the method is computationally efficient, has little memory requirement,
+/// invariant to diagonal rescaling of gradients, and is well suited for problems that are large in terms of data/parameters.
+type ComputeOptimizerAdam extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static beta1_def: float = 0.9;
+  static beta2_def: float = 0.999;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// The exponential decay rate for the 1st moment estimates. Defaults to 0.9
+  beta1: float?;
+
+  /// The exponential decay rate for the 2nd moment estimates. Defaults to 0.999.
+  beta2: float?;
+
+  /// A small constant for numerical stability. This epsilon is \"epsilon hat\" in the Kingma and Ba paper (in the formula just before Section 2.1), not the epsilon in Algorithm 1 of the paper. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+/// Optimizer that implements the [Adadelta algorithm](https://keras.io/api/optimizers/adadelta/)
+/// Adadelta optimization is a stochastic gradient descent method that is based on adaptive learning rate per dimension to address two drawbacks:
+/// The continual decay of learning rates throughout training.
+/// The need for a manually selected global learning rate.
+/// Adadelta [Zeiler, 2012](https://arxiv.org/abs/1212.5701) is a more robust extension of Adagrad that adapts learning rates based on a moving window of gradient updates, instead of accumulating all past gradients.
+/// This way, Adadelta continues learning even when many updates have been done. Compared to Adagrad, in the original version of Adadelta you don't have to set an initial learning rate.
+type ComputeOptimizerAdaDelta extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static decay_rate_def: float = 0.95;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// The decay rate. Defaults to 0.95.
+  decay_rate: float?;
+
+  /// A small constant for numerical stability. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+
+/// Optimizer that implements the [Adagrad algorithm](https://keras.io/api/optimizers/adagrad/).
+/// Adagrad [Duchi et al., 2011](https://www.jmlr.org/papers/volume12/duchi11a/duchi11a.pdf) is an optimizer with parameter-specific learning rates, which are adapted relative to how frequently a parameter gets updated during training.
+/// The more updates a parameter receives, the smaller the updates.
+type ComputeOptimizerAdaGrad extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static initial_accumulator_def: float = 0.1;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// Starting value for the accumulators (per-parameter momentum values). Must be non-negative. Defaults to 0.1
+  initial_accumulator: float?;
+
+  /// A small constant for numerical stability. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+/// Optimizer that implements the [Adamax algorithm](https://keras.io/api/optimizers/adamax/).
+/// Adamax, a variant of Adam based on the infinity norm, is a first-order gradient-based optimization method.
+/// Due to its capability of adjusting the learning rate based on data characteristics, it is suited to learn time-variant process, e.g., speech data with dynamically changed noise conditions.
+/// Default parameters follow those provided in the paper [Kingma et al., 2014](https://arxiv.org/abs/1412.6980).
+type ComputeOptimizerAdaMax extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static beta1_def: float = 0.9;
+  static beta2_def: float = 0.999;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// The exponential decay rate for the 1st moment estimates. Defaults to 0.9
+  beta1: float?;
+
+  /// The exponential decay rate for the exponentially weighted infinity norm. Defaults to 0.999
+  beta2: float?;
+
+  /// A small constant for numerical stability. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+/// Optimizer that implements the [Nadam algorithm](https://keras.io/api/optimizers/Nadam/).
+/// Much like Adam is essentially RMSprop with momentum, Nadam is Adam with Nesterov momentum
+/// Reference: [Dozat, 2015](http://cs229.stanford.edu/proj2015/054_report.pdf)
+type ComputeOptimizerNadam extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static beta1_def: float = 0.9;
+  static beta2_def: float = 0.999;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// The exponential decay rate for the 1st moment estimates. Defaults to 0.9
+  beta1: float?;
+
+  /// The exponential decay rate for the 2nd moment estimates. Defaults to 0.999
+  beta2: float?;
+
+  /// A small constant for numerical stability. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+
+/// Optimizer that implements the [FTRL algorithm](https://keras.io/api/optimizers/ftrl/).
+/// \"Follow The Regularized Leader\" (FTRL) is an optimization algorithm developed at Google for click-through rate prediction in the early 2010s.
+/// It is most suitable for shallow models with large and sparse feature spaces. The algorithm is described by [McMahan et al., 2013](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/41159.pdf).
+type ComputeOptimizerFtrl extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static beta_def: float = 0.0; 
+  static lambda1_def: float = 0.0;
+  static lambda2_def: float = 0.0;
+
+  /// l1_regularization_strength, a float value, must be greater than or equal to zero. Defaults to 0.0
+  lambda1: float?;
+
+  /// l2_regularization_strength, a float value, must be greater than or equal to zero. Defaults to 0.0
+  lambda2: float?;
+
+  /// A float value, representing the beta value from the paper. Defaults to 0.0
+  beta: float?;
+}
+
+/// Optimizer that implements the [RMSprop algorithm](https://keras.io/api/optimizers/rmsprop/).
+/// It maintains a moving (discounted) average of the square of gradients
+/// Divide the gradient by the root of this average
+/// This implementation of RMSprop uses plain momentum, not Nesterov momentum.
+/// The centered version additionally maintains a moving average of the gradients, and uses that average to estimate the variance.
+/// The algorithm is described by [Hinton, 2012](http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)
+type ComputeOptimizerRmsProp extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static decay_rate_def: float = 0.9;
+  static smooth_epsilon_def: float = 1e-07;
+
+  /// Discounting factor for the old gradients. Defaults to 0.9
+  decay_rate: float?;
+  /// epsilon: A small constant for numerical stability. Defaults to 1e-7
+  smooth_epsilon: float?;
+}
+
+/// The simplest optimizer ever, [Stochastic gradient descent](https://keras.io/api/optimizers/sgd/).
+/// Just updates the weight by learning rate * gradients
+type ComputeOptimizerSgd extends ComputeOptimizer {
+  static learning_rate_def: float = 0.01;
+}
+
+/// Momentum optimizer, just like SGD but add a decay rate to old gradients.
+type ComputeOptimizerMomentum extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static decay_rate_def: float = 0.9;
+
+  /// Discounting factor for the old gradients. Defaults to 0.9
+  decay_rate: float;
+}
+
+/// Just like SGD but with Nesterov momentum method.
+type ComputeOptimizerNesterov extends ComputeOptimizer {
+  static learning_rate_def: float = 0.001;
+  static decay_rate_def: float = 0.9;
+
+  /// Discounting factor for the old gradients. Defaults to 0.9
+  decay_rate: float;
+}
+
+type ComputeModel {
+  layers: Array<ComputeLayer>;
+}
+
+abstract type ComputeLayer {
+  name: String;
+}
+
+
+type ComputeRegularizer {
+  l1: float;
+  l2: float;
+}
+
+abstract type ComputeActivation {}
+
+type ComputeActivationRelu extends ComputeActivation {
+  static threshold_def: float = 0.0;
+
+  max_value: float?;
+  threshold: float?;
+}
+
+type ComputeActivationLeakyRelu extends ComputeActivation {
+  /// defaults to `0.3`
+  static alpha_def: float = 0.3;
+  static threshold_def: float = 0.0;
+
+  alpha: float?;
+  max_value: float?;
+  threshold: float?;
+}
+
+type ComputeActivationSigmoid extends ComputeActivation {}
+
+type ComputeActivationSoftmax extends ComputeActivation {
+  classes: String?; //Contains the predicted classes
+}
+
+type ComputeActivationSoftplus extends ComputeActivation {}
+
+type ComputeActivationSoftSign extends ComputeActivation {}
+
+type ComputeActivationTanh extends ComputeActivation {}
+
+type ComputeActivationSelu extends ComputeActivation {}
+
+type ComputeActivationElu extends ComputeActivation {
+  static alpha_def: float = 1.0;
+  alpha: float?;
+}
+
+type ComputeActivationCelu extends ComputeActivation {
+  /// defaults to `1.0`
+  static alpha_def: float = 1.0;
+  alpha: float?;
+}
+
+type ComputeActivationHardSigmoid extends ComputeActivation {
+  static slope_def: float = 0.2;
+  static shift_def: float = 0.5;
+  slope: float?;
+  shift: float?;
+}
+
+//type ComputeActivationHardmax extends ComputeActivation {
+//  axis:int?;
+//}
+
+type ComputeActivationExp extends ComputeActivation {}
+
+
+type ComputeLayerMinMaxScaler extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_min_name: String = "min";
+  static var_max_name: String = "max";
+  type: TensorType;
+
+  inverse_transform: bool;
+}
+
+type ComputeLayerStandardScaler extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_avg_name: String = "avg";
+  static var_std_name: String = "std";
+  type: TensorType;
+
+  inverse_transform: bool;
+}
+
+type ComputeLayerPCAScaler extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_avg_name: String = "avg";
+  static var_std_name: String = "std";
+  static var_space_name: String = "space";
+  type: TensorType;
+
+  inverse_transform: bool;
+}
+
+type ComputeLayerFilter extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_mask_name: String = "mask";
+  type: TensorType;
+  inputs: int;
+  outputs: int;
+
+  maskValues: Array<int>;
+}
+
+type ComputeLayerClassification extends ComputeLayer {
+  static var_input_name: String = "input"; //logits
+  static var_predicted_classes_name: String = "predicted_classes";
+  static var_probabilities_name: String = "probabilities";
+
+  calculate_probabilities: bool;
+  from_logits: bool;
+}
+
+
+type ComputeLayerLinear extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_weight_name: String = "weight";
+  static var_bias_name: String = "bias";
+  static var_mult_name: String = "mult";
+  type: TensorType;
+  inputs: int;
+  outputs: int;
+  use_bias: bool;
+  weight_initializer: ComputeInitializer?;
+  weight_regularizer: ComputeRegularizer?;
+  bias_initializer: ComputeInitializer?;
+  bias_regularizer: ComputeRegularizer?;
+}
+
+type ComputeLayerDense extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_weight_name: String = "weight";
+  static var_bias_name: String = "bias";
+  static var_mult_name: String = "mult";
+  static var_pre_activation_name: String = "pre_activation";
+  type: TensorType;
+  inputs: int;
+  outputs: int;
+  use_bias: bool;
+  weight_initializer: ComputeInitializer?;
+  weight_regularizer: ComputeRegularizer?;
+  bias_initializer: ComputeInitializer?;
+  bias_regularizer: ComputeRegularizer?;
+  activation: ComputeActivation?;
+}
+
+
+type ComputeLayerLSTM extends ComputeLayer {
+  //input/output variables for the lstm
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+  static var_hx_name: String = "hx";
+  static var_cx_name: String = "cx";
+  static var_hy_name: String = "hy";
+  static var_cy_name: String = "cy";
+
+  //weights to optimize, varo
+
+  static var_weight_name: String = "weight";
+  static var_bias_name: String = "bias";
+
+  //internal variables inside the layer
+  static var_internal_i_name: String = "internal_i";
+  static var_internal_f_name: String = "internal_f";
+  static var_internal_cp_name: String = "internal_cp";
+  static var_internal_o_name: String = "internal_o";
+  static var_internal_h_name: String = "internal_h";
+  static var_internal_c_name: String = "internal_c";
+  static var_internal_mult_name: String = "internal_mult";
+  static var_internal_output_name: String = "internal_output";
+
+
+  bias_initializer: ComputeInitializer?; //zero initializer default
+  weight_regularizer: ComputeRegularizer?;
+  bias_regularizer: ComputeRegularizer?;
+
+  type: TensorType;
+
+  /// default value use_bias = true, lstm does input x weights + bias, if false, no bias added
+  use_bias: bool?;
+  /// default value return_sequences = true, when true returns the full 3D sequence (sequence, batch, outputs), when false it returns only the 2D of last sequence (batch, output)
+  return_sequences: bool?;
+  /// default value bidirectional = false, if true: the output of LSTM gets doubled (one for passing on the sequence in natural order, one for passing in the opposite order
+  bidirectional: bool?;
+
+  /// default value auto_init_states = true, this initializes the hx and cx states by 0 - should be false if you want to pilot the sequencing by yourself, then hx and cx needs to be bind by a proxy
+  auto_init_states: bool?;
+  /// defines the lstm inputs dimension
+  inputs: int;
+
+  /// defines the lstm outputs dimension at the exit of lstm, when bidirectional=true, the outputs should be an even number => the internal lstm output will be divided by 2 (half for each order of the sequence)
+  outputs: int;
+  //@doc("number of stacked lstm layers for more efficient computation");
+  layers: int;
+  //@doc("defines the sequence length that the lstm processes")
+  sequences: int;
+}
+
+
+
+type ComputeLayerActivation extends ComputeLayer {
+  static var_input_name: String = "input";
+  static var_output_name: String = "output";
+
+  activation: ComputeActivation;
+}
+
+enum ComputeReduction {
+  auto("auto");
+  none("none"); //still reduces over outputs
+  sum("sum");
+  mean("mean");
+  disabled("disabled"); //No reduction whatsoever
+}
+
+enum ComputeRegressionLoss {
+  square("Square");
+  abs("Abs");
+}
+
+enum ComputeClassificationLoss {
+  categorical_cross_entropy("Categorical Cross Entropy");
+  sparse_categorical_cross_entropy("Sparse Categorical Cross Entropy");
+}
+
+type ComputeLayerConfusion extends ComputeLayer {
+  static var_computed_name: String = "computed";
+  static var_expected_name: String = "expected";
+  static var_confusion_name: String = "confusion";
+  nbClass: int;
+}
+
+abstract type ComputeLayerLoss extends ComputeLayer {
+  static var_computed_name: String = "computed";
+  static var_expected_name: String = "expected";
+  static var_loss_name: String = "loss";
+  reduction: ComputeReduction?;
+}
+
+type ComputeLayerLossRegression extends ComputeLayerLoss {
+  loss_type: ComputeRegressionLoss;
+}
+
+type ComputeLayerLossClassification extends ComputeLayerLoss {
+  static var_class_weights_name: String = "class_weights";
+  static var_predicted_classes_name: String = "predicted_classes";
+  static var_probabilities_name: String = "probabilities";
+  static var_sum_reduce_name: String = "sum_reduce";
+
+  loss_type: ComputeClassificationLoss;
+
+  has_class_weights: bool;
+  calculate_probabilities: bool;
+  from_logits: bool;
+}
+
+abstract type ComputeInitializer {}
+
+type ComputeInitializerNone extends ComputeInitializer {}
+
+type ComputeInitializerConstant extends ComputeInitializer {
+  value: any; //can be float or int
+}
+
+type ComputeInitializerSigmoidUniform extends ComputeInitializer {}
+
+type ComputeInitializerNormal extends ComputeInitializer {
+  avg: float;
+  std: float;
+}
+
+type ComputeInitializerUniform extends ComputeInitializer {
+  min: float;
+  max: float;
+}
+
+type ComputeInitializerLeCunUniform extends ComputeInitializer {}
+
+type ComputeInitializerXavier extends ComputeInitializer {}
+
+type ComputeInitializerXavierUniform extends ComputeInitializer {}
+
+type ComputeInitializerRelu extends ComputeInitializer {}
+
+type ComputeInitializerReluUniform extends ComputeInitializer {}
+
+type ComputeInitializerIdentity extends ComputeInitializer {}
+
+type ComputeInitializerNormalIn extends ComputeInitializer {}
+
+type ComputeInitializerNormalOut extends ComputeInitializer {}
+
+type ComputeInitializerNormalAvg extends ComputeInitializer {}
+
+type ComputeInitializerUniformIn extends ComputeInitializer {}
+
+type ComputeInitializerUniformOut extends ComputeInitializer {}
+
+type ComputeInitializerUniformAvg extends ComputeInitializer {}
+
+type ComputeInitializerPytorch extends ComputeInitializer {}
+
+//same as XavierUniform
+type ComputeInitializerGlorotUniform extends ComputeInitializer {}
+
+type ComputeInitializerLSTM extends ComputeInitializer {}
+
+abstract type ComputeOperation {}
+
+abstract type ComputeOperation2In1Out extends ComputeOperation {
+  input: String;
+  input2: String;
+  output: String;
+}
+
+abstract type ComputeOperation1In1Out extends ComputeOperation {
+  input: String;
+  output: String;
+}
+
+abstract type ComputeOperationArg extends ComputeOperation {
+  input: String;
+  output: String; //offset
+  output2: String; //value
+}
+
+type ComputeOperationAbs extends ComputeOperation1In1Out {}
+type ComputeOperationAcos extends ComputeOperation1In1Out {}
+type ComputeOperationAcosh extends ComputeOperation1In1Out {}
+type ComputeOperationAsin extends ComputeOperation1In1Out {}
+type ComputeOperationAsinh extends ComputeOperation1In1Out {}
+type ComputeOperationAtan extends ComputeOperation1In1Out {}
+type ComputeOperationAtanh extends ComputeOperation1In1Out {}
+type ComputeOperationCos extends ComputeOperation1In1Out {}
+type ComputeOperationCosh extends ComputeOperation1In1Out {}
+type ComputeOperationExp extends ComputeOperation1In1Out {}
+type ComputeOperationLog extends ComputeOperation1In1Out {}
+type ComputeOperationNeg extends ComputeOperation1In1Out {}
+type ComputeOperationSign extends ComputeOperation1In1Out {}
+type ComputeOperationSin extends ComputeOperation1In1Out {}
+type ComputeOperationSinh extends ComputeOperation1In1Out {}
+type ComputeOperationSqrt extends ComputeOperation1In1Out {}
+type ComputeOperationTan extends ComputeOperation1In1Out {}
+type ComputeOperationLeCunTanh extends ComputeOperation1In1Out {}
+
+
+type ComputeOperationRelu extends ComputeOperation1In1Out {
+  static threshold_def: float = 0.0;
+  max_value: float?;
+  threshold: float?;
+}
+
+type ComputeOperationLeakyRelu extends ComputeOperation1In1Out {
+  static alpha_def: float = 0.3;
+  static max_value_def: float = 1.7976931348623157e+308_f;
+  static threshold_def: float = 0.0;
+  /// defaults to `0.3`
+  alpha: float?;
+  max_value: float?;
+  threshold: float?;
+}
+
+type ComputeOperationSigmoid extends ComputeOperation1In1Out {}
+
+type ComputeOperationSoftmax extends ComputeOperation1In1Out {}
+
+type ComputeOperationSoftplus extends ComputeOperation1In1Out {}
+
+type ComputeOperationSoftSign extends ComputeOperation1In1Out {}
+
+type ComputeOperationTanh extends ComputeOperation1In1Out {}
+
+type ComputeOperationSelu extends ComputeOperation1In1Out {}
+
+type ComputeOperationElu extends ComputeOperation1In1Out {
+  static alpha_def: float = 1.0;
+  alpha: float?;
+}
+
+type ComputeOperationCelu extends ComputeOperation1In1Out {
+  static alpha_def: float = 1.0;
+
+  /// defaults to `1.0`
+  alpha: float?;
+}
+
+type ComputeOperationClip extends ComputeOperation1In1Out {
+  min: float?;
+  max: float?;
+}
+
+type ComputeOperationHardSigmoid extends ComputeOperation1In1Out {
+  static slope_def: float = 0.2;
+  static shift_def: float = 0.5;
+  slope: float?;
+  shift: float?;
+}
+
+//type ComputeOperationHardmax extends ComputeOperation1In1Out {
+//    axis:int?;
+//}
+
+type ComputeOperationLogSoftmax extends ComputeOperation1In1Out {
+  axis: int?;
+}
+
+type ComputeOperationScale extends ComputeOperation1In1Out {
+  alpha: float;
+}
+
+type ComputeOperationRaiseToPower extends ComputeOperation1In1Out {
+  power: float;
+}
+type ComputeOperationAdd extends ComputeOperation2In1Out {}
+type ComputeOperationDiv extends ComputeOperation2In1Out {}
+type ComputeOperationMul extends ComputeOperation2In1Out {}
+type ComputeOperationPow extends ComputeOperation2In1Out {}
+type ComputeOperationSub extends ComputeOperation2In1Out {}
+type ComputeOperationAddBias extends ComputeOperation2In1Out {}
+
+
+
+
+
+type ComputeOperationMatMul extends ComputeOperation2In1Out {
+  static transpose_def: bool = false;
+  static alpha_def: float = 1.0;
+  static beta_def: float = 0.0;
+
+  transposeA: bool;
+  transposeB: bool;
+  alpha: float;
+  beta: float;
+}
+
+type ComputeOperationEuclidean extends ComputeOperation2In1Out {}
+
+type ComputeOperationArgMin extends ComputeOperationArg {}
+
+type ComputeOperationArgMax extends ComputeOperationArg {}
+
+type ComputeOperationSumIf extends ComputeOperation {
+  input: String;
+  ifCondition: String;
+  output: String;
+  counts: String;
+  classes: int;
+}
+
+type ComputeOperationSum extends ComputeOperation1In1Out {
+  axis: int?;
+}
+
+type ComputeOperationFill extends ComputeOperation {
+  input: String;
+  value: any;
+}
+
+type ComputeOperationFilter extends ComputeOperation {
+  input: String;
+  output: String;
+  mask: String;
+  nbOutputs: int;
+}
+
+type ComputeOperationAvg extends ComputeOperation2In1Out {}
+
+
+type ComputeLayerCustom extends ComputeLayer {
+  ops: Array<ComputeOperation>;
+  vars: Array<ComputeVariable>;
+}
+
+type ComputeBinding {
+  src_layer_name: String;
+  src_var_name: String;
+  target_var_name: String;
+}
+
+type ComputeLayerCall {
+  layer_name: String;
+  bindings: Array<ComputeBinding>;
+}
+
+type ComputeLayerSeq extends ComputeLayer {
+  calls: Array<ComputeLayerCall>;
+  optimizer: ComputeOptimizer?;
+}
+
+abstract type ComputeVariable {
+  name: String;
+}
+
+type ComputeVar extends ComputeVariable {}
+
+type ComputeVarInOut extends ComputeVariable {
+  type: TensorType;
+  shape: Array<int>;
+  with_grad: bool;
+}
+
+type ComputeVarConst extends ComputeVariable {
+  type: TensorType;
+  shape: Array<int>;
+}
+
+type ComputeVarProxy extends ComputeVariable {}
+
+type ComputeVarOptimize extends ComputeVariable {
+  type: TensorType;
+  shape: Array<int>;
+  l1: float;
+  l2: float;
+  init: ComputeInitializer?;
+}
+
+type ComputeCounter {
+  /// Number of full runs on the dataset
+  epoch: int;
+  /// Number of times the optimizer was called
+  optimizationSteps: int;
+  /// Number of batch not optimized yet
+  batchNotOptimized: int;
+}
+
+//used to be native
+type ComputeEngine {
+  native fn configure(forwardOnly: bool);
+  /// returns memory size
+  native fn compile(model: ComputeModel, maxBatchSize: int): int;
+  /// returns batch size
+  native fn compileUsing(model: ComputeModel, capacity: int): int;
+  native fn memorySize(): int;
+  native fn setSeed(seed: int);
+  native fn getSeed(): int;
+  native fn getVar(layer_name: String, var_name: String): Tensor?;
+  native fn getGrad(layer_name: String, var_name: String): Tensor?;
+  native fn resize(batchSize: int);
+  native fn initialize();
+  native fn forward(layer_name: String);
+  native fn derive(layer_name: String);
+  native fn backward(layer_name: String);
+  native fn optimize(layer_name: String);
+  native fn endEpoch(layer_name: String);
+  native fn getCounters(layer_name: String): ComputeCounter;
+  native fn saveState(target: ComputeState);
+  native fn saveStateString(): String;
+  native fn loadState(target: ComputeState);
+  native fn loadStateString(input: String);
+}
+
+//used to be native
+type ComputeState {
+  native fn toString(): String;
+}

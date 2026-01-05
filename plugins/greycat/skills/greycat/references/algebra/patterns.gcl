@@ -1,0 +1,1230 @@
+
+fn timeWindowFirstTime(tw: TimeWindow): time? {
+    var values = tw.values;
+    if (null == values || values.rows() == 0) {
+        return null;
+    }
+    return values.get_cell(0, 0) as time;
+}
+
+fn timeWindowLastTime(tw: TimeWindow): time? {
+    var values = tw.values;
+    if (null == values || values.rows() == 0) {
+        return null;
+    }
+    return values.get_cell(values.rows() - 1, 0) as time;
+}
+
+fn timeWindowToMap(tw: TimeWindow): Map<time, any?> {
+    var map = Map<time, any?> {};
+    for (var row = 0; row < tw.values?.rows() ?? 0; row++) {
+        map.set(tw.values!!.get_cell(row, 0) as time, tw.values.get_cell(row, 1));
+    }
+    return map;
+}
+
+type ScoreDetails {
+    best_pattern: int;
+    timespan: duration;
+}
+
+type ScoreDetailsSingleton {
+    best_pattern: int;
+    timespan: duration;
+    timestamp: time;
+}
+
+abstract type Detection {
+    score: float;
+    best_pattern: int;
+    timespan: duration;
+}
+
+type OverlappingDetection extends Detection {
+    overlap: duration;
+
+    static fn new(result: OverlappingDetection): OverlappingDetection {
+        return OverlappingDetection {
+            score: result.score,
+            best_pattern: result.best_pattern,
+            timespan: result.timespan,
+            overlap: result.overlap,
+        };
+    }
+}
+
+enum PatternDetectors {
+    none("None");
+    euclidean("Euclidean");
+    fft("FFT");
+    dtw("DTW");
+    random("Random");
+    sax("SAX");
+}
+
+abstract type PatternDetector {
+    abstract fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine;
+}
+type EuclideanPatternDetector extends PatternDetector {
+    fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine {
+        return EuclideanPatternDetectionEngine::new(timeseries);
+    }
+}
+
+type RandomPatternDetector extends PatternDetector {
+    fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine {
+        return RandomPatternDetectionEngine::new(timeseries);
+    }
+}
+
+type DTWPatternDetector extends PatternDetector {
+    fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine {
+        return DTWPatternDetectionEngine::new(timeseries);
+    }
+}
+
+type FFTPatternDetector extends PatternDetector {
+    fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine {
+        return FFTPatternDetectionEngine::new(timeseries);
+    }
+}
+
+type SaxPatternDetector extends PatternDetector {
+    alphabet_size: int;
+    fingerprint_length: int;
+
+    fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine {
+        return SaxPatternDetectionEngine::new(timeseries, this.alphabet_size, this.fingerprint_length);
+    }
+}
+
+
+type PatternDetectionSensitivity {
+    threshold: float;
+    overlap: float;
+}
+
+type PatternDetectionEngineState {
+    hasScores: bool;
+    hasDetections: bool;
+    patterns: Array<TimeWindow>;
+    scores: nodeList<any?>;
+    detections: nodeTime<OverlappingDetection>;
+
+    static fn new(): PatternDetectionEngineState {
+        return PatternDetectionEngineState {
+            hasScores: false,
+            hasDetections: false,
+            patterns: Array<TimeWindow> {},
+            scores: nodeList<any?> {},
+            detections: nodeTime<OverlappingDetection> {},
+        };
+    }
+
+    fn resetPatterns() {
+        this.resetScores();
+        while (this.patterns.size() > 0) {
+            this.patterns.remove(0);
+        }
+    }
+
+    fn resetScores() {
+        this.resetDetections();
+        this.scores.removeAll();
+        this.hasScores = false;
+    }
+
+    fn resetDetections() {
+        this.detections.removeAll();
+        this.hasDetections = false;
+    }
+}
+
+enum SamplingPolicy {
+    as_is("As-is");
+    average_frequency("Average frequency");
+    highest_frequency("Highest frequency");
+}
+
+enum PatternNullStrategy {
+    replace("Replace");
+    interpolate("Interpolate");
+    previous("Previous");
+    next("Next");
+    none("None");
+}
+
+enum MatchingNormalisation {
+    as_is("As-is");
+    shift("Vertical shift");
+    scaling("Vertical scaling");
+    shift_and_scaling("Vertical shift and scaling");
+}
+
+abstract type PatternDetectionEngine {
+    timeseries: nodeTime;
+    state: PatternDetectionEngineState?;
+    nullStrategy: PatternNullStrategy?;
+    nullReplaceConstant: float?;
+    samplingPolicy: SamplingPolicy?;
+
+    fn setState(newState: PatternDetectionEngineState) {
+        this.state = newState;
+    }
+
+    fn addPattern(from: time, to: time) {
+        var pattern = TimeWindow { span:(to - from) };
+        for (timestamp: time, value in this.timeseries[from..to]) {
+            if (value != null) {
+                // Do nothing
+            } else if (PatternNullStrategy::replace == this.nullStrategy) {
+                value = this.nullReplaceConstant;
+            } else if (PatternNullStrategy::interpolate == this.nullStrategy) {
+                var previous = null;
+                var previous_timestamp = timestamp;
+                while (null == previous) {
+                    previous_timestamp = this.timeseries.prev(previous_timestamp);
+                    if (null == previous_timestamp) {
+                        break;
+                    } // if
+                    previous = this.timeseries.resolveAt(previous_timestamp);
+                } // while
+                var next = null;
+                var next_timestamp = timestamp;
+                while (null == next) {
+                    next_timestamp = this.timeseries.next(next_timestamp);
+                    if (null == next_timestamp) {
+                        break;
+                    } // if
+                    next = this.timeseries.resolveAt(next_timestamp);
+                } // while
+                if (null != previous && null != next) {
+                    var span = (next_timestamp - previous_timestamp).to(DurationUnit::microseconds);
+                    var previous_weight = (next_timestamp - timestamp).to(DurationUnit::microseconds) / span;
+                    var next_weight = (timestamp - previous_timestamp).to(DurationUnit::microseconds) / span;
+                    value = previous * previous_weight + next * next_weight;
+                } else {
+                    throw "Cannot interpolate";
+                } // if
+            } else if (PatternNullStrategy::previous == this.nullStrategy) {
+                var ts = timestamp;
+                while (null == value) {
+                    ts = this.timeseries.prev(ts);
+                    if (null == ts) {
+                        break;
+                    } // if
+                    value = this.timeseries.resolveAt(ts);
+                } // while
+                if (null == value) {
+                    throw "Cannot resolve to a previous non-null value";
+                } // if
+            } else if (PatternNullStrategy::next == this.nullStrategy) {
+                var ts = timestamp;
+                while (null == value) {
+                    ts = this.timeseries.next(ts);
+                    if (null == ts) {
+                        break;
+                    } // if
+                    value = this.timeseries.resolveAt(ts);
+                } // while
+                if (null == value) {
+                    throw "Cannot resolve to a next non-null value";
+                }
+            } else { // if nullStrategy in (none, null)
+                throw "Patterns cannot contain null";
+            } // if
+            pattern.add(timestamp, value);
+        } // for
+
+        this.state?.patterns?.add(normalize_pattern(pattern, this.samplingPolicy ?? SamplingPolicy::average_frequency));
+    }
+
+    fn setPatternsFromMarks(marks: nodeTime<bool?>) {
+        var from_timestamp: time? = null;
+        for (timestamp: time, mark: bool? in marks) {
+            if (null != mark) {
+                Assert::isTrue(mark);
+                Assert::isNull(from_timestamp);
+                from_timestamp = timestamp;
+            } else {
+                Assert::isNotNull(from_timestamp);
+                this.addPattern(from_timestamp!!, timestamp);
+                from_timestamp = null;
+            } // if
+        } // for
+    }
+
+    fn computeScores(path: String?): String? {
+        this.state?.resetScores();
+
+        var timespan = longest_pattern_duration(this.state!!.patterns);
+        var window = TimeWindow { span: timespan };
+
+        var append = false;
+        var out: GcbWriter;
+        var outPath: String? = null;
+        if (path != null) {
+            out = GcbWriter { path: path };
+            outPath = path;
+        }
+
+        var first_full = false;
+
+        var before = time::now();
+        for (timestamp: time, value in this.timeseries) {
+            var nextTimestamp = this.timeseries.next(timestamp);
+            if (!first_full && window.size() > 0 && nextTimestamp != null && nextTimestamp - timeWindowFirstTime(window)!! > timespan) {
+                first_full = true;
+            } // if
+
+            window.add(timestamp, value);
+
+            if (!first_full) {
+                continue;
+            } // if
+
+            var best_score = null as float?;
+            var best_pattern = null as int?;
+            var best_timespan = null as duration?;
+
+            for (index: int, pattern: TimeWindow in this.state.patterns) {
+                var pattern_score = this.score(index, pattern, window);
+
+                if (null == best_score || pattern_score > best_score) {
+                    best_score = pattern_score;
+                    best_pattern = index;
+                    best_timespan = timeWindowLastTime(pattern)!! - timeWindowFirstTime(pattern)!!;
+                } // if
+            } // for
+
+            //println("DEBUG: ${this.state?.patterns?.size()}: ${window.firstTime()?.toString()}: ${window.lastTime()?.toString()}: ${best_score}");
+
+            if ((null != best_score) && !isNaN(best_score) && (null != best_pattern) && (null != best_timespan)) {
+                if (this is FFTPatternDetectionEngine) {
+                    (this as FFTPatternDetectionEngine).results.setAt(timeWindowFirstTime(window)!!, FFTResult {
+                            distance: best_score,
+                            best_pattern: best_pattern,
+                            best_timespan: best_timespan,
+                        });
+                } else {
+                    var scoreAsIndex = normalize_score(best_score);
+                    if (path != null) {
+                        out.write(timeWindowFirstTime(window));
+                        out.write(scoreAsIndex);
+                        out.write(best_pattern);
+                        out.write(best_timespan);
+                    } else {
+                        var scoreResults = this.state.scores;
+                        var currentScoreAtIndex = scoreResults.get(scoreAsIndex);
+                        if (currentScoreAtIndex == null) {
+                            scoreResults.set(scoreAsIndex, ScoreDetailsSingleton {
+                                    timestamp: timeWindowFirstTime(window)!!,
+                                    best_pattern: best_pattern,
+                                    timespan: best_timespan,
+                                });
+                        } else {
+                            if (currentScoreAtIndex is ScoreDetailsSingleton) {
+                                var storedScore = currentScoreAtIndex;
+                                scoreResults.set(scoreAsIndex, nodeTime<ScoreDetails> {});
+                                (scoreResults.get(scoreAsIndex) as nodeTime<ScoreDetails>).setAt(storedScore.timestamp, ScoreDetails {
+                                        best_pattern: storedScore.best_pattern,
+                                        timespan: storedScore.timespan,
+                                    });
+                            } // if
+
+                            (scoreResults.get(scoreAsIndex) as nodeTime<ScoreDetails>).setAt(timeWindowFirstTime(window)!!, ScoreDetails {
+                                    best_pattern: best_pattern,
+                                    timespan: best_timespan,
+                                });
+                        } // if
+                    } // if
+                } // if
+            } // if
+        } // for
+        if (this is FFTPatternDetectionEngine) {
+            for (timestamp, result in(this as FFTPatternDetectionEngine).results) {
+                var pattern_size = this.state.patterns[result.best_pattern].size();
+                var std = (this as FFTPatternDetectionEngine).pattern_distance_profiles!![result.best_pattern].std() ?? 1.0;
+                if (std == 0.0) {
+                    std = 1.0;
+                }
+                var score = 1.0 + result.distance / (std * pattern_size);
+                var scoreAsIndex = normalize_score(score);
+                if (path != null) {
+                    out.write(timestamp);
+                    out.write(scoreAsIndex);
+                    out.write(result.best_pattern);
+                    out.write(result.best_timespan);
+                } else {
+                    var scoreResults = this.state.scores;
+                    var currentScoreAtIndex = scoreResults.get(scoreAsIndex);
+                    if (currentScoreAtIndex == null) {
+                        scoreResults.set(scoreAsIndex, ScoreDetailsSingleton {
+                                timestamp: timestamp,
+                                best_pattern: result.best_pattern,
+                                timespan: result.best_timespan,
+                            });
+                    } else {
+                        if (currentScoreAtIndex is ScoreDetailsSingleton) {
+                            var storedScore = currentScoreAtIndex;
+                            scoreResults.set(scoreAsIndex, nodeTime<ScoreDetails> {});
+                            (scoreResults.get(scoreAsIndex) as nodeTime<ScoreDetails>).setAt(storedScore.timestamp, ScoreDetails {
+                                    best_pattern: storedScore.best_pattern,
+                                    timespan: storedScore.timespan,
+                                });
+                        } // if
+
+                        (scoreResults.get(scoreAsIndex) as nodeTime<ScoreDetails>).setAt(timestamp, ScoreDetails {
+                                best_pattern: result.best_pattern,
+                                timespan: result.best_timespan,
+                            });
+                    } // if
+                } // if
+            } // for
+        } // if
+        var after = time::now();
+        // info("Score duration: ${after - before}");
+        return outPath;
+    }
+
+    abstract fn initScoring();
+    abstract fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float;
+
+    fn detect(sensitivity: PatternDetectionSensitivity, path: String?): String? {
+        this.state?.resetDetections();
+        var detections = this.state?.detections;
+
+        for (scoreAsIndex: int, results in this.state?.scores?) {
+            var score = get_score(scoreAsIndex);
+
+            // Scores are sorted and listed in descending order, so we can stop whenever the threshold is no longer matched
+            if (score < sensitivity.threshold) {
+                break;
+            } // if
+
+            var scoresDetails;
+
+            if (results is nodeTime) {
+                scoresDetails = results;
+            } else if (results is ScoreDetailsSingleton) {
+                var details = results;
+                scoresDetails = Map<time, any> {};
+                scoresDetails.set(details.timestamp, results);
+            } else {
+                throw("Unexpected results: ${results}");
+            } // if
+
+            for (timestamp: time, details: ScoreDetails in scoresDetails) {
+                var endTimestamp = timestamp + details.timespan;
+
+                // Check overlaps
+                var overall_overlap = 0_us;
+
+                var would_overlap = false;
+                for (detection_timestamp: time, detection: OverlappingDetection in detections?[timestamp - details.timespan .. timestamp + details.timespan]) {
+                    var detection_overlap: duration;
+                    if (detection_timestamp < timestamp) {
+                        detection_overlap = detection_timestamp + detection.timespan - timestamp;
+                    } else {
+                        detection_overlap = timestamp + details.timespan - detection_timestamp;
+                    } // if
+
+                    if ((detection.overlap + detection_overlap).to(DurationUnit::microseconds) > sensitivity.overlap * detection.timespan.to(DurationUnit::microseconds)) {
+                        would_overlap = true;
+                        break;
+                    } // if
+
+                    overall_overlap = overall_overlap + detection_overlap;
+                } // for
+
+                if (would_overlap ||(overall_overlap.to(DurationUnit::microseconds) > sensitivity.overlap * details.timespan.to(DurationUnit::microseconds))) {
+                    continue;
+                } // if
+
+                for (detection_timestamp: time, detection: OverlappingDetection in detections?[timestamp - details.timespan .. timestamp + details.timespan]) {
+                    var detection_overlap: duration;
+                    if (detection_timestamp < timestamp) {
+                        detection_overlap = detection_timestamp + detection.timespan - timestamp;
+                    } else {
+                        detection_overlap = timestamp + details.timespan - detection_timestamp;
+                    } // if
+
+                    detection.overlap = detection.overlap + detection_overlap;
+                } // for
+
+                // Publish detection
+                detections?.setAt(timestamp, OverlappingDetection {
+                        score: score,
+                        best_pattern: details.best_pattern,
+                        timespan: details.timespan,
+                        overlap: overall_overlap,
+                    });
+            } // for
+        } // for
+
+        if (path != null) {
+            var out = GcbWriter { path: path };
+            for (t: time, detection: OverlappingDetection in detections?) {
+                out.write(t);
+                out.write(detection);
+            }
+        }
+        return path;
+    }
+
+    static native fn windowToTensor(pattern: Table<any>, timeWindow: Table<any>, tensor: Tensor, matchingNormalisation: MatchingNormalisation);
+}
+
+type DTWPatternDetectionEngine extends PatternDetectionEngine {
+    std: float?;
+    matchingNormalisation: MatchingNormalisation?;
+
+    static fn new(timeseries: nodeTime): DTWPatternDetectionEngine {
+        return DTWPatternDetectionEngine {
+            timeseries: timeseries,
+        };
+    }
+
+    fn initScoring() {
+        var profile = Gaussian<float> {};
+        for (_, value in this.timeseries) {
+            if (null != value) { // Only non null values make sense for standard deviation
+                profile.add(value as float);
+            } // if
+        } // for
+        this.std = profile.std();
+    }
+
+    static fn toGaussian(series: any): Gaussian<float> {
+        var gaussian = Gaussian<float> {};
+        if (series is TimeWindow) {
+            for (var row = 0; row < series.values!!.rows(); ++row) {
+                var value = series.values.get_cell(row, 1);
+                if (value != null) {
+                    gaussian.add(value as float);
+                }
+            }
+        } else {
+            for (_, value in series) {
+                if (value != null) {
+                    gaussian.add(value as float);
+                }
+            }
+        }
+        return gaussian;
+    }
+
+    fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float {
+        var scores = Tensor {};
+        scores.init(TensorType::f64, Array<int> {pattern.size() + 1, timeWindow.size() + 1});
+        scores.fill(float::max);
+        scores.set(Array<int> {0, 0}, 0.0);
+
+        var pattern_avg: float;
+        var pattern_std: float;
+        var window_avg: float;
+        var window_std: float;
+
+        if (MatchingNormalisation::as_is != this.matchingNormalisation) {
+            var pattern_gaussian = DTWPatternDetectionEngine::toGaussian(pattern);
+            pattern_avg = pattern_gaussian.avg()!!;
+            pattern_std = pattern_gaussian.std()!!;
+            var window_gaussian = DTWPatternDetectionEngine::toGaussian(timeWindow);
+            window_avg = window_gaussian.avg()!!;
+            window_std = window_gaussian.std()!!;
+            // Deal with flat pattern or window by assuming both pattern & window are similar std-wise
+            // If both are flat, set both to 1.0 for they won’t be relevant then
+            if (0.0 == pattern_std) {
+                if (0.0 == window_std) {
+                    pattern_std = 1.0;
+                } else {
+                    pattern_std = window_std;
+                }
+            }
+            if (0.0 == window_std) {
+                window_std = pattern_std;
+            }
+        }
+
+        var i = 1;
+        for (var row = 0; row < pattern.values!!.rows(); ++row) {
+            var timestamp = pattern.values.get_cell(row, 0) as time;
+            var pattern_value = pattern.values.get_cell(row, 1);
+            var j = 1;
+            var window_values = timeWindow.values!!;
+            for (var wrow = 0; wrow < window_values.rows(); ++wrow) {
+                var timestampTW = window_values.get_cell(wrow, 0) as time;
+                var window_value = window_values.get_cell(wrow, 1);
+                var cost = 0.0;
+                if (null == window_value) { // Deal with null value as “standard distant” to maximize distance, therefore minimize score when encountering null values
+                    if (null == this.matchingNormalisation || MatchingNormalisation::as_is == this.matchingNormalisation || MatchingNormalisation::shift == this.matchingNormalisation) {
+                        cost = cost + pow(this.std!!, 2.0);
+                    } else if (MatchingNormalisation::scaling == this.matchingNormalisation || MatchingNormalisation::shift_and_scaling == this.matchingNormalisation) {
+                        cost = cost + 1; // TODO: check
+                    } else {
+                        throw "wrong state";
+                    }
+                } else { // Otherwise, compute true distance
+                    if (null == this.matchingNormalisation || MatchingNormalisation::as_is == this.matchingNormalisation) {
+                        cost = cost + pow(pattern_value as float - window_value as float, 2.0);
+                    } else if (MatchingNormalisation::shift == this.matchingNormalisation) {
+                        cost = cost + pow((pattern_value as float - pattern_avg) - (window_value as float - window_avg), 2.0);
+                    } else if (MatchingNormalisation::scaling == this.matchingNormalisation) {
+                        cost = cost + pow((pattern_value as float) / pattern_std - (window_value as float) / window_std, 2.0);
+                    } else if (MatchingNormalisation::shift_and_scaling == this.matchingNormalisation) {
+                        cost = cost + pow((pattern_value as float - pattern_avg) / pattern_std - (window_value as float - window_avg) / window_std, 2.0);
+                    } else {
+                        throw "wrong state";
+                    }
+                }
+                scores.set(Array<int> {i, j}, cost + min(min(scores.get(Array<int> {i - 1, j}) as float, scores.get(Array<int> {i, j - 1}) as float), scores.get(Array<int> {i - 1, j - 1}) as float));
+                j++;
+            }
+            i++;
+        }
+
+        var score = scores.get(Array<int> {pattern.size(), timeWindow.size()}) as float;
+        if (null == this.matchingNormalisation || MatchingNormalisation::as_is == this.matchingNormalisation || MatchingNormalisation::shift == this.matchingNormalisation) {
+            return 1.0 - sqrt(score) / (this.std!! * pattern.size()); // TODO: better score normalisation? Relevant for all MatchingNorms?
+        } else if (MatchingNormalisation::scaling == this.matchingNormalisation || MatchingNormalisation::shift_and_scaling == this.matchingNormalisation) {
+            return 1.0 - sqrt(score) / pattern.size();
+        }
+    }
+}
+
+fn toTensor(window: TimeWindow, matchingNormalisation: MatchingNormalisation, tensor: Tensor) {
+    tensor.init(TensorType::f64, Array<int> {window.size()});
+    var arr = Array<int> {0};
+
+    if (matchingNormalisation == MatchingNormalisation::as_is) {
+        for (var row = 0; row < window.values!!.rows(); ++row) {
+            var value = window.values.get_cell(row, 1);
+            tensor.set(arr,(value as float));
+            arr[0] = arr[0] + 1;
+        }
+    } else if (matchingNormalisation == MatchingNormalisation::shift) {
+        var window_avg = window.avg()!!;
+        for (var row = 0; row < window.values!!.rows(); ++row) {
+            var value = window.values.get_cell(row, 1);
+            tensor.set(arr,(value as float) - window_avg);
+            arr[0] = arr[0] + 1;
+        }
+    } else if (matchingNormalisation == MatchingNormalisation::scaling) {
+        var window_std: float = window.std()!!;
+        if (window_std == 0.0) {
+            window_std = 1.0;
+        }
+        for (var row = 0; row < window.values!!.rows(); ++row) {
+            var value = window.values.get_cell(row, 1);
+            tensor.set(arr,((value as float)) / window_std);
+            arr[0] = arr[0] + 1;
+        }
+    } else if (matchingNormalisation == MatchingNormalisation::shift_and_scaling) {
+        var window_avg: float = window.avg()!!;
+        var window_std: float = window.std()!!;
+        if (window_std == 0.0) {
+            window_std = 1.0;
+        }
+        for (var row = 0; row < window.values!!.rows(); ++row) {
+            var value = window.values.get_cell(row, 1);
+            tensor.set(arr,((value as float) - window_avg) / window_std);
+            arr[0] = arr[0] + 1;
+        }
+    }
+
+    return tensor;
+}
+
+
+type EuclideanPatternDetectionEngine extends PatternDetectionEngine {
+    pattern_tensors: Array<Tensor>?;
+    window_tensors: Array<Tensor>?;
+    std: float?;
+    matchingNormalisation: MatchingNormalisation?;
+
+    static fn new(timeseries: nodeTime): EuclideanPatternDetectionEngine {
+        return EuclideanPatternDetectionEngine {
+            timeseries: timeseries,
+        };
+    }
+
+    fn initScoring() {
+        var profile = Gaussian<float> {};
+        for (_, value in this.timeseries) {
+            if (null != value) { // Only non null values make sense for standard deviation
+                profile.add(value as float);
+            } // if
+        } // for
+        this.std = profile.std();
+        if (null == this.matchingNormalisation) {
+            this.matchingNormalisation = MatchingNormalisation::as_is;
+        }
+        this.pattern_tensors = Array<Tensor> {};
+        this.window_tensors = Array<Tensor> {};
+        for (index, pattern in this.state?.patterns?) {
+            var pattern_tensor = Tensor {};
+            var window_tensor = Tensor {};
+            if (pattern.size() > 0) {
+                pattern_tensor.init(TensorType::f64, Array<int> {pattern.size()});
+                window_tensor.init(TensorType::f64, Array<int> {pattern.size()});
+            } else {
+                pattern_tensor.init(TensorType::f64, Array<int> {0});
+                window_tensor.init(TensorType::f64, Array<int> {0});
+            }
+            toTensor(pattern, this.matchingNormalisation, pattern_tensor);
+            this.pattern_tensors.add(pattern_tensor);
+            this.window_tensors.add(window_tensor);
+        }
+    }
+
+//    fn windowToTensor(pattern: TimeWindow, timeWindow: TimeWindow) {
+//        var aligned_window = TimeWindow{};
+//        aligned_window.configure(pattern.lastTime() - pattern.firstTime());
+//        var patternFirstTime = pattern.firstTime();
+//        var windowFirstTime = timeWindow.firstTime()!!;
+//        for (timestamp, _ in pattern) {
+//          var offset = timestamp - patternFirstTime!!;
+//          aligned_window.add(timestamp, extrapolateWindow(timeWindow, windowFirstTime + offset));
+//        }
+//        if (this.window_tensor == null) {
+//          this.window_tensor = Tensor{};
+//        }
+//        this.window_tensor.init(TensorType::f64, [aligned_window.size()]);
+//        toTensor(aligned_window, this.matchingNormalisation, this.window_tensor);
+//    }
+
+    static fn toGaussian(series: any): Gaussian<float> {
+        var gaussian = Gaussian<float> {};
+        for (_, value in series) {
+            gaussian.add(value as float);
+        }
+        return gaussian;
+    }
+
+    fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float {
+        if (pattern.size() == 0 || timeWindow.size() == 0) {
+            return 0.0;
+        }
+        var window_tensor = this.window_tensors!![index];
+        PatternDetectionEngine::windowToTensor(pattern.values as Table<any>, timeWindow.values as Table<any>, window_tensor, this.matchingNormalisation ?? MatchingNormalisation::as_is);
+        var score = DistanceMetrics::euclidean(this.pattern_tensors!![index], window_tensor);
+        if (null == this.matchingNormalisation || MatchingNormalisation::as_is == this.matchingNormalisation || MatchingNormalisation::shift == this.matchingNormalisation) {
+            return 1.0 - score / (this.std!! * pattern.size()); // TODO: better score normalisation? Relevant for all MatchingNorms?
+        }
+        if (MatchingNormalisation::scaling == this.matchingNormalisation || MatchingNormalisation::shift_and_scaling == this.matchingNormalisation) {
+            return 1.0 - score / pattern.size();
+        }
+    }
+}
+
+type RandomPatternDetectionEngine extends PatternDetectionEngine {
+    rng: Random;
+
+    static fn new(timeseries: nodeTime): PatternDetectionEngine {
+        return RandomPatternDetectionEngine {
+            timeseries: timeseries,
+            rng: Random {},
+        };
+    }
+
+    fn initScoring() {}
+
+    fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float {
+        return this.rng.uniformf(0.0, 1.0);
+    }
+}
+
+type SaxPatternDetectionEngine extends PatternDetectionEngine {
+    // alphabet: Array<char>;
+    alphabet_size: int;
+    alphabet_boundaries: Array<float>;
+    lookup_table: nodeIndex<char, nodeIndex<char, float>>;
+    max_distance: float;
+    // pattern_fingerprints: Array<String>;
+    pattern_fingerprints: Array<String>;
+    fingerprint_length: int;
+    // timeseries_profile: Gaussian<float>;
+    static alphabet: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz";
+
+    static fn new(timeseries: nodeTime, alphabet_size: int, fingerprint_length: int): PatternDetectionEngine {
+        if (alphabet_size > SaxPatternDetectionEngine::alphabet.size()) {
+            throw "Alphabet size cannot be greater than ${SaxPatternDetectionEngine::alphabet.size()}";
+        } // if
+
+        var alphabet_boundaries = Array<float> {};
+        var min_value = Infinity;
+        var max_value = -Infinity;
+        for (_, value in timeseries) {
+            if (null != value) { // Null values cannot be considered close to any other value, therefore it is more prudent to ignore them
+                min_value = min(min_value, value as float);
+                max_value = max(max_value, value as float);
+            } // if
+        } // for
+
+        var timeseries_histogram = Histogram<float> { quantizer: LinearQuantizer<float> { min: min_value, max: max_value, bins: alphabet_size*2 } };
+
+        for (_, value in timeseries) {
+            if (null != value) { // Null values cannot be considered close to any other value, therefore it is more prudent to ignore them
+                timeseries_histogram.add(value as float);
+            }
+        } // for
+
+        alphabet_boundaries.add(min_value);
+        // alphabet_boundaries.add(-infinite());
+        for (var i = 1; i < alphabet_size - 1; ++i) {
+            var percentile: float = (i as float) / (alphabet_size as float) * 100.0;
+            //todo re-enable percentile
+            alphabet_boundaries.add(percentile); //todo THIS IS WRONG, to remove after implementing percentile
+            // alphabet_boundaries.add(timeseries_histogram.percentile(percentile)!!);
+        } // for
+        alphabet_boundaries.add(max_value);
+
+
+        var lookup_table = nodeIndex<char, nodeIndex<char, float>> {};
+        for (i0: int, b0: float in alphabet_boundaries) {
+            if (null == lookup_table.get(SaxPatternDetectionEngine::alphabet.get(i0))) {
+                lookup_table.set(SaxPatternDetectionEngine::alphabet.get(i0), nodeIndex<char, float> {});
+            } // if
+            var sub_table = lookup_table.get(SaxPatternDetectionEngine::alphabet.get(i0))!!;
+            for (i1: int, b1: float in alphabet_boundaries) {
+                if (abs(i1 - i0) < 2) {
+                    sub_table.set(SaxPatternDetectionEngine::alphabet.get(i1), 0.0);
+                } else {
+                    sub_table.set(SaxPatternDetectionEngine::alphabet.get(i1), abs(b1 - b0));
+                } // if
+            } // for
+        } // for
+
+        var max_distance = lookup_table.get(SaxPatternDetectionEngine::alphabet.get(0))!!.get(SaxPatternDetectionEngine::alphabet.get(alphabet_size - 1))!! * fingerprint_length;
+
+        var saxPatternDetector = SaxPatternDetectionEngine {
+            timeseries: timeseries,
+            alphabet_size: alphabet_size,
+            alphabet_boundaries: alphabet_boundaries,
+            lookup_table: lookup_table,
+            max_distance: max_distance,
+            pattern_fingerprints: Array<String> {},
+            fingerprint_length: fingerprint_length,
+        };
+
+        return saxPatternDetector;
+    }
+
+    fn initScoring() {
+        this.fingerprint_patterns();
+    }
+
+    fn fingerprint_patterns() {
+        this.pattern_fingerprints = Array<String> {};
+        for (_, pattern: TimeWindow in this.state?.patterns?) {
+            var pattern_paa = this.paa(pattern);
+            var pattern_fingerprint = this.sax(pattern_paa);
+            this.pattern_fingerprints.add(pattern_fingerprint);
+            // this.pattern_fingerprints.set(pattern, pattern_fingerprint);
+        } // for
+    }
+
+    fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float {
+        if (this.state?.patterns == null || this.pattern_fingerprints.size() < this.state!!.patterns.size()) {
+            throw "Run this.fingerprint_patterns first";
+        } // if
+
+        var pattern_fingerprint = this.pattern_fingerprints[index];
+
+        var window_paa = this.paa(timeWindow);
+        var window_fingerprint = this.sax(window_paa);
+
+        var distance = 0.0;
+        for (var i = 0; i < this.fingerprint_length; ++i) {
+            distance = distance + this.lookup_table.get(pattern_fingerprint.get(i))!!.get(window_fingerprint.get(i))!!;
+        } // for
+
+        return 1.0 - distance / this.max_distance;
+    }
+
+    fn sax(paa: Array<float>): String {
+        var fingerprint = "";
+
+        for (_, value in paa) {
+            var last_index: int? = null;
+            for (index: int, boundary: float in this.alphabet_boundaries) {
+                if (value < boundary) {
+                    if (last_index == null) {
+                        last_index = index;
+                    } // if
+                    break;
+                } // if
+                last_index = index;
+            } // for
+            fingerprint = "${fingerprint}${SaxPatternDetectionEngine::alphabet.get(last_index!!)}";
+        } // for
+
+        return fingerprint;
+    }
+
+    fn paa(pattern: any): Array<float> {
+        var paa = Array<float> {};
+
+        var firstTime: time = pattern.firstTime() as time;
+        var lastTime: time = pattern.lastTime() as time;
+        var timespan = (lastTime - firstTime).to(DurationUnit::microseconds);
+        var upperTimestamp: time;
+
+        var m = this.fingerprint_length; // m: fingerprint “target” sampling rate
+        for (var i = 0; i < m; ++i) {
+            var lowerTimestamp: time;
+            if (i > 0) {
+                lowerTimestamp = upperTimestamp;
+            } else {
+                var lowerDuration = duration::new(timespan * i / m, DurationUnit::microseconds);
+                lowerTimestamp = firstTime + lowerDuration;
+            } // if
+            var upperDuration = duration::new(timespan * (i + 1) / m, DurationUnit::microseconds);
+            upperTimestamp = firstTime + upperDuration;
+
+            var sum = 0.0;
+            var count = 0.0;
+            if (pattern is nodeTime) {
+                for (_, value: float in pattern[lowerTimestamp..upperTimestamp[) {
+                    sum = sum + value;
+                    ++count;
+                } // for
+            } else { // if TimeWindow
+                for (_, value: float? in slice(pattern as TimeWindow, lowerTimestamp, upperTimestamp)) {
+                    if (null != value) { // Null values cannot be considered close to any other value, therefore it is more prudent to ignore them
+                        sum = sum + value;
+                        ++count;
+                    } // if
+                } // for
+            } // if
+            // Don’t skip lastTime
+            if (lastTime == upperTimestamp) {
+                var value = pattern.last();
+                if (null != value) { // Null values cannot be considered close to any other value, therefore it is more prudent to ignore them
+                    sum = sum + pattern.last() as float;
+                    ++count;
+                } // if
+            } // if
+
+            if (count > 0) {
+                paa.add(sum / count);
+            } else { // If current slice is empty of any datapoint, default to the previous one if not null, otherwise next one
+                if (pattern is nodeTime) {
+                    paa.add(pattern.resolveAt(lowerTimestamp) as float);
+                } else { // if TimeWindow
+                    var ts = this.timeseries.resolveTimeAt(lowerTimestamp)!!;
+                    var value = this.timeseries.resolveAt(ts);
+                    while (null == value) {
+                        ts = this.timeseries.prev(ts);
+                        if (null == ts) {
+                            break;
+                        } // if
+                        value = this.timeseries.resolveAt(ts);
+                    } // while
+                    ts = this.timeseries.resolveTimeAt(lowerTimestamp)!!;
+                    while (null == value) {
+                        ts = this.timeseries.next(ts);
+                        if (null == ts) {
+                            break;
+                        } // if
+                        value = this.timeseries.resolveAt(ts);
+                    } // while
+                    if (null != value) {
+                        paa.add(value as float);
+                    } // if
+                } // if
+            } // if
+        } // for
+
+        return paa;
+    }
+}
+
+type FFTResult {
+    distance: float;
+    best_pattern: int;
+    best_timespan: duration;
+}
+
+@unserializable
+type FFTPatternDetectionEngine extends PatternDetectionEngine {
+    low_pass_filter_ratio: float;
+    pattern_frequencies: Array<Tensor>?;
+    pattern_step_spans: Array<duration?>?;
+    pattern_ffts: Array<FFT?>?;
+    pattern_lpf_sizes: Array<int?>?;
+    window_tensors: Array<Tensor>?;
+    window_last_times: Array<time?>?;
+    fft_tensor: Tensor;
+    window_frequency: Tensor?; //todo remove nullable
+    pattern_distance_profiles: Array<Gaussian<float>>?;
+    results: nodeTime<FFTResult>;
+    static fn new(timeseries: nodeTime): FFTPatternDetectionEngine {
+        return FFTPatternDetectionEngine {
+            timeseries: timeseries,
+            low_pass_filter_ratio: 0.9,
+            fft_tensor: Tensor {},
+            window_frequency: Tensor {},
+            results: nodeTime<FFTResult> {},
+        };
+    }
+
+    fn initScoring() {
+        this.pattern_ffts = Array<FFT?> {};
+        this.pattern_lpf_sizes = Array<int?> {};
+        this.pattern_frequencies = Array<Tensor> {};
+        this.pattern_step_spans = Array<duration?> {};
+        this.window_tensors = Array<Tensor> {};
+        this.window_last_times = Array<time?> {};
+        this.pattern_distance_profiles = Array<Gaussian<float>> {};
+        for (index, pattern in this.state?.patterns?) {
+            var freq_tensor = Tensor {};
+            var step_span: duration? = null;
+            var fft: FFT? = null;
+            var lpf_size: int? = null;
+            var window_tensor = Tensor {};
+            if (pattern.size() > 0) {
+                var tensor_size = FFT::get_next_fast_size(pattern.size());
+                step_span = duration::new(
+                    (timeWindowLastTime(pattern)!! - timeWindowFirstTime(pattern)!!).to(DurationUnit::microseconds) / (tensor_size - 1),
+                    DurationUnit::microseconds
+                );
+                var pattern_tensor = Tensor {};
+                pattern_tensor.init(TensorType::c128, Array<int> {tensor_size});
+                window_tensor.init(TensorType::c128, Array<int> {tensor_size});
+                var cursor = nodeTimeCursor { n: this.timeseries };
+                cursor.skip_duration(timeWindowFirstTime(pattern)!! - this.timeseries.firstTime()!!);
+                for (var index = 0; index < tensor_size; ++index) {
+                    var val = cursor.current() as float?;
+                    if (val == null) {
+                        var currentTime = cursor.currentTime();
+                        if (this.nullStrategy == PatternNullStrategy::previous) {
+                            do {
+                                cursor.previous();
+                                val = cursor.current();
+                            } while (val == null && cursor.currentTime() != null);
+                        } else if (this.nullStrategy == PatternNullStrategy::next) {
+                            do {
+                                cursor.next();
+                                val = cursor.current();
+                            } while (val == null && cursor.currentTime() != null);
+                        } else if (this.nullStrategy == PatternNullStrategy::replace && this.nullReplaceConstant != null) {
+                            val = this.nullReplaceConstant;
+                        } else if (this.nullStrategy == PatternNullStrategy::interpolate) {
+                            var prevVal = null;
+                            var prevTime: time? = null;
+                            var nextVal = null;
+                            var nextTime: time? = null;
+                            do {
+                                cursor.previous();
+                                prevVal = cursor.current();
+                                prevTime = cursor.currentTime();
+                            } while (prevVal == null && prevTime != null);
+                            // cursor.init(this.timeseries);
+                            cursor = nodeTimeCursor { n: this.timeseries };
+                            cursor.skip_duration(timeWindowFirstTime(pattern)!! - this.timeseries.firstTime()!!);
+                            do {
+                                cursor.next();
+                                nextVal = cursor.current();
+                                nextTime = cursor.currentTime();
+                            } while (nextVal == null && nextTime != null);
+                            if (prevVal != null && nextVal != null && prevTime != null && nextTime != null && currentTime != null) {
+                                var span = (nextTime - prevTime).to(DurationUnit::microseconds) as float;
+                                var previous_weight = ((nextTime - currentTime).to(DurationUnit::microseconds) as float) / span;
+                                var next_weight = ((currentTime - prevTime).to(DurationUnit::microseconds) as float) / span;
+                                val = prevVal * previous_weight + nextVal * next_weight;
+                            }
+                        } else {
+                            throw "Patterns cannot contain null without a null strategy";
+                        }
+                    }
+                    pattern_tensor.set(Array<int> {index}, val as float);
+
+                    cursor.skip_duration(step_span);
+                }
+                fft = FFT::new(tensor_size, false);
+                fft.transform(pattern_tensor, this.fft_tensor);
+                lpf_size = FFT::get_low_pass_filter_size(this.fft_tensor, this.low_pass_filter_ratio);
+                FFT::apply_low_pass_filter(this.fft_tensor, freq_tensor, lpf_size);
+            } else {
+                this.fft_tensor.init(TensorType::c128, Array<int> {0});
+                window_tensor.init(TensorType::c128, Array<int> {0});
+            }
+            this.pattern_frequencies.add(freq_tensor);
+            this.pattern_step_spans.add(step_span);
+            this.pattern_ffts.add(fft);
+            this.pattern_lpf_sizes.add(lpf_size);
+            this.window_tensors.add(window_tensor);
+            this.pattern_distance_profiles.add(Gaussian<float> {});
+        }
+    }
+
+    fn score(index: int, pattern: TimeWindow, timeWindow: TimeWindow): float {
+        if (pattern.size() == 0 || timeWindow.size() == 0) {
+            return 0.0;
+        }
+        var window_tensor = this.window_tensors!![index];
+        var step_span = this.pattern_step_spans!![index]!!;
+        var cursor = nodeTimeCursor { n: this.timeseries };
+        //    if (window_tensor.size() == 0) {
+        cursor.skip_duration(timeWindowFirstTime(timeWindow)!! - this.timeseries.firstTime()!!);
+        for (var index = 0; index < window_tensor.shape()[0]; ++index) {
+            window_tensor.set(Array<int> {index},(cursor.current() ?? NaN) as float);
+            cursor.skip_duration(step_span);
+        }
+        //    } else {
+        //      cursor.skip_duration(this.window_last_times[index]!! - this.timeseries.firstTime()!!);
+        //      cursor.skip_duration(step_span);
+        //      window_tensor.slide(1);
+        //      window_tensor.append(cursor.current()');
+        //    }
+        //    this.window_last_times[index] = timeWindow.lastTime();
+        this.pattern_ffts!![index]!!.transform(window_tensor, this.fft_tensor);
+
+        FFT::apply_low_pass_filter(this.fft_tensor, this.window_frequency!!, this.pattern_lpf_sizes!![index]!!);
+        var distance = DistanceMetrics::euclidean(this.pattern_frequencies!![index], this.window_frequency);
+        //    return 1.0 - distance / pattern.size(); // TODO: std somehow?
+        this.pattern_distance_profiles!![index].add(distance);
+        return -distance;
+    }
+}
+
+private fn normalize_score(score: float): int {
+    return(int::min * score) as int;
+}
+
+private fn get_score(normalized_score: int): float {
+    return normalized_score as float / int::min;
+}
+
+private fn normalize_pattern(pattern: TimeWindow, samplingPolicy: SamplingPolicy): TimeWindow {
+    var timepoints = pattern.size();
+
+    if (timepoints == 0) {
+        throw "Empty pattern";
+    } // if
+
+    if (timepoints == 1 || SamplingPolicy::as_is == samplingPolicy) {
+        return pattern;
+    } // if
+
+    var firstTime = timeWindowFirstTime(pattern)!!;
+    var lastTime = timeWindowLastTime(pattern)!!;
+    var timespan = lastTime - firstTime;
+    var normalized_pattern = TimeWindow { span: timespan };
+    if (SamplingPolicy::average_frequency == samplingPolicy) {
+        // Do nothing
+    } else if (SamplingPolicy::highest_frequency == samplingPolicy) {
+        var previousTime = firstTime;
+        var lowestPeriod = timespan;
+        for (timestamp: time, _ in timeWindowToMap(pattern)) {
+            if (firstTime == timestamp) {
+                continue;
+            }
+            var period = timestamp - previousTime;
+            if (period < lowestPeriod) {
+                lowestPeriod = period;
+            }
+        }
+        timepoints = timespan.to(DurationUnit::microseconds) / lowestPeriod.to(DurationUnit::microseconds);
+    } else {
+        throw "wrong state";
+    }
+    for (var i = 0; i < timepoints; ++i) {
+        var timestamp = firstTime + duration::new(timespan.to(DurationUnit::microseconds) * i / (timepoints - 1), DurationUnit::microseconds);
+        normalized_pattern.add(timestamp, extrapolateWindow(pattern, timestamp));
+    }
+
+    return normalized_pattern;
+}
+
+private fn printnt(nt: nodeTime) {
+    var s = "[";
+    for (_, value in nt) {
+        s = "${s}${value}, ";
+    } // for
+    println("${s}]");
+}
+
+fn extrapolateSeries(timeseries: nodeTime, offset: time) {
+    var from = timeseries.resolveTimeAt(offset);
+    if (offset == from || null == from) {
+        return timeseries.resolveAt(offset);
+    }
+    var to = timeseries.next(from);
+    if (null == to) {
+        return timeseries.getAt(from);
+    }
+    var before = (offset - from).to(DurationUnit::microseconds) as float;
+    var after = (to - offset).to(DurationUnit::microseconds) as float;
+    var from_value = timeseries.getAt(from);
+    var to_value = timeseries.getAt(to);
+    if (null == from_value) {
+        return to_value;
+    }
+    if (null == to_value) {
+        return from_value;
+    }
+    return (after * from_value + before * to_value) / (before + after);
+}
+
+fn extrapolateWindow(timeWindow: TimeWindow, offset: time) {
+    var from: time? = null;
+    var from_value: any? = null;
+    var to: time? = null;
+    var to_value: any? = null;
+    for (var row = 0; row < timeWindow.values!!.rows(); ++row) {
+        var timestamp = timeWindow.values.get_cell(row, 0) as time;
+        var value = timeWindow.values.get_cell(row, 1);
+        if (timestamp > offset) {
+            to = timestamp;
+            to_value = value;
+            break;
+        } // if
+        from = timestamp;
+        from_value = value;
+    }
+    if (offset == from || null == from || null == to) {
+        return from_value;
+    }
+    if (null == from_value) {
+        return to_value;
+    }
+    if (null == to_value) {
+        return from_value;
+    }
+    var before = (offset - from).to(DurationUnit::microseconds) as float;
+    var after = (to - offset).to(DurationUnit::microseconds) as float;
+    return(after * from_value + before * to_value) / (before + after);
+}
+
+private fn longest_pattern_duration(patterns: Array<TimeWindow>): duration {
+    var timespan: duration = 0_s;
+    for (_, pattern: TimeWindow in patterns) {
+        var pattern_timespan = timeWindowLastTime(pattern)!! - timeWindowFirstTime(pattern)!!;
+        if (pattern_timespan > timespan) {
+            timespan = pattern_timespan;
+        } // if
+    } // for
+
+    return timespan;
+}
+
+type DistanceMetrics {
+    static native fn euclidean(t1: Tensor, t2: Tensor): float;
+    static native fn dtw(t1: Tensor, t2: Tensor, workspace: Tensor): float;
+}
+
+fn slice(timeWindow: TimeWindow, from: time, to: time): Array {
+    var slice = Array<any> {};
+    for (timestamp: time, value: any in timeWindowToMap(timeWindow)) {
+        if (timestamp < from) {
+            continue;
+        } // if
+        if (timestamp >= to) {
+            break;
+        } // if
+        slice.add(value);
+    } // for
+    return slice;
+}

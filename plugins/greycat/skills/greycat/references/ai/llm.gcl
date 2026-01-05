@@ -1,0 +1,954 @@
+/// How to split the model across multiple GPUs
+enum SplitMode {
+    /// Single GPU
+    none,
+    /// Split layers and KV across GPUs
+    layer,
+    /// Split layers and KV across GPUs, use tensor parallelism if supported
+    row,
+}
+
+/// RoPE (Rotary Position Embedding) scaling type for context extension
+enum RopeScalingType {
+    /// No scaling, unspecified
+    unspecified,
+    /// No scaling
+    none,
+    /// Linear scaling
+    linear,
+    /// YaRN scaling
+    yarn,
+    /// Long RoPE scaling
+    longrope,
+}
+
+/// Pooling strategy for embeddings
+enum PoolingType {
+    /// Unspecified - use model default
+    unspecified,
+    /// No pooling
+    none,
+    /// Average all token embeddings
+    mean,
+    /// Use CLS token embedding
+    cls,
+    /// Use last token embedding
+    last,
+    /// Ranking mode (outputs class scores)
+    rank,
+}
+
+/// Attention mechanism type
+enum AttentionType {
+    /// Unspecified - use model default
+    unspecified,
+    /// Causal attention (GPT-style)
+    causal,
+    /// Non-causal attention
+    non_causal,
+}
+
+/// Flash Attention configuration
+enum FlashAttnType {
+    /// Disabled
+    disabled,
+    /// Only enable for models that support FlashAttention natively
+    enabled_for_fa,
+    /// Enable for all models (may be slower for non-FA models)
+    enabled_for_all,
+}
+
+/// GGML tensor data types (quantization formats)
+enum GgmlType {
+    f32,
+    f16,
+    q4_0,
+    q4_1,
+    q5_0,
+    q5_1,
+    q8_0,
+    q8_1,
+    q2_k,
+    q3_k,
+    q4_k,
+    q5_k,
+    q6_k,
+    q8_k,
+    iq2_xxs,
+    iq2_xs,
+    iq3_xxs,
+    iq1_s,
+    iq4_nl,
+    iq3_s,
+    iq2_s,
+    iq4_xs,
+    i8,
+    i16,
+    i32,
+    i64,
+    f64,
+    iq1_m,
+    bf16,
+    tq1_0,
+    tq2_0,
+}
+
+/// Model loading parameters
+///
+/// All fields are optional and override llama.cpp defaults when specified.
+/// For details on each parameter, see llama.cpp documentation.
+type ModelParams {
+    /// Number of layers to offload to GPU (0 = CPU only, -1 = all layers)
+    n_gpu_layers: int?;
+    /// How to split the model across multiple GPUs
+    split_mode: SplitMode?;
+    /// The GPU index to use when split_mode is none (default: 0)
+    main_gpu: int?;
+    /// Proportion of tensor rows to offload to each GPU (for split_mode layer/row)
+    /// Array length must match number of GPUs
+    tensor_split: Array<float>?;
+    /// Only load the vocabulary, no weights (useful for tokenization only)
+    vocab_only: bool?;
+    /// Use memory-mapped files if possible (faster loading, shared memory)
+    use_mmap: bool?;
+    /// Force system to keep model in RAM (prevent swapping)
+    use_mlock: bool?;
+    /// Validate model tensor data during loading
+    check_tensors: bool?;
+}
+
+/// Context creation parameters
+///
+/// All fields are optional. Controls inference behavior, memory usage, and performance.
+type ContextParams {
+    // ========================================================================
+    // Core Parameters
+    // ========================================================================
+    /// Text context size, 0 = from model
+    n_ctx: int?;
+    /// Logical maximum batch size that can be submitted to decode
+    n_batch: int?;
+    /// Physical maximum batch size
+    n_ubatch: int?;
+    /// Max number of sequences (i.e. distinct states for recurrent models)
+    n_seq_max: int?;
+    // ========================================================================
+    // Threading
+    // ========================================================================
+    /// Number of threads to use for generation
+    n_threads: int?;
+    /// Number of threads to use for batch processing
+    n_threads_batch: int?;
+    // ========================================================================
+    // Attention & Pooling
+    // ========================================================================
+    /// RoPE scaling type
+    rope_scaling_type: RopeScalingType?;
+    /// Whether to pool (sum) embedding results by sequence id
+    pooling_type: PoolingType?;
+    /// Attention type to use for embeddings
+    attention_type: AttentionType?;
+    /// When to enable Flash Attention
+    flash_attn_type: FlashAttnType?;
+    // ========================================================================
+    // RoPE Parameters
+    // ========================================================================
+    /// RoPE base frequency, 0 = from model
+    rope_freq_base: float?;
+    /// RoPE frequency scaling factor, 0 = from model
+    rope_freq_scale: float?;
+    // ========================================================================
+    // YaRN Parameters (for RoPE scaling)
+    // ========================================================================
+    /// YaRN extrapolation mix factor, negative = from model
+    yarn_ext_factor: float?;
+    /// YaRN magnitude scaling factor
+    yarn_attn_factor: float?;
+    /// YaRN low correction dim
+    yarn_beta_fast: float?;
+    /// YaRN high correction dim
+    yarn_beta_slow: float?;
+    /// YaRN original context size
+    yarn_orig_ctx: int?;
+    // ========================================================================
+    // KV Cache Parameters
+    // ========================================================================
+    /// Defragment the KV cache if `holes/size > thold`, `<= 0` disabled
+    defrag_thold: float?;
+    /// Data type for K cache
+    type_k: GgmlType?;
+    /// Data type for V cache
+    type_v: GgmlType?;
+    // ========================================================================
+    // Feature Flags
+    // ========================================================================
+    /// If true, extract embeddings (together with logits)
+    embeddings: bool?;
+    /// If true, normalize embeddings to unit length (L2 norm)
+    normalize: bool?;
+    /// Offload the KQV ops (including the KV cache) to GPU
+    offload_kqv: bool?;
+    /// Disable performance timings (for production use)
+    no_perf: bool?;
+    /// Offload host tensor operations to device
+    op_offload: bool?;
+    /// Use full-size SWA cache
+    swa_full: bool?;
+    /// Use a unified buffer across input sequences for attention
+    kv_unified: bool?;
+}
+
+/// Language Model (LLM) instance
+///
+/// Represents a loaded language model with methods for embeddings, generation,
+/// tokenization, and more. Models are automatically freed when garbage collected,
+/// but can be explicitly freed with the free() method.
+///
+/// Example:
+/// ```
+/// var model = Model::load("./Llama-3.2-1B.gguf", ModelParams { n_gpu_layers: -1 });
+/// var info = model.info();
+/// println("Loaded ${info.description} with ${info.n_params} parameters");
+///
+/// var emb = model.embed("Hello world", TensorType::f32, null);
+/// println("Embedding dimension: ${emb.size()}");
+/// ```
+type Model {
+    // ========================================================================
+    // STATIC: Model Loading & Management
+    // ========================================================================
+    /// Load model from file
+    ///
+    /// Creates a new Model instance by loading a GGUF model file from disk.
+    /// The model is kept in memory until freed (explicitly or by GC).
+    ///
+    /// For split models, the file path must follow the pattern:
+    /// `<name>-%05d-of-%05d.gguf` (e.g., `model-00001-of-00005.gguf`)
+    ///
+    /// Returns null if loading fails.
+    static native fn load(id: String, path: String, params: ModelParams?): Model;
+    /// Load model from custom-named split files
+    ///
+    /// Like load(), but allows custom file naming instead of the standard pattern.
+    /// The paths array must contain all split files in the correct order.
+    ///
+    /// Returns null if loading fails.
+    static native fn load_from_splits(id: String, paths: Array<String>, params: ModelParams?): Model;
+    /// Quantize a model file (convert to smaller precision)
+    ///
+    /// Converts an existing GGUF model to a different quantization format.
+    /// This is a static utility function - no Model instance required.
+    static native fn quantize(input_path: String, output_path: String, params: QuantizeParams?);
+
+    /// Retrive model from id
+    /// id must the same value than the one used during load phase
+    /// Returns null if not founds
+    static native fn get(id: String): Model?;
+
+    // ========================================================================
+    // INSTANCE: Model Information
+    // ========================================================================
+    /// Get comprehensive model information
+    ///
+    /// Returns detailed metadata about the model architecture, size,
+    /// training parameters, and capabilities.
+    native fn info(): ModelInfo;
+    /// Get model metadata value by key
+    /// Retrieves a specific metadata field from the GGUF file.
+    /// Returns null if the key doesn't exist.
+    /// Common keys: "general.name", "general.author", "general.license", etc.
+    native fn meta(key: String): String?;
+    /// Get number of metadata key/value pairs
+    /// Returns the total count of metadata entries in the model.
+    native fn meta_count(): int;
+    /// Get metadata key name by index
+    /// Retrieves the key name at the specified index (0-based).
+    /// Returns null if index is out of bounds.
+    native fn meta_key_by_index(index: int): String?;
+    /// Get metadata value by index
+    /// Retrieves the value at the specified index (0-based).
+    /// Returns null if index is out of bounds.
+    native fn meta_val_by_index(index: int): String?;
+    /// Get model description
+    /// Returns a human-readable string describing the model architecture.
+    native fn desc(): String;
+    /// Get chat template by name
+    /// Returns the chat template with the specified name.
+    /// If name is null, returns the default chat template.
+    /// Returns null if no template is available.
+    native fn chat_template(name: String?): String?;
+    /// Get classifier label by index
+    /// For classifier models, returns the label for the output at the given index.
+    /// Returns null if the model is not a classifier or index is out of bounds.
+    native fn cls_label(index: int): String?;
+    /// Get decoder start token
+    /// For encoder-decoder models, returns the token ID that must be provided
+    /// to the decoder to start generating output.
+    /// Returns -1 for models that don't require a decoder start token.
+    native fn decoder_start_token(): int;
+    // ========================================================================
+    // INSTANCE: Embeddings
+    // ========================================================================
+    /// Compute embedding vector for text
+    /// Generates a dense vector representation of the input text.
+    /// The pooling strategy is determined by ctx_params.pooling_type
+    /// (defaults to model's trained pooling type).
+    /// Returns a 1D Tensor of size n_embd.
+    native fn embed(text: String,tensor_type: TensorType,ctx_params: ContextParams?): Tensor;
+    /// Compute embeddings for multiple texts (batched)
+    /// More efficient than calling embed() multiple times.
+    /// All texts are processed in a single context creation.
+    /// Returns an array of Tensors, one per input text.
+    native fn embed_batch(texts: Array<String>,tensor_type: TensorType,ctx_params: ContextParams?): Array<Tensor>;
+
+    // ========================================================================
+    // INSTANCE: Text Generation
+    // ========================================================================
+    /// Generate text completion for a prompt
+    /// Performs auto-regressive text generation starting from the prompt.
+    /// Returns when max_tokens is reached or an end-of-generation token is produced.
+    native fn generate(prompt: String,params: GenerationParams?,ctx_params: ContextParams?): GenerationResult;
+    /// Generate text with streaming callback
+    /// Like generate(), but calls the callback function for each generated token.
+    /// Callback signature: fn(token: String, is_final: bool)
+    /// If callback returns false, generation stops.
+    native fn generate_stream(prompt: String,callback: function,params: GenerationParams?,ctx_params: ContextParams?): GenerationResult;
+
+    // ========================================================================
+    // INSTANCE: Chat
+    // ========================================================================
+    /// Format chat messages using model's chat template
+    ///
+    /// Applies the model's built-in chat template to format a conversation.
+    /// If add_assistant is true, adds the assistant message start token(s).
+    ///
+    /// Returns the formatted prompt string ready for generation.
+    /// Fails if the model has no chat template.
+    native fn format_chat(messages: Array<ChatMessage>,add_assistant: bool): String;
+    /// Chat completion
+    /// Convenience method that formats messages and generates a response.
+    /// Equivalent to: generate(format_chat(messages, true), params, ctx_params)
+    native fn chat(messages: Array<ChatMessage>,params: GenerationParams?,ctx_params: ContextParams?): GenerationResult;
+    /// Chat completion with streaming
+    /// Like chat(), but streams tokens via callback.
+    /// Callback signature: fn(token: String, is_final: bool)
+    native fn chat_stream(messages: Array<ChatMessage>,callback: function,params: GenerationParams?,ctx_params: ContextParams?): GenerationResult;
+
+    // ========================================================================
+    // INSTANCE: Tokenization
+    // ========================================================================
+    /// Tokenize text into token IDs
+    /// Converts text to an array of integer token IDs using the model's vocabulary.
+    /// - add_special: If true, add BOS/EOS tokens if model is configured to
+    /// - parse_special: If true, parse special tokens like <|endoftext|>
+    native fn tokenize(text: String,add_special: bool,parse_special: bool): Array<int>;
+
+    /// Detokenize token IDs back to text
+    /// Converts an array of token IDs back to a string.
+    /// - remove_special: If true, remove BOS/EOS tokens if model is configured to
+    /// - unparse_special: If true, render special tokens as text (e.g., "<|endoftext|>")
+    native fn detokenize(tokens: Array<int>,remove_special: bool,unparse_special: bool): String;
+
+    /// Convert single token ID to text
+    /// Returns the text representation of a single token.
+    native fn token_to_text(token: int): String;
+    /// Convert token ID to piece with lstrip support
+    /// Like token_to_text(), but allows skipping leading spaces.
+    /// - lstrip: Number of leading spaces to skip
+    /// - special: If true, render special tokens as text
+    native fn token_to_piece(token: int, lstrip: int, special: bool): String;
+    /// Get token score (log probability from training)
+    /// Returns the token's score in the vocabulary.
+    native fn token_score(token: int): float;
+    /// Get token attributes (bitfield)
+    /// Returns metadata about the token (control, byte, normalized, etc.)
+    native fn token_attr(token: int): TokenAttr;
+    /// Check if token is end-of-generation
+    /// Returns true if the token marks the end of generation (EOS, EOT, etc.)
+    native fn is_eog_token(token: int): bool;
+    /// Check if token is a control token
+    /// Returns true if the token is a special control token.
+    native fn is_control_token(token: int): bool;
+
+    // ========================================================================
+    // INSTANCE: Special Tokens
+    // ========================================================================
+    /// Get separator token ID
+    native fn token_sep(): int;
+    /// Get padding token ID
+    native fn token_pad(): int;
+    /// Get mask token ID
+    native fn token_mask(): int;
+    /// Get newline token ID
+    native fn token_nl(): int;
+    /// Get CLS (classifier) token ID
+    /// Returns the CLS token ID used by BERT-style models.
+    /// Returns -1 if the model doesn't have a CLS token.
+    native fn token_cls(): int;
+    /// Check if model adds SEP token automatically
+    native fn add_sep_token(): bool;
+
+    // ========================================================================
+    // INSTANCE: Fill-in-the-Middle Tokens
+    // ========================================================================
+    /// Get fill-in-the-middle prefix token ID
+    native fn token_fim_pre(): int;
+    /// Get fill-in-the-middle suffix token ID
+    native fn token_fim_suf(): int;
+    /// Get fill-in-the-middle middle token ID
+    native fn token_fim_mid(): int;
+    /// Get fill-in-the-middle padding token ID
+    native fn token_fim_pad(): int;
+    /// Get fill-in-the-middle repeat token ID
+    native fn token_fim_rep(): int;
+    /// Get fill-in-the-middle separator token ID
+    native fn token_fim_sep(): int;
+
+    // ========================================================================
+    // INSTANCE: Performance
+    // ========================================================================
+    /// Get performance metrics for last operation
+    ///
+    /// Returns timing and throughput statistics from the most recent
+    /// inference operation (embed, generate, etc.)
+    native fn perf(): PerfData;
+    /// Print detailed memory breakdown to log
+    ///
+    /// Outputs per-device memory usage information via llama.cpp logging.
+    native fn print_memory();
+
+    // ========================================================================
+    // INSTANCE: Resource Management
+    // ========================================================================
+    /// Save model to file
+    ///
+    /// Saves the current model to a GGUF file on disk.
+    native fn save(path: String);
+    /// Explicitly free model resources
+    ///
+    /// Immediately releases model memory. Optional - the GC will
+    /// automatically free the model when it's no longer referenced.
+    native fn free();
+}
+
+/// Static utility functions for llama.cpp
+///
+/// These functions don't require a Model instance.
+type LLM {
+    /// Enable or disable llama.cpp logging
+    ///
+    /// By default, logging is disabled. Call LLM::logging(true) to enable
+    /// llama.cpp internal logging to stderr.
+    ///
+    /// - enabled: true to enable logging, false to disable
+    static native fn logging(enabled: bool);
+
+    /// Get system information string
+    ///
+    /// Returns detailed information about the runtime environment:
+    /// CPU, GPU, SIMD support, backend capabilities, etc.
+    static native fn system_info(): String;
+
+    /// Get list of built-in chat templates
+    ///
+    /// Returns names of all chat templates supported by llama.cpp.
+    static native fn chat_templates(): Array<String>;
+
+    /// Check if memory mapping (mmap) is supported
+    ///
+    /// Returns true if the current platform supports mmap for faster model loading.
+    static native fn supports_mmap(): bool;
+
+    /// Check if memory locking (mlock) is supported
+    ///
+    /// Returns true if the current platform supports mlock to prevent swapping.
+    static native fn supports_mlock(): bool;
+
+    /// Check if GPU offload is supported
+    ///
+    /// Returns true if GPU acceleration is available (CUDA, Metal, Vulkan, etc.)
+    static native fn supports_gpu(): bool;
+
+    /// Get maximum number of devices
+    ///
+    /// Returns the maximum number of GPUs that can be used for model distribution.
+    static native fn max_devices(): int;
+
+    /// Get maximum parallel sequences
+    ///
+    /// Returns the maximum number of sequences that can be processed in parallel.
+    static native fn max_parallel_sequences(): int;
+
+    /// Get maximum tensor buffer type overrides
+    ///
+    /// Returns the maximum number of tensor buffer type overrides supported.
+    static native fn max_tensor_buft_overrides(): int;
+
+    /// Check if RPC is supported
+    ///
+    /// Returns true if remote procedure call support is available.
+    static native fn supports_rpc(): bool;
+
+    /// Get time in microseconds
+    ///
+    /// Returns the current time in microseconds since epoch.
+    static native fn time_us(): int;
+
+    /// Get list of built-in chat templates
+    ///
+    /// Returns names of all chat templates supported by llama.cpp.
+    static native fn chat_builtin_templates(): Array<String>;
+
+    /// Get flash attention type name
+    ///
+    /// Returns the string name for a flash attention type.
+    static native fn flash_attn_type_name(type: FlashAttnType): String;
+
+    /// Build split model file path
+    ///
+    /// Constructs a split GGUF file path following the standard naming pattern.
+    /// Example: split_path("model", 2, 4) => "model-00002-of-00004.gguf"
+    static native fn split_path(prefix: String, split_no: int, split_count: int): String;
+
+    /// Extract prefix from split model file path
+    ///
+    /// Extracts the base path from a split file name if split_no and split_count match.
+    /// Returns null if the path doesn't match the expected pattern.
+    static native fn split_prefix(split_path: String, split_no: int, split_count: int): String?;
+
+    /// Fit model and context parameters to available device memory
+    /// Adjusts ModelParams and ContextParams to fit within device memory constraints.
+    /// Assumes system memory is unlimited. Returns true if successful.
+    ///
+    /// WARNING: This function is NOT thread-safe as it modifies global logger state.
+    ///
+    /// - model_path: Path to model file
+    /// - mparams: Model parameters to adjust (modified in-place)
+    /// - cparams: Context parameters to adjust (modified in-place)
+    /// - margin: Memory margin to leave per device (bytes)
+    /// - n_ctx_min: Minimum context size when reducing memory
+    static native fn params_fit(model_path: String, mparams: ModelParams, cparams: ContextParams, margin: int, n_ctx_min: int): bool;
+}
+
+/// Vocabulary type
+enum VocabType {
+    /// No vocabulary
+    none,
+    /// SentencePiece (LLaMA, Mistral, etc.)
+    spm,
+    /// Byte-Pair Encoding (GPT-2, GPT-J, etc.)
+    bpe,
+    /// WordPiece (BERT)
+    wpm,
+    /// Unigram (T5)
+    ugm,
+    /// RWKV tokenizer
+    rwkv,
+    /// Plamo2 tokenizer
+    plamo2,
+}
+
+/// RoPE type
+enum RopeType {
+    /// No RoPE
+    none,
+    /// Normal RoPE
+    norm,
+    /// NeoX-style RoPE
+    neox,
+}
+
+/// Token attributes (bitfield)
+enum TokenAttr {
+    /// Undefined token
+    undefined,
+    /// Unknown token
+    unknown,
+    /// Unused token
+    unused,
+    /// Normal token
+    normal,
+    /// Control token (BOS, EOS, etc.)
+    control,
+    /// User-defined token
+    user_defined,
+    /// Byte token
+    byte,
+    /// Normalized token
+    normalized,
+    /// Left-strip whitespace
+    lstrip,
+    /// Right-strip whitespace
+    rstrip,
+    /// Single-word token
+    single_word,
+}
+
+/// Sampler type identifier
+enum SamplerType {
+    /// Greedy sampling
+    greedy,
+    /// Distribution sampling
+    dist,
+    /// Top-K sampling
+    top_k,
+    /// Top-P (nucleus) sampling
+    top_p,
+    /// Min-P sampling
+    min_p,
+    /// Typical sampling
+    typical,
+    /// Temperature sampling
+    temp,
+    /// Temperature with exponent
+    temp_ext,
+    /// XTC sampling
+    xtc,
+    /// Top-N-Sigma sampling
+    top_n_sigma,
+    /// Mirostat v1
+    mirostat,
+    /// Mirostat v2
+    mirostat_v2,
+    /// Grammar-based sampling
+    grammar,
+    /// Repetition penalties
+    penalties,
+    /// DRY (Don't Repeat Yourself) sampling
+    dry,
+    /// Logit bias
+    logit_bias,
+    /// Infill sampling
+    infill,
+}
+
+/// Generation stop reason
+enum StopReason {
+    /// Maximum tokens reached
+    max_tokens,
+    /// End-of-generation token produced
+    eog_token,
+    /// Generation aborted by user/callback
+    aborted,
+    /// Error occurred during generation
+    error,
+}
+
+/// Comprehensive model information
+/// Contains detailed metadata about the loaded model, including architecture,
+/// size, training parameters, and capabilities.
+type ModelInfo {
+    /// Human-readable model description
+    description: String;
+    /// Total model size in bytes
+    size: int;
+    /// Total number of parameters
+    n_params: int;
+    // ========================================================================
+    // Architecture Dimensions
+    // ========================================================================
+    /// Embedding dimension
+    n_embd: int;
+    /// Input embedding dimension (for encoder-decoder models)
+    n_embd_inp: int;
+    /// Number of layers
+    n_layer: int;
+    /// Number of attention heads
+    n_head: int;
+    /// Number of key-value heads (for Grouped Query Attention)
+    n_head_kv: int;
+    /// Sliding window attention size (0 = no sliding window)
+    n_swa: int;
+    /// Number of classifier output dimensions
+    n_cls_out: int;
+    // ========================================================================
+    // Context and Vocabulary
+    // ========================================================================
+    /// Context size the model was trained on
+    n_ctx_train: int;
+    /// Vocabulary size
+    n_vocab: int;
+    /// Vocabulary type
+    vocab_type: VocabType;
+    // ========================================================================
+    // RoPE (Rotary Position Embedding) Parameters
+    // ========================================================================
+    /// RoPE type
+    rope_type: RopeType;
+    /// RoPE frequency scaling factor used during training
+    rope_freq_scale_train: float;
+    // ========================================================================
+    // Model Capabilities
+    // ========================================================================
+    /// Whether model has encoder
+    has_encoder: bool;
+    /// Whether model has decoder
+    has_decoder: bool;
+    /// Whether model is recurrent (Mamba, RWKV)
+    is_recurrent: bool;
+    /// Whether model is hybrid (mixed architecture)
+    is_hybrid: bool;
+    /// Whether model is diffusion-based
+    is_diffusion: bool;
+    // ========================================================================
+    // Special Tokens
+    // ========================================================================
+    /// Whether to add BOS token automatically
+    add_bos: bool;
+    /// Whether to add EOS token automatically
+    add_eos: bool;
+    /// BOS (Beginning-of-Sequence) token ID
+    token_bos: int;
+    /// EOS (End-of-Sequence) token ID
+    token_eos: int;
+    /// EOT (End-of-Turn) token ID
+    token_eot: int;
+    // ========================================================================
+    // Chat and Metadata
+    // ========================================================================
+    /// Chat template string (if available)
+    chat_template: String?;
+    /// All model metadata key-value pairs
+    metadata: Map<String, String>;
+}
+
+/// Context performance data
+/// Timing and throughput metrics for inference operations.
+type PerfContextData {
+    /// Number of tokens evaluated
+    n_eval: int;
+    /// Number of tokens in prompt evaluation
+    n_p_eval: int;
+    /// Total evaluation time (milliseconds)
+    t_eval_ms: float;
+    /// Prompt evaluation time (milliseconds)
+    t_p_eval_ms: float;
+    /// Tokens per second (generation)
+    tokens_per_second: float;
+    /// Prompt tokens per second
+    prompt_tokens_per_second: float;
+}
+
+/// Sampler performance data
+/// Metrics for sampling operations.
+type PerfSamplerData {
+    /// Number of samples taken
+    n_sample: int;
+    /// Total sampling time (milliseconds)
+    t_sample_ms: float;
+    /// Samples per second
+    samples_per_second: float;
+}
+
+/// Complete performance data
+/// Comprehensive timing statistics for model operations.
+type PerfData {
+    /// Context/inference performance
+    context: PerfContextData;
+    /// Sampler performance (if applicable)
+    sampler: PerfSamplerData?;
+}
+
+/// Chat message
+/// Single message in a conversation.
+type ChatMessage {
+    /// Message role (e.g., "system", "user", "assistant")
+    role: String;
+    /// Message content
+    content: String;
+}
+
+/// Generation result
+/// Contains the generated text, tokens, and metadata from a generation operation.
+type GenerationResult {
+    /// Generated text
+    text: String;
+    /// Generated token IDs
+    tokens: Array<int>;
+    /// Number of tokens generated
+    n_tokens: int;
+    /// Why generation stopped
+    stop_reason: StopReason;
+    /// Performance metrics
+    perf: PerfData;
+}
+
+/// Inference state data
+/// Saved state from a context (KV cache, etc.) that can be restored later.
+type StateData {
+    /// State data bytes (binary blob)
+    data: Buffer;
+    /// State size in bytes
+    size: int;
+}
+
+/// Single token with probability
+/// Used for custom sampling and logit inspection.
+type TokenData {
+    /// Token ID
+    id: int;
+    /// Token logit (unnormalized log probability)
+    logit: float;
+    /// Token probability (after softmax)
+    p: float;
+}
+
+/// Batch of token data
+/// Array of token data with size information.
+type TokenDataBatch {
+    /// Token data array
+    data: Array<TokenData>;
+    /// Number of tokens
+    size: int;
+    /// Whether probabilities are sorted (descending)
+    sorted: bool;
+}
+
+/// Model quantization parameters
+/// Controls how models are quantized (converted to lower precision).
+type QuantizeParams {
+    /// Number of threads to use (0 = auto)
+    nthread: int?;
+    /// Target quantization format
+    ftype: GgmlType?;
+    /// Allow requantizing from a quantized source
+    allow_requantize: bool?;
+    /// Quantize output.weight
+    quantize_output_tensor: bool?;
+    /// Only copy tensors, no quantization
+    only_copy: bool?;
+    /// Disable k-quant mixtures and quantize all tensors to the same type
+    pure: bool?;
+    /// Path to importance matrix file for improved quantization
+    imatrix_file: String?;
+}
+
+/// Penalty parameters
+/// Controls repetition penalties during generation.
+type PenaltyParams {
+    /// Number of last tokens to consider for penalties (default: 64)
+    last_n: int?;
+    /// Repetition penalty strength (1.0 = disabled, >1.0 = penalize)
+    repeat: float?;
+    /// Frequency penalty (0.0 = disabled)
+    freq: float?;
+    /// Presence penalty (0.0 = disabled)
+    present: float?;
+}
+
+/// DRY (Don't Repeat Yourself) sampling parameters
+/// Advanced repetition penalty that penalizes repeating sequences.
+type DryParams {
+    /// DRY multiplier (0.0 = disabled)
+    multiplier: float?;
+    /// DRY base value
+    base: float?;
+    /// Allowed length of repeated sequences
+    allowed_length: int?;
+    /// Penalty range
+    penalty_last_n: int?;
+    /// Sequence breakers (tokens that break repetition detection)
+    seq_breakers: Array<String>?;
+}
+
+/// Mirostat v1 parameters
+type MirostatParams {
+    /// Target entropy (τ parameter)
+    tau: float?;
+    /// Learning rate (η parameter)
+    eta: float?;
+    /// Number of candidates to consider
+    m: int?;
+}
+
+/// Mirostat v2 parameters
+type MirostatV2Params {
+    /// Target entropy (τ parameter)
+    tau: float?;
+    /// Learning rate (η parameter)
+    eta: float?;
+}
+
+/// Logit bias
+/// Bias logits for specific tokens (positive = more likely, negative = less likely).
+type LogitBias {
+    /// Token ID to bias
+    token: int;
+    /// Bias value (-100.0 to 100.0)
+    bias: float;
+}
+
+/// Comprehensive sampler parameters
+/// Controls token sampling behavior during generation.
+/// All fields are optional and override llama.cpp defaults when specified.
+type SamplerParams {
+    // ========================================================================
+    // Basic Sampling
+    // ========================================================================
+    /// Temperature (0.0 = deterministic, higher = more random)
+    temperature: float?;
+    /// Dynamic temperature range (min, max)
+    dynatemp_range: float?;
+    /// Dynamic temperature exponent
+    dynatemp_exponent: float?;
+    // ========================================================================
+    // Top Sampling Methods
+    // ========================================================================
+    /// Top-K sampling (0 = disabled, N = keep top N tokens)
+    top_k: int?;
+    /// Top-P (nucleus) sampling (0.0-1.0, 1.0 = disabled)
+    top_p: float?;
+    /// Min-P sampling (0.0-1.0, 0.0 = disabled)
+    min_p: float?;
+    /// XTC (cross-token correlation) threshold
+    xtc_threshold: float?;
+    /// XTC probability
+    xtc_probability: float?;
+    /// Typical sampling (0.0-1.0, 1.0 = disabled)
+    typical_p: float?;
+    // ========================================================================
+    // Penalties
+    // ========================================================================
+    /// Repetition penalty parameters
+    penalty: PenaltyParams?;
+    /// DRY sampling parameters
+    dry: DryParams?;
+    // ========================================================================
+    // Advanced Sampling Algorithms
+    // ========================================================================
+    /// Mirostat v1 parameters
+    mirostat: MirostatParams?;
+    /// Mirostat v2 parameters
+    mirostat_v2: MirostatV2Params?;
+    // ========================================================================
+    // Constraints
+    // ========================================================================
+    /// Grammar string (GBNF format) to constrain generation
+    grammar: String?;
+    /// Logit biases for specific tokens
+    logit_bias: Array<LogitBias>?;
+    // ========================================================================
+    // Random Seed
+    // ========================================================================
+    /// Random seed for sampling (for reproducibility)
+    seed: int?;
+}
+
+/// Generation parameters
+/// High-level parameters controlling text generation.
+type GenerationParams {
+    /// Maximum number of tokens to generate
+    max_tokens: int?;
+    /// Sampler configuration
+    sampler: SamplerParams?;
+    /// Grammar to constrain generation (GBNF format)
+    grammar: String?;
+    /// Stop sequences (generation stops when any is encountered)
+    stop_sequences: Array<String>?;
+    /// Temperature override (shortcut for sampler.temperature)
+    temperature: float?;
+    /// Top-P override (shortcut for sampler.top_p)
+    top_p: float?;
+    /// Top-K override (shortcut for sampler.top_k)
+    top_k: int?;
+}

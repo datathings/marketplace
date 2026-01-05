@@ -1,0 +1,29 @@
+# Generated skill packages
+skills/*.skill
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+lib/
+webroot/
+bin/
+files/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Upstream repositories (cloned for updates)
+plugins/llamacpp/llama.cpp/
+
+# Local settings (user-specific)
+.claude/settings.local.json
