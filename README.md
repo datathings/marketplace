@@ -40,11 +40,6 @@ Via Git URL:
 /plugin marketplace add https://github.com/datathings/marketplace.git
 ```
 
-Local development:
-```bash
-/plugin marketplace add /path/to/marketplace
-```
-
 ### Install Plugins
 
 GCL development:
@@ -169,6 +164,24 @@ Remove marketplace:
 ```bash
 /plugin marketplace remove datathings
 ```
+
+## Development
+
+### Local Marketplace
+
+For developing or testing marketplace plugins locally:
+```bash
+/plugin marketplace add /path/to/marketplace
+```
+
+### Native GreyCat C Libraries
+
+To develop native GreyCat C libraries (custom functions implemented in C), install the **greycat-c** plugin:
+```bash
+/plugin install greycat-c@datathings
+```
+
+This provides the C API reference, tensor operations, and native function implementation patterns required for extending GreyCat with C code.
 
 ## Troubleshooting
 
