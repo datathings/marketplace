@@ -1,6 +1,6 @@
 ---
 name: greycat
-description: "GreyCat full-stack development for graph-based language with built-in persistence. CRITICAL WORKFLOW - After generating or modifying ANY GreyCat backend code (.gcl files), IMMEDIATELY run 'greycat-lang lint' to get linting feedback and fix all errors before proceeding. Use when: (1) working with .gcl files or GreyCat projects, (2) using persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo), (3) creating data models, services, or abstract types, (4) writing API endpoints with @expose, @permission, or @volatile decorators, (5) implementing parallel processing with Jobs, await(), or PeriodicTask, (6) integrating React frontends with @greycat/web SDK or TypeScript type generation, (7) running GreyCat CLI commands (greycat serve/test/run/install/lint), (8) debugging GreyCat applications or working with transactions. NOT for: general graph databases (Neo4j, ArangoDB), generic React apps, or SQL databases."
+description: "GreyCat full-stack development for graph-based language with built-in persistence and MCP server capability. CRITICAL WORKFLOW - After generating or modifying ANY GreyCat backend code (.gcl files), IMMEDIATELY run 'greycat-lang lint' to get linting feedback and fix all errors before proceeding. Use when: (1) working with .gcl files or GreyCat projects, (2) using persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo), (3) creating data models, services, or abstract types, (4) writing API endpoints with @expose, @permission, @tag, or @volatile decorators, (5) implementing parallel processing with Jobs, await(), or PeriodicTask, (6) integrating React frontends with @greycat/web SDK or TypeScript type generation, (7) running GreyCat CLI commands (greycat serve/test/run/install/lint), (8) debugging GreyCat applications or working with transactions, (9) exposing functions as MCP tools with @tag(\"mcp\"). NOT for: general graph databases (Neo4j, ArangoDB), generic React apps, or SQL databases."
 ---
 
 # GreyCat Backend Development
@@ -12,7 +12,7 @@ Graph-based language with built-in persistence. Not a database—an evolving cod
 ```bash
 greycat install      # download libs
 greycat test         # run tests
-greycat serve        # start :8080
+greycat serve        # start :8080 (HTTP + MCP server)
 greycat-lang lint    # check for errors
 ```
 
@@ -238,6 +238,16 @@ fn getCities(): Array<CityView> { ... }  // ✅ Array<View>, not nodeList
 ```
 
 **⚠️ CRITICAL: API functions must have `@expose`** — without it, the function cannot be called via HTTP even if it has `@permission`.
+
+**MCP Server Exposure** — Optionally expose functions as MCP tools using `@tag("mcp")`:
+```gcl
+@expose
+@tag("mcp")  // exposes this function as an MCP tool
+@permission("public")
+fn searchCities(query: String): Array<CityView> { ... }
+```
+
+**⚠️ Use `@tag("mcp")` very sparingly** — only for high-value APIs that are meaningful for AI agent interaction (e.g., search, lookups, key operations). Most API endpoints should NOT be exposed as MCP tools.
 
 ## Functions & Control Flow
 

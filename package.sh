@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 
 # Parse arguments
 CLEAN=false
+ALL=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         -o|--output)
@@ -29,10 +30,15 @@ while [[ $# -gt 0 ]]; do
             CLEAN=true
             shift
             ;;
+        -a|--all)
+            ALL=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [-o OUTPUT_DIR] [-c] [-h]"
+            echo "Usage: $0 [-o OUTPUT_DIR] [-c] [-a] [-h]"
             echo "  -o, --output DIR    Output directory for .skill files (default: ./skills)"
             echo "  -c, --clean         Remove existing .skill files before packaging"
+            echo "  -a, --all           Package all skills without prompting"
             echo "  -h, --help          Show this help message"
             exit 0
             ;;
@@ -124,23 +130,94 @@ package_skill() {
     fi
 }
 
-# Find and package all skills
+# Discover all available skills
 echo "Scanning for skills..."
-echo ""
+AVAILABLE_SKILLS=()
+SKILL_DIRS=()
 
-# Scan plugins directory for skills
 for plugin_dir in "${PLUGINS_DIR}"/*/; do
-    plugin_name=$(basename "${plugin_dir}")
-
-    # Check for skills directory in plugin
     if [[ -d "${plugin_dir}/skills" ]]; then
         for skill_dir in "${plugin_dir}/skills"/*/; do
             if [[ -d "${skill_dir}" ]]; then
-                package_skill "${skill_dir}" || true
-                echo ""
+                skill_name=$(basename "${skill_dir}")
+                AVAILABLE_SKILLS+=("${skill_name}")
+                SKILL_DIRS+=("${skill_dir}")
             fi
         done
     fi
+done
+
+if [[ ${#AVAILABLE_SKILLS[@]} -eq 0 ]]; then
+    echo -e "${RED}No skills found in ${PLUGINS_DIR}${NC}"
+    exit 1
+fi
+
+echo -e "Found ${#AVAILABLE_SKILLS[@]} skill(s): ${AVAILABLE_SKILLS[*]}"
+echo ""
+
+# Skill selection
+SELECTED_INDICES=()
+
+if [[ "${ALL}" == true ]]; then
+    # Select all skills
+    for i in "${!AVAILABLE_SKILLS[@]}"; do
+        SELECTED_INDICES+=("$i")
+    done
+else
+    # Interactive selection
+    echo -e "${BLUE}Select skills to package:${NC}"
+    echo ""
+    echo "  0) ALL (default)"
+    for i in "${!AVAILABLE_SKILLS[@]}"; do
+        echo "  $((i + 1))) ${AVAILABLE_SKILLS[$i]}"
+    done
+    echo ""
+    echo -n "Enter selection (space-separated numbers, or press Enter for ALL): "
+    read -r selection
+
+    if [[ -z "${selection}" ]] || [[ "${selection}" == "0" ]]; then
+        # Select all
+        for i in "${!AVAILABLE_SKILLS[@]}"; do
+            SELECTED_INDICES+=("$i")
+        done
+        echo -e "${GREEN}Selected: ALL${NC}"
+    else
+        # Parse selection
+        for num in ${selection}; do
+            if [[ "${num}" == "0" ]]; then
+                # User selected ALL along with other numbers - treat as ALL
+                SELECTED_INDICES=()
+                for i in "${!AVAILABLE_SKILLS[@]}"; do
+                    SELECTED_INDICES+=("$i")
+                done
+                break
+            elif [[ "${num}" =~ ^[0-9]+$ ]] && [[ "${num}" -ge 1 ]] && [[ "${num}" -le ${#AVAILABLE_SKILLS[@]} ]]; then
+                SELECTED_INDICES+=("$((num - 1))")
+            else
+                echo -e "${YELLOW}Warning: Invalid selection '${num}' ignored${NC}"
+            fi
+        done
+
+        if [[ ${#SELECTED_INDICES[@]} -eq 0 ]]; then
+            echo -e "${RED}No valid skills selected. Exiting.${NC}"
+            exit 1
+        fi
+
+        # Show selected skills
+        echo -n -e "${GREEN}Selected:${NC}"
+        for idx in "${SELECTED_INDICES[@]}"; do
+            echo -n " ${AVAILABLE_SKILLS[$idx]}"
+        done
+        echo ""
+    fi
+fi
+
+echo ""
+
+# Package selected skills
+for idx in "${SELECTED_INDICES[@]}"; do
+    package_skill "${SKILL_DIRS[$idx]}" || true
+    echo ""
 done
 
 # Note: .claude/skills/ contains dev tools (skill-creator) - not packaged for distribution
