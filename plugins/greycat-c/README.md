@@ -69,35 +69,30 @@ This skill automatically activates based on context. The AI assistant will use t
 ## Repository Structure
 
 ```
-greycat-c.skill/
-├── greycat-c/              # Skill files
-│   ├── SKILL.md            # Main skill entry point (concise overview)
-│   └── references/
-│       ├── api_reference.md        # Comprehensive C API reference
-│       └── standard_library.md     # Complete Standard Library documentation
+plugins/greycat-c/
+├── README.md               # This file
 ├── package.sh              # Script to package the skill
-├── marketplace.json        # Skill marketplace metadata
-└── README.md              # This file
+└── skills/greycat-c/       # Skill files
+    ├── SKILL.md            # Main skill entry point (concise overview)
+    └── references/
+        ├── api_reference.md        # Comprehensive C API reference
+        └── standard_library.md     # Complete Standard Library documentation
 ```
 
 ## Installation
 
-### Option 1: Clone and Install
+### Option 1: Clone and Package
 ```bash
-git clone git@hub.datathings.com:greycat/skill/greycat-c.skill.git
-cd greycat-c.skill
-# Copy greycat-c.skill to your skills directory
+git clone https://github.com/datathings/marketplace.git
+cd marketplace/plugins/greycat-c
+./package.sh
+# Install the greycat-c.skill file to your skills directory
 ```
 
-### Option 2: Download Release
-Download the latest `greycat-c.skill` file from releases and install it in your skills directory.
-
-### Option 3: Package from Source
+### Option 2: Install from Marketplace
+Install directly via Claude Code:
 ```bash
-git clone git@hub.datathings.com:greycat/skill/greycat-c.skill.git
-cd greycat-c.skill
-./package.sh
-# This creates greycat-c.skill which you can install
+/plugin install greycat-c@datathings
 ```
 
 ## Usage Examples
@@ -143,6 +138,9 @@ For issues or contributions, please use the repository issue tracker.
 
 ## Links
 
-- **Repository**: https://hub.datathings.com/greycat/skill/greycat-c.skill
-- **GreyCat Documentation**: https://docs.greycat.io/
+- **GreyCat Website**: https://greycat.io/
+- **GreyCat Documentation**: https://doc.greycat.io/
+- **GreyCat Installation**: https://get.greycat.io/
+- **Datathings**: https://datathings.com/
+- **Repository**: https://github.com/datathings/marketplace
 - **Skill Marketplace**: https://skillsmp.com/

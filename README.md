@@ -212,7 +212,8 @@ This provides the C API reference, tensor operations, and native function implem
 
 ## Links
 
-- **GreyCat**: https://doc.greycat.io | https://get.greycat.io
+- **GreyCat**: https://greycat.io | https://doc.greycat.io | https://get.greycat.io
+- **Datathings**: https://datathings.com
 - **llama.cpp**: https://github.com/ggml-org/llama.cpp
 - **Support**: contact@datathings.com
 - **Issues**: https://github.com/datathings/marketplace/issues

@@ -115,6 +115,14 @@ Ensure you're in a valid GreyCat project with a `project.gcl` file.
 
 Diagnostics update on file save. Save the file to see updated errors/warnings.
 
+## Links
+
+- **GreyCat Website**: https://greycat.io/
+- **GreyCat Documentation**: https://doc.greycat.io/
+- **GreyCat Installation**: https://get.greycat.io/
+- **Datathings**: https://datathings.com/
+- **Repository**: https://github.com/datathings/marketplace
+
 ## License
 
 MIT License - See LICENSE file for details.

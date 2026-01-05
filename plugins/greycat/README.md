@@ -160,13 +160,12 @@ Concise reference covering:
 ## Repository Structure
 
 ```
-greycat-language.skill/
+plugins/greycat/
 ├── README.md              # This file
-├── marketplace.json       # Skill marketplace metadata
-├── package.sh            # Packaging script
-└── greycat/              # Skill content
-    ├── SKILL.md          # Main skill documentation
-    └── references/       # Detailed reference files
+├── package.sh             # Packaging script
+└── skills/greycat/        # Skill content
+    ├── SKILL.md           # Main skill documentation
+    └── references/        # Detailed reference files
         ├── frontend.md
         ├── nodes.md
         ├── time.md
@@ -205,8 +204,8 @@ skills install greycat
 ### Manual Installation
 
 ```bash
-git clone git@hub.datathings.com:greycat/skill/greycat-language.skill.git
-cd greycat-language.skill
+git clone https://github.com/datathings/marketplace.git
+cd marketplace/plugins/greycat
 ./package.sh
 # Install the greycat.skill file to your AI assistant's skills directory
 ```
@@ -274,8 +273,10 @@ Contributions are welcome! This skill is maintained by the GreyCat team at DataT
 
 ## Resources
 
+- [GreyCat Website](https://greycat.io/)
 - [Official GreyCat Documentation](https://doc.greycat.io/)
 - [GreyCat Installation](https://get.greycat.io/)
+- [Datathings](https://datathings.com/)
 - [Skills Marketplace](https://skillsmp.com/)
 
 ## License

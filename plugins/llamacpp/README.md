@@ -69,10 +69,8 @@ This skill automatically activates when you:
 ## Repository Structure
 
 ```
-llamacpp.skill/                    # Skill repository root
-├── CLAUDE.md                      # Development guide for Claude Code
+plugins/llamacpp/                  # Plugin directory
 ├── README.md                      # This file - public documentation
-├── marketplace.json               # Skill marketplace metadata
 ├── package.sh                     # Script to package skill into .skill file
 │
 ├── llama.cpp/                     # Upstream llama.cpp (separate git repo)
@@ -81,19 +79,17 @@ llamacpp.skill/                    # Skill repository root
 │   ├── include/llama-cpp.h        # C++ wrapper header
 │   └── ...                        # Full llama.cpp source code
 │
-├── llamacpp/                      # Skill content directory
-│   ├── SKILL.md                   # Main skill entry point
-│   └── references/                # Detailed API documentation (split by category)
-│       ├── api-core.md            # Initialization, parameters, model loading
-│       ├── api-model-info.md      # Model properties and architecture
-│       ├── api-context.md         # Context, memory (KV cache), state
-│       ├── api-inference.md       # Batch, inference, tokenization, chat
-│       ├── api-sampling.md        # Sampling strategies (XTC, DRY, etc.)
-│       ├── api-advanced.md        # LoRA, performance, training
-│       ├── api.md                 # Legacy complete API reference
-│       └── workflows.md           # Working examples and patterns
-│
-└── llamacpp.skill                 # Generated skill package file
+└── skills/llamacpp/               # Skill content directory
+    ├── SKILL.md                   # Main skill entry point
+    └── references/                # Detailed API documentation (split by category)
+        ├── api-core.md            # Initialization, parameters, model loading
+        ├── api-model-info.md      # Model properties and architecture
+        ├── api-context.md         # Context, memory (KV cache), state
+        ├── api-inference.md       # Batch, inference, tokenization, chat
+        ├── api-sampling.md        # Sampling strategies (XTC, DRY, etc.)
+        ├── api-advanced.md        # LoRA, performance, training
+        ├── api.md                 # Legacy complete API reference
+        └── workflows.md           # Working examples and patterns
 ```
 
 **Important:** The `llama.cpp/` directory is a **separate git repository** cloned from https://github.com/ggml-org/llama.cpp. It is NOT a git submodule. This allows us to easily update to new llama.cpp versions and reference the source API headers.
@@ -106,10 +102,10 @@ The skill can be installed directly from [skillsmp.com](https://skillsmp.com).
 
 ### Option 2: Manual Installation
 
-1. Clone this repository:
+1. Clone the marketplace repository:
    ```bash
-   git clone https://hub.datathings.com/greycat/skill/llamacpp.skill.git
-   cd llamacpp.skill
+   git clone https://github.com/datathings/marketplace.git
+   cd marketplace/plugins/llamacpp
    ```
 
 2. Package the skill:
@@ -255,8 +251,9 @@ This skill documentation is provided as-is. Please refer to the llama.cpp projec
 ## Links
 
 - llama.cpp: https://github.com/ggerganov/llama.cpp
-- Skills Marketplace: https://skillsmp.com
-- Repository: https://hub.datathings.com/greycat/skill/llamacpp.skill
+- Datathings: https://datathings.com/
+- Skills Marketplace: https://skillsmp.com/
+- Repository: https://github.com/datathings/marketplace
 
 ## Version History
 
