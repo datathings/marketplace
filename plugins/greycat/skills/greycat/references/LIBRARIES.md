@@ -13,18 +13,9 @@ Core types, collections, I/O, and runtime utilities:
 
 ## AI Library (ai)
 
-**[📚 AI Library Guide](ai/README.md)** — Comprehensive LLM integration via llama.cpp for text generation, chat, embeddings, and fine-tuning with LoRA adapters.
+Local LLM inference via llama.cpp for text generation, chat, embeddings, and LoRA adapters:
 
-### Core API
-
-- **[llm_model.md](ai/llm_model.md)** | [llm_model.gcl](ai/llm_model.gcl) — Model loading, text generation, chat, embeddings, tokenization (Model, LLM, ModelParams, ContextParams)
-- **[llm_types.md](ai/llm_types.md)** | [llm_types.gcl](ai/llm_types.gcl) — Supporting types and parameters (GenerationParams, GenerationResult, ChatMessage, SamplerParams, ModelInfo, PerfData)
-
-### Advanced Control
-
-- **[llm_context.md](ai/llm_context.md)** | [llm_context.gcl](ai/llm_context.gcl) — Low-level context and KV cache management (Context, Batch, SeqId, StateData)
-- **[llm_sampler.md](ai/llm_sampler.md)** | [llm_sampler.gcl](ai/llm_sampler.gcl)** — Custom sampling strategies (SamplerChain, Sampler, TokenCandidates)
-- **[llm_lora.md](ai/llm_lora.md)** | [llm_lora.gcl](ai/llm_lora.gcl) — LoRA fine-tuning adapters (LoraAdapter, LoraParams)
+- **[llm.md](ai/llm.md)** | [llm.gcl](ai/llm.gcl) — Complete LLM API: Model loading, text generation, chat completion, embeddings, tokenization, Context API, Sampler API, LoRA adapters
 
 ## Algebra Library (algebra)
 
@@ -69,17 +60,17 @@ Specialized libraries for specific industries and applications:
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.5.138-dev");      // Standard library (required)
-@library("ai", "7.5.70-dev");        // AI/LLM support
-@library("algebra", "7.5.70-dev");   // ML and numerical computing
-@library("kafka", "7.5.70-dev");     // Kafka integration
-@library("sql", "7.5.70-dev");       // PostgreSQL support (postgres library)
-@library("s3", "7.5.70-dev");        // S3 storage
-@library("finance", "7.5.70-dev");   // Financial utilities
-@library("powerflow", "7.5.70-dev"); // Power flow analysis
-@library("opcua", "7.5.70-dev");     // OPC UA integration
-@library("useragent", "7.5.70-dev"); // User agent parsing
-@library("explorer", "7.5.3-dev");   // Graph UI (dev only)
+@library("std", "7.6.0-dev");        // Standard library (required)
+@library("ai", "7.6.10-dev");        // AI/LLM support
+@library("algebra", "7.6.10-dev");   // ML and numerical computing
+@library("kafka", "7.6.10-dev");     // Kafka integration
+@library("sql", "7.6.10-dev");       // PostgreSQL support (postgres library)
+@library("s3", "7.6.10-dev");        // S3 storage
+@library("finance", "7.6.10-dev");   // Financial utilities
+@library("powerflow", "7.6.10-dev"); // Power flow analysis
+@library("opcua", "7.6.10-dev");     // OPC UA integration
+@library("useragent", "7.6.10-dev"); // User agent parsing
+@library("explorer", "7.6.0-dev");   // Graph UI (dev only)
 ```
 
 **Library Installation:**

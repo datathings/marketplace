@@ -40,15 +40,15 @@ Backend (GCL) → greycat codegen ts → project.d.ts → Frontend (TypeScript/R
 ### Install Dependencies
 
 ```bash
-npm install https://get.greycat.io/files/sdk/web/dev/7.5/7.5.13-dev.tgz
-pnpm add https://get.greycat.io/files/sdk/web/dev/7.5/7.5.13-dev.tgz
+npm install https://get.greycat.io/files/sdk/web/dev/7.6/7.6.0-dev.tgz
+pnpm add https://get.greycat.io/files/sdk/web/dev/7.6/7.6.0-dev.tgz
 ```
 
 **Core Dependencies:**
 ```json
 {
   "dependencies": {
-    "@greycat/web": "https://get.greycat.io/files/sdk/web/dev/7.5/7.5.13-dev.tgz",
+    "@greycat/web": "https://get.greycat.io/files/sdk/web/dev/7.6/7.6.0-dev.tgz",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "@tanstack/react-query": "^5.0.0",

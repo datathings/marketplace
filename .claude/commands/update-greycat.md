@@ -81,6 +81,50 @@ Files to update:
 - `skills/greycat/references/algebra/README.md` (if exists)
 - `skills/greycat/references/std/README.md`
 - `skills/greycat/references/LIBRARIES.md`
+- `skills/greycat/references/frontend.md` (web SDK version)
+- `skills/greycat/SKILL.md` (main skill file - check for version references)
+
+### Verify Web SDK URL Exists
+
+After updating `frontend.md` with the new @greycat/web SDK version, verify the URL exists:
+
+```bash
+# Extract the SDK URL from frontend.md and verify it exists
+SDK_URL=$(grep -o 'https://get.greycat.io/files/sdk/web/dev/[^"]*' skills/greycat/references/frontend.md | head -1)
+echo "Verifying SDK URL: $SDK_URL"
+# Note: Server doesn't support HEAD requests, use GET with output to /dev/null
+HTTP_CODE=$(curl -so /dev/null -w "%{http_code}" "$SDK_URL")
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "SDK URL verified: $SDK_URL (HTTP $HTTP_CODE)"
+else
+    echo "WARNING: SDK URL does not exist! HTTP $HTTP_CODE"
+fi
+```
+
+**If the URL doesn't exist (not HTTP 200):**
+
+1. First, check the available dev versions:
+```bash
+curl -s "https://get.greycat.io/files/sdk/web/dev/"
+```
+
+2. If the major version directory exists (e.g., 7.6/), check for available .tgz files:
+```bash
+curl -s "https://get.greycat.io/files/sdk/web/dev/7.6/"
+```
+
+3. If no suitable dev version is found, navigate to the main SDK directory to find the latest stable version:
+```bash
+curl -s "https://get.greycat.io/files/sdk/web/"
+```
+
+4. Or visit https://get.greycat.io/files/sdk/web in a browser to browse all available versions interactively.
+
+5. Once you find the correct version, update `frontend.md` with the correct URL pattern:
+   - Dev versions: `https://get.greycat.io/files/sdk/web/dev/X.Y/X.Y.Z-dev.tgz`
+   - Stable versions: `https://get.greycat.io/files/sdk/web/X.Y/X.Y.Z.tgz`
+
+**Suggest to the user** what version to use based on what's available, matching the major.minor version of the libraries in `project.gcl`.
 
 ## Step 5: Analyze Function Signatures
 
@@ -102,15 +146,17 @@ Focus on documenting:
 
 ## Step 6: Re-package the Skill
 
-Run the packaging script to create the updated `.skill` file:
+Run the main packaging script from the repository root to create the updated `.skill` file:
 
 ```bash
-cd plugins/greycat
-chmod +x ./package.sh
-./package.sh
+# From repo root
+./package.sh greycat
+
+# Or with explicit flag
+./package.sh --skill greycat
 ```
 
-This will create `greycat.skill` with all the updated files.
+This will create `skills/greycat.skill` with all the updated files.
 
 ## Important Notes
 
@@ -126,6 +172,7 @@ The upgrade is complete when:
 1. All old GCL files are deleted from skills/greycat/references/
 2. All GCL files are copied from lib/ to skills/greycat/references/
 3. All library versions in markdown files match project.gcl
-4. All function signatures are documented and accurate
-5. The skill is successfully re-packaged
-6. No errors occur during the process
+4. No old version references remain in skills/greycat/ (run: `grep -r "7\.[0-9]\.[0-9]*-dev" skills/greycat/` to verify)
+5. All function signatures are documented and accurate
+6. The skill is successfully re-packaged
+7. No errors occur during the process

@@ -1,15 +1,15 @@
-@library("std", "7.5.138-dev");      // Standard library (required)
-@library("explorer", "7.5.3-dev");   // Graph UI (dev only)
+@library("std", "7.6.0-dev");      // Standard library (required)
+@library("explorer", "7.6.0-dev");   // Graph UI (dev only)
 
-@library("ai", "7.5.70-dev");        // AI/LLM support
-@library("algebra", "7.5.70-dev");   // ML and numerical computing
-@library("kafka", "7.5.70-dev");     // Kafka integration
-@library("sql", "7.5.70-dev");       // PostgreSQL support (postgres library)
-@library("s3", "7.5.70-dev");        // S3 storage
-@library("finance", "7.5.70-dev");   // Financial utilities
-@library("powerflow", "7.5.70-dev"); // Power flow analysis
-@library("opcua", "7.5.70-dev");     // OPC UA integration
-@library("useragent", "7.5.70-dev"); // User agent parsing
+@library("ai", "7.6.10-dev");        // AI/LLM support
+@library("algebra", "7.6.10-dev");   // ML and numerical computing
+@library("kafka", "7.6.10-dev");     // Kafka integration
+@library("sql", "7.6.10-dev");       // PostgreSQL support (postgres library)
+@library("s3", "7.6.10-dev");        // S3 storage
+@library("finance", "7.6.10-dev");   // Financial utilities
+@library("powerflow", "7.6.10-dev"); // Power flow analysis
+@library("opcua", "7.6.10-dev");     // OPC UA integration
+@library("useragent", "7.6.10-dev"); // User agent parsing
 
 fn main() {
     // s3_example::main();

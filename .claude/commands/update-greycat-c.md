@@ -34,9 +34,10 @@ The GreyCat C SDK headers are the authoritative source. These are typically foun
 
 5. **Package the Skill**
    ```bash
-   cd plugins/greycat-c
-   ./package.sh
+   # From repo root
+   ./package.sh greycat-c
    ```
+   This creates `skills/greycat-c.skill`.
 
 ## Files to Update
 

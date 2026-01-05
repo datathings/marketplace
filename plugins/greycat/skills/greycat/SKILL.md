@@ -14,7 +14,25 @@ greycat install      # download libs
 greycat test         # run tests
 greycat serve        # start :8080 (HTTP + MCP server)
 greycat-lang lint    # check for errors
+greycat-lang fmt     # format GCL files
 ```
+
+## Claude Code LSP Integration
+
+**Install the `greycat-lsp` plugin** for enhanced `.gcl` file editing with IDE features:
+
+| Feature | Description |
+|---------|-------------|
+| Code Completion | Intelligent suggestions for types, functions, fields |
+| Go to Definition | Jump to symbol definitions (LSP tool) |
+| Find References | Find all usages of a symbol (LSP tool) |
+| Hover | Type information and documentation |
+| Diagnostics | Real-time error detection (on save) |
+| Formatting | Auto-format `.gcl` files |
+
+**Prerequisite:** `greycat-lang` binary must be in PATH (`greycat-lang --version` to verify).
+
+**LSP tools available:** Use `goToDefinition`, `findReferences`, `hover`, `documentSymbol` on `.gcl` files.
 
 ## Development Workflow
 
@@ -48,8 +66,8 @@ greycat-lang lint
 
 **project.gcl example:**
 ```gcl
-@library("std", "7.5.125-dev");
-@library("explorer", "7.5.3-dev");  // enables graph navigation in explorer UI
+@library("std", "7.6.0-dev");
+@library("explorer", "7.6.0-dev");  // enables graph navigation in explorer UI
 @include("backend");  // includes all .gcl files in backend/ recursively
 
 @permission("app.admin", "app admin permission");
@@ -70,8 +88,8 @@ fn main() { }
 - `@include("folder")` recursively includes ALL `.gcl` files in that folder
 
 **Essential Libraries:**
-- `@library("std", "7.5.125-dev")` — Standard library (required)
-- `@library("explorer", "7.5.3-dev")` — Graph navigation UI at `/explorer` (recommended for development)
+- `@library("std", "7.6.0-dev")` — Standard library (required)
+- `@library("explorer", "7.6.0-dev")` — Graph navigation UI at `/explorer` (recommended for development)
 
 **Conventions:** GCL: snake_case files, PascalCase types | Unused vars: `_prefix` | Tests: `*_test.gcl`
 
@@ -382,6 +400,23 @@ Building React frontends with GreyCat backends?
 - Error handling and best practices
 
 This is the most detailed reference in the skill package - start here for frontend development.
+
+## Local LLM Integration
+
+Building AI-powered applications with local language models?
+
+**[references/ai/llm.md](references/ai/llm.md)** covers the complete llama.cpp integration:
+- Model loading (GGUF files, GPU offload, split models)
+- Text generation and chat completion
+- Embeddings for semantic search
+- Advanced Context and Sampler APIs
+- LoRA adapter fine-tuning
+
+```gcl
+@library("ai", "7.5.1");
+var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
+var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
+```
 
 ## Library References
 

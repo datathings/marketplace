@@ -1,11 +1,11 @@
-enum OpcuaSecurityMode{
+enum OpcuaSecurityMode {
     None;
     Sign;
     SignAndEncrypt;
     Invalid;
- }
+}
 
-enum OpcuaSecurityPolicy{
+enum OpcuaSecurityPolicy {
     Aes128_Sha256_RsaOaep("http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep");
     Aes256_Sha256_RsaPss("http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss");
     Basic128Rsa15("http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15");
@@ -14,26 +14,26 @@ enum OpcuaSecurityPolicy{
     None("http://opcfoundation.org/UA/SecurityPolicy#None");
 }
 
-type OpcuaValueDetails{
+type OpcuaValueDetails {
     value: any;
     source_time: time?;
     server_time: time?;
     status_code: int?;
 }
 
-type OpcuaCredentials{
+type OpcuaCredentials {
     login: String;
     password: String;
 }
 
-type OpcuaCertificate{
+type OpcuaCertificate {
     path: String?;
     private_key_path: String?;
     application_uri: String?;
     allow_self_signed: bool?;
 }
 
-type OpcuaEndpointDescription{
+type OpcuaEndpointDescription {
     url: String;
     discovery_urls: Array;
     certificate: String?;
@@ -44,7 +44,7 @@ type OpcuaEndpointDescription{
     security_level: int;
 }
 
-type OpcuaEvent{
+type OpcuaEvent {
     "EventId": String;
     "EventType": String?;
     "Message": Tuple?;
@@ -54,11 +54,11 @@ type OpcuaEvent{
     "ReceiveTime": time?;
     "Severity": int;
     "ConditionName": String?;
-    "ActiveState":Tuple?;
-    "Retain":bool?;
+    "ActiveState": Tuple?;
+    "Retain": bool?;
 }
 
-type OpcuaMeta{
+type OpcuaMeta {
     node_id: String;
     node_class: int?;
     browse_name: Tuple?;
@@ -84,80 +84,87 @@ type OpcuaMeta{
 }
 
 @volatile
-type OpcuaPathEntry{
+type OpcuaPathEntry {
     nodeId: String;
     path: Array<OpcuaMeta>;
 }
+
 type OpcuaClient {
-     private url: String;
-     private security_mode: OpcuaSecurityMode;
-     private security_policy: OpcuaSecurityPolicy?;
-     private credentials: OpcuaCredentials?;
-     private certificate: OpcuaCertificate?;
-     private timeout: duration?;
+    static SERVER_TIME_NODE_ID: String = "ns=0;i=2258";
+    static ADDRESS_SPACES_NODE_ID: String = "ns=0;i=2255";
+    
+    private url: String;
+    private security_mode: OpcuaSecurityMode;
+    private security_policy: OpcuaSecurityPolicy?;
+    private credentials: OpcuaCredentials?;
+    private certificate: OpcuaCertificate?;
+    private timeout: duration?;
 
-     native fn read(nodeId: String): any?;
-     native fn read_all(nodeIds: Array<String>): Array<any?>;
-     native fn read_with_time(nodeId: String):OpcuaValueDetails?;
-     native fn read_all_with_time(nodeIds: Array<String>): Array<OpcuaValueDetails?>;
-     native fn read_history(nodeId: String, from: time?, to:time?):Array<OpcuaValueDetails>?;
-     native fn read_metas(nodesIds: Array<String>): Array<OpcuaMeta?>;
-     native fn get_children(nodeId: String): Array<OpcuaMeta>;
+    native fn read(nodeId: String): any?;
+    native fn read_all(nodeIds: Array<String>): Array<any?>;
+    native fn read_with_time(nodeId: String): OpcuaValueDetails?;
+    native fn read_all_with_time(nodeIds: Array<String>): Array<OpcuaValueDetails?>;
+    native fn read_history(nodeId: String, from: time?, to: time?): Array<OpcuaValueDetails>?;
+    native fn read_metas(nodesIds: Array<String>): Array<OpcuaMeta?>;
+    native fn get_children(nodeId: String): Array<OpcuaMeta>;
 
-     native fn write(nodeId: String, value:any);
+    native fn write(nodeId: String, value: any);
 
-     native fn call(nodeId: String, parameters: Array<any?>): any?;
+    native fn call(nodeId: String, parameters: Array<any?>): any?;
 
-     native static fn find_endpoints(url: String, security_mode: OpcuaSecurityMode?, security_policy: OpcuaSecurityPolicy?): Array<OpcuaEndpointDescription>;
+    native static fn find_endpoints(
+        url: String, security_mode: OpcuaSecurityMode?, security_policy: OpcuaSecurityPolicy?
+    ): Array<OpcuaEndpointDescription>;
 
-     ///Subscriptions method
-     native fn subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function): int;
-     native fn read_events(nodeIds: Array<String>, callback_data: function, callback_error: function): int;
-     native fn cancel_subscription(subscription_id: int): bool;
+    ///Subscriptions method
+    native fn subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function);
+    native fn read_events(nodeIds: Array<String>, callback_data: function, callback_error: function);
+    native fn cancel_subscription(subscription_id: int): bool;
 
-     native fn is_connected(): bool;
+    native fn is_connected(): bool;
 
-     fn get_address_spaces(): Array{
-        return this.read("ns=0;i=2255") as Array;
-     }
+    fn get_address_spaces(): Array {
+        return this.read(OpcuaClient::ADDRESS_SPACES_NODE_ID) as Array;
+    }
 
-     fn get_server_time(): time{
-        return this.read("ns=0;i=2258") as time;
-     }
+    fn get_server_time(): time {
+        return this.read(OpcuaClient::SERVER_TIME_NODE_ID) as time;
+    }
 
-     fn explore(rootId: String):Array<Array<OpcuaMeta>>{
-        var stack = Stack<OpcuaPathEntry>{};
-        var paths = Array<Array<OpcuaMeta>>{};
+    fn explore(rootId: String): Array<Array<OpcuaMeta>> {
+        var stack = Stack<OpcuaPathEntry> {};
+        var paths = Array<Array<OpcuaMeta>> {};
 
-        stack.push(OpcuaPathEntry{
-            nodeId: rootId,
-            path: Array<OpcuaMeta>{this.read_metas(Array<String>{rootId}).get(0) as OpcuaMeta}
-        });
+        stack.push(
+            OpcuaPathEntry {
+                nodeId: rootId,
+                path: Array<OpcuaMeta> { this.read_metas(Array<String> { rootId }).get(0) as OpcuaMeta }
+            }
+        );
 
         var entry = stack.pop();
-        while (entry != null){
+        while (entry != null) {
             var node = entry.nodeId;
             var path = entry.path;
             paths.add(path);
 
             var children = this.get_children(node);
 
-            for (_, child in children){
-                if (path.index_of(child) == -1){
-                    var new_path = Array<OpcuaMeta>{};
+            for (_, child in children) {
+                if (path.index_of(child) == -1) {
+                    var new_path = Array<OpcuaMeta> {};
                     new_path.add_all(path);
                     new_path.add(child);
-                    stack.push(OpcuaPathEntry{
-                        nodeId: child.node_id,
-                        path: new_path
-                    });
+                    stack.push(OpcuaPathEntry {
+                            nodeId: child.node_id,
+                            path: new_path
+                        });
                 }
             }
             entry = stack.pop();
         }
         return paths;
-     }
-
+    }
 }
 
 native fn validate_opcua_name(name: String): bool;

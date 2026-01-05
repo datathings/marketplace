@@ -99,9 +99,11 @@ Update the following files in `skills/llamacpp/references/`:
 ### 7. Package Updated Skill
 
 ```bash
-cd plugins/llamacpp
-./package.sh
+# From repo root
+./package.sh llamacpp
 ```
+
+This creates `skills/llamacpp.skill`.
 
 ## Key Considerations
 
@@ -120,4 +122,4 @@ cd plugins/llamacpp
 - ✅ All deprecated functions are removed from documentation
 - ✅ All function signatures match the headers exactly
 - ✅ Code examples in workflows.md are updated and valid
-- ✅ Package builds successfully with `./package.sh`
+- ✅ Package builds successfully with `./package.sh llamacpp`

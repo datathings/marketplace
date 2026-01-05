@@ -20,6 +20,7 @@ NC='\033[0m' # No Color
 # Parse arguments
 CLEAN=false
 ALL=false
+SKILL_NAME=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         -o|--output)
@@ -34,24 +35,42 @@ while [[ $# -gt 0 ]]; do
             ALL=true
             shift
             ;;
+        -s|--skill)
+            SKILL_NAME="$2"
+            shift 2
+            ;;
         -h|--help)
-            echo "Usage: $0 [-o OUTPUT_DIR] [-c] [-a] [-h]"
+            echo "Usage: $0 [-o OUTPUT_DIR] [-c] [-a] [-s SKILL_NAME] [-h]"
             echo "  -o, --output DIR    Output directory for .skill files (default: ./skills)"
             echo "  -c, --clean         Remove existing .skill files before packaging"
             echo "  -a, --all           Package all skills without prompting"
+            echo "  -s, --skill NAME    Package a specific skill by name (e.g., greycat, llamacpp)"
             echo "  -h, --help          Show this help message"
             exit 0
             ;;
         *)
-            echo -e "${RED}Error: Unknown option $1${NC}"
-            exit 1
+            # Treat positional argument as skill name if no flag
+            if [[ -z "${SKILL_NAME}" ]] && [[ "$1" != -* ]]; then
+                SKILL_NAME="$1"
+                shift
+            else
+                echo -e "${RED}Error: Unknown option $1${NC}"
+                exit 1
+            fi
             ;;
     esac
 done
 
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}  Packaging All Skills${NC}"
-echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# Adjust header based on mode
+if [[ -n "${SKILL_NAME}" ]]; then
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Packaging Skill: ${SKILL_NAME}${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+else
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  Packaging All Skills${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+fi
 echo ""
 
 # Create output directory
@@ -158,7 +177,23 @@ echo ""
 # Skill selection
 SELECTED_INDICES=()
 
-if [[ "${ALL}" == true ]]; then
+if [[ -n "${SKILL_NAME}" ]]; then
+    # Find specific skill by name
+    FOUND=false
+    for i in "${!AVAILABLE_SKILLS[@]}"; do
+        if [[ "${AVAILABLE_SKILLS[$i]}" == "${SKILL_NAME}" ]]; then
+            SELECTED_INDICES+=("$i")
+            FOUND=true
+            echo -e "${GREEN}Selected: ${SKILL_NAME}${NC}"
+            break
+        fi
+    done
+    if [[ "${FOUND}" == false ]]; then
+        echo -e "${RED}Error: Skill '${SKILL_NAME}' not found${NC}"
+        echo -e "${YELLOW}Available skills: ${AVAILABLE_SKILLS[*]}${NC}"
+        exit 1
+    fi
+elif [[ "${ALL}" == true ]]; then
     # Select all skills
     for i in "${!AVAILABLE_SKILLS[@]}"; do
         SELECTED_INDICES+=("$i")
