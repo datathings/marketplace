@@ -8,7 +8,7 @@ set -e  # Exit on error
 # Configuration
 SKILL_NAME="llamacpp"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="${SCRIPT_DIR}/${SKILL_NAME}"
+SKILL_DIR="${SCRIPT_DIR}/skills/${SKILL_NAME}"
 OUTPUT_FILE="${SKILL_NAME}.skill"
 OUTPUT_DIR="${SCRIPT_DIR}"
 

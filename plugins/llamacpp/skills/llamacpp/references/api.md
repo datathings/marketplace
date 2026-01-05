@@ -1186,7 +1186,7 @@ Sampling in llama.cpp uses a chain architecture where multiple samplers can be c
 
 ```c
 struct llama_sampler * llama_sampler_init(
-    const struct llama_sampler_i * iface,
+    struct llama_sampler_i * iface,
     llama_sampler_context_t ctx);
 ```
 Initialize a custom sampler (for advanced users implementing custom sampling).
@@ -1246,10 +1246,14 @@ Add a sampler to the chain. **Important:** The chain takes ownership and will fr
 
 ```c
 struct llama_sampler * llama_sampler_chain_get(
-    const struct llama_sampler * chain,
+    struct llama_sampler * chain,
     int32_t i);
 ```
-Get the i-th sampler in the chain.
+Get the i-th sampler in the chain. Returns NULL if:
+- the sampler is NULL
+- the sampler is not a `llama_sampler_chain`
+- the index is out of bounds, unless i == -1
+- if i == -1, returns the chain itself (can check if sampler is a chain)
 
 ```c
 int llama_sampler_chain_n(const struct llama_sampler * chain);
@@ -1500,6 +1504,48 @@ while (...) {
 
 llama_sampler_free(sampler);
 ```
+
+### Backend Sampling API [EXPERIMENTAL]
+
+Backend sampling allows sampling operations to be performed directly on the GPU as part of the computation graph.
+
+**Note:** Use only if the `llama_context` was created with at least one `llama_sampler_seq_config`.
+
+#### llama_set_sampler
+```c
+bool llama_set_sampler(
+    struct llama_context * ctx,
+    llama_seq_id seq_id,
+    struct llama_sampler * smpl);
+```
+Attach a sampler to the context for a specific sequence. Prefer initializing the context with `llama_context_params.samplers` when possible.
+
+#### llama_get_sampled_token_ith
+```c
+llama_token llama_get_sampled_token_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled token for the i-th token. Returns `LLAMA_TOKEN_NULL` if no token was sampled.
+
+#### llama_get_sampled_probs_ith / llama_get_sampled_probs_count_ith
+```c
+float * llama_get_sampled_probs_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_probs_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled probabilities for the i-th token. Returns NULL if no probabilities were generated.
+
+#### llama_get_sampled_logits_ith / llama_get_sampled_logits_count_ith
+```c
+float * llama_get_sampled_logits_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_logits_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled logits for the i-th token. Returns NULL if no logits were sampled.
+
+#### llama_get_sampled_candidates_ith / llama_get_sampled_candidates_count_ith
+```c
+llama_token * llama_get_sampled_candidates_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_candidates_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled candidates (token ids) for the i-th token. Returns NULL if no candidates were sampled.
 
 ---
 

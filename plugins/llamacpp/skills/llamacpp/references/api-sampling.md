@@ -4,6 +4,7 @@ Part 5 of 6 | [Core](api-core.md) | [Model Info](api-model-info.md) | [Context](
 
 This file covers:
 - Sampling - All 25+ sampling strategies including XTC, DRY, penalties, top-k/p, temperature, etc.
+- Backend Sampling API [EXPERIMENTAL] - GPU-accelerated sampling
 
 For complete API navigation, see [api-core.md](api-core.md).
 
@@ -17,7 +18,7 @@ Sampling in llama.cpp uses a chain architecture where multiple samplers can be c
 
 ```c
 struct llama_sampler * llama_sampler_init(
-    const struct llama_sampler_i * iface,
+    struct llama_sampler_i * iface,
     llama_sampler_context_t ctx);
 ```
 Initialize a custom sampler (for advanced users implementing custom sampling).
@@ -77,10 +78,14 @@ Add a sampler to the chain. **Important:** The chain takes ownership and will fr
 
 ```c
 struct llama_sampler * llama_sampler_chain_get(
-    const struct llama_sampler * chain,
+    struct llama_sampler * chain,
     int32_t i);
 ```
-Get the i-th sampler in the chain.
+Get the i-th sampler in the chain. Returns NULL if:
+- the sampler is NULL
+- the sampler is not a `llama_sampler_chain`
+- the index is out of bounds, unless i == -1
+- if i == -1, returns the chain itself (can be used to check if the sampler is a chain)
 
 ```c
 int llama_sampler_chain_n(const struct llama_sampler * chain);
@@ -330,6 +335,132 @@ while (...) {
 }
 
 llama_sampler_free(sampler);
+```
+
+---
+
+## Backend Sampling API [EXPERIMENTAL]
+
+Backend sampling allows sampling operations to be performed directly on the GPU as part of the computation graph. This can improve performance by reducing data transfer between device and host memory.
+
+**Note:** Use only if the `llama_context` was created with at least one `llama_sampler_seq_config`.
+
+### Configuration Struct
+
+```c
+struct llama_sampler_seq_config {
+    llama_seq_id           seq_id;
+    struct llama_sampler * sampler;
+};
+```
+Configuration for per-sequence backend sampling. Add to `llama_context_params.samplers` when creating context.
+
+### Attaching Samplers
+
+```c
+bool llama_set_sampler(
+    struct llama_context * ctx,
+    llama_seq_id seq_id,
+    struct llama_sampler * smpl);
+```
+Attach a sampler to the context for a specific sequence.
+
+**Notes:**
+- Prefer initializing the context with `llama_context_params.samplers` when possible
+- Changing the samplers of a context can cause graph reallocations and degraded performance
+- The sampler must be a sampler chain (use `llama_sampler_chain_init`)
+
+### Retrieving Sampled Results
+
+```c
+llama_token llama_get_sampled_token_ith(
+    struct llama_context * ctx,
+    int32_t i);
+```
+Get the backend sampled token for the i-th token. Returns `LLAMA_TOKEN_NULL` if no token was sampled.
+
+```c
+float * llama_get_sampled_probs_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_probs_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled probabilities for the i-th token. Returns NULL if no probabilities were generated.
+
+```c
+float * llama_get_sampled_logits_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_logits_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled logits for the i-th token. Returns NULL if no logits were sampled.
+
+```c
+llama_token * llama_get_sampled_candidates_ith(struct llama_context * ctx, int32_t i);
+uint32_t llama_get_sampled_candidates_count_ith(struct llama_context * ctx, int32_t i);
+```
+Get the backend sampled candidates (token ids) for the i-th token. These are needed to map probability/logit indices to vocab token ids. Returns NULL if no candidates were sampled.
+
+### Custom Sampler Interface for Backend
+
+When implementing custom samplers with backend support, the `llama_sampler_i` interface includes:
+
+```c
+struct llama_sampler_data {
+    struct ggml_tensor * logits;
+    struct ggml_tensor * probs;
+    struct ggml_tensor * sampled;
+    struct ggml_tensor * candidates;
+};
+```
+Data structure for backend sampling operations.
+
+**Interface methods for backend sampling:**
+
+```c
+// Return true if the backend supports all ops needed by the sampler
+bool (*backend_init)(struct llama_sampler * smpl, ggml_backend_buffer_type_t buft);
+
+// Called after backend_apply()
+void (*backend_accept)(
+    struct llama_sampler * smpl,
+    struct ggml_context  * ctx,
+    struct ggml_cgraph   * gf,
+    struct ggml_tensor   * selected_token);
+
+// Called after backend_init()
+void (*backend_apply)(
+    struct llama_sampler      * smpl,
+    struct ggml_context       * ctx,
+    struct ggml_cgraph        * gf,
+    struct llama_sampler_data * data);
+
+// Called before graph execution to set inputs for the current ubatch
+void (*backend_set_input)(struct llama_sampler * smpl);
+```
+
+**Usage Example:**
+```c
+// Create sampler chain for backend sampling
+struct llama_sampler * chain = llama_sampler_chain_init(
+    llama_sampler_chain_default_params());
+llama_sampler_chain_add(chain, llama_sampler_init_top_k(50));
+llama_sampler_chain_add(chain, llama_sampler_init_dist(42));
+
+// Configure backend sampling in context params
+struct llama_sampler_seq_config sampler_configs[] = {
+    { .seq_id = 0, .sampler = chain }
+};
+
+struct llama_context_params ctx_params = llama_context_default_params();
+ctx_params.samplers = sampler_configs;
+ctx_params.n_samplers = 1;
+
+// Create context with backend sampling
+struct llama_context * ctx = llama_init_from_model(model, ctx_params);
+
+// After decode, retrieve backend-sampled token
+llama_decode(ctx, batch);
+llama_token token = llama_get_sampled_token_ith(ctx, -1);
+if (token != LLAMA_TOKEN_NULL) {
+    // Token was sampled on backend
+}
 ```
 
 ---

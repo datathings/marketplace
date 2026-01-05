@@ -4,17 +4,36 @@ Official Claude Code plugin marketplace by Datathings — skills and LSP support
 
 ## Quick Start
 
-Add the marketplace:
+**Add the marketplace:**
 ```bash
 /plugin marketplace add datathings/marketplace
 ```
 
-Install plugins:
+**Install plugins:**
 ```bash
 /plugin install greycat@datathings
 ```
 ```bash
 /plugin install greycat-lsp@datathings
+```
+
+**Install GreyCat:**
+
+Linux, Mac or FreeBSD (x64, arm64):
+```bash
+curl -fsSL https://get.greycat.io/install.sh | bash -s dev
+```
+
+Windows (x64, arm64):
+```powershell
+iwr https://get.greycat.io/install_dev.ps1 -useb | iex
+```
+
+**Try it:**
+
+Run Claude in a demo folder, then paste this prompt:
+```
+Create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy (country contains cities, cities contain streets, etc.). Generate sample `./data/addresses.csv`, an importer that loads it on startup, and expose all important API endpoints.
 ```
 
 ## Plugins
@@ -80,12 +99,6 @@ Activates on `.gcl` files and GreyCat topics. Provides:
 - Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
 - React integration (@greycat/web)
 
-#### Example Prompt
-
-```
-Create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy (country contains cities, cities contain streets, etc.). Generate sample `./data/addresses.csv`, an importer that loads it on startup, and expose all important API endpoints.
-```
-
 ### greycat-lsp
 
 IDE features for `.gcl` files. **Requires** `greycat-lang` in PATH.
@@ -123,7 +136,9 @@ skills/
 Each `.skill` file contains a `SKILL.md` with instructions and optional `references/` documentation. To regenerate:
 
 ```bash
-./package-all.sh       # Package all skills to ./skills/
+./package.sh           # Interactive skill selection
+./package.sh -a        # Package all skills to ./skills/
+./package.sh greycat   # Package a specific skill
 ```
 
 ## Configuration

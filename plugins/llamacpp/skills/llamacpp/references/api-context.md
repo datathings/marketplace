@@ -32,11 +32,37 @@ if (!ctx) {
 }
 ```
 
+**New parameters in b7631:**
+
+- `samplers` (`struct llama_sampler_seq_config *`) - [EXPERIMENTAL] Backend sampler chain configuration. Enables GPU-accelerated sampling as part of the computation graph. The caller must keep the sampler chains alive. Samplers must be sampler chains (use `llama_sampler_chain_init`). Default: NULL.
+
+- `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
+
 **New parameters in b7572:**
 
 - `kv_unified` (bool) - Use unified KV cache buffer (experimental). Enables a more memory-efficient cache layout. Default: false.
 
 - `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false.
+
+**Example with Backend Sampling:**
+```c
+// Create sampler chain for backend sampling
+struct llama_sampler * chain = llama_sampler_chain_init(
+    llama_sampler_chain_default_params());
+llama_sampler_chain_add(chain, llama_sampler_init_top_k(50));
+llama_sampler_chain_add(chain, llama_sampler_init_dist(42));
+
+// Configure backend sampling
+struct llama_sampler_seq_config sampler_configs[] = {
+    { .seq_id = 0, .sampler = chain }
+};
+
+struct llama_context_params params = llama_context_default_params();
+params.samplers = sampler_configs;
+params.n_samplers = 1;
+
+struct llama_context * ctx = llama_init_from_model(model, params);
+```
 
 **Example with SWA:**
 ```c

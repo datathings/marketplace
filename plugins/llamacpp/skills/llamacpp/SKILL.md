@@ -67,18 +67,18 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 - **[api-core.md](references/api-core.md)** (220 lines) - Initialization, parameters, model loading
 - **[api-model-info.md](references/api-model-info.md)** (193 lines) - Model properties, architecture detection **NEW**
-- **[api-context.md](references/api-context.md)** (383 lines) - Context, memory (KV cache), state management
+- **[api-context.md](references/api-context.md)** (412 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (417 lines) - Batch operations, inference, tokenization, chat
-- **[api-sampling.md](references/api-sampling.md)** (335 lines) - All 25+ sampling strategies (XTC, DRY, etc.) **EXPANDED**
+- **[api-sampling.md](references/api-sampling.md)** (467 lines) - All 25+ sampling strategies + backend sampling API [NEW]
 - **[api-advanced.md](references/api-advanced.md)** (359 lines) - LoRA adapters, performance, training
 
-**Total:** 163 active, non-deprecated functions (b7617) across 6 organized files
+**Total:** 172 active, non-deprecated functions (b7631) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all 163 function signatures and detailed usage.
+See **[references/api.md](references/api.md)** for all 172 function signatures and detailed usage.
 
 ## Common Workflows
 
@@ -148,12 +148,12 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 1,907 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,086 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
-  - [api-sampling.md](references/api-sampling.md) - All 25+ sampling strategies
+  - [api-sampling.md](references/api-sampling.md) - All 25+ sampling strategies + backend sampling API
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training
 - **[references/workflows.md](references/workflows.md)** (1,616 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 

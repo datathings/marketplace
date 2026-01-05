@@ -26,18 +26,14 @@ The marketplace follows a two-level structure:
 
 ## Commands
 
-### Package all skills
+### Package skills
 ```bash
-./package-all.sh                 # Creates all .skill files in ./skills/
-./package-all.sh -c              # Clean existing before packaging
-./package-all.sh -o /output/dir  # Custom output directory
-```
-
-### Package a single skill
-```bash
-cd plugins/<plugin-name>
-./package.sh                     # Creates <skill-name>.skill
-./package.sh -o /output/dir      # Custom output directory
+./package.sh                     # Interactive skill selection
+./package.sh -a                  # Package all skills to ./skills/
+./package.sh greycat             # Package a specific skill by name
+./package.sh -s llamacpp         # Same as above (explicit flag)
+./package.sh -c -a               # Clean existing before packaging all
+./package.sh -o /output/dir -a   # Custom output directory
 ```
 
 ### Update skills (sync with upstream libs)
