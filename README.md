@@ -80,6 +80,12 @@ Activates on `.gcl` files and GreyCat topics. Provides:
 - Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
 - React integration (@greycat/web)
 
+#### Example Prompt
+
+```
+Create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy (country contains cities, cities contain streets, etc.). Generate sample `./data/addresses.csv`, an importer that loads it on startup, and expose all important API endpoints.
+```
+
 ### greycat-lsp
 
 IDE features for `.gcl` files. **Requires** `greycat-lang` in PATH.
