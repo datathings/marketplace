@@ -4,12 +4,16 @@ Official Claude Code plugin marketplace by Datathings — skills and LSP support
 
 ## Quick Start
 
+Add the marketplace:
 ```bash
-# Add the marketplace
 /plugin marketplace add datathings/marketplace
+```
 
-# Install plugins
+Install plugins:
+```bash
 /plugin install greycat@datathings
+```
+```bash
 /plugin install greycat-lsp@datathings
 ```
 
@@ -26,24 +30,41 @@ Official Claude Code plugin marketplace by Datathings — skills and LSP support
 
 ### Add the Marketplace
 
+Via GitHub:
 ```bash
-# Via GitHub
 /plugin marketplace add datathings/marketplace
+```
 
-# Via Git URL
+Via Git URL:
+```bash
 /plugin marketplace add https://github.com/datathings/marketplace.git
+```
 
-# Local development
+Local development:
+```bash
 /plugin marketplace add /path/to/marketplace
 ```
 
 ### Install Plugins
 
+GCL development:
 ```bash
-/plugin install greycat@datathings      # GCL development
-/plugin install greycat-lsp@datathings  # LSP for .gcl files
-/plugin install greycat-c@datathings    # C SDK reference
-/plugin install llamacpp@datathings     # llama.cpp API
+/plugin install greycat@datathings
+```
+
+LSP for .gcl files:
+```bash
+/plugin install greycat-lsp@datathings
+```
+
+C SDK reference:
+```bash
+/plugin install greycat-c@datathings
+```
+
+llama.cpp API:
+```bash
+/plugin install llamacpp@datathings
 ```
 
 ### Verify
@@ -124,12 +145,29 @@ Add to `.claude/settings.json` (project or `~/.claude/settings.json` for global)
 
 ## Management Commands
 
+List installed:
 ```bash
-/plugin list                              # List installed
-/plugin update greycat@datathings         # Update plugin
-/plugin uninstall greycat@datathings      # Remove plugin
-/plugin marketplace list                  # List marketplaces
-/plugin marketplace remove datathings     # Remove marketplace
+/plugin list
+```
+
+Update plugin:
+```bash
+/plugin update greycat@datathings
+```
+
+Remove plugin:
+```bash
+/plugin uninstall greycat@datathings
+```
+
+List marketplaces:
+```bash
+/plugin marketplace list
+```
+
+Remove marketplace:
+```bash
+/plugin marketplace remove datathings
 ```
 
 ## Troubleshooting
