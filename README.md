@@ -60,7 +60,8 @@ Activates on `.gcl` files and GreyCat topics. Provides:
 - GCL syntax, types, decorators (@expose, @permission, @volatile)
 - Indexed collections (nodeIndex, nodeList, nodeTime, nodeGeo)
 - Concurrency patterns (Jobs, await)
-- Standard libraries (io, algebra, finance, kafka, s3, sql, etc.)
+- Standard library (core, io, runtime, util)
+- Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
 - React integration (@greycat/web)
 
 ### greycat-lsp

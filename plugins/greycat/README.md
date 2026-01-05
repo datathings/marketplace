@@ -38,7 +38,8 @@ This skill automatically activates when you're working with:
 ### Framework Components
 - **Backend**: Data models, services, API endpoints, persistence patterns
 - **Frontend**: `@greycat/web` SDK, React integration, TypeScript type generation
-- **Libraries**: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent
+- **Standard library**: core, io, runtime, util
+- **Pro libraries**: ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent
 
 ### CLI Commands
 - `greycat serve` - Start development server
