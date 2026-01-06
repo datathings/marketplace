@@ -4,16 +4,18 @@ Official Claude Code plugin marketplace by Datathings — skills and LSP support
 
 ## Quick Start
 
+Run these commands in [Claude Code](https://claude.ai/code):
+
 **Add the marketplace:**
-```bash
+```
 /plugin marketplace add datathings/marketplace
 ```
 
 **Install plugins:**
-```bash
+```
 /plugin install greycat@datathings
 ```
-```bash
+```
 /plugin install greycat-lsp@datathings
 ```
 
