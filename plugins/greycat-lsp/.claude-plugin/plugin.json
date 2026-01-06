@@ -8,11 +8,21 @@
   },
   "license": "MIT",
   "repository": "https://github.com/datathings/marketplace",
-  "keywords": ["greycat", "lsp", "language-server", "gcl", "code-completion", "diagnostics", "ide-support"],
+  "keywords": [
+    "greycat",
+    "lsp",
+    "language-server",
+    "gcl",
+    "code-completion",
+    "diagnostics",
+    "ide-support"
+  ],
   "lspServers": {
     "greycat": {
       "command": "greycat-lang",
-      "args": ["server"],
+      "args": [
+        "server --stdio"
+      ],
       "extensionToLanguage": {
         ".gcl": "greycat"
       },
