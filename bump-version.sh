@@ -8,6 +8,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
+README="${SCRIPT_DIR}/README.md"
 
 # Colors
 GREEN='\033[0;32m'
@@ -32,6 +33,11 @@ show_versions() {
         version=$(grep -o '"version": "[^"]*"' "$plugin_json" | sed 's/"version": "//' | sed 's/"//')
         echo "  $plugin_name: $version"
     done
+
+    # README
+    echo ""
+    echo -e "${YELLOW}README.md:${NC}"
+    grep -oE '\| [0-9]+\.[0-9]+\.[0-9]+ \|' "$README" | head -1 | sed 's/| /  /' | sed 's/ |//'
 }
 
 # Bump all versions
@@ -61,6 +67,15 @@ bump_version() {
         fi
         echo -e "  ${GREEN}✓${NC} Updated"
     done
+
+    # Update README.md plugin table
+    echo -e "${YELLOW}Updating README.md...${NC}"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/| [0-9]\+\.[0-9]\+\.[0-9]\+ |/| ${new_version} |/g" "$README"
+    else
+        sed -i "s/| [0-9]\+\.[0-9]\+\.[0-9]\+ |/| ${new_version} |/g" "$README"
+    fi
+    echo -e "  ${GREEN}✓${NC} Updated"
 
     echo ""
     echo -e "${GREEN}All versions bumped to ${new_version}${NC}"
