@@ -21,7 +21,7 @@ The marketplace follows a two-level structure:
 - `package.sh` - creates `.skill` distribution (zip with .skill extension)
 
 **LSP Plugins** (greycat-lsp):
-- `.lsp.json` - LSP server configuration (command, args, transport)
+- `lspServers` in `plugin.json` - LSP server configuration (command, args, transport)
 - Requires `greycat-lang` binary in PATH
 
 ## Commands
@@ -53,6 +53,12 @@ These are **repo maintenance workflows**, not distributed with the skills.
 .claude/skills/skill-creator/scripts/init_skill.py <skill-name> --path <output-dir>
 ```
 
+### Bump versions
+```bash
+./bump-version.sh                # Show current versions
+./bump-version.sh 1.3.0          # Bump all plugins to 1.3.0
+```
+
 ### Test LSP
 ```bash
 which greycat-lang               # Verify binary exists
@@ -72,7 +78,7 @@ greycat-lang server              # Start LSP server
    }
    ```
 3. For skills: create `skills/<skill>/SKILL.md` with frontmatter + `package.sh`
-4. For LSP: create `.lsp.json` with server configuration
+4. For LSP: add `lspServers` config in `plugin.json`
 
 ## Skill Development Rules
 

@@ -40,10 +40,10 @@ Create a GreyCat backend with Country, City, Street, House, and Person nodes lin
 
 | Plugin | Type | Version | Description |
 |--------|------|---------|-------------|
-| **greycat** | Skill | 1.0.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
-| **greycat-c** | Skill | 1.0.0 | GreyCat C API and Standard Library for native development |
-| **greycat-lsp** | LSP | 0.1.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| **llamacpp** | Skill | 1.1.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| **greycat** | Skill | 1.2.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| **greycat-c** | Skill | 1.2.0 | GreyCat C API and Standard Library for native development |
+| **greycat-lsp** | LSP | 1.2.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| **llamacpp** | Skill | 1.2.0 | llama.cpp C API reference (163 functions) for local LLM inference |
 
 ## Installation
 
@@ -193,6 +193,23 @@ Remove marketplace:
 For developing or testing marketplace plugins locally:
 ```bash
 /plugin marketplace add /path/to/marketplace
+```
+
+### Bump Versions
+
+Update all plugin versions at once:
+```bash
+./bump-version.sh           # Show current versions
+./bump-version.sh 1.3.0     # Bump all plugins to 1.3.0
+```
+
+### Package Skills
+
+Generate standalone `.skill` files for distribution:
+```bash
+./package.sh                # Interactive skill selection
+./package.sh -a             # Package all skills
+./package.sh greycat        # Package specific skill
 ```
 
 ### Native GreyCat C Libraries
