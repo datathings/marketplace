@@ -152,7 +152,7 @@ curl -X GET 'http://localhost:8080/files/0/tasks/1/result.gcb?json'
 
 ## Periodic Tasks
 
-Register recurring tasks:
+Schedule recurring tasks using the `Scheduler` API:
 
 ```gcl
 fn my_task() {
@@ -160,31 +160,96 @@ fn my_task() {
 }
 
 fn main() {
-    var task = PeriodicTask {
-        user_id: 0,
-        arguments: null,
-        every: 1_day,
-        function: project::my_task,
-        start: time::now()
-    };
+    // Schedule task to run daily at midnight
+    Scheduler::add(
+        project::my_task,
+        DailyPeriodicity {},
+        null
+    );
 
-    PeriodicTask::set(Array<PeriodicTask>{task});
+    // Schedule with fixed interval
+    Scheduler::add(
+        project::my_task,
+        FixedPeriodicity { every: 1_day },
+        PeriodicOptions { start: time::now() }
+    );
 }
 ```
 
-> `PeriodicTask::set()` replaces ALL registered tasks. Include all desired tasks in the array.
+### Periodicity Types
 
-### Manage Periodic Tasks
+**FixedPeriodicity** - Execute at fixed intervals:
+```gcl
+FixedPeriodicity { every: 30min }
+FixedPeriodicity { every: 2hour }
+```
+
+**DailyPeriodicity** - Execute daily at specific time:
+```gcl
+DailyPeriodicity { hour: 14, minute: 30 }  // 2:30 PM
+DailyPeriodicity { hour: 9, timezone: TimeZone::"Europe/Luxembourg" }
+```
+
+**WeeklyPeriodicity** - Execute on specific weekdays:
+```gcl
+WeeklyPeriodicity {
+    days: [DayOfWeek::Mon, DayOfWeek::Fri],
+    daily: DailyPeriodicity { hour: 9 }
+}
+```
+
+**MonthlyPeriodicity** - Execute on specific days of month:
+```gcl
+MonthlyPeriodicity {
+    days: [15],
+    daily: DailyPeriodicity { hour: 14 }
+}
+```
+
+**YearlyPeriodicity** - Execute on specific calendar dates:
+```gcl
+YearlyPeriodicity {
+    dates: [DateTuple { day: 1, month: Month::Jan }],
+    daily: DailyPeriodicity { hour: 0 }
+}
+```
+
+### Periodic Options
+
+Configure task behavior with `PeriodicOptions`:
+```gcl
+PeriodicOptions {
+    activated: true,              // Task is active (default: true)
+    start: time::now() + 1hour,   // Delay first execution
+    max_duration: 30s             // Timeout per execution
+}
+```
+
+### Manage Scheduled Tasks
 
 ```gcl
-// Get all registered tasks
-var tasks = PeriodicTask::all();
+// List all scheduled tasks
+var tasks = Scheduler::list();
 
-// Add a task (keeping existing)
-tasks.add(newTask);
-PeriodicTask::set(tasks);
+// Find specific task
+var task = Scheduler::find(project::my_task);
 
-// Remove by index
-tasks.remove(index);
-PeriodicTask::set(tasks);
+// Activate/deactivate tasks
+Scheduler::deactivate(project::my_task);
+Scheduler::activate(project::my_task);
 ```
+
+> Adding a task with the same function replaces the existing configuration.
+
+### PeriodicTask Fields
+
+Tasks returned by `Scheduler::list()` contain:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| function | function | The scheduled function |
+| periodicity | Periodicity | Periodicity configuration |
+| options | PeriodicOptions | Applied options |
+| is_active | bool | Whether task is active |
+| next_execution | time | Next scheduled time |
+| execution_count | int | Total executions |

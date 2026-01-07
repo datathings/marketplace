@@ -11,28 +11,119 @@ This command upgrades the GreyCat skill by syncing with the latest library versi
 
 ## Process Overview
 
-1. Install the latest GreyCat libraries from `project.gcl`
-2. Delete all old GCL files from the skill to ensure a clean state
-3. Replace all GCL files in the skill with the newly installed versions
-4. Update library versions in skill markdown documentation
-5. Analyze function signatures and update skill documentation
-6. Re-package the skill
+1. Fetch the latest library versions from get.greycat.io
+2. Compare with current versions in `project.gcl` (exit early if all up-to-date)
+3. Update `project.gcl` with the latest versions
+4. Install the latest GreyCat libraries from updated `project.gcl`
+5. Delete all old GCL files from the skill to ensure a clean state
+6. Replace all GCL files in the skill with the newly installed versions
+7. Update all `@library` declarations in skill markdown files
+8. Analyze function signatures and update skill documentation
+9. Re-package the skill
 
-## Step 1: Install Latest Libraries
+## Step 1: Fetch Latest Library Versions
+
+Fetch the latest library versions from get.greycat.io:
+
+```bash
+cd plugins/greycat
+
+# Fetch core libraries
+STD_VERSION=$(curl -s "https://get.greycat.io/files/core/dev/latest" | cut -d'/' -f2)
+EXPLORER_VERSION=$(curl -s "https://get.greycat.io/files/explorer/dev/latest" | cut -d'/' -f2)
+
+# If std version is empty, use explorer version as fallback (they typically match)
+if [ -z "$STD_VERSION" ]; then
+  STD_VERSION="$EXPLORER_VERSION"
+  echo "Note: std version endpoint returned empty, using explorer version as fallback"
+fi
+
+# Fetch pro libraries version (all pro libraries share the same version)
+# We only need to check one library (algebra) to get the version for all
+PRO_VERSION=$(curl -s "https://get.greycat.io/files/algebra/dev/latest" | cut -d'/' -f2)
+
+# Fetch web SDK version
+WEB_SDK_VERSION=$(curl -s "https://get.greycat.io/files/sdk/web/dev/latest" | cut -d'/' -f2)
+
+echo "Latest versions:"
+echo "  std: $STD_VERSION"
+echo "  explorer: $EXPLORER_VERSION"
+echo "  pro libraries: $PRO_VERSION"
+echo "  web SDK: $WEB_SDK_VERSION"
+```
+
+**Note:** All pro libraries (ai, algebra, kafka, sql, s3, finance, powerflow, opcua, useragent) share the same version, so we only need to fetch one version.
+
+## Step 2: Compare with Current Versions
+
+Extract the current versions from `project.gcl` and compare with the latest versions:
+
+```bash
+# Extract current versions from project.gcl
+CURRENT_STD=$(grep '@library("std"' project.gcl | sed -n 's/.*@library("std", "\([^"]*\)").*/\1/p')
+CURRENT_EXPLORER=$(grep '@library("explorer"' project.gcl | sed -n 's/.*@library("explorer", "\([^"]*\)").*/\1/p')
+CURRENT_PRO=$(grep '@library("algebra"' project.gcl | sed -n 's/.*@library("algebra", "\([^"]*\)").*/\1/p')
+
+echo ""
+echo "Current versions in project.gcl:"
+echo "  std: $CURRENT_STD"
+echo "  explorer: $CURRENT_EXPLORER"
+echo "  pro libraries: $CURRENT_PRO"
+
+# Compare versions - if ALL versions are the same, exit early
+if [ "$CURRENT_STD" = "$STD_VERSION" ] && \
+   [ "$CURRENT_EXPLORER" = "$EXPLORER_VERSION" ] && \
+   [ "$CURRENT_PRO" = "$PRO_VERSION" ]; then
+    echo ""
+    echo "✓ All libraries are already up-to-date. No changes needed."
+    exit 0
+fi
+
+# If any version is different, show which ones need updating
+echo ""
+echo "Updates needed:"
+[ "$CURRENT_STD" != "$STD_VERSION" ] && echo "  std: $CURRENT_STD → $STD_VERSION"
+[ "$CURRENT_EXPLORER" != "$EXPLORER_VERSION" ] && echo "  explorer: $CURRENT_EXPLORER → $EXPLORER_VERSION"
+[ "$CURRENT_PRO" != "$PRO_VERSION" ] && echo "  pro libraries: $CURRENT_PRO → $PRO_VERSION"
+echo ""
+echo "Proceeding with update..."
+```
+
+**Early Exit:** If all versions match, the command will exit here. If any version is different, it will continue with the update process.
+
+## Step 3: Update project.gcl
+
+Update `project.gcl` with the latest versions:
+
+```bash
+# Update std library
+sed -i "s/@library(\"std\", \"[^\"]*\")/@library(\"std\", \"$STD_VERSION\")/" project.gcl
+
+# Update explorer library
+sed -i "s/@library(\"explorer\", \"[^\"]*\")/@library(\"explorer\", \"$EXPLORER_VERSION\")/" project.gcl
+
+# Update all pro libraries with the same version
+for lib in ai algebra kafka sql s3 finance powerflow opcua useragent; do
+  sed -i "s/@library(\"$lib\", \"[^\"]*\")/@library(\"$lib\", \"$PRO_VERSION\")/" project.gcl
+done
+
+echo "Updated project.gcl with latest versions"
+cat project.gcl
+```
+
+## Step 4: Install Latest Libraries
 
 Run `greycat install` to download the latest versions specified in `project.gcl` to the `./lib` directory.
 
 ```bash
-cd plugins/greycat
 greycat install
 ```
 
-## Step 2: Clean Old GCL Files
+## Step 5: Clean Old GCL Files
 
 **IMPORTANT**: First, delete all existing `.gcl` files from the skill folder to remove any stale files:
 
 ```bash
-cd plugins/greycat
 find ./skills/greycat/references -type f -name "*.gcl" -delete
 ```
 
@@ -41,7 +132,7 @@ This ensures:
 - Clean state before copying new files
 - Removed libraries don't leave behind files
 
-## Step 3: Sync GCL Files from lib/ to skill
+## Step 6: Sync GCL Files from lib/ to skill
 
 Copy all `.gcl` files from `./lib/*/` to `skills/greycat/references/*/`:
 
@@ -61,15 +152,29 @@ Libraries to sync:
 - opcua (opcua.gcl)
 - useragent (useragent.gcl)
 
-## Step 4: Update Library Versions in Markdown Files
+## Step 7: Update All @library Declarations in Skill Files
 
-Read `project.gcl` to extract all library versions (e.g., `@library("kafka", "7.5.68-dev")`).
+Update all `@library` declarations in the skill markdown files to match the versions in `project.gcl`:
 
-For each library's markdown documentation file in `skills/greycat/references/`:
-- Find the installation section with `@library("library-name", "version")`
-- Update the version to match what's in `project.gcl`
+```bash
+# Update all @library declarations in skill files using the versions we fetched
 
-Files to update:
+# Update std library
+find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"std\", \"[^\"]*\")/@library(\"std\", \"$STD_VERSION\")/g" {} \;
+
+# Update explorer library
+find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"explorer\", \"[^\"]*\")/@library(\"explorer\", \"$EXPLORER_VERSION\")/g" {} \;
+
+# Update all pro libraries with the same version
+for lib in ai algebra kafka sql s3 finance powerflow opcua useragent; do
+  find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"$lib\", \"[^\"]*\")/@library(\"$lib\", \"$PRO_VERSION\")/g" {} \;
+done
+
+echo "Updated all @library declarations in skill files"
+```
+
+**Files that will be updated:**
+- `skills/greycat/SKILL.md`
 - `skills/greycat/references/kafka/kafka.md`
 - `skills/greycat/references/sql/postgres.md`
 - `skills/greycat/references/s3/s3.md`
@@ -77,25 +182,29 @@ Files to update:
 - `skills/greycat/references/powerflow/powerflow.md`
 - `skills/greycat/references/opcua/opcua.md`
 - `skills/greycat/references/useragent/useragent.md`
-- `skills/greycat/references/ai/README.md`
-- `skills/greycat/references/algebra/README.md` (if exists)
-- `skills/greycat/references/std/README.md`
+- `skills/greycat/references/ai/llm.md`
 - `skills/greycat/references/LIBRARIES.md`
-- `skills/greycat/references/frontend.md` (web SDK version)
-- `skills/greycat/SKILL.md` (main skill file - check for version references)
+- Any other markdown files containing `@library` declarations
 
-### Verify Web SDK URL Exists
+### Update and Verify Web SDK Version
 
-After updating `frontend.md` with the new @greycat/web SDK version, verify the URL exists:
+Update the web SDK version in `frontend.md` and verify the URL exists:
 
 ```bash
-# Extract the SDK URL from frontend.md and verify it exists
-SDK_URL=$(grep -o 'https://get.greycat.io/files/sdk/web/dev/[^"]*' skills/greycat/references/frontend.md | head -1)
-echo "Verifying SDK URL: $SDK_URL"
-# Note: Server doesn't support HEAD requests, use GET with output to /dev/null
+# Update the web SDK version in frontend.md
+# The SDK version pattern in frontend.md should match: https://get.greycat.io/files/sdk/web/dev/X.Y/X.Y.Z-dev.tgz
+MAJOR_MINOR=$(echo $WEB_SDK_VERSION | cut -d'.' -f1,2)
+SDK_URL="https://get.greycat.io/files/sdk/web/dev/$MAJOR_MINOR/$WEB_SDK_VERSION.tgz"
+
+echo "Updating frontend.md with web SDK version: $WEB_SDK_VERSION"
+echo "Expected SDK URL: $SDK_URL"
+
+# Verify the URL exists
 HTTP_CODE=$(curl -so /dev/null -w "%{http_code}" "$SDK_URL")
 if [ "$HTTP_CODE" = "200" ]; then
     echo "SDK URL verified: $SDK_URL (HTTP $HTTP_CODE)"
+    # Update the version in frontend.md
+    # Update version references and URLs in frontend.md as needed
 else
     echo "WARNING: SDK URL does not exist! HTTP $HTTP_CODE"
 fi
@@ -126,7 +235,7 @@ curl -s "https://get.greycat.io/files/sdk/web/"
 
 **Suggest to the user** what version to use based on what's available, matching the major.minor version of the libraries in `project.gcl`.
 
-## Step 5: Analyze Function Signatures
+## Step 8: Analyze Function Signatures
 
 For each newly copied `.gcl` file:
 1. Read the file and extract all function signatures, type definitions, and method signatures
@@ -144,7 +253,7 @@ Focus on documenting:
 - Method signatures with parameters and return types
 - Any breaking changes or new features
 
-## Step 6: Re-package the Skill
+## Step 9: Re-package the Skill
 
 Run the main packaging script from the repository root to create the updated `.skill` file:
 
@@ -169,10 +278,22 @@ This will create `skills/greycat.skill` with all the updated files.
 ## Success Criteria
 
 The upgrade is complete when:
-1. All old GCL files are deleted from skills/greycat/references/
-2. All GCL files are copied from lib/ to skills/greycat/references/
-3. All library versions in markdown files match project.gcl
-4. No old version references remain in skills/greycat/ (run: `grep -r "7\.[0-9]\.[0-9]*-dev" skills/greycat/` to verify)
-5. All function signatures are documented and accurate
-6. The skill is successfully re-packaged
-7. No errors occur during the process
+1. Latest versions are successfully fetched from get.greycat.io
+2. Current versions are compared with latest versions (or early exit if already up-to-date)
+3. `project.gcl` is updated with the latest versions
+4. All old GCL files are deleted from skills/greycat/references/
+5. All GCL files are copied from lib/ to skills/greycat/references/
+6. All `@library` declarations in skill markdown files are updated to match the latest versions
+7. Web SDK version is verified and updated in frontend.md
+8. All function signatures are documented and accurate
+9. The skill is successfully re-packaged
+10. No errors occur during the process
+
+**Verification commands:**
+```bash
+# Verify all @library declarations are updated (should show no old versions)
+grep -r "@library" skills/greycat/ | grep -v "$STD_VERSION" | grep -v "$EXPLORER_VERSION" | grep -v "$PRO_VERSION"
+
+# Verify project.gcl versions
+cat project.gcl
+```
