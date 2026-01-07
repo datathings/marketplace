@@ -41,6 +41,12 @@ int32_t llama_model_n_embd_inp(const struct llama_model * model);
 ```
 Get the input embedding dimension.
 
+### llama_model_n_embd_out
+```c
+int32_t llama_model_n_embd_out(const struct llama_model * model);
+```
+Get the output embedding dimension.
+
 ### llama_model_n_layer
 ```c
 int32_t llama_model_n_layer(const struct llama_model * model);
