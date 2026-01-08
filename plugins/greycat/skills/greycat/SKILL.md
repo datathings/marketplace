@@ -28,11 +28,36 @@ Efficient, scalable programming language with unified temporal/graph/vector data
 
 **Dev mode**: `--user=1` bypasses auth (NEVER in production).
 
-## Claude Code LSP Integration
+## Development Workflow Commands
 
-Install `greycat-lsp` plugin for IDE features: completion, go-to-definition, find-references, hover, diagnostics, formatting.
+The greycat plugin provides Claude Code commands for common GreyCat development workflows. Use these with `/greycat:command-name`:
 
-**Prerequisite**: `greycat-lang` in PATH. Plugin runs `greycat-lang server --stdio`.
+| Command | Description | When to Use |
+|---------|-------------|-------------|
+| `/greycat:init` | Initialize CLAUDE.md with GreyCat development guidelines | Starting new project, setting up Claude Code |
+| `/greycat:upgrade` | Update all GreyCat libraries to latest versions | Monthly maintenance, before releases |
+| `/greycat:backend` | Comprehensive backend review (dead code, duplications, anti-patterns) | After sprints, before releases, during refactoring |
+| `/greycat:apicheck` | Review @expose endpoints for security, performance, best practices | After adding endpoints, before releases |
+| `/greycat:coverage` | Generate test coverage report and suggest new tests | After sprints, before releases, when adding features |
+| `/greycat:frontend` | Review React/TypeScript frontend for quality and performance | After sprints, when adding frontend features |
+| `/greycat:docs` | Generate/update README, API docs, and MCP documentation | After sprints, before releases, when APIs change |
+| `/greycat:typecheck` | Advanced type safety checks beyond greycat-lang lint | After type changes, before releases |
+
+**Example usage**:
+```bash
+/greycat:init              # Generate CLAUDE.md with best practices
+/greycat:upgrade           # Update libraries to latest dev versions
+/greycat:backend           # Full backend analysis and cleanup
+/greycat:apicheck          # Security and performance review of APIs
+```
+
+**Note**: These commands guide Claude through comprehensive workflows for GreyCat development. They complement the core `greycat` CLI commands above.
+
+## Language Server (LSP)
+
+**[references/lsp.md](references/lsp.md)** - Comprehensive LSP guide: IDE integration (VS Code, Neovim, Emacs), real-time diagnostics, programmatic GCL clients, Claude Code integration.
+
+**Quick start**: Run in background `greycat-lang server --stdio` for IDE features (completion, go-to-definition, hover, diagnostics, formatting).
 
 **CLI reference**: [references/cli.md](references/cli.md) for all commands, options, environment variables.
 
