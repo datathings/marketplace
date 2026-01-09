@@ -1,11 +1,11 @@
 ---
 name: greycat
-description: "GreyCat is an efficient, scalable programming language with unified temporal/graph/vector database, built-in web server, and native MCP capability—the all-in-one backend for modern large-scale digital twins. Use when: (1) working with .gcl files or GreyCat projects, (2) using persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo), (3) creating data models, services, or abstract types, (4) writing API endpoints with @expose, @permission, @tag, or @volatile decorators, (5) implementing parallel processing with Jobs, await(), or PeriodicTask, (6) integrating React frontends with @greycat/web SDK or TypeScript type generation, (7) running GreyCat CLI commands (greycat serve/test/run/install/lint), (8) debugging GreyCat applications or working with transactions, (9) exposing functions as MCP tools with @tag(\"mcp\")."
+description: "GreyCat is an efficient, scalable programming language with unified temporal/graph/vector database, built-in web server, and native MCP capability. The all-in-one backend for modern large-scale digital twins handling billions of data points. Use when working with .gcl files or GreyCat projects"
 ---
 
 # GreyCat: The All-in-One Backend
 
-Efficient, scalable programming language with unified temporal/graph/vector database, built-in web server, and native MCP integration. Eliminates the separation between code and data—write imperative code that directly evolves your data structure. Perfect for modern large-scale digital twins handling billions of data points.
+GreyCat is an efficient, scalable programming language with unified temporal/graph/vector database, built-in web server, and native MCP capability. The all-in-one backend for modern large-scale digital twins handling billions of data points. Use when working with .gcl files or GreyCat projects. 
 
 ## Quick Navigation
 
