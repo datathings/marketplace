@@ -344,6 +344,7 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `split_mode`: How to split the model across GPUs
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
+- `use_direct_io`: Use direct I/O (takes precedence over use_mmap)
 - `use_mlock`: Force system to keep model in RAM
 
 ### llama_context_params

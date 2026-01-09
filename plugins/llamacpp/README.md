@@ -161,14 +161,14 @@ Complete, production-ready applications:
 
 ## Compatibility
 
-This skill documents the llama.cpp C API as of **December 2025** (version b7572).
+This skill documents the llama.cpp C API as of **January 2026** (version b7681).
 
 ### Version Support
 
 - **Recommended:** llama.cpp b3000 or newer
 - **API Coverage:** 163 non-deprecated functions across 16 categories
 - **Deprecated Functions:** 30 (excluded from documentation)
-- **New in b7572:** Advanced sampling (XTC, DRY), model type detection, per-sequence state management
+- **New in b7681:** Direct I/O support, per-device memory margins, improved parameter fitting status reporting
 
 ### Version Notes
 

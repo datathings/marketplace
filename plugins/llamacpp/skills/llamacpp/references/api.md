@@ -456,17 +456,22 @@ llama_free(ctx);
 
 ### llama_params_fit
 ```c
-bool llama_params_fit(
+enum llama_params_fit_status llama_params_fit(
     const char * path_model,
     struct llama_model_params * mparams,
     struct llama_context_params * cparams,
     float * tensor_split,
     struct llama_model_tensor_buft_override * tensor_buft_overrides,
-    size_t margin,
+    size_t * margins,
     uint32_t n_ctx_min,
     enum ggml_log_level log_level);
 ```
-Fits model and context parameters to available device memory. Returns true if successful. This function is NOT thread-safe.
+Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe.
+
+**Return Values:**
+- `LLAMA_PARAMS_FIT_STATUS_SUCCESS (0)`: Found allocations that are projected to fit
+- `LLAMA_PARAMS_FIT_STATUS_FAILURE (1)`: Could not find allocations that fit
+- `LLAMA_PARAMS_FIT_STATUS_ERROR (2)`: Hard error occurred (e.g., model not found)
 
 **Parameters:**
 - `path_model`: Path to model file
@@ -474,7 +479,7 @@ Fits model and context parameters to available device memory. Returns true if su
 - `cparams`: Writable context params (will be modified)
 - `tensor_split`: Writable buffer for tensor split (needs at least `llama_max_devices()` elements)
 - `tensor_buft_overrides`: Writable buffer for overrides (needs at least `llama_max_tensor_buft_overrides()` elements)
-- `margin`: Margin of memory to leave per device in bytes
+- `margins`: Margins of memory to leave per device in bytes (array with `llama_max_devices()` elements)
 - `n_ctx_min`: Minimum context size to set when trying to reduce memory use
 - `log_level`: Minimum log level to print during fitting
 
@@ -1876,6 +1881,7 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `split_mode`: How to split the model across GPUs
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
+- `use_direct_io`: Use direct I/O (takes precedence over use_mmap)
 - `use_mlock`: Force system to keep model in RAM
 
 ### llama_context_params
