@@ -659,6 +659,216 @@ Estimated Impact: MEDIUM (network payload reduction)
 Priority: MEDIUM
 ```
 
+### Step 4.5: Unnecessary Persistence
+
+**Detect node<T> usage where plain objects suffice**:
+
+```bash
+# Find local variables with node types
+grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" backend/src --include="*.gcl" | \
+    grep "    " | \  # Has indentation (not module-level)
+    while IFS=: read -r file line content; do
+        echo "  ⚠ $file:$line - Local variable using persistent type"
+    done
+
+# Find function returns with nodeList/nodeIndex
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" backend/src --include="*.gcl" | \
+    while IFS=: read -r file line content; do
+        echo "  ⚠ $file:$line - Function returning persistent collection"
+    done
+```
+
+**Example Output**:
+```
+📍 backend/src/service/processor.gcl:120
+
+🔴 CRITICAL: Unnecessary node allocation
+
+Code:
+  fn process_items(items: Array<Item>): nodeList<node<Item>> {
+      var results = nodeList<node<Item>> {};
+      for (item in items) {
+          results.add(node<Item>{item});
+      }
+      return results;
+  }
+
+Problem:
+  - Local variable using nodeList (should be Array)
+  - Creating persistent nodes for temporary results
+  - Returning nodeList from function (should be Array)
+
+Optimization:
+  fn process_items(items: Array<Item>): Array<Item> {
+      var results = Array<Item> {};
+      for (item in items) {
+          results.add(item);
+      }
+      return results;
+  }
+
+Benefits:
+  - No unnecessary persistence overhead
+  - Cleaner code
+  - Better performance
+
+Estimated Impact: HIGH
+Priority: CRITICAL
+```
+
+### Step 4.6: Reimplemented Native Functions
+
+**Detect custom implementations of stdlib functions**:
+
+```bash
+# Look for custom sort implementations
+grep -rn "fn [a-z_]*sort" backend/src --include="*.gcl" -A 20 | \
+    grep -A 15 "for.*for" | \  # Nested loops suggest manual sort
+    head -20
+
+# Look for custom min/max
+grep -rn "fn find_\(max\|min\)" backend/src --include="*.gcl"
+
+# Look for custom string join
+grep -rn "fn [a-z_]*join" backend/src --include="*.gcl" -A 10
+```
+
+**Example Output**:
+```
+📍 backend/src/util/array_utils.gcl:23
+
+🟡 MEDIUM: Reimplemented native function
+
+Code:
+  fn sort_by_priority(items: Array<Item>): Array<Item> {
+      // Bubble sort implementation
+      for (i in 0..items.size()) {
+          for (j in i+1..items.size()) {
+              if (items[i]->priority > items[j]->priority) {
+                  // swap...
+              }
+          }
+      }
+      return items;
+  }
+
+Problem:
+  - Custom bubble sort (O(n²))
+  - Native sort_by is faster and cleaner
+
+Optimization:
+  items.sort_by(Item::priority, SortOrder::asc);
+
+Benefits:
+  - Simpler code (1 line vs 10+)
+  - Better performance (native implementation)
+  - More maintainable
+
+Estimated Impact: MEDIUM
+Priority: MEDIUM
+```
+
+### Step 4.7: Useless Function Wrappers
+
+**Detect one-line wrappers**:
+
+```bash
+# Find functions with single return statement calling another function
+for file in $(find backend/src -name "*.gcl"); do
+    awk '/^fn [a-z_].*{$/ {
+        func_line = NR;
+        func = $0;
+        getline;
+        if ($0 ~ /^    return .*::/) {
+            print FILENAME ":" func_line ": One-line wrapper - " func
+        }
+    }' "$file"
+done
+```
+
+**Example Output**:
+```
+📍 backend/src/api/user_api.gcl:67
+
+🟡 MEDIUM: Useless function wrapper
+
+Code:
+  fn get_user(id: int): node<User>? {
+      return UserService::find_by_id(id);
+  }
+
+Problem:
+  - Single-line wrapper adds no value
+  - Just forwards call to service
+  - Extra indirection for no benefit
+
+Suggestion:
+  Remove wrapper, call UserService::find_by_id() directly
+
+Benefits:
+  - Less code to maintain
+  - Clearer call chain
+  - Slightly faster (no extra function call)
+
+Estimated Impact: LOW
+Priority: LOW
+```
+
+### Step 4.8: Algorithmic Complexity
+
+**Detect O(n²) operations**:
+
+```bash
+# Find nested loops with conditionals (potential O(n²))
+grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 5 | \
+    grep -B 1 "for.*in.*{" | \
+    grep -A 3 "if.*==" | \
+    head -30
+```
+
+**Example Output**:
+```
+📍 backend/src/processor/matcher.gcl:89
+
+🔴 CRITICAL: O(n²) algorithmic complexity
+
+Code:
+  for (user in all_users) {
+      for (order in all_orders) {
+          if (order->user_id == user->id) {
+              process(order, user);
+          }
+      }
+  }
+
+Problem:
+  - Nested iteration: users × orders
+  - If 1000 users × 10000 orders = 10M iterations
+  - Linear search for matching orders
+
+Optimization:
+  // Create index if it doesn't exist:
+  var orders_by_user_id: nodeIndex<int, nodeList<node<Order>>>;
+
+  // Use O(1) lookup:
+  for (user in all_users) {
+      var user_orders = orders_by_user_id.get(user->id);
+      if (user_orders != null) {
+          for (i, order in user_orders) {
+              process(order, user);
+          }
+      }
+  }
+
+Benefits:
+  - O(n) instead of O(n²)
+  - 1000× faster for large datasets
+  - Scales better
+
+Estimated Impact: VERY HIGH
+Priority: CRITICAL
+```
+
 ---
 
 ## Phase 5: GreyCat Best Practices Check
@@ -786,14 +996,26 @@ Found Issues:
   [ ] 3 unused global variables (needs review)
   [ ] 8 duplicated code blocks (extract to utilities)
   [ ] 15 anti-patterns (requires code changes)
-  [ ] 23 optimization opportunities
+  [ ] 23 optimization opportunities (NEW):
+      - 5 unnecessary persistence (critical)
+      - 3 reimplemented native functions (medium)
+      - 5 useless wrappers (medium)
+      - 2 O(n²) complexity (critical)
+      - 8 other optimizations
+
+Auto-fix available for:
+  ✓ Unused code deletion
+  ✓ Unnecessary persistence (node<T> → plain objects)
+  ✓ Useless function wrappers (can be removed)
+  ! O(n²) operations (requires index creation - semi-automated)
 
 What would you like to do?
 
 A) Delete unused code (functions + types)
 B) Fix anti-patterns (persistence issues, missing @volatile)
-C) Show detailed report only (no changes)
-D) Custom selection (I'll ask for each category)
+C) Fix performance issues (unnecessary persistence, wrappers)
+D) Show detailed report only (no changes)
+E) Custom selection (I'll ask for each category)
 ```
 
 ### Step 6.2: Delete Unused Code (If Confirmed)

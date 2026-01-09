@@ -7,6 +7,53 @@ description: "GreyCat is an efficient, scalable programming language with unifie
 
 Efficient, scalable programming language with unified temporal/graph/vector database, built-in web server, and native MCP integration. Eliminates the separation between code and data—write imperative code that directly evolves your data structure. Perfect for modern large-scale digital twins handling billions of data points.
 
+## Quick Navigation
+
+**Core Concepts**: [Types](#types) • [Nullability](#nullability) • [Nodes](#nodes-persistence) • [Collections](#indexed-collections) • [Functions](#functions--control-flow)
+**Development**: [Commands](#commands) • [Workflows](#development-workflow-commands) • [Testing](#testing) • [Pitfalls](#common-pitfalls)
+**Advanced**: [Parallelization](#parallelization) • [Frontend](references/frontend.md) • [Libraries](references/LIBRARIES.md)
+
+**Quick Recipes**:
+```gcl
+// Create model with index
+var users_by_id: nodeIndex<int, node<User>>;
+type User { name: String; email: String; }
+
+// Add CRUD service
+abstract type UserService {
+    static fn create(name: String): node<User> { var u = node<User>{User{name: name}}; users_by_id.set(u->id, u); return u; }
+    static fn find(id: int): node<User>? { return users_by_id.get(id); }
+}
+
+// Expose API endpoint
+@expose @permission("public") fn getUsers(): Array<UserView> { /* ... */ }
+
+// Query time-series
+for (t: time, temp: float in temperatures[start..end]) { info("${t}: ${temp}"); }
+
+// Parallel processing
+var jobs = Array<Job<Result>> {}; for (item in items) { jobs.add(Job<Result>{function: process, arguments: [item]}); }
+await(jobs, MergeStrategy::last_wins);
+```
+
+## Installation
+
+**Before using GreyCat**, verify installation with `which greycat` or `greycat --version`.
+
+**If greycat is not found**, confirm with user before installing:
+
+**Linux, Mac, FreeBSD (x64, arm64)**:
+```bash
+curl -fsSL https://get.greycat.io/install.sh | bash -s dev
+```
+
+**Windows (x64, arm64)**:
+```powershell
+iwr https://get.greycat.io/install_dev.ps1 -useb | iex
+```
+
+After installation, verify with `greycat --version` and restart shell if needed.
+
 ## Commands
 
 | Command | Description | Options |
@@ -18,13 +65,14 @@ Efficient, scalable programming language with unified temporal/graph/vector data
 | `greycat install` | Download dependencies | From project.gcl @library |
 | `greycat codegen` | Generate typed headers | TS, Python, C, Rust |
 | `greycat defrag` | Compact storage | Safe anytime |
-| `greycat-lang lint` | Check for errors | **Run after code changes** |
+| `greycat-lang lint --fix` | Check and auto-fix errors | **Run after code changes** |
+| `greycat-lang lint` | Check only (no fixes) | For CI/CD pipelines |
 | `greycat-lang fmt` | Format files | In-place |
 | `greycat-lang server` | Start LSP | `--stdio` for IDE |
 
 **Environment**: All `--options` have `GREYCAT_*` equivalents. Use `.env` next to `project.gcl` for config.
 
-**⚠️ CRITICAL**: After generating/modifying .gcl files, IMMEDIATELY run `greycat-lang lint` and fix errors before proceeding.
+**⚠️ CRITICAL**: After generating/modifying .gcl files, IMMEDIATELY run `greycat-lang lint --fix` and verify 0 errors before proceeding.
 
 **Dev mode**: `--user=1` bypasses auth (NEVER in production).
 
@@ -35,8 +83,12 @@ The greycat plugin provides Claude Code commands for common GreyCat development 
 | Command | Description | When to Use |
 |---------|-------------|-------------|
 | `/greycat:init` | Initialize CLAUDE.md with GreyCat development guidelines | Starting new project, setting up Claude Code |
+| `/greycat:tutorial` | Interactive learning modules for GreyCat concepts | Onboarding, learning features, refreshing knowledge |
+| `/greycat:scaffold` | Generate models, services, APIs, tests with templates | Starting features, adding CRUD, creating entities |
+| `/greycat:migrate` | Schema evolution, data migrations, import/export, storage health | Schema changes, bulk operations, database maintenance |
 | `/greycat:upgrade` | Update all GreyCat libraries to latest versions | Monthly maintenance, before releases |
-| `/greycat:backend` | Comprehensive backend review (dead code, duplications, anti-patterns) | After sprints, before releases, during refactoring |
+| `/greycat:backend` | Comprehensive backend review (dead code, duplications, anti-patterns, performance) | After sprints, before releases, during refactoring |
+| `/greycat:optimize` | Detect and auto-fix performance anti-patterns | Quick performance checks, optimization needs |
 | `/greycat:apicheck` | Review @expose endpoints for security, performance, best practices | After adding endpoints, before releases |
 | `/greycat:coverage` | Generate test coverage report and suggest new tests | After sprints, before releases, when adding features |
 | `/greycat:frontend` | Review React/TypeScript frontend for quality and performance | After sprints, when adding frontend features |
@@ -45,10 +97,11 @@ The greycat plugin provides Claude Code commands for common GreyCat development 
 
 **Example usage**:
 ```bash
-/greycat:init              # Generate CLAUDE.md with best practices
-/greycat:upgrade           # Update libraries to latest dev versions
-/greycat:backend           # Full backend analysis and cleanup
-/greycat:apicheck          # Security and performance review of APIs
+/greycat:tutorial          # Learn GreyCat interactively
+/greycat:scaffold          # Generate model + service + API + tests
+/greycat:migrate           # Handle schema changes and migrations
+/greycat:optimize          # Quick performance analysis and fixes
+/greycat:backend           # Comprehensive code review and cleanup
 ```
 
 **Note**: These commands guide Claude through comprehensive workflows for GreyCat development. They complement the core `greycat` CLI commands above.
@@ -124,7 +177,7 @@ var item = node<Item>{ Item{} };
 by_id.set(1, item); by_name.set("x", item);  // both point to same
 ```
 
-**Transactions**: Atomic per function, rollback on error. **Advanced**: [references/nodes.md](references/nodes.md)
+**Transactions**: Atomic per function, rollback on error. **Production patterns, multi-index ownership, transaction safety** → [references/nodes.md](references/nodes.md)
 
 ## Indexed Collections
 
@@ -189,24 +242,21 @@ var lambda = fn(x: int): int { x * 2 };
 for (k: K, v: V in map) { }; for (i, v in nullable?) { }  // ✅ use ? for nullable
 ```
 
-## Services Pattern
+## Services & Patterns
 
 ```gcl
+// Service pattern: static functions for business logic
 abstract type CountryService {
-    static fn create(name: String, code: String): node<Country> { ... }
+    static fn create(name: String): node<Country> { ... }
     static fn find(name: String): node<Country>? { return countries_by_name.get(name); }
-}  // Usage: CountryService::create(...) vs fn createCountry() in API
-```
+}
 
-## Abstract Types & Inheritance
-
-```gcl
-abstract type Building { address: String; fn calculateTax(): float; }  // abstract method
+// Inheritance: abstract methods, polymorphism
+abstract type Building { address: String; fn calculateTax(): float; }
 type House extends Building { fn calculateTax(): float { return value * 0.01; } }
-var buildings: nodeIndex<String, node<Building>>{}; for (addr, b in buildings) { b->calculateTax(); }
 ```
 
-**Key**: `abstract type` has fields + methods. Use `node<BaseType>` for polymorphism, `is` for type checks. Concrete methods can't be overridden.
+**Detailed patterns, CRUD examples, inheritance, polymorphism** → [references/patterns.md](references/patterns.md)
 
 ## Logging & Error Handling
 
@@ -222,7 +272,7 @@ for (item in items) { jobs.add(Job<ResultType> { function: processFn, arguments:
 await(jobs, MergeStrategy::last_wins); for (job in jobs) { results.add(job.result()); }
 ```
 
-**Key**: `Job<T>` generic, `MergeStrategy::last_wins`, no nested await. **Async**: `curl -H "task:''" -X POST http://localhost:8080/fn` or `PeriodicTask::set(...)`. **Production**: [references/concurrency.md](references/concurrency.md)
+**Key**: `Job<T>` generic, `MergeStrategy::last_wins`, no nested await. **Worker pools, PeriodicTask, async HTTP, production patterns** → [references/concurrency.md](references/concurrency.md)
 
 ## Testing
 
@@ -233,9 +283,20 @@ Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`.
 fn setup() { /* runs before tests */ } fn teardown() { /* cleanup after tests */ }
 ```
 
-**Assert**: `equals(a, b)`, `equalsd(a, b, epsilon)`, `isTrue(v)`, `isFalse(v)`, `isNull(v)`, `isNotNull(v)`. **Advanced**: [references/testing.md](references/testing.md)
+**Assert**: `equals(a, b)`, `equalsd(a, b, epsilon)`, `isTrue(v)`, `isFalse(v)`, `isNull(v)`, `isNotNull(v)`. **Test organization, mocking, fixtures, CI/CD** → [references/testing.md](references/testing.md)
 
 ## Common Pitfalls
+
+**⚠️ Reserved Keywords**: `limit`, `node`, `type`, `var`, `fn` are reserved. Do NOT use as variable names or attribute names:
+```gcl
+// ❌ WRONG - using reserved keywords
+type User { limit: int; type: String; }  // 'limit' and 'type' are reserved!
+fn process(node: String) { }             // 'node' is reserved!
+
+// ✅ CORRECT - use different names
+type User { max_limit: int; user_type: String; }
+fn process(node_name: String) { }
+```
 
 | ❌ Wrong | ✅ Correct |
 |----------|-----------|
