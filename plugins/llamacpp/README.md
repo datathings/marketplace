@@ -161,13 +161,14 @@ Complete, production-ready applications:
 
 ## Compatibility
 
-This skill documents the llama.cpp C API as of **January 2026** (version b7681).
+This skill documents the llama.cpp C API as of **January 2026** (version b7709).
 
 ### Version Support
 
 - **Recommended:** llama.cpp b3000 or newer
-- **API Coverage:** 163 non-deprecated functions across 16 categories
+- **API Coverage:** 173 non-deprecated functions across 16 categories
 - **Deprecated Functions:** 30 (excluded from documentation)
+- **New in b7709:** Gemma3n multimodal support with MobileNetV5 vision encoder, pooling type improvements
 - **New in b7681:** Direct I/O support, per-device memory margins, improved parameter fitting status reporting
 
 ### Version Notes

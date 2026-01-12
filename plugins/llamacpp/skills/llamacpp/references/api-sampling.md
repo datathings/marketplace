@@ -113,6 +113,9 @@ struct llama_sampler * llama_sampler_init_dist(uint32_t seed);
 ```
 Sample from the probability distribution.
 
+**Parameters:**
+- `seed`: Random seed. Use `LLAMA_DEFAULT_SEED` (0xFFFFFFFF) to use a random seed.
+
 #### Top-K Sampling
 
 ```c

@@ -24,10 +24,7 @@ map.set("Key", 42);
 println(map.get("Test"));
 ```
 
-### Removing Elements
-
-Use the `remove` method to delete elements from arrays and maps:
-
+**Removing elements**:
 ```gcl
 // Array - remove by index
 var arr = Array<int>{1, 2, 3, 4, 5};
@@ -35,30 +32,22 @@ arr.remove(2);  // Removes element at index 2
 
 // Map - remove by key
 var map = Map<String, int>{"a": 1, "b": 2, "c": 3};
-map.remove("b");  // Removes key "b" and its value
+map.remove("b");  // Removes key "b"
 ```
 
-> Note: There is no `unset` method. Use `remove` to delete elements.
-
-> Use `pprint` for readable console output with formatting.
+> Use `remove` to delete elements. No `unset` method. Use `pprint` for readable console output.
 
 ## Windows (FIFO with Statistics)
 
-### TimeWindow
-Collect values within time period, auto-discard old:
-
+**TimeWindow** - Collect values within time period, auto-discard old:
 ```gcl
 var tw = TimeWindow<float>{ span: 5s };
 tw.add(time::new(t, DurationUnit::seconds), value as float);
 
-println("Average: ${tw.avg()}");
-println("Min: ${tw.min()}, Max: ${tw.max()}");
-println("Size: ${tw.size()}");
+println("Average: ${tw.avg()}, Min: ${tw.min()}, Max: ${tw.max()}, Size: ${tw.size()}");
 ```
 
-### SlidingWindow
-Fixed number of elements:
-
+**SlidingWindow** - Fixed number of elements:
 ```gcl
 var sw = SlidingWindow<float>{ span: 5 };  // 5 elements max
 sw.add(value as float);
@@ -84,10 +73,7 @@ info(t.rows());
 info(t.get_cell(0, 0));
 ```
 
-### Table Column Mappings
-
-Transform tables by extracting nested fields:
-
+**Table Column Mappings** - Transform tables by extracting nested fields:
 ```gcl
 var mappings = Array<TableColumnMapping>{
     TableColumnMapping { column: 0, extractors: Array<any>{"*", "a"} },  // resolve node, get attr
@@ -99,85 +85,43 @@ var newTable = Table::applyMappings(t, mappings);
 
 ## Tensor
 
-Multi-dimensional numerical array for ML batch processing:
+Multi-dimensional numerical arrays:
 
 ```gcl
-var t = Tensor{};
-t.init(TensorType::f64, Array<int>{4, 3});  // 4 rows, 3 columns
-
-Assert::equals(t.dim(), 2);   // dimensions
-Assert::equals(t.size(), 12); // total elements
+var t = Tensor::new([2, 3, 2]); // Shape: 2x3x2 tensor (12 elements)
+t.set(0, 1.0);
+var value = t.get(0);
 ```
 
-### Tensor Types
-`i32`, `i64`, `f32`, `f64`, `c64`, `c128` (complex)
+**Operations**: `flatten()`, `reshape()`, `min()`, `max()`, `avg()`, `sum()`, `matmul()`
 
-### Set/Get Values
-
-```gcl
-t.set(Array<int>{0, 0, 0}, 42.3);
-var val = t.get(Array<int>{0, 0, 0});
-t.fill(50.3);  // Fill all with value
-```
-
-### Iterate Multidimensional
-
-```gcl
-var index = t.initPos();
-do {
-    t.set(index, random.uniformf(-5.0, 5.0));
-} while (t.incPos(index));
-```
-
-### Append Data
-
-```gcl
-// 1D tensor
-t.append(3.0);           // single value
-t.append([4.0, 4.0]);    // array
-t.append(otherTensor);   // another 1D tensor
-
-// ND tensor - append N-1 dimensional tensor
-var t4d = Tensor{};
-t4d.init(TensorType::f64, Array<int>{0, 2, 3, 4});
-t4d.append(tensor3d);  // Must be 2x3x4
-```
-
-### Performance
-
-```gcl
-t.setCapacity(1000);  // Pre-allocate
-t.reset();            // Reuse memory with new shape
-```
+**Shapes**: `[2, 3]` = 2x3 matrix, `[2, 3, 4]` = 2x3x4 3D array
 
 ## Buffer
 
-Efficient string builder:
+Typed byte arrays (C-like):
 
 ```gcl
-var b = Buffer{};
-b.add(1);
-b.add(" one ");
-b.add([1, 2]);
-println(b.toString());  // "1 one Array{1,2}"
+var b = Buffer::new(1024);  // 1KB
+b.write_i32(0, 42);
+var value = b.read_i32(0);
 ```
 
-## Stack (LIFO)
+**Types**: `i8`, `i16`, `i32`, `i64`, `f32`, `f64`, `bool` (read/write)
+
+## Stack & Queue
 
 ```gcl
-var stack = Stack<int>{};
-stack.push(i);
-println(stack.first());  // bottom
-println(stack.last());   // top
-var val = stack.pop();   // returns and removes top
+var stack = Stack<int>{}; stack.push(1); stack.push(2); var top = stack.pop();
+var queue = Queue<int>{}; queue.enqueue(1); queue.enqueue(2); var front = queue.dequeue();
 ```
 
-## Queue (FIFO)
+## Set
+
+Unordered unique elements:
 
 ```gcl
-var queue = Queue<int>{};
-queue.push(i);
-println(queue.front());  // first in
-println(queue.back());   // last in
-var val = queue.pop();   // returns and removes front
+var set = Set<String>{}; set.add("a"); set.add("b"); set.add("a");  // Only one "a"
+var hasA = set.contains("a");  // true
+set.remove("a");
 ```

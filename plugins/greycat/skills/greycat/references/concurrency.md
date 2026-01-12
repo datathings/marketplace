@@ -19,15 +19,13 @@ fn main() {
 
     await(jobs);  // Blocks until all complete
 
-    for (_, job in jobs) {
-        var result = job.result();
-    }
+    for (_, job in jobs) { var result = job.result(); }
 }
 ```
 
 > Jobs only run in parallel when executed within a task context.
 
-## Error Handling in Jobs
+### Error Handling
 
 `await` throws if any job fails. Handle individually:
 
@@ -43,17 +41,14 @@ fn main() {
     } catch (err) {
         for (i, job in jobs) {
             var res = job.result();
-            if (res is Error) {
-                println("Job ${i} failed");
-            } else {
-                println("Job ${i} finished");
-            }
+            if (res is Error) { println("Job ${i} failed"); }
+            else { println("Job ${i} finished"); }
         }
     }
 }
 ```
 
-## Parallel Writes
+### Parallel Writes
 
 Can write to different nodes in parallel, but NOT to the same node:
 
@@ -61,19 +56,13 @@ Can write to different nodes in parallel, but NOT to the same node:
 var sensor_list: nodeList<node<Sensor>>;
 
 fn main() {
-    var jobs = Array<Job>{
-        Job { function: project::import },
-        Job { function: project::import }
-    };
-
+    var jobs = Array<Job>{ Job { function: project::import }, Job { function: project::import } };
     await(jobs);
 
     // Aggregate results after await
     for (_, job in jobs) {
         var sensors = job.result();
-        for (_, sensor: node<Sensor> in sensors) {
-            sensor_list.add(sensor);
-        }
+        for (_, sensor: node<Sensor> in sensors) { sensor_list.add(sensor); }
     }
 }
 
@@ -86,7 +75,7 @@ fn import(): Array<node<Sensor>> {
 }
 ```
 
-## Await Limitations
+### Await Limitations
 
 Objects resolved before `await` become invalid after:
 
@@ -116,7 +105,7 @@ curl -H "task:''" -X POST -d '[]' http://localhost:8080/project::long_computatio
 # Returns Task object immediately
 ```
 
-### Task Object Fields
+### Task Object
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -129,23 +118,14 @@ curl -H "task:''" -X POST -d '[]' http://localhost:8080/project::long_computatio
 | duration | duration? | How long |
 | status | TaskStatus | Current status |
 
-### Task Status
+**Task Status**: `empty → waiting → running → await → ended/error/cancelled/ended_with_errors`
 
-```
-empty → waiting → running → await → ended
-                         ↘ error
-                         ↘ cancelled
-                         ↘ ended_with_errors
-```
-
-### Check Task Status
-
+**Check Status**:
 ```bash
 curl -X POST -d '[1,1]' http://localhost:8080/runtime::Task::info
 ```
 
-### Retrieve Task Result
-
+**Retrieve Result**:
 ```bash
 curl -X GET 'http://localhost:8080/files/0/tasks/1/result.gcb?json'
 ```
@@ -155,68 +135,29 @@ curl -X GET 'http://localhost:8080/files/0/tasks/1/result.gcb?json'
 Schedule recurring tasks using the `Scheduler` API:
 
 ```gcl
-fn my_task() {
-    println("Current time: ${time::now()}");
-}
+fn my_task() { println("Current time: ${time::now()}"); }
 
 fn main() {
-    // Schedule task to run daily at midnight
-    Scheduler::add(
-        project::my_task,
-        DailyPeriodicity {},
-        null
-    );
+    // Daily at midnight
+    Scheduler::add(project::my_task, DailyPeriodicity {}, null);
 
-    // Schedule with fixed interval
-    Scheduler::add(
-        project::my_task,
-        FixedPeriodicity { every: 1_day },
-        PeriodicOptions { start: time::now() }
-    );
+    // Fixed interval
+    Scheduler::add(project::my_task, FixedPeriodicity { every: 1_day }, PeriodicOptions { start: time::now() });
 }
 ```
 
 ### Periodicity Types
 
-**FixedPeriodicity** - Execute at fixed intervals:
-```gcl
-FixedPeriodicity { every: 30min }
-FixedPeriodicity { every: 2hour }
-```
-
-**DailyPeriodicity** - Execute daily at specific time:
-```gcl
-DailyPeriodicity { hour: 14, minute: 30 }  // 2:30 PM
-DailyPeriodicity { hour: 9, timezone: TimeZone::"Europe/Luxembourg" }
-```
-
-**WeeklyPeriodicity** - Execute on specific weekdays:
-```gcl
-WeeklyPeriodicity {
-    days: [DayOfWeek::Mon, DayOfWeek::Fri],
-    daily: DailyPeriodicity { hour: 9 }
-}
-```
-
-**MonthlyPeriodicity** - Execute on specific days of month:
-```gcl
-MonthlyPeriodicity {
-    days: [15],
-    daily: DailyPeriodicity { hour: 14 }
-}
-```
-
-**YearlyPeriodicity** - Execute on specific calendar dates:
-```gcl
-YearlyPeriodicity {
-    dates: [DateTuple { day: 1, month: Month::Jan }],
-    daily: DailyPeriodicity { hour: 0 }
-}
-```
+| Type | Description | Example |
+|------|-------------|---------|
+| `FixedPeriodicity` | Fixed intervals | `{ every: 30min }`, `{ every: 2hour }` |
+| `DailyPeriodicity` | Daily at specific time | `{ hour: 14, minute: 30 }`, `{ hour: 9, timezone: TimeZone::"Europe/Luxembourg" }` |
+| `WeeklyPeriodicity` | Specific weekdays | `{ days: [DayOfWeek::Mon, DayOfWeek::Fri], daily: DailyPeriodicity { hour: 9 } }` |
+| `MonthlyPeriodicity` | Specific days of month | `{ days: [15], daily: DailyPeriodicity { hour: 14 } }` |
+| `YearlyPeriodicity` | Specific calendar dates | `{ dates: [DateTuple { day: 1, month: Month::Jan }], daily: DailyPeriodicity { hour: 0 } }` |
 
 ### Periodic Options
 
-Configure task behavior with `PeriodicOptions`:
 ```gcl
 PeriodicOptions {
     activated: true,              // Task is active (default: true)
@@ -228,22 +169,15 @@ PeriodicOptions {
 ### Manage Scheduled Tasks
 
 ```gcl
-// List all scheduled tasks
-var tasks = Scheduler::list();
-
-// Find specific task
-var task = Scheduler::find(project::my_task);
-
-// Activate/deactivate tasks
-Scheduler::deactivate(project::my_task);
-Scheduler::activate(project::my_task);
+var tasks = Scheduler::list();  // List all tasks
+var task = Scheduler::find(project::my_task);  // Find specific task
+Scheduler::deactivate(project::my_task);  // Deactivate
+Scheduler::activate(project::my_task);    // Activate
 ```
 
 > Adding a task with the same function replaces the existing configuration.
 
 ### PeriodicTask Fields
-
-Tasks returned by `Scheduler::list()` contain:
 
 | Field | Type | Description |
 |-------|------|-------------|

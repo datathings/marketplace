@@ -2,7 +2,7 @@
 
 ## Definition
 
-Nodes are persistent pointers (64-bit IDs) to locations in the Graph. They enable disc persistence for objects that would otherwise exist only in RAM.
+Nodes are persistent pointers (64-bit IDs) to locations in the Graph. Enable disc persistence for objects that would otherwise exist only in RAM.
 
 ```gcl
 type Country { name: String; phoneCode: int; location: geo; }
@@ -26,11 +26,10 @@ n->name = "X";   // modify object field
 node<int>{0}.set(5);  // primitives use .set()
 ```
 
-## Operators Summary
-
+**Operators**:
 | Operator | Description |
 |----------|-------------|
-| `.` | Access fields/methods on an instance |
+| `.` | Access fields/methods on instance |
 | `::` | Static access operator |
 | `->` | Arrow: traverses graph to access attribute/function |
 
@@ -88,56 +87,50 @@ val_ref.set(5);                // Works
 
 ## Indexed Collections
 
-### nodeTime
-Indexes by time with interpolation. Ideal for time series:
+| Persisted | Key | In-Memory |
+|-----------|-----|-----------|
+| `node<T>` | — | `Array<T>`, `Map<K,V>` |
+| `nodeList<node<T>>` | int | `Stack<T>`, `Queue<T>` |
+| `nodeIndex<K, node<V>>` | hash | `Set<T>`, `Tuple<A,B>` |
+| `nodeTime<node<T>>` | time | `Buffer`, `Table`, `Tensor` |
+| `nodeGeo<node<T>>` | geo | `TimeWindow`, `SlidingWindow` |
 
+**nodeTime** - Indexes by time with interpolation:
 ```gcl
 var temps = nodeTime<float>{};
 temps.setAt(t1, 20.5);
 
-for (t: time, temp: float in temps[fromTime..toTime]) {
-    println("Temperature was ${temp} at ${t}");
-}
+for (t: time, temp: float in temps[fromTime..toTime]) { println("Temperature was ${temp} at ${t}"); }
 
-// Remove by time
-temps.remove(t1);  // Deletes the entry at time t1
+temps.remove(t1);  // Remove by time
 ```
 
-### nodeList
-Indexes by integer (64-bit). Discrete scale:
-
+**nodeList** - Indexes by integer (64-bit):
 ```gcl
 var myStock = nodeList<Palette>{};
 for (position: int, content: Palette in myStock[54..78]) { }
 
-// Remove by index
-myStock.remove(55);  // Deletes the entry at index 55
+myStock.remove(55);  // Remove by index
 ```
 
-### nodeGeo
-Indexes by geographical position:
-
+**nodeGeo** - Indexes by geographical position:
 ```gcl
 var buildings = nodeGeo<node<Building>>{};
 for (position: geo, building: Building in buildings.filter(GeoBox{...})) { }
 
-// Remove by geo position
-buildings.remove(position);  // Deletes the entry at the given position
+buildings.remove(position);  // Remove by geo position
 ```
 
-### nodeIndex
-Indexes by any hashable key (usually String):
-
+**nodeIndex** - Indexes by any hashable key (usually String):
 ```gcl
 var collaborators = nodeIndex<String, node<Person>>{};
 collaborators.set("john", johnNode);
 for (name: String, collab: node<Person> in collaborators) { }
 
-// Remove by key
-collaborators.remove("john");  // Deletes the entry with key "john"
+collaborators.remove("john");  // Remove by key
 ```
 
-> Note: Use `remove` to delete entries. There is no `unset` method.
+> Use `remove` to delete entries. No `unset` method.
 
 ## Sampling Large Collections
 
@@ -153,8 +146,4 @@ var result = nodeTime::sample(
 );
 ```
 
-### SamplingMode Options
-- `fixed` - Fixed delta between index values
-- `fixed_reg` - Fixed + linear interpolation
-- `adaptative` - Skip elements to limit results
-- `dense` - All elements, no sampling
+**SamplingMode**: `fixed` (fixed delta), `fixed_reg` (fixed + linear interpolation), `adaptative` (skip to limit results), `dense` (all elements, no sampling)

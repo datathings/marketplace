@@ -4,21 +4,6 @@ Official Claude Code plugin marketplace by Datathings — skills and LSP support
 
 ## Quick Start
 
-Run these commands in [Claude Code](https://claude.ai/code):
-
-**Add the marketplace:**
-```
-/plugin marketplace add datathings/marketplace
-```
-
-**Install plugins:**
-```
-/plugin install greycat@datathings
-```
-```
-/plugin install greycat-lsp@datathings
-```
-
 **Install GreyCat:**
 
 Linux, Mac or FreeBSD (x64, arm64):
@@ -31,21 +16,42 @@ Windows (x64, arm64):
 iwr https://get.greycat.io/install_dev.ps1 -useb | iex
 ```
 
+**⚠️ Important: Restart your terminal after installing GreyCat**
+
+**Install Claude Code:**
+
+Follow the installation instructions at [https://code.claude.com/docs/en/setup](https://code.claude.com/docs/en/setup)
+
+**Add the marketplace:**
+
+Run these commands in [Claude Code](https://claude.ai/code):
+```
+/plugin marketplace add datathings/marketplace
+```
+
+**Install plugins:**
+```
+/plugin install greycat@datathings
+```
+```
+/plugin install greycat-lsp@datathings
+```
+
 **Try it:**
 
 Run Claude in a demo folder, then paste this prompt:
 ```
-Create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy (country contains cities, cities contain streets, etc.). Generate sample `./data/addresses.csv`, an importer that loads it on startup, and expose all important API endpoints.
+Use your greycat skill to create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy with back references for bidirectional navigation (country contains cities, cities contain streets, etc., and children reference their parents). Add geo coordinates (latitude, longitude) to appropriate nodes. Houses should have temperature sensors storing time series data. Generate two sample CSV files: `./data/addresses.csv` (with house IDs) and `./data/temperatures.csv` (with house_id, date, value columns), and create an importer that loads both on startup (import the CSVs on main if the country index size is 0). Expose all important API endpoints. Create comprehensive API documentation and expose meaningful functions as MCP.
 ```
 
 ## Plugins
 
 | Plugin | Type | Version | Description |
 |--------|------|---------|-------------|
-| **greycat** | Skill | 1.4.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
-| **greycat-c** | Skill | 1.4.0 | GreyCat C API and Standard Library for native development |
-| **greycat-lsp** | LSP | 1.4.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| **llamacpp** | Skill | 1.4.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| **greycat** | Skill | 1.5.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| **greycat-c** | Skill | 1.5.0 | GreyCat C API and Standard Library for native development |
+| **greycat-lsp** | LSP | 1.5.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| **llamacpp** | Skill | 1.5.0 | llama.cpp C API reference (163 functions) for local LLM inference |
 
 ## Installation
 

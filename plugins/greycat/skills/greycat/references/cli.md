@@ -4,8 +4,6 @@ Complete CLI documentation. All projects use `project.gcl`. Run from project roo
 
 ## Commands
 
-Pattern: `greycat <command> [options] (param)?`
-
 | Command | Purpose | Param | Exit |
 |---------|---------|-------|------|
 | `build` | Compile | - | 0 |
@@ -25,17 +23,16 @@ Pattern: `greycat <command> [options] (param)?`
 
 All commands accept these options (CLI / Environment Variable):
 
-**Logging & Storage:**
-- `--log=<level>` / `GREYCAT_LOG` (trace/debug/info/warn/error, def: info)
-- `--logfile` / `GREYCAT_LOGFILE` (def: false)
-- `--cache=<MB>` / `GREYCAT_CACHE` (def: 8192)
-- `--store=<MB>` / `GREYCAT_STORE` (def: 1000)
-- `--store_paths=<path>` / `GREYCAT_STORE_PATHS` (def: ./gcdata)
-
-**Execution:**
-- `--workers=<N>` / `GREYCAT_WORKERS` (def: 8)
-- `--user=<id>` / `GREYCAT_USER` (def: 0, use 1 to bypass auth in dev)
-- `--tz=<str>` / `GREYCAT_TZ` (e.g., Europe/Luxembourg)
+| Option | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `--log=<level>` | `GREYCAT_LOG` | info | trace/debug/info/warn/error |
+| `--logfile` | `GREYCAT_LOGFILE` | false | Log to file |
+| `--cache=<MB>` | `GREYCAT_CACHE` | 8192 | Cache size in MB |
+| `--store=<MB>` | `GREYCAT_STORE` | 1000 | Store size in MB |
+| `--store_paths=<path>` | `GREYCAT_STORE_PATHS` | ./gcdata | Storage directory |
+| `--workers=<N>` | `GREYCAT_WORKERS` | 8 | Worker threads |
+| `--user=<id>` | `GREYCAT_USER` | 0 | User ID (1 bypasses auth, **DEV ONLY**) |
+| `--tz=<str>` | `GREYCAT_TZ` | - | Timezone (e.g., Europe/Luxembourg) |
 
 ## greycat serve
 
@@ -48,34 +45,39 @@ greycat serve --user=1 --unsecure      # Dev mode (UNSAFE!)
 ```
 
 **Essential Options:**
-- `--port=<N>` / `GREYCAT_PORT` (def: 8080)
-- `--workers=<N>` / `GREYCAT_WORKERS` (def: 8)
-- `--user=<id>` / `GREYCAT_USER` (def: 0, **DEV ONLY**: bypass auth)
-- `--unsecure` / `GREYCAT_UNSECURE` (def: false, **DEV ONLY**: allow HTTP)
 
-**Performance:**
-- `--http_threads=<N>` / `GREYCAT_HTTP_THREADS` (def: 3)
-- `--req_workers=<N>` / `GREYCAT_REQ_WORKERS` (def: 2)
-- `--task_pool_capacity=<N>` / `GREYCAT_TASK_POOL_CAPACITY` (def: 10000)
-- `--request_pool_capacity=<N>` / `GREYCAT_REQUEST_POOL_CAPACITY` (def: 512)
-- `--defrag_ratio=<f64>` / `GREYCAT_DEFRAG_RATIO` (def: 1.00, <0 = off)
+| Option | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `--port=<N>` | `GREYCAT_PORT` | 8080 | HTTP port |
+| `--workers=<N>` | `GREYCAT_WORKERS` | 8 | Worker threads |
+| `--user=<id>` | `GREYCAT_USER` | 0 | **DEV ONLY**: bypass auth |
+| `--unsecure` | `GREYCAT_UNSECURE` | false | **DEV ONLY**: allow HTTP |
+| `--http_threads=<N>` | `GREYCAT_HTTP_THREADS` | 3 | HTTP handler threads |
+| `--req_workers=<N>` | `GREYCAT_REQ_WORKERS` | 2 | Request workers |
+| `--task_pool_capacity=<N>` | `GREYCAT_TASK_POOL_CAPACITY` | 10000 | Task queue size |
+| `--request_pool_capacity=<N>` | `GREYCAT_REQUEST_POOL_CAPACITY` | 512 | Request queue size |
+| `--defrag_ratio=<f64>` | `GREYCAT_DEFRAG_RATIO` | 1.00 | Defrag threshold (<0=off) |
+| `--webroot=<str>` | `GREYCAT_WEBROOT` | webroot | Static files path |
+| `--keep_alive` | `GREYCAT_KEEP_ALIVE` | false | HTTP keep-alive |
+| `--validity=<sec>` | `GREYCAT_VALIDITY` | 86400 | Token validity (seconds) |
 
-**Server:**
-- `--webroot=<str>` / `GREYCAT_WEBROOT` (def: webroot)
-- `--keep_alive` / `GREYCAT_KEEP_ALIVE` (def: false)
-- `--validity=<sec>` / `GREYCAT_VALIDITY` (def: 86400)
+**Security/SSO Options:**
 
-**Security/SSO:**
-- `--key=<str>` / `GREYCAT_KEY` (private key path)
-- `--keysafe=<str>` / `GREYCAT_KEYSAFE` (password)
-- `--oid_client_id=<str>` / `GREYCAT_OID_CLIENT_ID`
-- `--oid_config_url=<str>` / `GREYCAT_OID_CONFIG_URL`
-- `--oid_keys_url=<str>` / `GREYCAT_OID_KEYS_URL`
-- `--oid_public_key=<str>` / `GREYCAT_OID_PUBLIC_KEY`
+| Option | Env Var | Description |
+|--------|---------|-------------|
+| `--key=<str>` | `GREYCAT_KEY` | Private key path |
+| `--keysafe=<str>` | `GREYCAT_KEYSAFE` | Key password |
+| `--oid_client_id=<str>` | `GREYCAT_OID_CLIENT_ID` | OpenID client ID |
+| `--oid_config_url=<str>` | `GREYCAT_OID_CONFIG_URL` | OpenID config URL |
+| `--oid_keys_url=<str>` | `GREYCAT_OID_KEYS_URL` | OpenID keys URL |
+| `--oid_public_key=<str>` | `GREYCAT_OID_PUBLIC_KEY` | OpenID public key |
 
-**Backup:**
-- `--backup_path=<str>` / `GREYCAT_BACKUP_PATH` (def: backup)
-- `--max_backup_files=<N>` / `GREYCAT_MAX_BACKUP_FILES` (def: 3)
+**Backup Options:**
+
+| Option | Env Var | Default | Description |
+|--------|---------|---------|-------------|
+| `--backup_path=<str>` | `GREYCAT_BACKUP_PATH` | backup | Backup directory |
+| `--max_backup_files=<N>` | `GREYCAT_MAX_BACKUP_FILES` | 3 | Max backup files |
 
 **Behavior**: Executes main() as task, serves /webroot/, enables /explorer (if @library("explorer")), starts MCP server.
 
@@ -86,76 +88,47 @@ greycat serve --user=1 --unsecure      # Dev mode (UNSAFE!)
 greycat serve --oid_client_id=abc123 --oid_config_url=https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration
 ```
 
-## greycat test
+## Other Commands
 
-Run all @test functions. Exit 0 if pass, non-zero if fail.
-
+**greycat test** - Run all @test functions. Exit 0 if pass, non-zero if fail.
 ```bash
-greycat test; greycat test --log=debug
+greycat test
+greycat test --log=debug
 ```
+Finds all @test functions in `*_test.gcl`, runs `setup()` before, `teardown()` after. See [testing.md](testing.md).
 
-**Discovery**: Finds all @test functions in `*_test.gcl`, runs `setup()` before, `teardown()` after.
-
-**Output**: `project::test_name ok (5us) ... tests success: 2, failed: 0, skipped: 0`
-
-See [testing.md](testing.md) for comprehensive guide.
-
-## greycat run
-
-Execute main() or specified function.
-
+**greycat run** - Execute main() or specified function.
 ```bash
 greycat run             # main()
 greycat run import_data # project::import_data()
 greycat run --user=1    # As user ID 1
 ```
 
-## greycat install
+**greycat install** - Download libraries from @library directives in project.gcl.
 
-Download libraries from @library directives in project.gcl.
+**greycat codegen** - Generate typed headers: TypeScript, Python, C, Rust. See [frontend.md](frontend.md).
 
-## greycat codegen
-
-Generate typed headers: TypeScript, Python, C, Rust. See [frontend.md](frontend.md).
-
-## greycat defrag
-
-Compact storage (atomic, safe anytime).
-
+**greycat defrag** - Compact storage (atomic, safe anytime). When: After deleting data, optimize disk usage.
 ```bash
-greycat defrag; greycat defrag --store_paths=./gcdata
+greycat defrag
+greycat defrag --store_paths=./gcdata
 ```
-
-**When**: After deleting data, optimize disk usage.
 
 ## greycat-lang Commands
 
-### greycat-lang lint
-
-Check GCL for errors.
-
+**greycat-lang lint** - Check GCL for errors. **⚠️ CRITICAL**: Always run after generating/modifying .gcl files. Exit 0=no errors, 1=errors found.
 ```bash
-greycat-lang lint; greycat-lang lint --project=./backend/project.gcl
+greycat-lang lint
+greycat-lang lint --project=./backend/project.gcl
 ```
 
-**⚠️ CRITICAL**: Always run after generating/modifying .gcl files. Exit 0=no errors, 1=errors found.
+**greycat-lang fmt** - Format GCL files in-place. Respects @format_indent, @format_line_width.
 
-### greycat-lang fmt
-
-Format GCL files in-place. Respects @format_indent, @format_line_width.
-
-### greycat-lang server
-
-Start LSP server for IDE integration.
-
+**greycat-lang server** - Start LSP server for IDE integration. Features: Completion, go-to-definition, find-references, hover, diagnostics, formatting.
 ```bash
 greycat-lang server --stdio    # VS Code, Neovim
 greycat-lang server --tcp=6008 # Network clients
 ```
-
-**Features**: Completion, go-to-definition, find-references, hover, diagnostics, formatting.
-
-**Integration**: Install `greycat-lsp` Claude Code plugin for automatic setup.
 
 ## .env File Support
 
@@ -193,32 +166,15 @@ GREYCAT_TZ=UTC
 
 ## Common Workflows
 
-**Dev Server:**
-```bash
-# Create .env: GREYCAT_USER=1, GREYCAT_UNSECURE=true, GREYCAT_LOG=debug
-greycat serve
-```
+**Dev Server:** `greycat serve` (with .env: GREYCAT_USER=1, GREYCAT_UNSECURE=true, GREYCAT_LOG=debug)
 
-**CI/CD:**
-```bash
-greycat-lang lint && greycat test --log=info && greycat build-version-full > version.txt
-```
+**CI/CD:** `greycat-lang lint && greycat test --log=info && greycat build-version-full > version.txt`
 
-**Prod Deploy:**
-```bash
-greycat build --log=warn && greycat test && greycat serve
-```
+**Prod Deploy:** `greycat build --log=warn && greycat test && greycat serve`
 
-**Data Reset (Dev):**
-```bash
-# ⚠️ DELETES DATA
-rm -rf gcdata && greycat run import
-```
+**Data Reset (Dev):** `rm -rf gcdata && greycat run import` (**⚠️ DELETES DATA**)
 
-**Quality Check:**
-```bash
-greycat-lang lint && greycat-lang fmt && greycat test
-```
+**Quality Check:** `greycat-lang lint && greycat-lang fmt && greycat test`
 
 ## Troubleshooting
 
@@ -237,7 +193,10 @@ greycat-lang lint && greycat-lang fmt && greycat test
 ## Help
 
 ```bash
-greycat --help; greycat serve --help; greycat -v; greycat -vv  # Full version + git hash
+greycat --help
+greycat serve --help
+greycat -v
+greycat -vv  # Full version + git hash
 ```
 
 ## See Also

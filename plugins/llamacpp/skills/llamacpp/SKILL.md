@@ -72,7 +72,7 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (467 lines) - All 25+ sampling strategies + backend sampling API [NEW]
 - **[api-advanced.md](references/api-advanced.md)** (359 lines) - LoRA adapters, performance, training
 
-**Total:** 173 active, non-deprecated functions (b7681) across 6 organized files
+**Total:** 173 active, non-deprecated functions (b7709) across 6 organized files
 
 ### Quick Function Lookup
 
