@@ -772,6 +772,9 @@ private type SchemaObject {
     maxItems: int?;
     enum: Array<String>?;
     additionalProperties: SchemaObject?;
+
+    /// Creates a schema from the given type
+    static native fn from_type(type: type): SchemaObject;
 }
 
 private enum SchemaType {

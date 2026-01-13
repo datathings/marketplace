@@ -25,6 +25,41 @@ while (reader.can_read()) {
 }
 ```
 
+### BinReader
+Low-level binary file reader for reading primitive types and tensors directly from binary files.
+
+```gcl
+// Read raw binary data (integers, floats, tensors)
+var reader = BinReader { path: "/path/to/data.bin" };
+
+// Read primitive types
+var int32_val = reader.read_i32();   // Read 32-bit integer
+var int64_val = reader.read_i64();   // Read 64-bit integer
+var float32_val = reader.read_f32(); // Read IEEE 754 binary32
+var float64_val = reader.read_f64(); // Read IEEE 754 binary64
+
+// Read tensor with specified type and shape
+var tensor = reader.read_tensor(TensorType::f32, [3, 3]);
+
+// Check available data
+while (reader.can_read()) {
+    var bytes_left = reader.available();
+    // Process remaining data...
+}
+```
+
+### XmlReader
+XML file reader for parsing XML documents into typed GreyCat objects.
+
+```gcl
+// Read XML data
+var reader = XmlReader<MyXmlType> { path: "/path/to/data.xml" };
+while (reader.can_read()) {
+    var obj = reader.read();
+    // Process XML element...
+}
+```
+
 ### TextWriter / TextReader
 UTF-8 text file operations with line-based I/O.
 
@@ -183,11 +218,11 @@ Assert::equals(url.hash, "section1");
 HTTP client for REST API communication and file downloads.
 
 ```gcl
-// HTTP GET with custom headers
-var headers = [
-    HttpHeader { name: "Authorization", value: "Bearer token123" },
-    HttpHeader { name: "Accept", value: "application/json" }
-];
+// HTTP GET with custom headers (Map<String, String>)
+var headers = Map<String, String> {
+    ["Authorization"] = "Bearer token123",
+    ["Accept"] = "application/json"
+};
 
 var response = Http<String> {}.get("https://api.example.com/users", headers);
 Assert::isNotNull(response);

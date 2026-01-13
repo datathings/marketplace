@@ -20,7 +20,7 @@ This library is ideal for applications that need persistent storage, complex que
 Add the PostgreSQL library to your GreyCat project:
 
 ```gcl
-@library("sql", "7.6.10-dev")
+@library("sql", "7.6.14-dev")
 ```
 
 **Note:** Ensure PostgreSQL client libraries are available in your runtime environment.

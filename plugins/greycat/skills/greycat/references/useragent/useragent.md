@@ -20,7 +20,7 @@ This library is ideal for web analytics, device-specific content delivery, compa
 Add the User Agent library to your GreyCat project:
 
 ```gcl
-@library("useragent", "7.6.10-dev")
+@library("useragent", "7.6.14-dev")
 ```
 
 ## Quick Start

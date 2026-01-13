@@ -120,7 +120,7 @@ The greycat plugin provides Claude Code commands for common GreyCat development 
 
 **project.gcl:**
 ```gcl
-@library("std", "7.6.16-dev");           // required
+@library("std", "7.6.68-dev");           // required
 @library("explorer", "7.6.0-dev");      // graph UI at /explorer (dev)
 @include("backend");                     // ⚠️ ONLY in project.gcl - recursively includes ALL .gcl
 
@@ -331,7 +331,7 @@ rm -rf gcdata && greycat run import  # ⚠️ DELETES DATA - ask confirmation
 
 **[references/ai/llm.md](references/ai/llm.md)** - llama.cpp integration: model loading, text gen, chat, embeddings, LoRA.
 ```gcl
-@library("ai", "7.6.10-dev");
+@library("ai", "7.6.14-dev");
 var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
 var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
 ```
