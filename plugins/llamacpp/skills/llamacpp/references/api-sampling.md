@@ -3,7 +3,7 @@
 Part 5 of 6 | [Core](api-core.md) | [Model Info](api-model-info.md) | [Context](api-context.md) | [Inference](api-inference.md) | **Sampling** | [Advanced](api-advanced.md)
 
 This file covers:
-- Sampling - All 25+ sampling strategies including XTC, DRY, penalties, top-k/p, temperature, etc.
+- Sampling - All 26+ sampling strategies including XTC, DRY, adaptive-p, penalties, top-k/p, temperature, etc.
 - Backend Sampling API [EXPERIMENTAL] - GPU-accelerated sampling
 
 For complete API navigation, see [api-core.md](api-core.md).
@@ -287,6 +287,27 @@ DRY (Don't Repeat Yourself) sampler.
 
 **Reference:** https://github.com/oobabooga/text-generation-webui/pull/5677
 
+#### Adaptive-P Sampler
+
+```c
+struct llama_sampler * llama_sampler_init_adaptive_p(
+    float target,
+    float decay,
+    uint32_t seed);
+```
+Adaptive-P sampler - selects tokens near a configurable target probability over time.
+
+The sampler transforms the token probability distribution to favor tokens near a user-configurable probability target. Internally maintains an exponential moving average (EMA) of original probabilities of selected tokens, using this to compute an adapted target at each step.
+
+**Parameters:**
+- `target`: Select tokens near this probability (valid range 0.0 to 1.0; negative = disabled)
+- `decay`: EMA decay for adaptation; history ≈ 1/(1-decay) tokens (valid range 0.0 - 0.99)
+- `seed`: Random seed. Use `LLAMA_DEFAULT_SEED` for a random seed.
+
+**Important:** This sampler selects a token ID (like mirostat, dist, greedy), so it must be **last in the sampler chain**. Only mild truncation before this sampler is recommended - use min-p as the only other active sampler.
+
+**Reference:** https://github.com/ggml-org/llama.cpp/pull/17927
+
 #### Logit Bias
 
 ```c
@@ -370,7 +391,6 @@ Attach a sampler to the context for a specific sequence.
 
 **Notes:**
 - Prefer initializing the context with `llama_context_params.samplers` when possible
-- Changing the samplers of a context can cause graph reallocations and degraded performance
 - The sampler must be a sampler chain (use `llama_sampler_chain_init`)
 
 ### Retrieving Sampled Results

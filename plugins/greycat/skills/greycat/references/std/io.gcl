@@ -60,10 +60,19 @@ type TextWriter<T> extends Writer<T> {
     native fn writeln(v: T);
 }
 
-/// Text reader utility can read text file line by line (utf-8)
+/// Text reader utility for reading byte data line by line.
+/// Note: Does not perform UTF-8 validation - returns raw byte sequences as strings.
 type TextReader extends Reader<String> {
+    /// Reads the next line from the input, returning the content up to (but not including) the line terminator.
+    /// Skips leading null bytes, trims trailing null bytes and `'\r'` characters.
+    /// Line terminators: `'\n'` or `'\r\n'`
+    /// Throws an error when no more data is available to read.
     native fn read(): String;
+    
+    /// Returns true if there is data available to read, false otherwise.
     native fn can_read(): bool;
+    
+    /// Returns the number of bytes remaining in the input buffer.
     native fn available(): int;
 }
 

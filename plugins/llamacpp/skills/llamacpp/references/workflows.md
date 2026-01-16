@@ -619,8 +619,8 @@ int main() {
     // Or clear all adapters
     llama_clear_adapter_lora(ctx);
 
-    // Free LoRA (optional - freed automatically with model)
-    llama_adapter_lora_free(lora);
+    // Note: LoRA adapters are automatically freed with the model
+    // llama_adapter_lora_free() is deprecated
 
     llama_free(ctx);
     llama_model_free(model);

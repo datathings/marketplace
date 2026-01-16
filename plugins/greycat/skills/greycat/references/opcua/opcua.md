@@ -22,7 +22,7 @@ This library is ideal for Industry 4.0 applications, SCADA integration, IoT data
 Add the OPC UA library to your GreyCat project:
 
 ```gcl
-@library("opcua", "7.6.14-dev")
+@library("opcua", "7.6.23-dev")
 ```
 
 ## Quick Start

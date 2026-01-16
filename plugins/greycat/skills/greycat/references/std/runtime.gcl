@@ -758,6 +758,7 @@ private type SchemaObject {
     /// Must be either `SchemaType?` or `Array<SchemaType>?`
     type: any?;
     format: SchemaFormat?;
+    description: String?;
     nullable: bool?;
     properties: Map<String, SchemaObject>?;
     required: Array<String>?;
@@ -1073,7 +1074,6 @@ type McpToolsCallParams extends McpRequestParams {
     name: String;
     arguments: any?;
 }
-
 
 @expose("initialize")
 native fn mcp_initialize(params: McpInitializeParams): McpInitializeResult;
