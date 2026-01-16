@@ -105,6 +105,8 @@ fn buildResults() {
 # Backend (GreyCat)
 greycat build              # Build project
 greycat-lang lint          # Lint (RUN AFTER EACH CHANGE!)
+greycat-lang fmt -p project.gcl -w  # Format all .gcl files
+greycat-lang fmt <file> -w          # Format specific file
 greycat run [function]     # Run function (default: main)
 greycat serve              # Start server (port 8080)
 greycat test               # Run tests
@@ -171,17 +173,21 @@ Standard GreyCat project layout:
 ### Before Committing
 
 \`\`\`bash
-# 1. Lint passes
+# 1. Format code
+greycat-lang fmt -p project.gcl -w
+
+# 2. Lint passes
 greycat-lang lint
 
-# 2. Tests pass
+# 3. Tests pass
 greycat test
-
-# 3. No uncommitted changes to critical files
-git status
 
 # 4. Build succeeds
 greycat build
+
+# 5. Review changes
+git status
+git diff
 \`\`\`
 
 ---
@@ -284,6 +290,92 @@ abstract type SearchService {
 var results = SearchService::executeQuery("test");
 \`\`\`
 
+### Documentation (REQUIRED)
+
+All functions and types MUST have documentation:
+
+\`\`\`gcl
+/// Retrieve document by ID with automatic identifier detection.
+/// @param id Document identifier (CELEX, ECLI, or internal ID)
+/// @return Document object with full details
+/// @throws NotFoundError if document not found
+/// @example document("62009CJ0204")
+fn document(id: String): Document { }
+
+/// Search results container.
+/// @volatile Required for API response types
+@volatile
+type SearchResults {
+    /// List of matching items
+    items: Array<ResultView>;
+    /// Total count for pagination
+    total: int;
+}
+\`\`\`
+
+**Section Headers** for organizing code:
+\`\`\`gcl
+// ============================================================================
+// SEARCH OPERATIONS
+// ============================================================================
+
+fn search(...) { }
+fn advancedSearch(...) { }
+
+// ============================================================================
+// DOCUMENT RETRIEVAL
+// ============================================================================
+
+fn getDocument(...) { }
+\`\`\`
+
+### Error Handling (MANDATORY)
+
+**All @expose functions MUST have try/catch with error logging**:
+
+\`\`\`gcl
+@expose
+@permission("app.user")
+fn document(id: String): Document {
+    try {
+        var doc = documents_by_id.get(id);
+        if (doc == null) {
+            throw NotFoundError { message: "Document not found", id: id };
+        }
+        return toDocumentView(doc.resolve());
+    } catch (ex) {
+        error("document(${id}) failed: ${ex}");  // Function name + args
+        throw ex;
+    }
+}
+\`\`\`
+
+**Typed Errors** (create in model/ or api/):
+\`\`\`gcl
+@volatile
+type NotFoundError {
+    message: String;
+    id: String;
+}
+
+@volatile
+type ValidationError {
+    message: String;
+    field: String;
+}
+
+@volatile
+type ServiceError {
+    message: String;
+}
+\`\`\`
+
+**Rules**:
+- Never throw raw strings: \`throw "Not found"\` ❌
+- Always use typed errors: \`throw NotFoundError { ... }\` ✅
+- Re-throwing is fine: \`throw ex;\` ✅
+- Log with function name and args: \`error("funcName(${arg}) failed: ${ex}")\`
+
 ---
 
 ## Common Pitfalls
@@ -298,6 +390,10 @@ var results = SearchService::executeQuery("test");
 | `nodeList<T>` for local vars | `Array<T>` for non-persistent |
 | Missing @volatile on API types | Always add @volatile |
 | Uninitialized collections | Initialize in constructor |
+| `throw "error message"` | `throw TypedError { message: "..." }` |
+| @expose without try/catch | Always wrap in try/catch + error() |
+| Functions without /// docs | Document all functions with /// |
+| Skip formatting | Run `greycat-lang fmt` before commit |
 
 ---
 
@@ -322,27 +418,55 @@ tar -czf gcdata-backup.tar.gz gcdata/
 
 ### Writing Tests
 
+**Naming Convention**: \`test_functionName_scenario\` (snake_case)
+
 \`\`\`gcl
 // In backend/test/my_test.gcl
 
+// ============================================================================
+// MY SERVICE TESTS
+// ============================================================================
+
 @test
-fn test_my_function() {
+fn test_process_validInput() {
     var result = MyService::process("input");
     Assert::equals(result, "expected");
 }
 
 @test
-fn test_null_handling() {
+fn test_process_nullInput() {
     var result = MyService::process(null);
     Assert::isTrue(result == null);
 }
+
+@test
+fn test_process_emptyString() {
+    var result = MyService::process("");
+    Assert::equals(result, "");
+}
+
+// ============================================================================
+// EDGE CASES
+// ============================================================================
+
+@test
+fn test_process_specialCharacters() {
+    var result = MyService::process("test@#$%");
+    Assert::notNull(result);
+}
 \`\`\`
+
+**Test Patterns**:
+- Use \`// ===\` section headers to organize tests by feature/function
+- Name tests: \`test_functionName_scenario\`
+- Use \`Assert\` class: \`equals\`, \`isTrue\`, \`isFalse\`, \`notNull\`, \`isNull\`
+- One assertion focus per test when possible
 
 ### Running Tests
 
 \`\`\`bash
 greycat test                           # Run all tests
-greycat test backend/test/my_test.gcl  # Run specific test
+greycat test backend/test/my_test.gcl  # Run specific test file
 \`\`\`
 
 ---
@@ -443,6 +567,23 @@ greycat test backend/test/failing_test.gcl
 
 # Add debug output
 println("Debug: ${variable}");
+\`\`\`
+
+---
+
+## Backend Consistency Checklist
+
+**Before every commit**:
+
+\`\`\`
+[ ] greycat-lang lint shows 0 errors
+[ ] greycat-lang fmt -p project.gcl -w applied (code formatted)
+[ ] All @expose functions have try/catch with error() logging
+[ ] All functions/types have /// documentation
+[ ] Transient/response types marked @volatile
+[ ] Abstract service types documented
+[ ] Tests follow test_functionName_scenario naming
+[ ] greycat test passes
 \`\`\`
 
 ---

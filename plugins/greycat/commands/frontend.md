@@ -27,6 +27,99 @@ This command performs multi-category frontend analysis:
 
 ---
 
+## Phase 0: Coding Standards Reference
+
+Before reviewing, understand the required patterns. These are the standards to check against:
+
+### Component Pattern (MANDATORY)
+
+```tsx
+/**
+ * Displays paginated search results with highlighting
+ */
+interface SearchResultsProps {
+  results: SearchResult[] | null
+  isLoading: boolean
+  onResultClick?: (result: SearchResult) => void
+}
+
+// ✅ Named export + memo (pages use default export)
+export const SearchResults = memo(function SearchResults({
+  results,
+  isLoading,
+  onResultClick
+}: SearchResultsProps) {
+  // Component implementation
+})
+```
+
+**Rules**:
+- Props interface ABOVE component with JSDoc
+- Named export + memo for all components
+- Exception: Default export for page components only
+- JSDoc on ALL components, hooks, and services
+
+### Service Pattern
+
+```tsx
+// ✅ Named export object with withRetry wrapper
+export const DocumentService = {
+  getDocument: (id: string): Promise<gc.api_types.Document> =>
+    withRetry(() => gc.document(id)),
+
+  search: (query: string): Promise<gc.api_types.SearchResults> =>
+    withRetry(() => gc.search(query)),
+}
+```
+
+### Hook Pattern
+
+```tsx
+/**
+ * Hook for managing search state
+ * @returns Object with search state and handlers
+ */
+export function useSearch() {
+  // ✅ useCallback with functional setState to minimize deps
+  const handleSearch = useCallback((query: string) => {
+    setSubmittedQuery(query)  // Param-based, no deps needed
+  }, [])
+
+  // ✅ useMemo for derived data
+  const sortedResults = useMemo(() =>
+    results ? [...results.items].sort((a, b) => b.score - a.score) : []
+  , [results])
+
+  // ✅ Return object (not array) for named access
+  return { query, results: sortedResults, handleSearch }
+}
+```
+
+### React Query Pattern
+
+```tsx
+const { data, isLoading } = useQuery({
+  queryKey: ['search', query, searchType, options],  // All deps in key
+  queryFn: () => SearchService.search(query),
+  enabled: !!query,                                   // Conditional
+  staleTime: QUERY_CONFIG.staleTime.search           // From config
+})
+```
+
+### State Management Strategy
+
+| State Type | Solution | Example |
+|------------|----------|---------|
+| URL params | useSearchParams | search query, filters, pagination |
+| Persistence | localStorage | history, preferences |
+| App-wide | Context | theme, user session |
+| Server | React Query | API data, cache |
+| Local | useState/useReducer | form state, UI toggles |
+
+**NO Redux/Zustand** - use hooks and context instead.
+
+---
+
 ## Phase 1: Code Quality & Best Practices
 
 ### Objective
@@ -113,7 +206,76 @@ Priority: HIGH (if component renders frequently)
 Impact: Performance, user experience
 ```
 
-### Step 1.3: Prop Drilling
+### Step 1.3: Component Export Pattern
+
+```bash
+# Find components not using memo
+grep -rn "export const.*=.*function\|export function" frontend/src/components/ --include="*.tsx" | grep -v "memo("
+```
+
+**Example Output**:
+```
+📍 frontend/src/components/SearchResults.tsx:15
+
+⚠️ CODE QUALITY: Component not wrapped in memo
+
+Code:
+  15: export const SearchResults = function SearchResults({ results }: Props) {
+
+Problem:
+  - Component re-renders on every parent render
+  - Props interface not above component
+  - Missing JSDoc documentation
+
+Fix:
+  /**
+   * Displays search results with highlighting
+   */
+  interface SearchResultsProps {
+    results: SearchResult[] | null
+    isLoading: boolean
+  }
+
+  export const SearchResults = memo(function SearchResults({
+    results,
+    isLoading
+  }: SearchResultsProps) {
+    // ...
+  })
+
+Priority: MEDIUM
+Impact: Performance, code consistency
+```
+
+### Step 1.4: Services Without Retry
+
+```bash
+# Find service calls not using withRetry
+grep -rn "gc\.\w\+(" frontend/src/services/ --include="*.ts" | grep -v "withRetry"
+```
+
+**Example Output**:
+```
+📍 frontend/src/services/documentService.ts:12
+
+⚠️ CODE QUALITY: Service call without retry wrapper
+
+Code:
+  12: getDocument: (id: string) => gc.document(id),
+
+Problem:
+  - No retry on transient failures
+  - No consistent error handling
+
+Fix:
+  getDocument: (id: string): Promise<gc.api_types.Document> =>
+    withRetry(() => gc.document(id)),
+
+Priority: MEDIUM
+Impact: Reliability, error handling
+```
+
+### Step 1.5: Prop Drilling
 
 **Find deep prop passing**:
 ```bash
@@ -390,7 +552,45 @@ Impact: SEO, accessibility
 
 ## Phase 5: Testing
 
-### Step 5.1: Untested Components
+### Step 5.1: Test Structure & Patterns
+
+**Required test structure** (nested describes):
+```tsx
+describe('ComponentName', () => {
+  describe('Feature Area', () => {
+    it('describes specific behavior with outcome', () => {
+      // Test implementation
+    })
+  })
+})
+```
+
+**Use test fixtures** (if test/fixtures.ts exists):
+```tsx
+import { fixtures } from '@/test/fixtures'
+
+it('renders document details', () => {
+  const mockDoc = fixtures.document({ id: 'test-1', title: 'Test' })
+  render(<DocumentCard document={mockDoc} />)
+  expect(screen.getByText('Test')).toBeInTheDocument()
+})
+```
+
+**Use test helpers** (if available):
+```tsx
+// Service mocks
+import { setupGcMockForService } from '@/test/serviceMockHelpers'
+
+beforeEach(() => {
+  setupGcMockForService('document')
+})
+
+// Component helpers
+import { testClickableCard, testCountDisplay } from '@/test/cardTestHelpers'
+import { testCheckboxFilter, testRangeFilter } from '@/test/filterTestHelpers'
+```
+
+### Step 5.2: Untested Components
 
 ```bash
 # Find components without test files
@@ -412,28 +612,32 @@ Untested components:
   - frontend/src/components/FilterPanel.tsx
 
 Recommendation:
-  Create test files with basic coverage:
+  Create test files with nested describes:
 
   // SearchBar.test.tsx
   import { render, screen, fireEvent } from '@testing-library/react';
   import { SearchBar } from './SearchBar';
 
   describe('SearchBar', () => {
-      it('renders input field', () => {
-          render(<SearchBar onSearch={jest.fn()} />);
-          expect(screen.getByRole('textbox')).toBeInTheDocument();
+      describe('rendering', () => {
+          it('renders input field', () => {
+              render(<SearchBar onSearch={vi.fn()} />);
+              expect(screen.getByRole('textbox')).toBeInTheDocument();
+          });
       });
 
-      it('calls onSearch when submitted', () => {
-          const onSearch = jest.fn();
-          render(<SearchBar onSearch={onSearch} />);
+      describe('interactions', () => {
+          it('calls onSearch when submitted', () => {
+              const onSearch = vi.fn();
+              render(<SearchBar onSearch={onSearch} />);
 
-          fireEvent.change(screen.getByRole('textbox'), {
-              target: { value: 'test query' }
+              fireEvent.change(screen.getByRole('textbox'), {
+                  target: { value: 'test query' }
+              });
+              fireEvent.submit(screen.getByRole('form'));
+
+              expect(onSearch).toHaveBeenCalledWith('test query');
           });
-          fireEvent.submit(screen.getByRole('form'));
-
-          expect(onSearch).toHaveBeenCalledWith('test query');
       });
   });
 
@@ -443,9 +647,52 @@ Impact: Test coverage, confidence in changes
 
 ---
 
-## Phase 6: UI/UX Consistency
+## Phase 6: UI/UX Consistency & Styling
 
-### Step 6.1: Hardcoded Values
+### Step 6.1: Inline Styles (CRITICAL)
+
+**Rule: NO inline styles except truly dynamic values**
+
+```bash
+# Find inline styles
+grep -rn "style={{" frontend/src/ --include="*.tsx"
+```
+
+**Allowed inline styles** (dynamic values only):
+```tsx
+// ✅ Dynamic percentage
+<div style={{ width: `${progress}%` }} />
+
+// ✅ Dynamic rotation
+<div style={{ transform: `rotate(${angle}deg)` }} />
+
+// ✅ Computed colors (from data)
+<div style={{ backgroundColor: item.color }} />
+```
+
+**Forbidden inline styles**:
+```tsx
+// ❌ Hardcoded colors
+<div style={{ color: '#1976d2' }} />
+
+// ❌ Fixed sizes
+<div style={{ width: 200, padding: 16 }} />
+
+// ❌ Static positioning
+<div style={{ marginTop: 10 }} />
+```
+
+**Fix**: Use theme constants or Tailwind utilities:
+```tsx
+// ✅ Theme constants from config/theme
+import { buttonStyles, textStyles, panelStyles } from '@/config/theme'
+<button className={buttonStyles.primary}>Click</button>
+
+// ✅ Tailwind utilities
+<div className="w-48 p-4 mt-2 text-blue-600" />
+```
+
+### Step 6.2: Hardcoded Colors
 
 ```bash
 # Find hardcoded colors
@@ -467,29 +714,20 @@ Problem:
   - Hard to maintain
 
 Fix:
-  // Define theme
-  const theme = {
-      colors: {
-          primary: '#1976d2',
-          background: '#ffffff',
-          text: '#333333'
-      }
-  };
+  // Use theme config
+  import { colors } from '@/config/theme'
+  <Button className={colors.primary} />
 
-  // Use in components
-  <Button style={{ color: theme.colors.primary }} />
+  // Or Tailwind
+  <Button className="text-primary bg-white" />
 
-  // Or use CSS variables
+  // Or CSS variables
   :root {
       --color-primary: #1976d2;
-      --color-background: #ffffff;
   }
+  .button { color: var(--color-primary); }
 
-  .button {
-      color: var(--color-primary);
-  }
-
-Priority: MEDIUM
+Priority: HIGH
 Impact: Theming, maintainability
 ```
 
@@ -715,6 +953,29 @@ BUNDLE SIZE OPPORTUNITIES:
 - **Dead code requires knip**: Install if not present
 - **Fix CRITICAL first**: Security issues are urgent
 - **Test after changes**: Run tests after applying fixes
+- **Phase 0 is reference**: Contains required patterns to check against
+- **GreyCat projects**: Services should use withRetry wrapper for gc.* calls
+
+---
+
+## Frontend Consistency Checklist
+
+**Before every commit**:
+
+```
+[ ] Components: named export + memo (pages: default export only)
+[ ] Props interface ABOVE component with JSDoc
+[ ] All components/hooks/services have JSDoc documentation
+[ ] NO inline styles (except dynamic %, deg, computed colors)
+[ ] Theme constants from config/theme OR Tailwind utilities
+[ ] Services use withRetry wrapper
+[ ] React Query: queryKey includes all dependencies
+[ ] Hooks: useCallback with minimal deps, useMemo for derived data
+[ ] Tests use fixtures from test/fixtures.ts (if exists)
+[ ] Tests use setupGcMockForService for service tests
+[ ] npm run lint passes
+[ ] npm run test passes
+```
 
 ---
 
