@@ -120,7 +120,7 @@ The greycat plugin provides Claude Code commands for common GreyCat development 
 
 **project.gcl:**
 ```gcl
-@library("std", "7.6.91-dev");           // required
+@library("std", "7.6.92-dev");           // required
 @library("explorer", "7.6.0-dev");      // graph UI at /explorer (dev)
 @include("backend");                     // ⚠️ ONLY in project.gcl - recursively includes ALL .gcl
 
