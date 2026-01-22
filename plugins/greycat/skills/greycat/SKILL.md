@@ -136,7 +136,7 @@ fn main() { }
 ## Types
 
 **Primitives:** `int` (64-bit, `1_000_000`), `float` (`3.14`), `bool`, `char`, `String` (`"${name}"`)
-**Time:** `time` (μs epoch), `duration` (`5_s`, `7_hour`), `Date` (UI, needs timezone)
+**Time:** `time` (μs epoch), `duration` (`1_us`, `500_ms`, `5_s`, `30_min`, `7_hour`, `2_day`), `Date` (UI, needs timezone)
 **Geo:** `geo{lat, lng}` | Shapes: `GeoBox`, `GeoCircle`, `GeoPoly` (`.contains(geo)`)
 
 ```gcl

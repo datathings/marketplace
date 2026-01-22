@@ -29,104 +29,73 @@ This command creates a `CLAUDE.md` file with:
 ```markdown
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this GreyCat project.
+[One-line project description]
 
-## ⚠️ CRITICAL DEVELOPMENT RULES
+## ⚠️ CRITICAL RULES
 
 ### 1. ALWAYS LINT AFTER EACH CHANGE
 \`\`\`bash
-greycat-lang lint  # Run IMMEDIATELY after ANY code change
+greycat-lang lint  # Run IMMEDIATELY after ANY code change - verify 0 errors
 \`\`\`
-- Verify 0 errors before proceeding
-- Never make multiple changes without linting between them
-- If lint fails, FIX IMMEDIATELY before continuing
 
-### 2. VERIFY DEPENDENCIES BEFORE DELETING
-- Use `Grep` to search for usages across codebase before removing types/functions/variables
-- Check imports, indexers, and API endpoints
-- Run `greycat-lang lint` after deletions to catch missing references
+### 2. VERIFY BEFORE DELETING
+Use \`Grep\` to search for usages before removing types/functions/variables.
 
-### 3. GREYCAT LANGUAGE GOTCHAS
-
-**String Operations**:
+### 3. GREYCAT GOTCHAS
 \`\`\`gcl
-// ❌ String.substring() - doesn't exist
-var preview = text.substring(0, 100);
+// ❌ String.substring() doesn't exist
+// ✅ String.slice(from, to)
 
-// ✅ String.slice(from, to) - use this
-var preview = text.slice(0, 100);
+// ❌ Static methods can't have generics
+abstract type MyService { static fn process<T>(v: T): T { } }
+
+// ✅ Non-static methods with generics
+type MyHelper<T> { fn process(v: T): T { return v; } }
+
+// ❌ Array<T>::new() | nodeList<T> for local vars
+// ✅ Array<T> {} | Array<T> for non-persistent data
 \`\`\`
 
-**Generic Type Parameters**:
-\`\`\`gcl
-// ❌ WRONG - Generic params on static functions not allowed
-abstract type MyService {
-    static fn process<T>(value: T): T { }  // ERROR!
-}
-
-// ✅ CORRECT - Non-static methods with generics
-type MyHelper<T> {
-    fn process(value: T): T { return value; }
-}
-// Usage: MyHelper<int>{}.process(42)
-\`\`\`
-
-**Collection Initialization**:
-\`\`\`gcl
-// ❌ WRONG - Using ::new()
-var list = Array<String>::new();
-
-// ✅ CORRECT - Using {}
-var list = Array<String> {};
-var map = Map<String, int> {};
-\`\`\`
-
-**Persistent Collections (Local Variables)**:
-\`\`\`gcl
-// ❌ WRONG - nodeList for local variable
-fn buildResults() {
-    var results = nodeList<T> {};  // Should be Array!
-}
-
-// ✅ CORRECT - Array for non-persistent data
-fn buildResults() {
-    var results = Array<T> {};
-}
-\`\`\`
-
-### 4. USE GREYCAT SKILL FOR BACKEND WORK
-**⚠️ MANDATORY**: For ANY GreyCat backend work (GCL files, graph operations, API endpoints), use `/greycat` skill or invoke via Skill tool.
+### 4. USE GREYCAT SKILL
+**Mandatory** for GCL backend work: use \`/greycat\` skill.
 
 ---
 
-## Common Commands
+## Commands
 
 \`\`\`bash
-# Backend (GreyCat)
-greycat build              # Build project
-greycat-lang lint          # Lint (RUN AFTER EACH CHANGE!)
+# Backend
+greycat-lang lint          # Lint (after EVERY change!)
 greycat-lang fmt -p project.gcl -w  # Format all .gcl files
 greycat-lang fmt <file> -w          # Format specific file
+greycat build/test/serve   # Build/test/start server (port 8080)
 greycat run [function]     # Run function (default: main)
-greycat serve              # Start server (port 8080)
-greycat test               # Run tests
-greycat codegen ts         # Generate TypeScript types → project.d.ts
-greycat install            # Install libraries from project.gcl
+greycat codegen ts         # Generate project.d.ts
+greycat install            # Install libraries
 
-# Frontend (if exists)
-cd frontend
-npm install                # First time setup
-npm run dev                # Dev server (proxies to backend)
-npm run build              # Production build
-npm run lint               # Lint TypeScript/React
-npm run test               # Run tests
+# Frontend (if exists) - run from root, package.json in root
+pnpm install               # First time setup
+pnpm dev                   # Dev server (proxies to backend)
+pnpm build                 # Build frontend/ → webroot/
+pnpm lint                  # Lint TypeScript/React
+pnpm test                  # Run tests
 \`\`\`
+
+---
+
+## Stack
+
+**Backend**: GreyCat [version] (GCL)
+**Frontend** (if exists): React + TypeScript + Vite, Tailwind CSS, React Router, TanStack Query
+**Libraries**: \`@library("std", "[version]")\`, \`@library("explorer", "[version]")\`
+**Testing**: Vitest + React Testing Library (backend: @test annotation)
+
+**Frontend Setup**: Config files in root (package.json, vite.config.ts, tsconfig.json), source in frontend/, builds to webroot/
+**Frontend Dependencies**: Use exact versions (e.g., \`"5.6.9"\` instead of \`"^5.6.9"\`)
 
 ---
 
 ## Project Structure
-
-Standard GreyCat project layout:
 
 \`\`\`
 .
@@ -136,58 +105,179 @@ Standard GreyCat project layout:
 │   │   ├── model/              # Data types and global indices
 │   │   ├── service/            # Business logic services
 │   │   ├── api/                # REST API endpoints (@expose)
-│   │   └── edi/                # Import/export logic
+│   │   └── edi/                # Import/export logic (optional)
 │   └── test/                   # Test files (*_test.gcl)
-├── frontend/                   # React/TypeScript frontend (optional)
-├── data/                       # Data files, models (optional)
-├── lib/                        # Installed GreyCat libraries
+├── frontend/                   # Frontend source (if exists)
+│   ├── src/
+│   │   ├── pages/              # Page components
+│   │   ├── components/         # Reusable components
+│   │   ├── services/           # API clients
+│   │   ├── hooks/              # Custom hooks
+│   │   └── utils/              # Utilities
+│   └── index.html              # HTML entry point
+├── package.json                # Frontend deps (root level)
+├── vite.config.ts              # Vite config (root, builds to webroot/)
+├── tsconfig.json               # TypeScript config (root level)
+├── .gitignore                  # Git ignore rules (GreyCat essentials)
+├── webroot/                    # Built frontend (gitignored, served by GreyCat)
+├── lib/                        # Installed GreyCat libraries (gitignored)
 ├── gcdata/                     # Database storage (gitignored)
 └── CLAUDE.md                   # This file
 \`\`\`
 
+**Frontend Build**: Vite builds frontend/ → webroot/, GreyCat serves webroot/ on \`GREYCAT_WEBROOT=webroot\`
+
 ---
 
-## Development Workflow
+## .gitignore
 
-### Making Changes
+Essential entries for GreyCat projects:
 
-1. **Make code changes** to `.gcl` files
-2. **Run linter immediately**:
-   \`\`\`bash
-   greycat-lang lint
-   \`\`\`
-3. **Fix any errors** before proceeding
-4. **Test your changes**:
-   \`\`\`bash
-   greycat test
-   \`\`\`
-5. **[If has frontend] Update TypeScript types**:
-   \`\`\`bash
-   greycat codegen ts
-   \`\`\`
-6. **Verify runtime**:
-   \`\`\`bash
-   greycat serve  # Test in browser or via API
-   \`\`\`
+\`\`\`gitignore
+# GreyCat
+/gcdata                    # Database storage
+/lib                       # Installed GreyCat libraries
+/webroot                   # Built frontend
+project.d.ts               # Generated TypeScript types
+project.gcp                # Project cache
+/project_types             # Generated type files
 
-### Before Committing
+# Frontend dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-\`\`\`bash
-# 1. Format code
-greycat-lang fmt -p project.gcl -w
+# Build outputs
+/dist
+/build
+/coverage
+/outputs
+/generated
 
-# 2. Lint passes
-greycat-lang lint
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# 3. Tests pass
-greycat test
+# OS
+.DS_Store
+Thumbs.db
 
-# 4. Build succeeds
-greycat build
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# 5. Review changes
-git status
-git diff
+# Python (if using scripts)
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+.playwright-mcp/
+
+# Misc
+.parcel-cache
+\`\`\`
+
+---
+
+## Coding Style
+
+### Backend (GreyCat/GCL)
+
+**Documentation** (REQUIRED): \`///\` for ALL functions/types, @param/@return/@throws/@example, \`// ===\` section headers
+\`\`\`gcl
+/// Retrieve document by ID.
+/// @param id Document identifier
+/// @return Document object
+/// @throws NotFoundError if not found
+/// @example document("62009CJ0204")
+@expose @permission("public")
+fn document(id: String): Document { }
+\`\`\`
+
+**Services**: Abstract types with static methods, @volatile for transient types, null-safe with \`?\`
+\`\`\`gcl
+abstract type SearchService {
+    static fn search(query: String): Array<Result> { }
+}
+@volatile  // REQUIRED for non-persisted types
+type SearchResults { items: Array<ResultView>; total: int; }
+\`\`\`
+
+**Error Handling** (MANDATORY): try/catch on ALL @expose functions, typed errors only, \`error()\` logging
+\`\`\`gcl
+@expose @permission("public")
+fn document(id: String): Document {
+  try {
+    var doc = documents_by_id.get(id);
+    if (doc == null) {
+      throw NotFoundError { message: "Not found", id: id };
+    }
+    return doc.resolve();
+  } catch (ex) {
+    error("document(${id}) failed: ${ex}");
+    throw ex;
+  }
+}
+\`\`\`
+
+**Collections**: \`Array<T> {}\`, \`Map<K,V> {}\`, \`nodeIndex<K, node<V>>\`, initialize collection attributes
+**Naming**: snake_case fields, camelCase functions
+
+### Frontend (React/TypeScript) - if exists
+
+**Components** (MANDATORY): Named export + memo, props interface ABOVE component, JSDoc
+\`\`\`tsx
+/**
+ * Search results display with pagination
+ */
+interface SearchResultsProps {
+  results: SearchResult[]
+  isLoading: boolean
+}
+export const SearchResults = memo(function SearchResults({ results, isLoading }: SearchResultsProps) { })
+\`\`\`
+**Exception**: Default export for pages only
+
+**Hooks**: use* prefix, useCallback w/ deps, useMemo for derived, return objects
+**React Query**: queryKey arrays w/ all deps, staleTime config, enabled for conditional
+**Services**: Named export objects, explicit return types from project.d.ts
+**State**: URL (useSearchParams), localStorage, Context (theme/user)
+**Styling**: Theme constants, Tailwind utilities, NO inline styles except dynamic values
+**Naming**: camelCase (variables, functions), PascalCase (components, types)
+
+### Testing
+
+**Backend**: @test annotation, test_function_scenario naming (snake_case), Assert class, \`// ===\` headers
+\`\`\`gcl
+@test
+fn test_search_validQuery() {
+    var results = SearchService::search("test");
+    Assert::notNull(results);
+}
+\`\`\`
+
+**Frontend**: Nested describe blocks, fixtures for mock data, test helpers
+\`\`\`tsx
+describe('Component', () => {
+  describe('Feature', () => {
+    it('behavior with outcome', () => {
+      render(<Component />)
+      expect(screen.getByText('...')).toBeInTheDocument()
+    })
+  })
+})
 \`\`\`
 
 ---
@@ -195,186 +285,36 @@ git diff
 ## GreyCat Language Patterns
 
 ### Nullability
-
-All types are non-null by default. Use `?` for nullable:
-
 \`\`\`gcl
 var city: City?;                    // nullable
 city?.name?.size();                 // optional chaining
 city?.name ?? "Unknown";            // nullish coalescing
-data.get("key")!!;                  // non-null assertion
+(answer as String?) ?? "default"    // ⚠️ parens for cast + coalescing
 
 if (country == null) { return null; }
-return country->name;               // ✅ no !! needed after null check
+return country->name;               // ✅ no !! after null check
 \`\`\`
 
-**⚠️ Cast + coalescing needs parens**:
-\`\`\`gcl
-// WRONG: answer as String? ?? "default"
-// RIGHT:
-(answer as String?) ?? "default"
-\`\`\`
-
-**⚠️ NO TERNARY OPERATOR** — use if/else:
-\`\`\`gcl
-var result: String;
-if (valid) { result = "yes"; } else { result = "no"; }
-\`\`\`
+**⚠️ NO TERNARY** — use if/else
 
 ### Nodes (Persistence)
-
-Nodes are 64-bit refs to persistent containers:
-
 \`\`\`gcl
 type Country { name: String; code: int; }
-var obj = Country { name: "LU", code: 352 };  // RAM only
-var n = node<Country>{obj};                    // persisted
-
-*n;              // dereference
-n->name;         // ✅ arrow: deref + field
+var n = node<Country>{ Country { name: "LU", code: 352 }};
+n->name;         // arrow: deref + field
 n.resolve();     // method
-n->name = "X";   // modify field
-node<int>{0}.set(5);  // primitives use .set()
 \`\`\`
 
 ### Indexed Collections
-
 | Persisted | Key | In-Memory |
 |-----------|-----|-----------|
-| `node<T>` | — | `Array<T>`, `Map<K,V>` |
-| `nodeList<node<T>>` | int | `Stack<T>`, `Queue<T>` |
-| `nodeIndex<K, node<V>>` | hash | `Set<T>`, `Tuple<A,B>` |
-| `nodeTime<node<T>>` | time | `Buffer`, `Table`, `Tensor` |
-| `nodeGeo<node<T>>` | geo | `TimeWindow`, `SlidingWindow` |
+| \`node<T>\` | — | \`Array<T>\`, \`Map<K,V>\` |
+| \`nodeList<node<T>>\` | int | \`Stack<T>\`, \`Queue<T>\` |
+| \`nodeIndex<K, node<V>>\` | hash | \`Set<T>\`, \`Tuple<A,B>\` |
+| \`nodeTime<node<T>>\` | time | \`Buffer\`, \`Table\`, \`Tensor\` |
+| \`nodeGeo<node<T>>\` | geo | — |
 
-**⚠️ CRITICAL: Initialize Collection Attributes**:
-\`\`\`gcl
-// ✅ Correct — initialize collections on creation
-var city = node<City>{ City{
-    name: "Paris",
-    streets: nodeList<node<Street>>{}   // ⚠️ MUST initialize!
-}};
-\`\`\`
-
-### API Endpoints
-
-\`\`\`gcl
-// In backend/src/api/xxx_api.gcl
-
-@expose
-@permission("app.user")
-fn search(query: String): SearchResults {
-    // Implementation
-}
-
-// Response types MUST be @volatile
-@volatile
-type SearchResults {
-    items: Array<ResultView>;
-    total: int;
-}
-\`\`\`
-
-### Services
-
-\`\`\`gcl
-// In backend/src/service/xxx_service.gcl
-
-abstract type SearchService {
-    static fn executeQuery(query: String): Array<Result> {
-        // Implementation
-    }
-}
-
-// Usage:
-var results = SearchService::executeQuery("test");
-\`\`\`
-
-### Documentation (REQUIRED)
-
-All functions and types MUST have documentation:
-
-\`\`\`gcl
-/// Retrieve document by ID with automatic identifier detection.
-/// @param id Document identifier (CELEX, ECLI, or internal ID)
-/// @return Document object with full details
-/// @throws NotFoundError if document not found
-/// @example document("62009CJ0204")
-fn document(id: String): Document { }
-
-/// Search results container.
-/// @volatile Required for API response types
-@volatile
-type SearchResults {
-    /// List of matching items
-    items: Array<ResultView>;
-    /// Total count for pagination
-    total: int;
-}
-\`\`\`
-
-**Section Headers** for organizing code:
-\`\`\`gcl
-// ============================================================================
-// SEARCH OPERATIONS
-// ============================================================================
-
-fn search(...) { }
-fn advancedSearch(...) { }
-
-// ============================================================================
-// DOCUMENT RETRIEVAL
-// ============================================================================
-
-fn getDocument(...) { }
-\`\`\`
-
-### Error Handling (MANDATORY)
-
-**All @expose functions MUST have try/catch with error logging**:
-
-\`\`\`gcl
-@expose
-@permission("app.user")
-fn document(id: String): Document {
-    try {
-        var doc = documents_by_id.get(id);
-        if (doc == null) {
-            throw NotFoundError { message: "Document not found", id: id };
-        }
-        return toDocumentView(doc.resolve());
-    } catch (ex) {
-        error("document(${id}) failed: ${ex}");  // Function name + args
-        throw ex;
-    }
-}
-\`\`\`
-
-**Typed Errors** (create in model/ or api/):
-\`\`\`gcl
-@volatile
-type NotFoundError {
-    message: String;
-    id: String;
-}
-
-@volatile
-type ValidationError {
-    message: String;
-    field: String;
-}
-
-@volatile
-type ServiceError {
-    message: String;
-}
-\`\`\`
-
-**Rules**:
-- Never throw raw strings: \`throw "Not found"\` ❌
-- Always use typed errors: \`throw NotFoundError { ... }\` ✅
-- Re-throwing is fine: \`throw ex;\` ✅
-- Log with function name and args: \`error("funcName(${arg}) failed: ${ex}")\`
+**⚠️ CRITICAL**: Initialize collection attributes on creation
 
 ---
 
@@ -382,221 +322,112 @@ type ServiceError {
 
 | ❌ Don't | ✅ Do |
 |---------|-------|
-| `String.substring()` | `String.slice(from, to)` |
-| Delete types without checking | Grep first, verify no usages |
-| Multiple changes without linting | Lint after each change |
-| `static fn process<T>` | Remove static OR remove generics |
-| `Array<T>::new()` | `Array<T> {}` |
-| `nodeList<T>` for local vars | `Array<T>` for non-persistent |
-| Missing @volatile on API types | Always add @volatile |
+| \`String.substring()\` | \`String.slice(from, to)\` |
+| Delete without Grep | Grep first, verify no usages |
+| Skip linting | Lint after EACH change |
+| \`static fn process<T>\` | Remove static OR generics |
+| \`Array<T>::new()\` | \`Array<T> {}\` |
+| \`nodeList<T>\` for local vars | \`Array<T>\` for non-persistent |
+| Missing @volatile | Always add @volatile |
 | Uninitialized collections | Initialize in constructor |
-| `throw "error message"` | `throw TypedError { message: "..." }` |
-| @expose without try/catch | Always wrap in try/catch + error() |
-| Functions without /// docs | Document all functions with /// |
-| Skip formatting | Run `greycat-lang fmt` before commit |
+| \`throw "error"\` | \`throw TypedError { ... }\` |
+| @expose without try/catch | Always wrap + error() |
+| Functions without /// docs | Document ALL functions |
 
 ---
 
-## Database Management
+## Database (DEV MODE)
 
-**⚠️ Development Mode**: No migrations, delete deprecated fields immediately.
-
-**Reset Database**:
-\`\`\`bash
-rm -rf gcdata           # ⚠️ DELETES ALL DATA - ask user first!
-greycat run import      # Reimport from data files (if applicable)
-\`\`\`
-
-**Backup**:
-\`\`\`bash
-tar -czf gcdata-backup.tar.gz gcdata/
-\`\`\`
+**No migrations**: Delete deprecated fields, reset \`gcdata/\` freely, use nullable for new fields
+**Reset**: \`rm -rf gcdata && greycat run import\`
 
 ---
 
-## Testing
-
-### Writing Tests
-
-**Naming Convention**: \`test_functionName_scenario\` (snake_case)
-
-\`\`\`gcl
-// In backend/test/my_test.gcl
-
-// ============================================================================
-// MY SERVICE TESTS
-// ============================================================================
-
-@test
-fn test_process_validInput() {
-    var result = MyService::process("input");
-    Assert::equals(result, "expected");
-}
-
-@test
-fn test_process_nullInput() {
-    var result = MyService::process(null);
-    Assert::isTrue(result == null);
-}
-
-@test
-fn test_process_emptyString() {
-    var result = MyService::process("");
-    Assert::equals(result, "");
-}
-
-// ============================================================================
-// EDGE CASES
-// ============================================================================
-
-@test
-fn test_process_specialCharacters() {
-    var result = MyService::process("test@#$%");
-    Assert::notNull(result);
-}
-\`\`\`
-
-**Test Patterns**:
-- Use \`// ===\` section headers to organize tests by feature/function
-- Name tests: \`test_functionName_scenario\`
-- Use \`Assert\` class: \`equals\`, \`isTrue\`, \`isFalse\`, \`notNull\`, \`isNull\`
-- One assertion focus per test when possible
-
-### Running Tests
+## Environment
 
 \`\`\`bash
-greycat test                           # Run all tests
-greycat test backend/test/my_test.gcl  # Run specific test file
+# Backend (.env)
+GREYCAT_PORT=8080
+GREYCAT_WEBROOT=webroot      # Serve built frontend from webroot/
+GREYCAT_CACHE=30000
+
+# Frontend (.env) - if exists
+VITE_GREYCAT_URL=http://localhost:8080
+\`\`\`
+
+**Vite Config** (vite.config.ts in root):
+\`\`\`ts
+export default defineConfig({
+  root: 'frontend',           // Source files in frontend/
+  build: {
+    outDir: '../webroot',     // Build to webroot/ for GreyCat
+    emptyOutDir: true
+  }
+})
+\`\`\`
+
+**TypeScript Config** (tsconfig.json in root):
+\`\`\`json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/src/*"]
+    }
+  },
+  "include": ["frontend/src"]
+}
 \`\`\`
 
 ---
 
-## Debugging
+## Auth & Permissions
 
-\`\`\`gcl
-println("msg")          # Console output
-info("msg")             # Info level log
-warn("msg")             # Warning
-error("msg")            # Error
-pprint(object)          # Formatted output
-\`\`\`
-
----
-
-## Authentication & Permissions
-
-**Define in project.gcl**:
+**project.gcl**:
 \`\`\`gcl
 @permission("app.admin", "admin permission");
 @permission("app.user", "user permission");
-
 @role("admin", "app.admin", "app.user", "public", "admin", "api");
 @role("user", "app.user", "public", "api");
-@role("public", "public", "api");
 \`\`\`
 
-**Use in code**:
-\`\`\`gcl
-@expose
-@permission("app.user")  // Requires authentication
-fn search(query: String): Results {
-    var user = SecurityService::getLoggedUser();  // Get current user
-    // ...
-}
-
-@expose
-@permission("public")  // No authentication required
-fn getPublicData(): Data {
-    // ...
-}
-\`\`\`
+**Usage**: \`@permission("app.user")\`, \`SecurityService::getLoggedUser()\`
 
 ---
 
-## Library Management
+## Development Workflow
 
-**Update libraries**:
-\`\`\`bash
-# Edit project.gcl with new versions
-@library("std", "7.6.10-dev");
-@library("explorer", "7.6.10-dev");
-
-# Install updated libraries
-greycat install
-
-# Verify
-greycat-lang lint
-\`\`\`
-
-**Common libraries**:
-- `std` - Standard library (required)
-- `explorer` - Graph explorer UI (recommended for dev)
-- `ai` - LLM/embedding support
-- `algebra` - ML pipelines
-- `sql` - PostgreSQL integration
-- `kafka` - Apache Kafka integration
+1. Use \`/greycat\` skill for backend work
+2. \`greycat-lang lint\` after EVERY change (0 errors required)
+3. \`greycat-lang fmt -p project.gcl -w\` to format all files
+4. \`Grep\` before deleting (verify no usages)
+5. \`greycat codegen ts\` after backend type changes
+6. Test: \`greycat test\` (backend), \`pnpm test\` (frontend)
 
 ---
 
-## Troubleshooting
+## Consistency Checklist
 
-**Lint Errors**:
-\`\`\`bash
-# Run linter and review errors
-greycat-lang lint
-
-# Common issues:
-# - Missing imports → Check @include in project.gcl
-# - Type mismatch → Check type definitions
-# - Unknown function → Check spelling, imports
-\`\`\`
-
-**Server Won't Start**:
-\`\`\`bash
-# Check port availability
-lsof -i :8080
-
-# Reset database if corrupted
-rm -rf gcdata && greycat run import
-\`\`\`
-
-**Tests Failing**:
-\`\`\`bash
-# Run specific test to isolate issue
-greycat test backend/test/failing_test.gcl
-
-# Add debug output
-println("Debug: ${variable}");
-\`\`\`
+**Before commit**:
+- [ ] \`greycat-lang lint\` shows 0 errors
+- [ ] \`greycat-lang fmt -p project.gcl -w\` applied
+- [ ] All @expose functions have try/catch with error() logging
+- [ ] All functions/types have /// documentation
+- [ ] Transient types marked @volatile
+- [ ] Frontend: exact versions in package.json (no ^ or ~)
+- [ ] Tests pass
 
 ---
 
-## Backend Consistency Checklist
+## LSP (Language Server)
 
-**Before every commit**:
-
-\`\`\`
-[ ] greycat-lang lint shows 0 errors
-[ ] greycat-lang fmt -p project.gcl -w applied (code formatted)
-[ ] All @expose functions have try/catch with error() logging
-[ ] All functions/types have /// documentation
-[ ] Transient/response types marked @volatile
-[ ] Abstract service types documented
-[ ] Tests follow test_functionName_scenario naming
-[ ] greycat test passes
-\`\`\`
+**Start**: \`greycat-lang server --stdio\`
+**Features**: Autocomplete, hover docs, go-to-def, diagnostics, format, rename
+**Use**: IDE integration for real-time feedback, BUT always \`greycat-lang lint\` before commit
 
 ---
 
-## Additional Resources
-
-- **GreyCat Documentation**: https://doc.greycat.io
-- **GreyCat Skill**: Use `/greycat` command in Claude Code for expert help
-- **Language Server**: Configure LSP for IDE integration (optional)
-
----
-
-**Last Updated**: [Auto-generate timestamp]
+More: https://doc.greycat.io/
 ```
 
 ---
@@ -610,8 +441,7 @@ if [ -f "CLAUDE.md" ]; then
     echo "⚠️  CLAUDE.md already exists"
     echo "Options:"
     echo "  A) Backup existing and create new"
-    echo "  B) Append generic rules to existing"
-    echo "  C) Cancel"
+    echo "  B) Cancel"
     # Ask user for choice
 else
     echo "✓ No CLAUDE.md found, creating new file"
@@ -621,152 +451,101 @@ fi
 ### Step 2: Detect Project Features
 
 ```bash
-# Check for frontend
+# Check for frontend (frontend/ directory or package.json with React)
 HAS_FRONTEND=false
-if [ -d "frontend" ] || [ -d "ui" ]; then
+if [ -d "frontend" ] || ([ -f "package.json" ] && grep -q "react" package.json); then
     HAS_FRONTEND=true
 fi
 
-# Check for tests
-HAS_TESTS=false
-if [ -d "backend/test" ]; then
-    HAS_TESTS=true
-fi
+# Detect GreyCat version from project.gcl
+GREYCAT_VERSION=$(grep '@library("std"' project.gcl | sed -E 's/.*"([^"]+)".*/\1/' || echo "[version]")
+```
 
-# Check for data import
-HAS_DATA_IMPORT=false
-if [ -d "data" ] || grep -q "fn import(" project.gcl; then
-    HAS_DATA_IMPORT=true
+### Step 3: Check/Create .gitignore
+
+```bash
+if [ ! -f ".gitignore" ]; then
+    echo "✓ No .gitignore found, will create with GreyCat essentials"
+    CREATE_GITIGNORE=true
+elif ! grep -q "gcdata" .gitignore; then
+    echo "⚠️  .gitignore exists but missing GreyCat entries"
+    echo "Will append GreyCat-specific entries"
+    APPEND_GITIGNORE=true
+else
+    echo "✓ .gitignore exists with GreyCat entries"
 fi
 ```
 
-### Step 3: Generate CLAUDE.md
+### Step 4: Generate CLAUDE.md
 
-Use Write tool to create CLAUDE.md with template above, customizing sections based on detected features:
+Use Write tool to create CLAUDE.md with template above, customizing:
 
-- If no frontend: Remove frontend commands section
-- If no tests: Simplify testing section
-- If no data import: Remove data import commands
+- **Replace placeholders**: `[One-line project description]`, `[version]`
+- **Remove frontend sections** if no frontend detected:
+  - Frontend commands (pnpm commands)
+  - Frontend section in Stack
+  - Frontend structure in Project Structure
+  - Frontend section in Coding Style
+  - Frontend testing patterns
+  - Frontend environment variables
+- **Keep all backend sections** (always present in GreyCat projects)
 
-### Step 4: Report
+If CREATE_GITIGNORE or APPEND_GITIGNORE, add/update .gitignore with essential GreyCat entries from template
+
+### Step 5: Report
 
 ```
 ===============================================================================
-PROJECT INITIALIZED
+GREYCAT PROJECT INITIALIZED
 ===============================================================================
 
-Created: CLAUDE.md (2,340 lines)
+Created: CLAUDE.md (~300 lines)
+[Created/Updated: .gitignore with GreyCat essentials]
 
-Sections included:
-  ✓ Critical development rules
-  ✓ GreyCat language patterns
-  ✓ Common commands
-  ✓ Project structure
+CLAUDE.md includes:
+  ✓ Critical rules (lint, verify, gotchas)
+  ✓ Commands (backend [+ frontend])
+  ✓ Coding style (backend [+ frontend])
+  ✓ GreyCat patterns (nullability, nodes, collections)
+  ✓ .gitignore section (GreyCat essentials)
+  ✓ Common pitfalls table
   ✓ Development workflow
-  [✓ Frontend commands] (detected frontend/)
-  [✓ Testing guide] (detected backend/test/)
-  ✓ Database management
-  ✓ Troubleshooting
+
+.gitignore [created/updated]:
+  ✓ /gcdata, /lib, /webroot (GreyCat)
+  ✓ project.d.ts, project.gcp (generated)
+  ✓ /node_modules, .env (frontend)
 
 Next steps:
-  1. Review CLAUDE.md and customize for your project
-  2. Add project-specific sections (architecture, data model, etc.)
-  3. Commit to repository:
-     git add CLAUDE.md
-     git commit -m "docs: add Claude Code development guide"
+  1. Replace "[One-line project description]" in CLAUDE.md
+  2. Add project-specific sections (data model, architecture)
+  3. Commit:
+     git add CLAUDE.md .gitignore
+     git commit -m "docs: initialize Claude Code development guide"
 
 ===============================================================================
-```
-
----
-
-## Customization
-
-After generation, developers should add project-specific sections:
-
-### Additional Sections to Add
-
-**Project Overview**:
-```markdown
-## Project Overview
-
-[Brief description of what this project does]
-
-**Technology Stack**:
-- Backend: GreyCat + [specific libraries]
-- [If frontend] Frontend: React + TypeScript
-- [Other technologies]
-
-**Key Features**:
-- [Feature 1]
-- [Feature 2]
-```
-
-**Data Model**:
-```markdown
-## Data Model
-
-**Core Types**:
-- **Document** - [Description]
-- **User** - [Description]
-[etc.]
-
-**Relationships**:
-[Explain key relationships]
-```
-
-**Architecture**:
-```markdown
-## Architecture
-
-[Project-specific architecture details]
 ```
 
 ---
 
 ## Success Criteria
 
-✓ **CLAUDE.md created** in project root
+✓ **CLAUDE.md created** (~300 lines, compressed format)
+✓ **.gitignore created/updated** with GreyCat essentials (gcdata, lib, webroot, project.d.ts, project.gcp)
 ✓ **Generic rules included** (linting, gotchas, workflows)
-✓ **GreyCat patterns documented** (nullability, nodes, collections)
-✓ **Commands listed** (build, test, serve, etc.)
-✓ **Common pitfalls documented** (what to avoid)
-✓ **Customized for project features** (frontend, tests, data)
+✓ **pnpm commands** (not npm)
+✓ **Root-level configs** (package.json, vite.config.ts, tsconfig.json), source in frontend/
+✓ **Vite builds to webroot/** (GreyCat-compatible)
+✓ **Exact version note** for frontend deps
+✓ **Customized for frontend presence**
 
 ---
 
 ## Notes
 
-- **Generic template**: Applies to any GreyCat project
-- **No project-specific details**: Developers add these after generation
-- **Always up-to-date**: Based on latest GreyCat best practices
-- **Claude Code optimized**: Designed for Claude Code workflows
+- **Compressed format**: ~300 lines vs 600 in old template
+- **Generic template**: No project-specific details
+- **GreyCat essentials**: Creates/updates .gitignore with gcdata/, lib/, webroot/, project.d.ts, project.gcp
+- **Frontend structure**: All config in root (package.json, vite.config.ts, tsconfig.json), source in frontend/, builds to webroot/
+- **Frontend preferences**: pnpm, exact versions (no ^ or ~), webroot/ for GreyCat compatibility
 - **Can be regenerated**: Safe to run multiple times (with backup option)
-
----
-
-## Example Workflow
-
-```bash
-# 1. Start new GreyCat project
-greycat init my-project
-cd my-project
-
-# 2. Initialize Claude Code documentation
-/init
-
-# 3. CLAUDE.md created
-# Review and customize for your project
-
-# 4. Add project-specific sections
-# - Architecture overview
-# - Data model details
-# - Specific API endpoints
-
-# 5. Commit
-git add CLAUDE.md
-git commit -m "docs: initialize Claude Code development guide"
-
-# 6. Start development with Claude Code
-# Claude now has full context of GreyCat best practices
-```

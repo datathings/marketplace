@@ -72,9 +72,19 @@ var d1 = duration::new(5, DurationUnit::microseconds);
 var d2 = duration::new(2, DurationUnit::days);
 var d3 = duration::newf(1.5, DurationUnit::years);  // Float value
 
-// Shorthand literals
-var d4 = 5.6_s;    // 5.6 seconds
-var d5 = 7_hour;   // 7 hours
+// Shorthand literals (suffix notation)
+var d4 = 1_us;      // 1 microsecond
+var d5 = 500_ms;    // 500 milliseconds
+var d6 = 5.6_s;     // 5.6 seconds
+var d7 = 30_min;    // 30 minutes
+var d8 = 7_hour;    // 7 hours
+var d9 = 2_day;     // 2 days
+
+// ⚠️ Only these suffixes are valid:
+//    _us, _ms, _s, _min, _hour, _day
+// ❌ These do NOT work:
+//    _microsecond, _millisecond, _second, _minute (verbose forms not supported)
+//    _month, _year (ambiguous - use smaller denominations like 30_day or 365_day)
 ```
 
 ### Duration Operations
@@ -92,14 +102,16 @@ println(d.tof(DurationUnit::hours));    // Fractional hours
 
 Fixed microsecond values:
 
-| Unit | Microseconds | Shorthand |
-|------|--------------|-----------|
-| microseconds | 1 | N_us |
-| milliseconds | 1e3 | N_ms |
-| seconds | 1e6 | N_s |
-| minutes | 60e6 | N_m |
-| hours | 3600e6 | N_h |
-| days | 86400e6 | N_d |
+| Unit | Microseconds | Shorthand | Example |
+|------|--------------|-----------|---------|
+| microseconds | 1 | `_us` | `1_us`, `100_us` |
+| milliseconds | 1e3 | `_ms` | `500_ms`, `1_ms` |
+| seconds | 1e6 | `_s` | `30_s`, `1.5_s` |
+| minutes | 60e6 | `_min` | `5_min`, `30_min` |
+| hours | 3600e6 | `_hour` | `1_hour`, `24_hour` |
+| days | 86400e6 | `_day` | `1_day`, `7_day` |
+
+**Note**: Maximum duration is `_day`. For longer periods, use multiples (e.g., `30_day`, `365_day`) or CalendarUnit for calendar-aware operations.
 
 ## CalendarUnit
 

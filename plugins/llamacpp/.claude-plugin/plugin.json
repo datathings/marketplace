@@ -1,6 +1,6 @@
 {
   "name": "llamacpp",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "Complete llama.cpp C/C++ API reference (v b7572) covering 163 functions: model loading, inference, text generation, embeddings, chat, advanced sampling (XTC, DRY, infill), per-sequence state management, model type detection, and more. For GGUF models, local LLM inference, and C/C++ AI development.",
   "author": {
     "name": "Datathings",
