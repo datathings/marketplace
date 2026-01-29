@@ -72,13 +72,13 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 26+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (359 lines) - LoRA adapters, performance, training
 
-**Total:** 174 active functions (b7802) across 6 organized files
+**Total:** 197 active functions (b7871) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all 174 function signatures and detailed usage.
+See **[references/api.md](references/api.md)** for all 197 function signatures and detailed usage.
 
 ## Common Workflows
 

@@ -6,6 +6,9 @@ native type null {}
 
 /// meta type for reflexive usages
 native type type {
+    /// Return all types of current program
+    native static fn all(): Array<type>;
+
     native static fn of(v: any?): type;
     /// Return the number of field of this type
     native fn nb_fields(): int;
@@ -19,6 +22,10 @@ native type type {
     native fn nb_enum_values(): int;
     /// Return the values of an enumeration
     native fn enum_values(): Array;
+    /// Return trye if this type has parent type into inheritance hierachie
+    native fn has_parent(parent: type): bool;
+    /// Create an instance of the associate type
+    native fn create_instance(): any?;
     /// Return the enum value based on the given type and offset
     native static fn enum_by_offset<T>(enum_type: typeof T, offset: int): T?;
     /// Return the enum value based on the given type and name
@@ -297,7 +304,7 @@ native type nodeList<T> {
     native fn firstIndex(): int?;
     /// Returns the value associated with the first element of the nodeList.
     native fn first(): T?;
-    /// Returns the las index of the nodeList.
+    /// Returns the last index of the nodeList.
     native fn lastIndex(): int?;
     /// Returns the value associated with the last element of the nodeList.
     native fn last(): T?;
@@ -913,12 +920,8 @@ native type nodeGeo<T> {
 /// If the field was declared without a value, `null` is returned.
 ///
 /// ```gcl
-/// use util;
-///
-/// fn main() {
-///   Assert::equals(valueOf(ErrorCode::none), 0);
-/// }
-/// ```make
+/// Assert::equals(valueOf(ErrorCode::none), 0);
+/// ```
 native fn valueOf(en: any): any?;
 
 /// Tries to parse a [`String`](/libs/std/core/type.String.html) and returns either a [`float`](/libs/std/core/type.float.html) or an [`int`](/libs/std/core/type.int.html).

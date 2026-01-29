@@ -1,3 +1,4 @@
+/// Base type for writing values to files. Use concrete implementations like GcbWriter, TextWriter, JsonWriter, or CsvWriter.
 abstract type Writer<T> {
     private path: String;
     private append: bool?;
@@ -7,6 +8,7 @@ abstract type Writer<T> {
     abstract fn flush();
 }
 
+/// Base type for reading values from files. Use concrete implementations like GcbReader, TextReader, JsonReader, or CsvReader.
 abstract type Reader<T> {
     private path: String;
     pos: int?;
@@ -166,6 +168,7 @@ type CsvReader<T> extends Reader<T> {
     native fn set_path(path: String);
 }
 
+/// Configuration for CSV parsing and writing.
 type CsvFormat {
     /// Number of header lines. `null` or `0` means none and is the default.
     header_lines: int?;
@@ -275,7 +278,7 @@ type Csv {
     static native fn sample(reader: CsvReader, max_lines: int?): Table;
 }
 
-/// represents a file entry within operating system file system, can be plain file or directory.
+/// Represents a file entry within operating system file system, can be plain file or directory.
 type File {
     /// path of the file entry
     path: String;

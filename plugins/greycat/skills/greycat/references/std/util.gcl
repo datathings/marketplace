@@ -17,31 +17,33 @@ type Queue<T> {
     native fn clear();
 }
 
-/// A LIFO collection.
+/// A LIFO (Last-In-First-Out) collection.
 type Stack<T> {
-    /// Internal array of values laid out as `[<first>, ..., <last>]`
+    /// Internal array of values laid out as `[<bottom>, ..., <top>]`
     private values: Array<T>?;
 
-    /// Adds an element at queue back. If values size is over capacity, element at front is removed.
+    /// Adds an element to the top of the stack.
     native fn push(value: T);
-    /// Gets and removes the element at queue front.
+    /// Gets and removes the element from the top of the stack.
     native fn pop(): T?;
-    /// Returns the element at the back of the queue. Does not remove the element from the queue.
+    /// Returns the element at the top of the stack without removing it.
     native fn first(): T?;
-    /// Returns the element at the front of the queue. Does not remove the element from the queue.
+    /// Returns the element at the bottom of the stack without removing it.
     native fn last(): T?;
-    /// Clears the queue of all its content.
+    /// Clears the stack of all its content.
     native fn clear();
 }
 
-/// A FiFO collection to compute moving average over a fixed number of values.
+/// A FIFO collection to compute moving average over a fixed number of values.
 /// Use this collection during iterations to efficiently obtain avg and std while regularly adding values.
 type SlidingWindow<T> {
     /// Internal array of values laid out as FIFO
     private values: Array<T>?;
     /// The maximum number of elements in the window
     span: int;
+    /// Running sum of values in the window for efficient average calculation
     sum: float?;
+    /// Running sum of squared values for efficient standard deviation calculation
     sumsq: float?;
     /// Field to extract numerical value taken into account in the moving average
     private field: field?;
@@ -71,7 +73,9 @@ type TimeWindow<T> {
     private values: Table<Tuple<time, T>>?;
     /// The maximum window span as a `duration` between the first and the last time.
     span: duration;
+    /// Running sum of values in the window for efficient average calculation
     sum: float?;
+    /// Running sum of squared values for efficient standard deviation calculation
     sumsq: float?;
     /// Field to extract numerical value taken into account in the moving average
     private field: field?;
@@ -99,10 +103,15 @@ type TimeWindow<T> {
 
 /// Structure to compute and update live gaussian distribution
 type Gaussian<T> {
+    /// Running sum of all added values
     sum: float?;
+    /// Running sum of squared values for standard deviation calculation
     sumsq: float?;
+    /// Total count of values added to the distribution
     count: int?;
+    /// Minimum value observed in the distribution
     min: T?;
+    /// Maximum value observed in the distribution
     max: T?;
 
     /// Adds a new value to the profile. Returns true if the value has successfully been added, false otherwise.
@@ -171,8 +180,6 @@ type Assert {
     static native fn isNull(v: any?);
     /// Verifies that `v` is not null, throws an error if not.
     static native fn isNotNull(v: any?);
-    // Verifies that `v` is not null, throws an error if not.")
-    //static native fn fail(f: core::function);
 }
 
 /// The `ProgressTracker` is used to monitor the progress of a computation, hence its performance.
@@ -197,17 +204,24 @@ type ProgressTracker {
     native fn update(nb: int);
 }
 
+/// Represents the bounds of a quantizer slot
 type QuantizerSlotBound<T> {
     min: T;
     max: T;
     center: T;
 }
 
+/// Represents a single bin in a histogram with count and ratio statistics
 type HistogramBin<T> {
+    /// The bounds of this histogram bin
     bin: QuantizerSlotBound<T>;
+    /// Number of values in this bin
     count: int;
+    /// Ratio of values in this bin relative to total
     ratio: float;
+    /// Cumulative count of values up to and including this bin
     cumulative_count: int;
+    /// Cumulative ratio of values up to and including this bin
     cumulative_ratio: float;
 }
 
@@ -261,9 +275,13 @@ type MultiQuantizer<T> extends Quantizer<Array<T>> {
     native fn slot_vector(slot: int): Array<int>;
 }
 
+/// Slot for tracking gaussian statistics in a profiled bin
 type GaussianProfileSlot {
+    /// Sum of all values in this slot
     sum: int;
+    /// Sum of squared values in this slot
     sumsq: int;
+    /// Count of values in this slot
     count: int;
 }
 

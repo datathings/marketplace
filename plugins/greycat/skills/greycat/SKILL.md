@@ -97,8 +97,8 @@ Use `/greycat:command-name` in Claude Code:
 
 **project.gcl**:
 ```gcl
-@library("std", "7.6.122-dev");           // required
-@library("explorer", "7.6.0-dev");      // graph UI /explorer (dev)
+@library("std", "7.6.152-dev");           // required
+@library("explorer", "7.6.11-dev");      // graph UI /explorer (dev)
 @include("backend");                     // ⚠️ project.gcl only - includes ALL .gcl
 
 @permission("app.admin", "description");
@@ -318,7 +318,7 @@ rm -rf gcdata && greycat run import  # ⚠️ DELETES DATA - confirm first
 
 **[references/ai/llm.md](references/ai/llm.md)** - llama.cpp integration: model loading, text gen, chat, embeddings, LoRA.
 ```gcl
-@library("ai", "7.6.37-dev");
+@library("ai", "7.6.60-dev");
 var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
 var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
 ```

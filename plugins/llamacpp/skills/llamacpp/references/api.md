@@ -466,7 +466,7 @@ enum llama_params_fit_status llama_params_fit(
     uint32_t n_ctx_min,
     enum ggml_log_level log_level);
 ```
-Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe.
+Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe. Only parameters matching defaults are modified, except context size which is always modified when set to 0.
 
 **Return Values:**
 - `LLAMA_PARAMS_FIT_STATUS_SUCCESS (0)`: Found allocations that are projected to fit
@@ -1794,12 +1794,12 @@ Set callback for all future logging events. If NULL, everything is output on std
 ### Model Split Utilities
 
 ```c
-int llama_split_path(
+int32_t llama_split_path(
     char * split_path,
     size_t maxlen,
     const char * path_prefix,
-    int split_no,
-    int split_count);
+    int32_t split_no,
+    int32_t split_count);
 ```
 Build a split GGUF file path for a chunk.
 
@@ -1811,12 +1811,12 @@ llama_split_path(split_path, 256, "/models/ggml-model-q4_0", 2, 4);
 ```
 
 ```c
-int llama_split_prefix(
+int32_t llama_split_prefix(
     char * split_prefix,
     size_t maxlen,
     const char * split_path,
-    int split_no,
-    int split_count);
+    int32_t split_no,
+    int32_t split_count);
 ```
 Extract the path prefix from a split path if and only if split_no and split_count match.
 
@@ -1902,7 +1902,7 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `split_mode`: How to split the model across GPUs
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
-- `use_direct_io`: Use direct I/O (takes precedence over use_mmap)
+- `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
 - `use_mlock`: Force system to keep model in RAM
 
 ### llama_context_params

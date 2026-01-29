@@ -41,7 +41,7 @@ enum MergeStrategy {
     /// This should be considered the default mode, as it offers the strongest guarantee of consistency.
     strict;
     /// Partial strategy making merge not crash on concurrent conflicts.
-    ///All node updates are applied and conflicts are resolved using the previously inserted values in a graph.
+    /// All node updates are applied and conflicts are resolved using the previously inserted values in a graph.
     first_wins;
     /// Partial strategy making merge not crash on concurrent conflicts.
     /// All node updates are applied and conflicts are resolved by overriding previously inserted values by current ones.
@@ -492,16 +492,6 @@ type Scheduler {
     @expose
     @permission("admin")
     static native fn deactivate(function: function): bool;
-
-    // /// Removes a task completely from the scheduler.
-    // ///
-    // /// Unlike `deactivate()`, this permanently removes the task configuration.
-    // /// The function will no longer be scheduled for execution.
-    // ///
-    // /// Returns `true` if a matching task was found and removed, `false` otherwise.
-    // @expose
-    // @permission("admin")
-    // static native fn remove(function: function): bool;
 }
 
 /// Represents a scheduled periodic task in the system.
@@ -994,7 +984,7 @@ type McpTextContent extends McpContentBlock {
 type McpImageContent extends McpContentBlock {
     /// The base64-encoded image data in bytes
     data: String;
-    /// The MIME type of the image. Different providers may sipport different image types.
+    /// The MIME type of the image. Different providers may support different image types.
     mimeType: String;
 }
 
@@ -1003,7 +993,7 @@ type McpImageContent extends McpContentBlock {
 type McpAudioContent extends McpContentBlock {
     /// The base64-encoded audio data in bytes
     data: String;
-    /// The MIME type of the audio. Different providers may sipport different audio types.
+    /// The MIME type of the audio. Different providers may support different audio types.
     mimeType: String;
 }
 

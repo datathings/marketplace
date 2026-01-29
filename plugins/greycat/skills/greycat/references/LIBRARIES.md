@@ -60,17 +60,17 @@ Specialized libraries for specific industries and applications:
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.6.122-dev");        // Standard library (required)
-@library("ai", "7.6.37-dev");        // AI/LLM support
-@library("algebra", "7.6.37-dev");   // ML and numerical computing
-@library("kafka", "7.6.37-dev");     // Kafka integration
-@library("sql", "7.6.37-dev");       // PostgreSQL support (postgres library)
-@library("s3", "7.6.37-dev");        // S3 storage
-@library("finance", "7.6.37-dev");   // Financial utilities
-@library("powerflow", "7.6.37-dev"); // Power flow analysis
-@library("opcua", "7.6.37-dev");     // OPC UA integration
-@library("useragent", "7.6.37-dev"); // User agent parsing
-@library("explorer", "7.6.0-dev");   // Graph UI (dev only)
+@library("std", "7.6.152-dev");        // Standard library (required)
+@library("ai", "7.6.60-dev");        // AI/LLM support
+@library("algebra", "7.6.60-dev");   // ML and numerical computing
+@library("kafka", "7.6.60-dev");     // Kafka integration
+@library("sql", "7.6.60-dev");       // PostgreSQL support (postgres library)
+@library("s3", "7.6.60-dev");        // S3 storage
+@library("finance", "7.6.60-dev");   // Financial utilities
+@library("powerflow", "7.6.60-dev"); // Power flow analysis
+@library("opcua", "7.6.60-dev");     // OPC UA integration
+@library("useragent", "7.6.60-dev"); // User agent parsing
+@library("explorer", "7.6.11-dev");   // Graph UI (dev only)
 ```
 
 **Library Installation:**

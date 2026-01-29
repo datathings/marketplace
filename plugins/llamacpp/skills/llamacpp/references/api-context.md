@@ -102,7 +102,7 @@ enum llama_params_fit_status llama_params_fit(
     uint32_t n_ctx_min,
     enum ggml_log_level log_level);
 ```
-Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe.
+Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe. Only parameters matching defaults are modified, except context size which is always modified when set to 0.
 
 **Return Values:**
 - `LLAMA_PARAMS_FIT_STATUS_SUCCESS (0)`: Found allocations that are projected to fit
