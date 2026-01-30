@@ -258,4 +258,5 @@ This skill documentation is provided as-is. Please refer to the llama.cpp projec
 
 ## Version History
 
+- **1.1.0** (2026-01-30): Updated to llama.cpp b7885 (no API changes, implementation improvements)
 - **1.0.0**: Initial release with complete API reference and examples

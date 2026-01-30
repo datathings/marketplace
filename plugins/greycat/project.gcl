@@ -1,5 +1,5 @@
-@library("std", "7.6.152-dev");      // Standard library (required)
-@library("explorer", "7.6.11-dev");   // Graph UI (dev only)
+@library("std", "7.6.158-dev");      // Standard library (required)
+@library("explorer", "7.6.13-dev");   // Graph UI (dev only)
 
 @library("ai", "7.6.60-dev");        // AI/LLM support
 @library("algebra", "7.6.60-dev");   // ML and numerical computing
