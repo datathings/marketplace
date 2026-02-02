@@ -333,6 +333,8 @@ type Url {
     host: String?;
     port: int?;
     path: String?;
+    user: String?;
+    password: String?;
     params: Map<String, String>?;
     hash: String?;
     /// create an URL from a string representation
@@ -360,6 +362,7 @@ type HttpRequest {
     url: String;
     headers: Map<String, String>?;
     body: String?;
+    timeout: duration?;
 }
 
 /// Http response wrapper
