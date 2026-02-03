@@ -215,6 +215,7 @@ type SecurityFields {
     first_name: String?;
     last_name: String?;
     roles: Map<String, String>?;
+    groups_claim: String?;
     groups: Map<String, String>?;
 
     @expose
