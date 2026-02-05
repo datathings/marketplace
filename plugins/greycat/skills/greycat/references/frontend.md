@@ -12,7 +12,7 @@ React + GreyCat integration using `@greycat/web` SDK.
 
 ```bash
 # Install SDK (check https://get.greycat.io for latest)
-npm install https://get.greycat.io/files/sdk/web/dev/7.6/7.6.10-dev.tgz
+npm install https://get.greycat.io/files/sdk/web/dev/7.7/7.7.1-dev.tgz
 ```
 
 **Dependencies**: `@greycat/web`, `react@^18.3`, `react-dom@^18.3`, `@tanstack/react-query@^5`, `react-router-dom@^6`

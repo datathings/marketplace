@@ -1,3 +1,23 @@
+/// Large Language Model (LLM) integration via llama.cpp
+///
+/// Provides local AI inference using GGUF quantized models (Llama, Mistral, etc.).
+/// Supports text generation, embeddings, chat, tokenization, and more.
+///
+/// Key features:
+/// - GPU acceleration (CUDA, Metal, OpenCL)
+/// - Quantization (2-bit to 16-bit for memory efficiency)
+/// - Chat templates and conversation management
+/// - Embeddings and semantic search
+/// - LoRA adapter support
+/// - State save/load for resumable inference
+///
+/// Quick start:
+///   var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
+///   var response = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
+///   info("Response: ${response.content}");
+///
+/// For detailed documentation, see references/ai/llm.md
+
 /// How to split the model across multiple GPUs
 enum SplitMode {
     /// Single GPU

@@ -1,3 +1,11 @@
+/// Compute engine and layer definitions for neural networks
+///
+/// Provides low-level building blocks for computational graphs:
+/// - Optimizers (Adam, SGD, RMSprop, AdaGrad, etc.)
+/// - Layers (Linear, Dense, LSTM, Activation, Loss, etc.)
+/// - Operations (MatMul, Add, Sub, Activation functions, etc.)
+/// - Variables (Input/Output, Trainable, Constants)
+/// - Compute engine for forward/backward passes and optimization
 
 /// ComputeOptimizer is an abstract class of optimizers for neural networks. 
 /// As minimalistic common attributes, it hosts the learning rate with default value 0.001.
@@ -161,15 +169,18 @@ type ComputeOptimizerNesterov extends ComputeOptimizer {
   decay_rate: float;
 }
 
+/// Computational graph model containing all layers
 type ComputeModel {
   layers: Array<ComputeLayer>;
 }
 
+/// Base type for all compute layers
 abstract type ComputeLayer {
   name: String;
 }
 
 
+/// L1/L2 regularization configuration for preventing overfitting
 type ComputeRegularizer {
   l1: float;
   l2: float;
@@ -698,7 +709,22 @@ type ComputeCounter {
   batchNotOptimized: int;
 }
 
-//used to be native
+/// Compute engine for executing computational graphs
+///
+/// Handles forward propagation, gradient computation, backpropagation,
+/// and weight optimization. Manages memory, seed, and state persistence.
+///
+/// Example:
+/// ```gcl
+/// var engine = ComputeEngine {};
+/// engine.configure(false); // training mode
+/// engine.compile(model, batch_size);
+/// engine.setSeed(42);
+/// engine.initialize();
+/// engine.forward("seq_train");
+/// engine.backward("seq_train");
+/// engine.optimize("seq_train");
+/// ```
 type ComputeEngine {
   native fn configure(forwardOnly: bool);
   /// returns memory size
@@ -724,7 +750,7 @@ type ComputeEngine {
   native fn loadStateString(input: String);
 }
 
-//used to be native
+/// State container for saving/loading model weights
 type ComputeState {
   native fn toString(): String;
 }

@@ -1,3 +1,23 @@
+/// Machine Learning utilities for GreyCat
+///
+/// Provides:
+/// - Statistical profiling (GaussianND for multi-dimensional analysis)
+/// - Dimensionality reduction (PCA)
+/// - Linear regression solvers
+/// - Polynomial regression and time-series compression
+/// - Time-series decomposition utilities
+
+/// Multi-dimensional Gaussian profiler for statistical analysis and preprocessing
+///
+/// Learns statistical properties (min, max, avg, std, covariance, correlation)
+/// and provides scaling transformations (min-max, standard scaling).
+///
+/// Example:
+/// ```gcl
+/// var profile = GaussianND {};
+/// profile.learn(training_data); // [batch_size, n_features]
+/// var scaled = profile.standard_scaling(test_data);
+/// ```
 type GaussianND {
   private total: int?;
   private min: Tensor?;
@@ -48,6 +68,17 @@ type GaussianND {
 }
 
 
+/// Principal Component Analysis for dimensionality reduction
+///
+/// Identifies most important dimensions by computing eigenvectors/eigenvalues.
+/// Reduces feature count while retaining variance.
+///
+/// Example:
+/// ```gcl
+/// var pca = PCA {};
+/// pca.learn(correlation, avg, std, 0.95); // 95% variance
+/// var reduced = pca.transform(data);
+/// ```
 type PCA {
   static threshold_def: float = 0.95;
 
@@ -85,11 +116,24 @@ type PCA {
   native fn get_dimension(threshold: float): int;
 }
 
+/// Linear equation solver for regression problems
+///
+/// Solves X * w = Y for weights w using least squares
 type Solver {
   static native fn solve(X: Tensor, Y: Tensor): Tensor;
 }
 
-//used to be native
+/// Polynomial regression and time-series compression
+///
+/// Fits polynomial curves for compression and interpolation.
+/// Useful for compressing time-series with smooth variations.
+///
+/// Example:
+/// ```gcl
+/// var poly = Polynomial {};
+/// var error = poly.learn(3, X_tensor, Y_tensor); // 3rd degree
+/// var pred = poly.predictValue(5.0);
+/// ```
 type Polynomial {
   degree: int?;
   coefficients: Array<float>?;
@@ -195,6 +239,10 @@ type Polynomial {
   }
 }
 
+/// Time-series aggregation into different resolutions
+///
+/// Decomposes instant-level data into hourly, daily, weekly, monthly,
+/// and yearly aggregations. Supports incremental updates
 type TimeSeriesDecomposition {
   static fn reset(ts: nodeTime<any>, tz: TimeZone, calendarUnit: CalendarUnit, lastUpdatedTime: time?) {
     var d: Date;

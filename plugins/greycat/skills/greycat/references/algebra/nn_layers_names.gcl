@@ -1,3 +1,7 @@
+/// Predefined layer names for neural networks
+///
+/// Provides standardized naming for up to 200 layers.
+/// Layer names are automatically assigned during network construction
 enum NNLayersNames {
   layer_0("layer_0");
   layer_1("layer_1");

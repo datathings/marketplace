@@ -1,10 +1,33 @@
+/// OPC UA (Open Platform Communications Unified Architecture) client library
+///
+/// Provides industrial automation connectivity via OPC UA protocol.
+/// Supports reading/writing process variables, historical data, events, and method calls.
+///
+/// Example:
+///   var client = OpcuaClient {
+///     url: "opc.tcp://localhost:4840",
+///     security_mode: OpcuaSecurityMode::None
+///   };
+///   var value = client.read("ns=2;s=Temperature");
+///   client.write("ns=2;s=Setpoint", 25.0);
+
+/// OPC UA security modes for client-server communication
+///
+/// Determines level of message security (authentication/encryption).
 enum OpcuaSecurityMode {
+    /// No security (plaintext)
     None;
+    /// Messages are signed but not encrypted
     Sign;
+    /// Messages are both signed and encrypted
     SignAndEncrypt;
+    /// Invalid security mode
     Invalid;
 }
 
+/// OPC UA security policies defining cryptographic algorithms
+///
+/// Each policy specifies encryption, signing, and key derivation algorithms.
 enum OpcuaSecurityPolicy {
     Aes128_Sha256_RsaOaep("http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep");
     Aes256_Sha256_RsaPss("http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss");
@@ -14,123 +37,302 @@ enum OpcuaSecurityPolicy {
     None("http://opcfoundation.org/UA/SecurityPolicy#None");
 }
 
+/// OPC UA value with timestamps and status
+///
+/// Returned by read_with_time() and read_history() methods.
 type OpcuaValueDetails {
+    /// The actual value read from the node
     value: any;
+    /// Timestamp when the value was generated at the source (device/sensor)
     source_time: time?;
+    /// Timestamp when the server received/processed the value
     server_time: time?;
+    /// OPC UA status code (0 = good, non-zero = error)
     status_code: int?;
 }
 
+/// Username/password credentials for OPC UA authentication
 type OpcuaCredentials {
+    /// Username for authentication
     login: String;
+    /// Password for authentication
     password: String;
 }
 
+/// X.509 certificate configuration for secure OPC UA connections
 type OpcuaCertificate {
+    /// Path to the client certificate file (.der or .pem)
     path: String?;
+    /// Path to the private key file
     private_key_path: String?;
+    /// Application URI matching the certificate
     application_uri: String?;
+    /// Whether to accept self-signed server certificates
     allow_self_signed: bool?;
 }
 
+/// OPC UA server endpoint description from discovery
+///
+/// Describes available security configurations for a server endpoint.
 type OpcuaEndpointDescription {
+    /// Endpoint URL (e.g., "opc.tcp://localhost:4840")
     url: String;
+    /// Alternative discovery URLs for this endpoint
     discovery_urls: Array;
+    /// Server's X.509 certificate (DER encoded)
     certificate: String?;
+    /// Security mode for this endpoint
     security_mode: OpcuaSecurityMode;
+    /// Security policy for this endpoint
     security_policy: OpcuaSecurityPolicy;
+    /// Supported user identity token types
     user_identity_token_ids: Array;
+    /// Transport protocol URI
     transport_profile_uri: String;
+    /// Relative security level (higher = more secure)
     security_level: int;
 }
 
+/// OPC UA alarm/event notification
+///
+/// Represents an alarm, event, or condition notification from the server.
 type OpcuaEvent {
+    /// Unique event identifier
     "EventId": String;
+    /// Type of event (node ID of event type)
     "EventType": String?;
+    /// Human-readable message describing the event
     "Message": Tuple?;
+    /// Node that generated the event
     "SourceNode": String;
+    /// Name of the source node
     "SourceName": String;
+    /// Time the event occurred
     "Time": time;
+    /// Time the server received the event
     "ReceiveTime": time?;
+    /// Event severity (0-1000, 1000 = most severe)
     "Severity": int;
+    /// Name of the condition (for alarms)
     "ConditionName": String?;
+    /// Active state of the alarm (for alarms)
     "ActiveState": Tuple?;
+    /// Whether the alarm should be retained after acknowledgment
     "Retain": bool?;
 }
 
+/// OPC UA node metadata and attributes
+///
+/// Contains all attributes of an OPC UA node (variable, object, method, etc.).
 type OpcuaMeta {
+    /// Node identifier (e.g., "ns=2;s=Temperature")
     node_id: String;
+    /// Node class (1=Object, 2=Variable, 4=Method, etc.)
     node_class: int?;
+    /// Qualified name in namespace
     browse_name: Tuple?;
+    /// Human-readable display name
     display_name: Tuple?;
+    /// Node description
     description: Tuple?;
+    /// Write permissions mask
     write_mask: int?;
+    /// User-specific write permissions
     user_write_mask: int?;
+    /// Whether this is an abstract type
     is_abstract: bool?;
+    /// Whether reference is symmetric
     symetric: bool?;
+    /// Inverse name for references
     inverse_name: Tuple?;
+    /// Whether hierarchy contains loops
     contains_no_loops: bool?;
+    /// Event notifier flags
     event_notifier: int?;
+    /// Current value (for variable nodes)
     value: any?;
+    /// Data type node ID
     data_type: String?;
+    /// Value rank (-3 to +3, indicating array dimensions)
     value_rang: int?;
+    /// Array dimension sizes
     array_dimentions: Array?;
+    /// Access level flags (read/write permissions)
     access_level: int?;
+    /// User-specific access level
     user_access_level: int?;
+    /// Minimum sampling interval in milliseconds
     minimum_sampling_interval: float?;
+    /// Whether historical data is available
     historizing: bool?;
+    /// Whether method is executable
     executable: bool?;
+    /// User-specific executability
     user_executable: bool?;
 }
 
+/// Internal type for tree exploration
 @volatile
 type OpcuaPathEntry {
+    /// Node identifier
     nodeId: String;
+    /// Path from root to this node
     path: Array<OpcuaMeta>;
 }
 
+/// OPC UA client for industrial automation connectivity
+///
+/// Connects to OPC UA servers to read/write process variables, historical data,
+/// events, and call methods. Supports secure communication with certificates and encryption.
+///
+/// Workflow:
+///   1. Find endpoints: find_endpoints() to discover server capabilities
+///   2. Create client: Configure URL, security, credentials
+///   3. Read/write: read(), write(), read_history()
+///   4. Subscribe: subscribe() for real-time updates
 type OpcuaClient {
+    /// Standard node ID for server time
     static SERVER_TIME_NODE_ID: String = "ns=0;i=2258";
+    /// Standard node ID for address spaces
     static ADDRESS_SPACES_NODE_ID: String = "ns=0;i=2255";
-    
+
+    /// OPC UA server endpoint URL (e.g., "opc.tcp://localhost:4840")
     private url: String;
+    /// Security mode for the connection
     private security_mode: OpcuaSecurityMode;
+    /// Security policy (optional, auto-negotiated if not set)
     private security_policy: OpcuaSecurityPolicy?;
+    /// Username/password credentials (optional)
     private credentials: OpcuaCredentials?;
+    /// X.509 certificate configuration (optional, for SignAndEncrypt mode)
     private certificate: OpcuaCertificate?;
+    /// Connection/operation timeout
     private timeout: duration?;
 
+    /// Read a single value from a node
+    ///
+    /// @param nodeId Node identifier (e.g., "ns=2;s=Temperature", "ns=0;i=2258")
+    /// @return The current value, or null if node doesn't exist or can't be read
     native fn read(nodeId: String): any?;
+
+    /// Read multiple values in a single request
+    ///
+    /// @param nodeIds Array of node identifiers
+    /// @return Array of values (null entries for failed reads)
     native fn read_all(nodeIds: Array<String>): Array<any?>;
+
+    /// Read a value with timestamps and status code
+    ///
+    /// @param nodeId Node identifier
+    /// @return Value with source/server timestamps and status, or null if failed
     native fn read_with_time(nodeId: String): OpcuaValueDetails?;
+
+    /// Read multiple values with timestamps in a single request
+    ///
+    /// @param nodeIds Array of node identifiers
+    /// @return Array of values with timestamps (null entries for failed reads)
     native fn read_all_with_time(nodeIds: Array<String>): Array<OpcuaValueDetails?>;
+
+    /// Read historical data for a node
+    ///
+    /// Requires the server to support historical access and the node to have historizing enabled.
+    ///
+    /// @param nodeId Node identifier
+    /// @param from Start time (null = earliest available)
+    /// @param to End time (null = now)
+    /// @return Array of historical values with timestamps, or null if not supported
     native fn read_history(nodeId: String, from: time?, to: time?): Array<OpcuaValueDetails>?;
+
+    /// Read metadata/attributes for nodes
+    ///
+    /// @param nodesIds Array of node identifiers
+    /// @return Array of node metadata (null entries for failed reads)
     native fn read_metas(nodesIds: Array<String>): Array<OpcuaMeta?>;
+
+    /// Get child nodes of a parent node
+    ///
+    /// Returns nodes directly referenced by the parent (hierarchical children).
+    ///
+    /// @param nodeId Parent node identifier
+    /// @return Array of child node metadata
     native fn get_children(nodeId: String): Array<OpcuaMeta>;
 
+    /// Write a value to a node
+    ///
+    /// @param nodeId Node identifier
+    /// @param value Value to write (must match node's data type)
     native fn write(nodeId: String, value: any);
 
+    /// Call a method on the server
+    ///
+    /// @param nodeId Method node identifier
+    /// @param parameters Array of input parameters
+    /// @return Method output, or null if method failed
     native fn call(nodeId: String, parameters: Array<any?>): any?;
 
+    /// Discover available endpoints on a server
+    ///
+    /// Use this to find available security configurations before connecting.
+    ///
+    /// @param url Server URL (e.g., "opc.tcp://localhost:4840")
+    /// @param security_mode Filter by security mode (null = all)
+    /// @param security_policy Filter by security policy (null = all)
+    /// @return Array of endpoint descriptions
     native static fn find_endpoints(
         url: String, security_mode: OpcuaSecurityMode?, security_policy: OpcuaSecurityPolicy?
     ): Array<OpcuaEndpointDescription>;
 
-    ///Subscriptions method
+    /// Subscribe to node value changes
+    ///
+    /// Receives real-time notifications when node values change.
+    /// Callbacks run asynchronously in the background.
+    ///
+    /// @param nodeIds Array of node identifiers to monitor
+    /// @param callback_data Callback function(nodeId: String, value: any, timestamp: time)
+    /// @param callback_error Callback function(error: String)
     native fn subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function);
+
+    /// Subscribe to events/alarms
+    ///
+    /// Receives notifications for alarms, events, and conditions.
+    ///
+    /// @param nodeIds Array of node identifiers to monitor for events
+    /// @param callback_data Callback function(event: OpcuaEvent)
+    /// @param callback_error Callback function(error: String)
     native fn read_events(nodeIds: Array<String>, callback_data: function, callback_error: function);
+
+    /// Cancel an active subscription
+    ///
+    /// @param subscription_id Subscription ID returned by subscribe() or read_events()
+    /// @return True if successfully canceled, false otherwise
     native fn cancel_subscription(subscription_id: int): bool;
 
+    /// Check if client is connected to the server
+    ///
+    /// @return True if connected, false otherwise
     native fn is_connected(): bool;
 
+    /// Get available address spaces from the server
+    ///
+    /// @return Array of address space node IDs
     fn get_address_spaces(): Array {
         return this.read(OpcuaClient::ADDRESS_SPACES_NODE_ID) as Array;
     }
 
+    /// Get current server time
+    ///
+    /// @return Server's current time
     fn get_server_time(): time {
         return this.read(OpcuaClient::SERVER_TIME_NODE_ID) as time;
     }
 
+    /// Recursively explore the address space from a root node
+    ///
+    /// Traverses the node hierarchy, collecting all reachable nodes and their paths.
+    /// Use with caution on large address spaces (can be slow).
+    ///
+    /// @param rootId Starting node identifier
+    /// @return Array of paths, where each path is an array of node metadata from root to leaf
     fn explore(rootId: String): Array<Array<OpcuaMeta>> {
         var stack = Stack<OpcuaPathEntry> {};
         var paths = Array<Array<OpcuaMeta>> {};
@@ -167,4 +369,10 @@ type OpcuaClient {
     }
 }
 
+/// Validate an OPC UA node identifier format
+///
+/// Checks if a string is a valid OPC UA node ID format (e.g., "ns=2;s=Name", "ns=0;i=85").
+///
+/// @param name Node identifier to validate
+/// @return True if valid OPC UA node ID format, false otherwise
 native fn validate_opcua_name(name: String): bool;

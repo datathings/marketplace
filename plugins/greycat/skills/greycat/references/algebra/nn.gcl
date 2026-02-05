@@ -1,4 +1,14 @@
+/// Neural Network library for GreyCat
+///
+/// Provides comprehensive neural network framework including:
+/// - Multiple architectures (Regression, Classification, AutoEncoder)
+/// - Layer types (Linear, Dense, LSTM, Activation, Filter)
+/// - Activation functions (ReLU, Sigmoid, Tanh, etc.)
+/// - Optimizers (Adam, SGD, RMSprop, etc.)
+/// - Pre/post processing (MinMax, Standard scaling, PCA)
+/// - Loss functions for regression and classification
 
+/// Available activation functions for neural network layers
 enum ComputeActivations {
     relu("Relu");
     leaky_relu("Leaky Relu");
@@ -14,6 +24,7 @@ enum ComputeActivations {
     elu("Elu");
     celu("Celu");
 }
+/// Optimization algorithms for training neural networks
 enum ComputeOptimizers {
     ada_delta("Ada Delta");
     ada_grad("Ada Grad");
@@ -27,6 +38,7 @@ enum ComputeOptimizers {
     nesterov("Nesterov");
 }
 
+/// Neural network layer types
 enum ComputeLayerTypes {
     linear("Linear");
     dense("Dense");
@@ -36,6 +48,7 @@ enum ComputeLayerTypes {
     filter("Filter");
 }
 
+/// Weight initialization strategies for neural network layers
 enum ComputeInitializers {
     none("None");
     constant("Constant");
@@ -57,6 +70,7 @@ enum ComputeInitializers {
     pytorch("Pytorch");
 }
 
+/// Data preprocessing strategies applied to inputs before training
 enum PreProcessType {
     none("None");
     min_max_scaling("Min/Max Scaling");
@@ -64,6 +78,7 @@ enum PreProcessType {
     pca_scaling("PCA Scaling");
 }
 
+/// Post-processing strategies applied to outputs after prediction
 enum PostProcessType {
     none("None");
     min_max_scaling("Min/Max Scaling");
@@ -71,6 +86,7 @@ enum PostProcessType {
 }
 
 
+/// Configuration for weight and bias initialization in layers
 type InitializerConfig {
     weight_initializer: ComputeInitializer?;
     weight_regularizer: ComputeRegularizer?;
@@ -78,6 +94,7 @@ type InitializerConfig {
     bias_regularizer: ComputeRegularizer?;
 }
 
+/// Internal type for layer binding results
 type BindingsResult {
     previousLayerName: String;
     previousLayerOutput: String;
@@ -87,6 +104,10 @@ type BindingsResult {
     postLayer: ComputeLayer?;
 }
 
+/// Base abstract type for all neural network architectures
+///
+/// Provides common functionality for network configuration, training, and prediction.
+/// Subclasses: RegressionNetwork, ClassificationNetwork, AutoEncoderNetwork
 abstract type NeuralNetwork {
     static err_negative_in_out: String = "Inputs or outputs can't be negative";
     static err_last_layer_wrong: String = "Last layer has different number of outputs than declared";
@@ -1046,6 +1067,10 @@ abstract type NeuralNetwork {
     }
 }
 
+/// Neural network for regression tasks (predicting continuous values)
+///
+/// Use for problems with continuous outputs (e.g., price prediction, temperature forecasting).
+/// Supports loss functions: square error, absolute error
 type RegressionNetwork extends NeuralNetwork {
     static fn new(inputs: int, outputs: int, tensor_type: TensorType, inputs_gradients: bool?, fixed_batch_size: int?, seed: int?): RegressionNetwork {
         if (inputs <= 0 || outputs <= 0) {
@@ -1162,12 +1187,17 @@ type RegressionNetwork extends NeuralNetwork {
     }
 }
 
+/// Metrics for evaluating classification model performance
 type ClassificationMetrics {
     precision: Array<float?>;
     recall: Array<float?>;
     f1Score: Array<float?>;
 }
 
+/// Neural network for classification tasks (predicting discrete classes)
+///
+/// Use for problems with categorical outputs (e.g., image classification, sentiment analysis).
+/// Supports confusion matrix, class probabilities, and class weights
 type ClassificationNetwork extends NeuralNetwork {
     calculate_probabilities: bool;
     has_class_weights: bool;
@@ -1387,6 +1417,11 @@ type ClassificationNetwork extends NeuralNetwork {
     }
 }
 
+/// Neural network for auto-encoding (dimensionality reduction and reconstruction)
+///
+/// Learns to compress data into lower-dimensional representation (encoding)
+/// and reconstruct original data (decoding). Useful for anomaly detection,
+/// feature learning, and data denoising
 type AutoEncoderNetwork extends NeuralNetwork {
     encoder_layer_idx: int;
     encoder_layer_name: String?;

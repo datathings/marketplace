@@ -1,4 +1,25 @@
-//used to be native
+/// Fourier Transform and signal processing utilities
+///
+/// Provides:
+/// - Fast Fourier Transform (FFT) for time/frequency analysis
+/// - Frequency spectrum analysis with decibel conversion
+/// - Low-pass filtering for signal smoothing
+/// - Time-series extrapolation using frequency components
+/// - FFT-based pattern matching and modeling
+
+/// Fast Fourier Transform engine for time/frequency transformations
+///
+/// Converts time-series to frequency components and vice versa.
+/// Useful for signal analysis, filtering, compression, pattern detection.
+///
+/// Example:
+/// ```gcl
+/// var fft = FFT::new(1024, false);  // 1024 samples, forward
+/// var time_tensor = Tensor {};  // Complex [1024]
+/// var freq_tensor = Tensor {};
+/// fft.transform(time_tensor, freq_tensor);
+/// var table = FFT::get_frequency_table(freq_tensor, step);
+/// ```
 type FFT {
     static log_min: float = -6666.0;
     ///Create a new FFT engine able to process nb_samples time/frequency
@@ -53,6 +74,12 @@ type FFT {
     }
 }
 
+/// High-level FFT model for time-series analysis and extrapolation
+///
+/// Trains on time-series data and provides:
+/// - Frequency analysis (identify dominant frequencies)
+/// - Signal reconstruction with low-pass filtering
+/// - Future value prediction using learned frequency components
 type FFTModel {
     nt: nodeTime;
     sampling_step: duration;

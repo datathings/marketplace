@@ -1,10 +1,43 @@
+/// Apache Kafka integration for GreyCat
+///
+/// Provides streaming data integration with Apache Kafka message broker.
+/// Supports both consuming (reading) and producing (writing) messages.
+///
+/// Example (Consumer):
+///   var reader = KafkaReader<String> {
+///     conf: KafkaConf { "bootstrap.servers": "localhost:9092", "group.id": "mygroup" },
+///     topics: ["topic1", "topic2"]
+///   };
+///   var msg = reader.read();
+///   info("Received: ${msg.value} from ${msg.topic}");
+///
+/// Example (Producer):
+///   var writer = KafkaWriter<String> {
+///     conf: KafkaConf { "bootstrap.servers": "localhost:9092" },
+///     topic: "topic1"
+///   };
+///   writer.write("Hello Kafka");
+///   writer.flush();
+
+/// Kafka consumer for reading messages from topics
+///
+/// Generic type T is the message payload type (deserialized from bytes).
+/// Supports automatic offset management and consumer groups.
 type KafkaReader<T> {
+    /// Kafka client configuration (see KafkaConf for available options)
     private conf: KafkaConf;
+    /// List of topics to subscribe to
     private topics: Array<String>;
     /// `read()` will fail if blocking for more than this duration.
     /// If `null`, a default timeout of `10s` is used.
     timeout: duration?;
 
+    /// Read the next message from subscribed topics
+    ///
+    /// Blocks until a message is available or timeout is reached.
+    /// Automatically commits offsets for consumer group coordination.
+    ///
+    /// @return The next message with topic, partition, offset, and payload
     native fn read(): KafkaMsg<T>;
 }
 
@@ -19,15 +52,43 @@ type KafkaMsg<T> {
     value: T;
 }
 
+/// Kafka producer for writing messages to a topic
+///
+/// Generic type T is the message payload type (serialized to bytes).
+/// Messages are buffered and sent asynchronously for performance.
 type KafkaWriter<T> {
+    /// Kafka client configuration (see KafkaConf for available options)
     private conf: KafkaConf;
+    /// Target topic name
     private topic: String;
 
+    /// Write a message to the topic
+    ///
+    /// Messages are buffered internally and sent asynchronously.
+    /// Call flush() to ensure delivery before shutdown.
+    ///
+    /// @param value The message payload to send
     native fn write(value: T);
+
+    /// Wait for all buffered messages to be sent
+    ///
+    /// Blocks until all pending messages are delivered to the broker.
+    /// Call this before shutdown to prevent message loss.
     native fn flush();
 }
 
+/// Kafka client configuration
+///
+/// Maps to librdkafka configuration properties.
+/// See https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
+///
+/// Common settings:
+/// - "bootstrap.servers": Broker list (required)
+/// - "group.id": Consumer group name (required for consumers)
+/// - "auto.offset.reset": "earliest" or "latest" for new consumer groups
+/// - "security.protocol": "PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"
 type KafkaConf {
+    /// Number of acknowledgements the producer requires [all, 0, 1]
     "acks": String?;
     "allow.auto.create.topics": String?;
     "api.version.fallback.ms": String?;

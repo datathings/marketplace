@@ -1,10 +1,27 @@
+/// International Bank Account Number (IBAN) utilities
+///
+/// Provides parsing and validation of IBAN strings according to ISO 13616 standard.
 
-
+/// Represents a parsed and validated International Bank Account Number
+///
+/// An IBAN consists of a country code, check digits, and a Basic Bank Account Number (BBAN).
+/// The BBAN format varies by country but typically includes bank and account identifiers.
 type Iban {
+  /// The complete IBAN string in standard format
   iban: String;
+  /// Two-letter ISO 3166-1 alpha-2 country code (e.g., "FR", "DE", "GB")
   country: String;
+  /// Bank identifier code extracted from the BBAN portion
   bank: String;
+  /// Account number extracted from the BBAN portion
   account: String;
 
+  /// Parse and validate an IBAN string
+  ///
+  /// Validates the IBAN format, check digits, and country-specific structure.
+  /// Extracts country, bank, and account components.
+  ///
+  /// @param iban The IBAN string to parse (may include spaces which will be removed)
+  /// @return Parsed IBAN object if valid, null if invalid format or checksum
   native static fn parse(iban: String): Iban?;
 }

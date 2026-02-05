@@ -1,3 +1,13 @@
+/// Pattern detection for time-series anomaly and similarity detection
+///
+/// Algorithms:
+/// - Euclidean distance-based matching
+/// - Dynamic Time Warping (DTW)
+/// - Fast Fourier Transform (FFT) based matching
+/// - Symbolic Aggregate Approximation (SAX)
+/// - Random baseline detector
+///
+/// Supports multiple normalization strategies and configurable sensitivity
 
 fn timeWindowFirstTime(tw: TimeWindow): time? {
     var values = tw.values;
@@ -23,23 +33,27 @@ fn timeWindowToMap(tw: TimeWindow): Map<time, any?> {
     return map;
 }
 
+/// Score details for pattern matching
 type ScoreDetails {
     best_pattern: int;
     timespan: duration;
 }
 
+/// Single score detail entry
 type ScoreDetailsSingleton {
     best_pattern: int;
     timespan: duration;
     timestamp: time;
 }
 
+/// Base type for pattern detection results
 abstract type Detection {
     score: float;
     best_pattern: int;
     timespan: duration;
 }
 
+/// Detection result with overlap tracking
 type OverlappingDetection extends Detection {
     overlap: duration;
 
@@ -53,6 +67,7 @@ type OverlappingDetection extends Detection {
     }
 }
 
+/// Available pattern detection algorithms
 enum PatternDetectors {
     none("None");
     euclidean("Euclidean");
@@ -62,6 +77,7 @@ enum PatternDetectors {
     sax("SAX");
 }
 
+/// Factory interface for creating pattern detection engines
 abstract type PatternDetector {
     abstract fn getEngine(timeseries: nodeTime<float>): PatternDetectionEngine;
 }
@@ -161,6 +177,14 @@ enum MatchingNormalisation {
     shift_and_scaling("Vertical shift and scaling");
 }
 
+/// Base class for pattern detection engines
+///
+/// Workflow:
+///   1. Create: var engine = EuclideanPatternDetectionEngine::new(ts);
+///   2. Add patterns: engine.addPattern(from_time, to_time);
+///   3. Compute scores: engine.computeScores(null);
+///   4. Detect: engine.detect(sensitivity, null);
+///   5. Access: engine.state.detections
 abstract type PatternDetectionEngine {
     timeseries: nodeTime;
     state: PatternDetectionEngineState?;
@@ -475,6 +499,9 @@ abstract type PatternDetectionEngine {
     static native fn windowToTensor(pattern: Table<any>, timeWindow: Table<any>, tensor: Tensor, matchingNormalisation: MatchingNormalisation);
 }
 
+/// Dynamic Time Warping pattern detector
+///
+/// Uses DTW distance metric which allows elastic matching of patterns
 type DTWPatternDetectionEngine extends PatternDetectionEngine {
     std: float?;
     matchingNormalisation: MatchingNormalisation?;
@@ -636,6 +663,9 @@ fn toTensor(window: TimeWindow, matchingNormalisation: MatchingNormalisation, te
 }
 
 
+/// Euclidean distance pattern detector
+///
+/// Fast pattern matching using simple Euclidean distance
 type EuclideanPatternDetectionEngine extends PatternDetectionEngine {
     pattern_tensors: Array<Tensor>?;
     window_tensors: Array<Tensor>?;
@@ -717,6 +747,7 @@ type EuclideanPatternDetectionEngine extends PatternDetectionEngine {
     }
 }
 
+/// Random pattern detector for baseline comparison
 type RandomPatternDetectionEngine extends PatternDetectionEngine {
     rng: Random;
 
@@ -734,6 +765,9 @@ type RandomPatternDetectionEngine extends PatternDetectionEngine {
     }
 }
 
+/// Symbolic Aggregate Approximation (SAX) pattern detector
+///
+/// Converts time-series to symbolic representation for efficient matching
 type SaxPatternDetectionEngine extends PatternDetectionEngine {
     // alphabet: Array<char>;
     alphabet_size: int;
@@ -940,12 +974,16 @@ type SaxPatternDetectionEngine extends PatternDetectionEngine {
     }
 }
 
+/// FFT pattern detection result
 type FFTResult {
     distance: float;
     best_pattern: int;
     best_timespan: duration;
 }
 
+/// Fast Fourier Transform pattern detector
+///
+/// Matches patterns in frequency domain for scale-invariant detection
 @unserializable
 type FFTPatternDetectionEngine extends PatternDetectionEngine {
     low_pass_filter_ratio: float;
@@ -1210,6 +1248,7 @@ private fn longest_pattern_duration(patterns: Array<TimeWindow>): duration {
     return timespan;
 }
 
+/// Distance metrics for pattern comparison
 type DistanceMetrics {
     static native fn euclidean(t1: Tensor, t2: Tensor): float;
     static native fn dtw(t1: Tensor, t2: Tensor, workspace: Tensor): float;

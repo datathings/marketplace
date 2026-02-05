@@ -5,7 +5,7 @@ GreyCat's LLM API provides comprehensive access to llama.cpp for local language 
 ## Quick Start
 
 ```gcl
-@library("ai", "7.6.85-dev");
+@library("ai", "7.7.0-dev");
 
 // Load a model
 var model = Model::load("llama3", "./Llama-3.2-1B.gguf", ModelParams { n_gpu_layers: -1 });

@@ -1,2 +1,13 @@
-/// Universal Thermal Climate Index
+/// Climate analysis utilities
+
+/// Calculates Universal Thermal Climate Index (UTCI)
+///
+/// UTCI assesses physiological response to outdoor thermal conditions.
+/// Returns equivalent temperature in Celsius.
+///
+/// @param temp_outside Outdoor air temperature (°C)
+/// @param wind_avg Average wind speed (m/s)
+/// @param temp_rad Mean radiant temperature (°C)
+/// @param hygro_per Relative humidity (%)
+/// @return UTCI equivalent temperature (°C)
 native fn utci(temp_outside: float, wind_avg: float, temp_rad: float, hygro_per: float): float;

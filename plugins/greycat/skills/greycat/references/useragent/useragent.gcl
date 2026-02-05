@@ -1,3 +1,17 @@
+/// User-Agent string parser for web analytics and browser detection
+///
+/// Parses HTTP User-Agent headers to extract browser, OS, and device information.
+/// Useful for analytics, compatibility detection, and device-specific content delivery.
+///
+/// Example:
+///   var ua = UserAgent::parse("Mozilla/5.0 (Linux; Android 4.4.2) Chrome/36.0");
+///   info("Browser: ${ua.browserFamily} ${ua.browserMajor}");
+///   info("OS: ${ua.osFamily} ${ua.osMajor}");
+///   info("Device: ${ua.deviceBrand} ${ua.deviceModel}");
+
+/// Parsed User-Agent information
+///
+/// Contains browser, operating system, and device details extracted from a User-Agent string.
 type UserAgent {
   /// "The browser name of the user agent, For example Chrome "
   browserFamily: String?;
