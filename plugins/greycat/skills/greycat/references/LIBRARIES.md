@@ -70,7 +70,7 @@ Add libraries to your `project.gcl`:
 @library("powerflow", "7.7.0-dev"); // Power flow analysis
 @library("opcua", "7.7.0-dev");     // OPC UA integration
 @library("useragent", "7.7.0-dev"); // User agent parsing
-@library("explorer", "7.6.13-dev");   // Graph UI (dev only)
+@library("explorer", "7.7.0-dev");   // Graph UI (dev only)
 ```
 
 **Library Installation:**
