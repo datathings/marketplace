@@ -242,6 +242,57 @@ YearlyPeriodicity {
 }
 ```
 
+### Scheduler Supporting Types
+
+#### DayOfWeek
+Enum representing days of the week (0 = Monday, 6 = Sunday).
+
+```gcl
+enum DayOfWeek {
+    Mon(0),
+    Tue(1),
+    Wed(2),
+    Thu(3),
+    Fri(4),
+    Sat(5),
+    Sun(6);
+}
+```
+
+#### Month
+Enum representing months of the year (0 = January, 11 = December).
+
+```gcl
+enum Month {
+    Jan(0),
+    Feb(1),
+    Mar(2),
+    Apr(3),
+    May(4),
+    Jun(5),
+    Jul(6),
+    Aug(7),
+    Sep(8),
+    Oct(9),
+    Nov(10),
+    Dec(11);
+}
+```
+
+#### DateTuple
+Represents a specific date within a year (used for yearly periodic tasks).
+
+```gcl
+type DateTuple {
+    day: int;      // Day of the month (1-31)
+    month: Month;  // Month of the year
+}
+
+// Example usage
+var new_years = DateTuple { day: 1, month: Month::Jan };
+var christmas = DateTuple { day: 25, month: Month::Dec };
+```
+
 ## Runtime & System Information
 
 ### Runtime

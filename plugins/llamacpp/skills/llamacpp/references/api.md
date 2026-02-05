@@ -1583,13 +1583,7 @@ struct llama_adapter_lora * llama_adapter_lora_init(
     struct llama_model * model,
     const char * path_lora);
 ```
-Load a LoRA adapter from file.
-
-### llama_adapter_lora_free [DEPRECATED]
-```c
-void llama_adapter_lora_free(struct llama_adapter_lora * adapter);
-```
-**DEPRECATED:** Adapters are now automatically freed together with the associated model. This function is kept for backwards compatibility but should not be used in new code.
+Load a LoRA adapter from file. Adapters are automatically freed when the model is freed.
 
 ### llama_adapter_meta_val_str
 ```c

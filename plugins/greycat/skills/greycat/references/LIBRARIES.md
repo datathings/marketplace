@@ -60,7 +60,7 @@ Specialized libraries for specific industries and applications:
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.6.177-dev");        // Standard library (required)
+@library("std", "7.6.201-dev");        // Standard library (required)
 @library("ai", "7.6.85-dev");        // AI/LLM support
 @library("algebra", "7.6.85-dev");   // ML and numerical computing
 @library("kafka", "7.6.85-dev");     // Kafka integration

@@ -702,6 +702,7 @@ native type Array<T> {
     /// Allocates the given capacity, size remains unchanged
     native fn set_capacity(value: int);
     /// Returns true if each element of the array between `start` and `end` is equal to `v`.
+    /// start and end are position between 0 and size-1, both are inclusive bounds
     native fn range_equals(start: int, end: int, v: any?): bool;
 }
 

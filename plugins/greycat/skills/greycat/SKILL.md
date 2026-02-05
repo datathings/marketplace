@@ -97,7 +97,7 @@ Use `/greycat:command-name` in Claude Code:
 
 **project.gcl**:
 ```gcl
-@library("std", "7.6.177-dev");           // required
+@library("std", "7.6.201-dev");           // required
 @library("explorer", "7.6.13-dev");      // graph UI /explorer (dev)
 @include("backend");                     // ⚠️ project.gcl only - includes ALL .gcl
 
