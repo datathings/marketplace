@@ -1,6 +1,6 @@
 {
   "name": "greycat-c",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "Comprehensive reference for GreyCat C API and GCL Standard Library. Covers native function implementation, tensor operations, scheduling, I/O, statistics, and all std modules.",
   "author": {
     "name": "Datathings",
