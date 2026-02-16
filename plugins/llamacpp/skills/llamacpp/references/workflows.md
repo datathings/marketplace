@@ -603,9 +603,10 @@ int main() {
         return 1;
     }
 
-    // Apply LoRA to context
-    float scale = 1.0;  // LoRA scaling factor
-    if (llama_set_adapter_lora(ctx, lora, scale) < 0) {
+    // Apply LoRA to context (new unified API)
+    struct llama_adapter_lora * adapters[] = { lora };
+    float scales[] = { 1.0 };  // LoRA scaling factor
+    if (llama_set_adapters_lora(ctx, adapters, 1, scales) < 0) {
         fprintf(stderr, "Failed to apply LoRA adapter\n");
         return 1;
     }
@@ -613,14 +614,10 @@ int main() {
     // Use context with LoRA applied...
     // ... generate text ...
 
-    // Remove LoRA adapter
-    llama_rm_adapter_lora(ctx, lora);
-
-    // Or clear all adapters
-    llama_clear_adapter_lora(ctx);
+    // Clear all adapters (pass n_adapters = 0)
+    llama_set_adapters_lora(ctx, NULL, 0, NULL);
 
     // Note: LoRA adapters are automatically freed with the model
-    // llama_adapter_lora_free() is deprecated
 
     llama_free(ctx);
     llama_model_free(model);

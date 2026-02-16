@@ -10,91 +10,91 @@
 
 /// Unit of access control, attached to functions
 private type Permission {
-    name: String;
-    description: String;
+  name: String;
+  description: String;
 
-    @expose
-    @permission("admin")
-    static native fn all(): Array<Permission>;
+  @expose
+  @permission("admin")
+  static native fn all(): Array<Permission>;
 }
 
 /// Aggregation of permissions to be associated to a user
 private type Role {
-    name: String;
-    permissions: Array<String>;
+  name: String;
+  permissions: Array<String>;
 
-    @expose
-    @permission("admin")
-    static native fn all(): Array<Role>;
+  @expose
+  @permission("admin")
+  static native fn all(): Array<Role>;
 }
 
 /// Unit of computation executed in parallel awaited by a parent Task
 type Job<T> {
-    function: core::function;
-    arguments: Array<any?>?;
-    native fn result(): T;
+  function: core::function;
+  arguments: Array<any?>?;
+  native fn result(): T;
 }
 
 /// The strategy applies to merge node updates from job to task or task to the main graph.
 enum MergeStrategy {
-    /// All or nothing. Every node update must be free of conflicts with concurrent changes; otherwise, an exception is thrown.
-    /// This should be considered the default mode, as it offers the strongest guarantee of consistency.
-    strict;
-    /// Partial strategy making merge not crash on concurrent conflicts.
-    /// All node updates are applied and conflicts are resolved using the previously inserted values in a graph.
-    first_wins;
-    /// Partial strategy making merge not crash on concurrent conflicts.
-    /// All node updates are applied and conflicts are resolved by overriding previously inserted values by current ones.
-    last_wins;
+  /// All or nothing. Every node update must be free of conflicts with concurrent changes; otherwise, an exception is thrown.
+  /// This should be considered the default mode, as it offers the strongest guarantee of consistency.
+  strict;
+  /// Partial strategy making merge not crash on concurrent conflicts.
+  /// All node updates are applied and conflicts are resolved using the previously inserted values in a graph.
+  first_wins;
+  /// Partial strategy making merge not crash on concurrent conflicts.
+  /// All node updates are applied and conflicts are resolved by overriding previously inserted values by current ones.
+  last_wins;
 }
 
 native fn await(jobs: Array<Job>, strategy: MergeStrategy);
 
 /// log levels used in log files
 enum LogLevel {
-    error;
-    warn;
-    info;
-    perf;
-    trace;
+  error;
+  warn;
+  info;
+  perf;
+  trace;
 }
 
 /// log structure useful for parsing
 @volatile
 type Log {
-    level: LogLevel;
-    time: time;
-    user_id: int?;
-    id: int?;
-    id2: int?;
-    src: function?;
-    data: any?;
+  level: LogLevel;
+  time: time;
+  user_id: int?;
+  id: int?;
+  id2: int?;
+  src: function?;
+  data: any?;
 }
 
 @volatile
 type LogDataUsage {
-    read_bytes: int;
-    read_hits: int;
-    read_wasted: int;
-    write_bytes: int;
-    write_hits: int;
-    cache_bytes: int;
-    cache_hits: int;
+  read_bytes: int;
+  read_hits: int;
+  read_wasted: int;
+  write_bytes: int;
+  write_hits: int;
+  cache_bytes: int;
+  cache_hits: int;
 }
 
 @volatile
 type RuntimeInfo {
-    version: String;
-    program_version: String?;
-    arch: String;
-    timezone: TimeZone;
-    license: License;
-    io_threads: int;
-    bg_threads: int;
-    fg_threads: int;
-    mem_total: int;
-    mem_worker: int;
-    disk_data_bytes: int;
+  version: String;
+  program_version: String?;
+  arch: String;
+  timezone: TimeZone;
+  license: License;
+  io_threads: int;
+  bg_threads: int;
+  fg_threads: int;
+  mem_total: int;
+  mem_worker: int;
+  disk_data_bytes: int;
 }
 
 //type World {
@@ -105,32 +105,32 @@ type RuntimeInfo {
 //}
 
 type Runtime {
-    @expose
-    @permission("debug")
-    static native fn info(): RuntimeInfo;
+  @expose
+  @permission("debug")
+  static native fn info(): RuntimeInfo;
 
-    @expose
-    @reserved
-    @permission("api")
-    static native fn abi();
+  @expose
+  @reserved
+  @permission("api")
+  static native fn abi();
 
-    @expose
-    @permission("debug")
-    static native fn root(): any;
+  @expose
+  @permission("debug")
+  static native fn root(): any;
 
-    /// Puts the current thread to sleep for at least the given duration
-    static native fn sleep(d: duration);
+  /// Puts the current thread to sleep for at least the given duration
+  static native fn sleep(d: duration);
 
-    /// Perform full backup even if incremental delta are present in backup directory
-    @expose
-    @permission("admin")
-    static native fn backup_full();
+  /// Perform full backup even if incremental delta are present in backup directory
+  @expose
+  @permission("admin")
+  static native fn backup_full();
 
-    /// Perform incremental backup based on delta present in backup directory
-    static native fn backup_delta();
+  /// Perform incremental backup based on delta present in backup directory
+  static native fn backup_delta();
 
-    /// Trigger a defrag process
-    static native fn defrag();
+  /// Trigger a defrag process
+  static native fn defrag();
 }
 
 /// This type is not supposed to be created manually, use `System::spawn(...)` to create a `ChildProcess`.
@@ -138,290 +138,294 @@ type Runtime {
 /// If you do not ensure the `ChildProcess` has exited then it will continue to run, even after the handle
 /// has gone out of scope.
 type ChildProcess {
-    private pid: int;
-    /// Waits for the child to exit completely returning `ChildProcessResult` with `code`, `stdout` and `stderr`
-    native fn wait(): ChildProcessResult;
-    /// Forces the child process to exit.
-    native fn kill();
+  private pid: int;
+  /// Waits for the child to exit completely returning `ChildProcessResult` with `code`, `stdout` and `stderr`
+  native fn wait(): ChildProcessResult;
+  /// Forces the child process to exit.
+  native fn kill();
 }
 
 type ChildProcessResult {
-    /// Return code of the process
-    code: int;
-    stdout: String;
-    stderr: String;
+  /// Return code of the process
+  code: int;
+  stdout: String;
+  stderr: String;
 }
 
 type System {
-    /// Executes the given command as a subprocess.
-    /// Returns the content of stdout.
-    /// If an error occurs the exception will contain the content of stderr.
-    static native fn exec(path: String, params: Array<String>): String;
-    /// Spawns the given command as a subprocess and yields its pid.
-    ///
-    /// Contrary to `System::exec` this method does not actively wait for the process to finish.
-    static native fn spawn(path: String, params: Array<String>): ChildProcess;
-    /// get local configured TimeZone
-    static native fn tz(): TimeZone;
-    static native fn getEnv(key: String): String?;
+  /// Executes the given command as a subprocess.
+  /// Returns the content of stdout.
+  /// If an error occurs the exception will contain the content of stderr.
+  static native fn exec(path: String, params: Array<String>): String;
+  /// Spawns the given command as a subprocess and yields its pid.
+  ///
+  /// Contrary to `System::exec` this method does not actively wait for the process to finish.
+  static native fn spawn(path: String, params: Array<String>): ChildProcess;
+  /// get local configured TimeZone
+  static native fn tz(): TimeZone;
+  static native fn getEnv(key: String): String?;
+
+  @expose
+  @permission("admin")
+  static native fn get_all_envs(): Array<Tuple<String, String?>>;
 }
 
 enum TaskStatus {
-    empty;
-    waiting;
-    running;
-    await;
-    cancelled;
-    error;
-    ended;
-    ended_with_errors;
-    breakpoint;
+  empty;
+  waiting;
+  running;
+  await;
+  cancelled;
+  error;
+  ended;
+  ended_with_errors;
+  breakpoint;
 }
 
 type Task {
-    user_id: int;
-    task_id: int;
-    mod: String?;
-    type: String?;
-    fun: String?;
-    creation: time;
-    start: time?;
-    duration: duration?;
-    status: TaskStatus;
-    progress: float?;
+  user_id: int;
+  task_id: int;
+  mod: String?;
+  type: String?;
+  fun: String?;
+  creation: time;
+  start: time?;
+  duration: duration?;
+  status: TaskStatus;
+  progress: float?;
 
-    /// set globally the progress for parent task, accepted value are between 0 and 1.
-    static native fn progress(progress: float);
-    static native fn parentId(): int;
-    static native fn id(): int;
+  /// set globally the progress for parent task, accepted value are between 0 and 1.
+  static native fn progress(progress: float);
+  static native fn parentId(): int;
+  static native fn id(): int;
 
-    @expose
-    @reserved
-    static native fn running(): Array<Task>;
-    @expose
-    @reserved
-    static native fn history(offset: int, max: int): Array<Task>;
-    @expose
-    @reserved
-    static native fn cancel(task_id: int): bool;
-    @expose
-    @reserved
-    static native fn is_running(task_id: int): bool;
+  @expose
+  @reserved
+  static native fn running(): Array<Task>;
+  @expose
+  @reserved
+  static native fn history(offset: int, max: int): Array<Task>;
+  @expose
+  @reserved
+  static native fn cancel(task_id: int): bool;
+  @expose
+  @reserved
+  static native fn is_running(task_id: int): bool;
 }
 
 type SecurityFields {
-    email: String?;
-    name: String?;
-    first_name: String?;
-    last_name: String?;
-    roles: Map<String, String>?;
-    groups_claim: String?;
-    groups: Map<String, String>?;
+  email: String?;
+  name: String?;
+  first_name: String?;
+  last_name: String?;
+  roles: Map<String, String>?;
+  groups_claim: String?;
+  groups: Map<String, String>?;
 
-    @expose
-    @permission("admin")
-    static native fn set(f: SecurityFields);
+  @expose
+  @permission("admin")
+  static native fn set(f: SecurityFields);
 
-    @expose
-    @permission("admin")
-    static native fn get(): SecurityFields?;
+  @expose
+  @permission("admin")
+  static native fn get(): SecurityFields?;
 }
 
 type SecurityPolicy {
-    entities: Array<SecurityEntity>?;
-    credentials: Map<String, UserCredential>?;
-    fields: SecurityFields?;
-    keys: Map<String, String>?;
-    keys_last_refresh: time?;
+  entities: Array<SecurityEntity>?;
+  credentials: Map<String, UserCredential>?;
+  fields: SecurityFields?;
+  keys: Map<String, String>?;
+  keys_last_refresh: time?;
 }
 
 abstract type SecurityEntity {
-    id: int;
-    name: String;
-    activated: bool;
+  id: int;
+  name: String;
+  activated: bool;
 
-    @expose
-    @reserved
-    @permission("admin")
-    static native fn all(): Array<SecurityEntity>;
+  @expose
+  @reserved
+  @permission("admin")
+  static native fn all(): Array<SecurityEntity>;
 
-    @expose
-    @permission("admin")
-    static native fn set(entity: SecurityEntity): int?;
+  @expose
+  @permission("admin")
+  static native fn set(entity: SecurityEntity): int?;
 }
 
 type UserGroup extends SecurityEntity {}
 
 enum UserGroupPolicyType {
-    read;
-    write;
-    execute;
+  read;
+  write;
+  execute;
 }
 
 type UserGroupPolicy {
-    group_id: int;
-    type: UserGroupPolicyType;
+  group_id: int;
+  type: UserGroupPolicyType;
 }
 
 type OpenIDConnect {
-    url: String;
-    clientId: String;
+  url: String;
+  clientId: String;
 
-    /// get current configuration to enable OpenID connect capability
-    @reserved
-    @expose
-    @permission("public")
-    static native fn config(): OpenIDConnect?;
+  /// get current configuration to enable OpenID connect capability
+  @reserved
+  @expose
+  @permission("public")
+  static native fn config(): OpenIDConnect?;
 }
 
 type User extends SecurityEntity {
-    full_name: String?;
-    email: String?;
-    role: String?;
-    groups: Array<UserGroupPolicy>?;
-    groups_flags: int?;
-    external: bool;
+  full_name: String?;
+  email: String?;
+  role: String?;
+  groups: Array<UserGroupPolicy>?;
+  groups_flags: int?;
+  external: bool;
 
-    /// If the given `credentials` are valid, returns a session `token`.
-    ///
-    /// If `use_cookie` is `true`, the HTTP Response Headers will contain
-    /// a `Set-Cookie: greycat=<TOKEN> (...)`
-    ///
-    /// This token can then be used by HTTP clients:
-    /// - as a bearer: `Authorization: <TOKEN>` _(note that 'bearer' is not specified)_
-    /// - as a cookie: `Cookie: greycat=<TOKEN>`
-    @expose
-    @reserved
-    @permission("public")
-    static native fn login(credentials: String, use_cookie: bool): String;
+  /// If the given `credentials` are valid, returns a session `token`.
+  ///
+  /// If `use_cookie` is `true`, the HTTP Response Headers will contain
+  /// a `Set-Cookie: greycat=<TOKEN> (...)`
+  ///
+  /// This token can then be used by HTTP clients:
+  /// - as a bearer: `Authorization: <TOKEN>` _(note that 'bearer' is not specified)_
+  /// - as a cookie: `Cookie: greycat=<TOKEN>`
+  @expose
+  @reserved
+  @permission("public")
+  static native fn login(credentials: String, use_cookie: bool): String;
 
-    /// If the given JWT `token` is valid (signed with the public key provided), returns a Greycat session `token`.
-    ///
-    /// If `use_cookie` is `true`, the HTTP Response Headers will contain
-    /// a `Set-Cookie: greycat=<TOKEN> (...)`
-    ///
-    /// This token can then be used by HTTP clients:
-    /// - as a bearer: `Authorization: <TOKEN>` _(note that 'bearer' is not specified)_
-    /// - as a cookie: `Cookie: greycat=<TOKEN>`
-    @expose
-    @reserved
-    @permission("public")
-    static native fn tokenLogin(token: String, use_cookie: bool): String;
+  /// If the given JWT `token` is valid (signed with the public key provided), returns a Greycat session `token`.
+  ///
+  /// If `use_cookie` is `true`, the HTTP Response Headers will contain
+  /// a `Set-Cookie: greycat=<TOKEN> (...)`
+  ///
+  /// This token can then be used by HTTP clients:
+  /// - as a bearer: `Authorization: <TOKEN>` _(note that 'bearer' is not specified)_
+  /// - as a cookie: `Cookie: greycat=<TOKEN>`
+  @expose
+  @reserved
+  @permission("public")
+  static native fn tokenLogin(token: String, use_cookie: bool): String;
 
-    /// logout cookie
-    @expose
-    @reserved
-    @permission("public")
-    static native fn logout();
+  /// logout cookie
+  @expose
+  @reserved
+  @permission("public")
+  static native fn logout();
 
-    /// renew cookie
-    @expose
-    @reserved
-    @permission("api")
-    static native fn renew(use_cookie: bool): String;
+  /// renew cookie
+  @expose
+  @reserved
+  @permission("api")
+  static native fn renew(use_cookie: bool): String;
 
-    /// Returns the currently logged-in user id.
-    @expose
-    @reserved
-    @permission("public")
-    static native fn current(): int;
+  /// Returns the currently logged-in user id.
+  @expose
+  @reserved
+  @permission("public")
+  static native fn current(): int;
 
-    /// Returns the currently logged-in user.
-    @expose
-    @reserved
-    @permission("public")
-    static native fn me(): User;
+  /// Returns the currently logged-in user.
+  @expose
+  @reserved
+  @permission("public")
+  static native fn me(): User;
 
-    /// Returns the list of permissions of the currently logged-in user.
-    @expose
-    @reserved
-    @permission("public")
-    static native fn permissions(): Array<String>;
+  /// Returns the list of permissions of the currently logged-in user.
+  @expose
+  @reserved
+  @permission("public")
+  static native fn permissions(): Array<String>;
 
-    /// Returns `true` if the current connected user has the permission associated to the name passed as parameter, false otherwise.
-    static native fn hasPermission(permission: String): bool;
+  /// Returns `true` if the current connected user has the permission associated to the name passed as parameter, false otherwise.
+  static native fn hasPermission(permission: String): bool;
 
-    /// Updates the password of the user `name`. If the user does not exist, `false` is returned.
-    @expose
-    @permission("admin")
-    static native fn setPassword(name: String, pass: String): bool;
+  /// Updates the password of the user `name`. If the user does not exist, `false` is returned.
+  @expose
+  @permission("admin")
+  static native fn setPassword(name: String, pass: String): bool;
 
-    static native fn getByName(name: String): User?;
+  static native fn getByName(name: String): User?;
 
-    static native fn get(id: int): User?;
+  static native fn get(id: int): User?;
 
-    /// Validates the password of the user `name`, if the user does not exist or the password does not match, `false` is returned.
-    static native fn checkPassword(name: String, pass: String): bool;
+  /// Validates the password of the user `name`, if the user does not exist or the password does not match, `false` is returned.
+  static native fn checkPassword(name: String, pass: String): bool;
 }
 
 private type UserCredential {
-    offset: int;
-    pass: String?;
+  offset: int;
+  pass: String?;
 }
 
 enum LicenseType {
-    community;
-    enterprise;
-    testing;
+  community;
+  enterprise;
+  testing;
 }
 
 type License {
-    /// Associated username
-    name: String?;
-    /// Start of license validity
-    start: time;
-    /// End of license validity
-    end: time;
-    /// Associated company name
-    company: String?;
-    /// Maximum allowed memory in MB
-    max_memory: int;
-    extra_1: int?;
-    extra_2: int?;
-    /// type of license
-    type: LicenseType?;
+  /// Associated username
+  name: String?;
+  /// Start of license validity
+  start: time;
+  /// End of license validity
+  end: time;
+  /// Associated company name
+  company: String?;
+  /// Maximum allowed memory in MB
+  max_memory: int;
+  extra_1: int?;
+  extra_2: int?;
+  /// type of license
+  type: LicenseType?;
 }
 
 /// Checkpoint frame variable, named by program origin name if any
 @volatile
 private type Variable {
-    name: String?;
-    value: any?;
+  name: String?;
+  value: any?;
 }
 
 /// Checkpoint stack frame, representing nested function call
 @volatile
 private type Frame {
-    module: String?;
-    type: String?;
-    function: String?;
-    src: String?;
-    line: int;
-    column: int;
-    scope: Array<Variable>;
+  module: String?;
+  type: String?;
+  function: String?;
+  src: String?;
+  line: int;
+  column: int;
+  scope: Array<Variable>;
 }
 
 /// Checkpoint snapshots, containing frames themselves containing variables
 @volatile
 private type Debug {
-    id: int;
-    frames: Array<Frame>;
-    root: any;
+  id: int;
+  frames: Array<Frame>;
+  root: any;
 
-    @expose
-    @permission("debug")
-    @reserved
-    native static fn all(): Array<int>;
+  @expose
+  @permission("debug")
+  @reserved
+  native static fn all(): Array<int>;
 
-    @expose
-    @permission("debug")
-    @reserved
-    native static fn get(id: int): Debug;
+  @expose
+  @permission("debug")
+  @reserved
+  native static fn get(id: int): Debug;
 
-    @expose
-    @permission("debug")
-    @reserved
-    native static fn resume(id: int);
+  @expose
+  @permission("debug")
+  @reserved
+  native static fn resume(id: int);
 }
 
 /// A global manager of periodic tasks.
@@ -430,104 +434,104 @@ private type Debug {
 /// Each function can only have one scheduled task at a time - adding a new task with the same
 /// function will replace any existing task.
 type Scheduler {
-    /// Schedules a function to be executed as a task periodically.
-    ///
-    /// If a task with the same `function` already exists, it will be replaced with the new
-    /// configuration. The scheduler uses function pointer equality for task identification.
-    ///
-    /// Examples:
-    /// ```gcl
-    /// // Schedule a backup every day at 2 AM
-    /// Scheduler::add(
-    ///     backup_database,
-    ///     DailyPeriodicity { hour: 2 },
-    ///     null,
-    /// );
-    ///
-    /// // Schedule health checks every 5 minutes, starting in 1 hour
-    /// Scheduler::add(
-    ///     health_check,
-    ///     FixedPeriodicity { every: 5min },
-    ///     PeriodicOptions {
-    ///         start: time::now() + 1hour,
-    ///         max_duration: 30s
-    ///     }
-    /// );
-    /// ```
-    @expose
-    @permission("admin")
-    static native fn add(function: function, periodicity: Periodicity, options: PeriodicOptions?);
+  /// Schedules a function to be executed as a task periodically.
+  ///
+  /// If a task with the same `function` already exists, it will be replaced with the new
+  /// configuration. The scheduler uses function pointer equality for task identification.
+  ///
+  /// Examples:
+  /// ```gcl
+  /// // Schedule a backup every day at 2 AM
+  /// Scheduler::add(
+  ///     backup_database,
+  ///     DailyPeriodicity { hour: 2 },
+  ///     null,
+  /// );
+  ///
+  /// // Schedule health checks every 5 minutes, starting in 1 hour
+  /// Scheduler::add(
+  ///     health_check,
+  ///     FixedPeriodicity { every: 5min },
+  ///     PeriodicOptions {
+  ///         start: time::now() + 1hour,
+  ///         max_duration: 30s
+  ///     }
+  /// );
+  /// ```
+  @expose
+  @permission("admin")
+  static native fn add(function: function, periodicity: Periodicity, options: PeriodicOptions?);
 
-    /// Returns the current list of all scheduled tasks.
-    ///
-    /// The returned array includes both active and inactive tasks.
-    /// Use `PeriodicTask.is_active` to check individual task status.
-    @expose
-    @permission("admin")
-    static native fn list(): Array<PeriodicTask>;
+  /// Returns the current list of all scheduled tasks.
+  ///
+  /// The returned array includes both active and inactive tasks.
+  /// Use `PeriodicTask.is_active` to check individual task status.
+  @expose
+  @permission("admin")
+  static native fn list(): Array<PeriodicTask>;
 
-    /// Looks for a task that matches the given `function`.
-    ///
-    /// Returns `null` if no matching task is found.
-    /// Uses function pointer equality for matching.
-    @expose
-    @permission("admin")
-    static native fn find(function: function): PeriodicTask?;
+  /// Looks for a task that matches the given `function`.
+  ///
+  /// Returns `null` if no matching task is found.
+  /// Uses function pointer equality for matching.
+  @expose
+  @permission("admin")
+  static native fn find(function: function): PeriodicTask?;
 
-    /// Tries to find a task that matches `function` and activates it.
-    ///
-    /// Activating a task means it will be eligible for execution according to its periodicity.
-    /// If the task was previously deactivated, it will resume from its next scheduled time.
-    ///
-    /// Returns `true` if a matching task was found and activated, `false` otherwise.
-    @expose
-    @permission("admin")
-    static native fn activate(function: function): bool;
+  /// Tries to find a task that matches `function` and activates it.
+  ///
+  /// Activating a task means it will be eligible for execution according to its periodicity.
+  /// If the task was previously deactivated, it will resume from its next scheduled time.
+  ///
+  /// Returns `true` if a matching task was found and activated, `false` otherwise.
+  @expose
+  @permission("admin")
+  static native fn activate(function: function): bool;
 
-    /// Tries to find a task that matches `function` and deactivates it.
-    ///
-    /// Deactivating a task prevents it from being executed, but keeps the task configuration
-    /// in the scheduler. The task can be reactivated later with `activate()`.
-    ///
-    /// Returns `true` if a matching task was found and deactivated, `false` otherwise.
-    @expose
-    @permission("admin")
-    static native fn deactivate(function: function): bool;
+  /// Tries to find a task that matches `function` and deactivates it.
+  ///
+  /// Deactivating a task prevents it from being executed, but keeps the task configuration
+  /// in the scheduler. The task can be reactivated later with `activate()`.
+  ///
+  /// Returns `true` if a matching task was found and deactivated, `false` otherwise.
+  @expose
+  @permission("admin")
+  static native fn deactivate(function: function): bool;
 }
 
 /// Represents a scheduled periodic task in the system.
 type PeriodicTask {
-    /// The function that will be executed
-    function: function;
-    /// The periodicity configuration for this task
-    periodicity: Periodicity;
-    /// Current options applied to this task
-    options: PeriodicOptions;
-    /// Whether the task is currently active
-    is_active: bool;
-    /// Next scheduled execution time
-    next_execution: time;
-    /// Total number of times this task has been executed
-    execution_count: int;
+  /// The function that will be executed
+  function: function;
+  /// The periodicity configuration for this task
+  periodicity: Periodicity;
+  /// Current options applied to this task
+  options: PeriodicOptions;
+  /// Whether the task is currently active
+  is_active: bool;
+  /// Next scheduled execution time
+  next_execution: time;
+  /// Total number of times this task has been executed
+  execution_count: int;
 }
 
 /// Configuration options for periodic tasks.
 type PeriodicOptions {
-    /// Whether or not the task can be executed.
-    /// Defaults to `true` if not specified.
-    activated: bool?;
-    /// Will start the task lifecycle at that time.
-    ///
-    /// By default `time::now()` is used.
-    /// If set to a future time, the first execution will be delayed accordingly.
-    start: time?;
-    /// The maximum duration a task should take before being forcefully cancelled.
-    ///
-    /// By default this is `null` meaning the task can run endlessly.
-    ///
-    /// *Note that the timer starts as soon as a task is queued for execution.*
-    /// *Note: a negative duration will be replaced by `null`*
-    max_duration: duration?;
+  /// Whether or not the task can be executed.
+  /// Defaults to `true` if not specified.
+  activated: bool?;
+  /// Will start the task lifecycle at that time.
+  ///
+  /// By default `time::now()` is used.
+  /// If set to a future time, the first execution will be delayed accordingly.
+  start: time?;
+  /// The maximum duration a task should take before being forcefully cancelled.
+  ///
+  /// By default this is `null` meaning the task can run endlessly.
+  ///
+  /// *Note that the timer starts as soon as a task is queued for execution.*
+  /// *Note: a negative duration will be replaced by `null`*
+  max_duration: duration?;
 }
 
 /// Base type for all periodicity definitions.
@@ -542,8 +546,8 @@ abstract type Periodicity {}
 /// - Every 2 hours: `FixedPeriodicity { every: 2hour }`
 /// - Every day: `FixedPeriodicity { every: 24hour }`
 type FixedPeriodicity extends Periodicity {
-    /// The fixed interval between task executions
-    every: duration;
+  /// The fixed interval between task executions
+  every: duration;
 }
 
 /// Defines tasks daily execution parameters with specific time targeting.
@@ -554,14 +558,14 @@ type FixedPeriodicity extends Periodicity {
 /// - Run at midnight: `DailyPeriodicity {}` (all defaults)
 /// - Run at 9 AM Europe/Luxembourg: `DailyPeriodicity { hour: 9, timezone: TimeZone::"Europe/Luxembourg" }`
 type DailyPeriodicity extends Periodicity {
-    /// Hour of execution (0-23). Defaults to midnight if not specified
-    hour: int?;
-    /// Minute of execution (0-59). Defaults to 0 if not specified
-    minute: int?;
-    /// Second of execution (0-59). Defaults to 0 if not specified
-    second: int?;
-    /// Timezone for time calculation. Uses the host timezone if not specified
-    timezone: TimeZone?;
+  /// Hour of execution (0-23). Defaults to midnight if not specified
+  hour: int?;
+  /// Minute of execution (0-59). Defaults to 0 if not specified
+  minute: int?;
+  /// Second of execution (0-59). Defaults to 0 if not specified
+  second: int?;
+  /// Timezone for time calculation. Uses the host timezone if not specified
+  timezone: TimeZone?;
 }
 
 /// Defines tasks that run on specific days of the week.
@@ -581,10 +585,10 @@ type DailyPeriodicity extends Periodicity {
 ///   }
 ///   ```
 type WeeklyPeriodicity extends Periodicity {
-    /// Array of weekdays when the task should run
-    days: Array<DayOfWeek>;
-    /// Optional daily periodicity. Defaults to midnight if not provided.
-    daily: DailyPeriodicity?;
+  /// Array of weekdays when the task should run
+  days: Array<DayOfWeek>;
+  /// Optional daily periodicity. Defaults to midnight if not provided.
+  daily: DailyPeriodicity?;
 }
 
 /// Defines tasks that run monthly on specific days.
@@ -611,13 +615,13 @@ type WeeklyPeriodicity extends Periodicity {
 ///   }
 ///   ```
 type MonthlyPeriodicity extends Periodicity {
-    /// Array of days in the month when the task should run.
-    /// Positive values (1-31) count from start of month.
-    /// Negative values (-1 to -31) count from end of month (-1 = last day).
-    /// Invalid days for shorter months are skipped (e.g., day 31 in February).
-    days: Array<int>;
-    /// Optional daily timing specification. Defaults to midnight if not provided.
-    daily: DailyPeriodicity?;
+  /// Array of days in the month when the task should run.
+  /// Positive values (1-31) count from start of month.
+  /// Negative values (-1 to -31) count from end of month (-1 = last day).
+  /// Invalid days for shorter months are skipped (e.g., day 31 in February).
+  days: Array<int>;
+  /// Optional daily timing specification. Defaults to midnight if not provided.
+  daily: DailyPeriodicity?;
 }
 
 /// Defines tasks that run on specific calendar dates each year.
@@ -644,426 +648,426 @@ type MonthlyPeriodicity extends Periodicity {
 ///   }
 ///   ```
 type YearlyPeriodicity extends Periodicity {
-    /// Array of specific dates (day + month) when the task should run
-    dates: Array<DateTuple>;
-    /// Timezone for date calculation. Uses the host timezone if not specified
-    timezone: TimeZone?;
+  /// Array of specific dates (day + month) when the task should run
+  dates: Array<DateTuple>;
+  /// Timezone for date calculation. Uses the host timezone if not specified
+  timezone: TimeZone?;
 }
 
 enum DayOfWeek {
-    Mon(0),
-    Tue(1),
-    Wed(2),
-    Thu(3),
-    Fri(4),
-    Sat(5),
-    Sun(6);
+  Mon(0),
+  Tue(1),
+  Wed(2),
+  Thu(3),
+  Fri(4),
+  Sat(5),
+  Sun(6);
 }
 
 enum Month {
-    Jan(0),
-    Feb(1),
-    Mar(2),
-    Apr(3),
-    May(4),
-    Jun(5),
-    Jul(6),
-    Aug(7),
-    Sep(8),
-    Oct(9),
-    Nov(10),
-    Dec(11);
+  Jan(0),
+  Feb(1),
+  Mar(2),
+  Apr(3),
+  May(4),
+  Jun(5),
+  Jul(6),
+  Aug(7),
+  Sep(8),
+  Oct(9),
+  Nov(10),
+  Dec(11);
 }
 
 /// Represents a specific date within a year.
 /// The day field must be valid for the specified month (e.g., February 30th is invalid).
 /// Leap year handling is automatic for February dates.
 type DateTuple {
-    /// Day of the month (1-31). Must be valid for the specified month
-    day: int;
-    /// Month of the year
-    month: Month;
+  /// Day of the month (1-31). Must be valid for the specified month
+  day: int;
+  /// Month of the year
+  month: Month;
 }
 
 type OpenApi {
-    /// Returns an `OpenApiV3` specification from the current program.
-    /// All exposed functions are exported as paths, with their parameters
-    /// and return types represented as schemas.
-    @expose
-    @permission("api")
-    static native fn v3(): OpenApiV3;
+  /// Returns an `OpenApiV3` specification from the current program.
+  /// All exposed functions are exported as paths, with their parameters
+  /// and return types represented as schemas.
+  @expose
+  @permission("api")
+  static native fn v3(): OpenApiV3;
 }
 
 private type OpenApiV3 {
-    openapi: OpenApiVersion;
-    info: InfoObject;
-    paths: Map<String, PathItemObject>?;
-    components: ComponentsObject?;
+  openapi: OpenApiVersion;
+  info: InfoObject;
+  paths: Map<String, PathItemObject>?;
+  components: ComponentsObject?;
 }
 
 private enum OpenApiVersion {
-    "3.0.4";
-    "3.1.0";
+  "3.0.4";
+  "3.1.0";
 }
 
 private type InfoObject {
-    /// The title of the API
-    title: String;
-    /// The version of the OpenAPI Document
-    version: String;
+  /// The title of the API
+  title: String;
+  /// The version of the OpenAPI Document
+  version: String;
 }
 
 private type PathItemObject {
-    description: String?;
-    post: OperationObject?;
+  description: String?;
+  post: OperationObject?;
 }
 
 private type OperationObject {
-    /// A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
-    tags: Array<String>?;
-    /// A verbose explanation of the operation behavior.
-    description: String?;
-    requestBody: RequestBodyObject?;
-    responses: Map<String, ResponseObject>?;
+  /// A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
+  tags: Array<String>?;
+  /// A verbose explanation of the operation behavior.
+  description: String?;
+  requestBody: RequestBodyObject?;
+  responses: Map<String, ResponseObject>?;
 }
 
 private enum ResponseCode {
-    "200",
-    "400",
-    "404"
+  "200",
+  "400",
+  "404"
 }
 
 private type RequestBodyObject {
-    content: Map<String, MediaTypeObject>;
-    /// Determines if the request body is required in the request. Defaults to `false`
-    required: bool?;
+  content: Map<String, MediaTypeObject>;
+  /// Determines if the request body is required in the request. Defaults to `false`
+  required: bool?;
 }
 
 private type MediaTypeObject {
-    schema: SchemaObject;
+  schema: SchemaObject;
 }
 
 private type SchemaObject {
-    "$ref": String?;
-    "$defs": Map<String, SchemaObject>?;
-    /// Must be either `SchemaType?` or `Array<SchemaType>?`
-    type: any?;
-    format: SchemaFormat?;
-    description: String?;
-    nullable: bool?;
-    properties: Map<String, SchemaObject>?;
-    required: Array<String>?;
-    items: SchemaObject?;
-    /// Validates against exactly one of the schemas
-    oneOf: Array<SchemaObject>?;
-    /// Validates against all of the schemas
-    allOf: Array<SchemaObject>?;
-    /// Validates against at least one of the schemas
-    anyOf: Array<SchemaObject>?;
-    minItems: int?;
-    maxItems: int?;
-    enum: Array<String>?;
-    additionalProperties: SchemaObject?;
+  "$ref": String?;
+  "$defs": Map<String, SchemaObject>?;
+  /// Must be either `SchemaType?` or `Array<SchemaType>?`
+  type: any?;
+  format: SchemaFormat?;
+  description: String?;
+  nullable: bool?;
+  properties: Map<String, SchemaObject>?;
+  required: Array<String>?;
+  items: SchemaObject?;
+  /// Validates against exactly one of the schemas
+  oneOf: Array<SchemaObject>?;
+  /// Validates against all of the schemas
+  allOf: Array<SchemaObject>?;
+  /// Validates against at least one of the schemas
+  anyOf: Array<SchemaObject>?;
+  minItems: int?;
+  maxItems: int?;
+  enum: Array<String>?;
+  additionalProperties: SchemaObject?;
 
-    /// Creates a schema from the given type
-    static native fn from_type(type: type): SchemaObject;
+  /// Creates a schema from the given type
+  static native fn from_type(type: type): SchemaObject;
 }
 
 private enum SchemaType {
-    string,
-    number,
-    integer,
-    boolean,
-    object,
-    array,
-    null,
+  string,
+  number,
+  integer,
+  boolean,
+  object,
+  array,
+  null,
 }
 
 private enum SchemaFormat {
-    /// number, signed 32 bits
-    int32,
-    /// number, signed 64 bits (a.k.a long)
-    int64,
-    /// number, 32 bits
-    float,
-    /// number, 64 bits
-    double,
-    /// string, base64 encoded characters [RFC4648 - Section 4](https://datatracker.ietf.org/doc/html/rfc4648#section-4)
-    byte,
-    /// string, any sequence of bytes
-    binary,
-    /// string, as defined by `full-date` [RFC3339 - Section 5.6](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6)
-    date,
-    /// string, as defined by `date-time` [RFC3339 - Section 5.6](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6)
-    "date-time",
-    /// A hint to obscure the value
-    password,
+  /// number, signed 32 bits
+  int32,
+  /// number, signed 64 bits (a.k.a long)
+  int64,
+  /// number, 32 bits
+  float,
+  /// number, 64 bits
+  double,
+  /// string, base64 encoded characters [RFC4648 - Section 4](https://datatracker.ietf.org/doc/html/rfc4648#section-4)
+  byte,
+  /// string, any sequence of bytes
+  binary,
+  /// string, as defined by `full-date` [RFC3339 - Section 5.6](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6)
+  date,
+  /// string, as defined by `date-time` [RFC3339 - Section 5.6](https://datatracker.ietf.org/doc/html/rfc3339#section-5.6)
+  "date-time",
+  /// A hint to obscure the value
+  password,
 }
 
 private type ResponseObject {
-    description: String;
-    headers: Map<String, HeaderObject>?;
-    content: Map<String, MediaTypeObject>?;
+  description: String;
+  headers: Map<String, HeaderObject>?;
+  content: Map<String, MediaTypeObject>?;
 }
 
 private type HeaderObject {
-    /// A brief description of the header
-    description: String?;
-    /// Determines whether this header is mandatory. The default value is `false`
-    required: bool?;
+  /// A brief description of the header
+  description: String?;
+  /// Determines whether this header is mandatory. The default value is `false`
+  required: bool?;
 }
 
 private type ComponentsObject {
-    schemas: Map<String, SchemaObject>?;
+  schemas: Map<String, SchemaObject>?;
 }
 
 @volatile
 type McpInitializeParams extends McpRequestParams {
-    protocolVersion: String;
-    capabilities: McpClientCapabilities;
-    clientInfo: McpImplementation;
+  protocolVersion: String;
+  capabilities: McpClientCapabilities;
+  clientInfo: McpImplementation;
 }
 
 @volatile
 type McpClientCapabilities {
-    /// Experimental, non-standard capabilities that the client supports.
-    experimental: Map<String, any>?;
-    /// Present if the client supports listing roots.
-    roots: McpClientRoots?;
-    /// Present if the client supports sampling from an LLM.
-    sampling: Map<String, any>?;
-    /// Present if the client supports elicitation from the server.
-    elicitation: Map<String, any>?;
+  /// Experimental, non-standard capabilities that the client supports.
+  experimental: Map<String, any>?;
+  /// Present if the client supports listing roots.
+  roots: McpClientRoots?;
+  /// Present if the client supports sampling from an LLM.
+  sampling: Map<String, any>?;
+  /// Present if the client supports elicitation from the server.
+  elicitation: Map<String, any>?;
 }
 
 @volatile
 abstract type McpBaseMetadata {
-    /// Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
-    name: String;
-    /// Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
-    /// even by those unfamiliar with domain-specific terminology.
-    ///
-    /// If not provided, the name should be used for display (except for Tool,
-    /// where `annotations.title` should be given precedence over using `name`,
-    /// if present).
-    title: String?;
+  /// Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
+  name: String;
+  /// Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
+  /// even by those unfamiliar with domain-specific terminology.
+  ///
+  /// If not provided, the name should be used for display (except for Tool,
+  /// where `annotations.title` should be given precedence over using `name`,
+  /// if present).
+  title: String?;
 }
 
 @volatile
 type McpClientRoots {
-    /// Whether the client supports notifications for changes to the roots list.
-    listChanged: bool?;
+  /// Whether the client supports notifications for changes to the roots list.
+  listChanged: bool?;
 }
 
 @volatile
 type McpImplementation extends McpBaseMetadata {
-    version: String;
+  version: String;
 }
 
 @volatile
 type McpInitializeResult extends McpResult {
-    /// The version of the Model Context Protocol that the server wants to use.
-    /// This may not match the version that the client requested.
-    /// If the client cannot support this version, it MUST disconnect.
-    protocolVersion: String;
-    capabilities: McpServerCapabilities;
-    serverInfo: McpImplementation;
-    /// Instructions describing how to use the server and its features.
-    ///
-    /// This can be used by clients to improve the LLM's understanding of available tools, resources, etc.
-    /// It can be thought of like a "hint" to the model. For example, this information MAY be added to the system prompt.
-    instructions: String?;
+  /// The version of the Model Context Protocol that the server wants to use.
+  /// This may not match the version that the client requested.
+  /// If the client cannot support this version, it MUST disconnect.
+  protocolVersion: String;
+  capabilities: McpServerCapabilities;
+  serverInfo: McpImplementation;
+  /// Instructions describing how to use the server and its features.
+  ///
+  /// This can be used by clients to improve the LLM's understanding of available tools, resources, etc.
+  /// It can be thought of like a "hint" to the model. For example, this information MAY be added to the system prompt.
+  instructions: String?;
 }
 
 @volatile
 type McpServerCapabilities {
-    /// Experimental, non-standard capabilities that the server supports.
-    experimental: Map<String, Map<String, any>>?;
-    /// Present if the server supports sending log messages to the client.
-    logging: Map<String, any>?;
-    /// Present if the server supports argument autocompletion suggestions.
-    completions: Map<String, any>?;
-    /// Present if the server offers any prompt templates.
-    prompts: McpServerPromptsCapabilities?;
-    /// Present if the server offers any resources to read.
-    resources: McpServerResourcesCapabilities?;
-    /// Present if the server offers any tools to call.
-    tools: McpServerToolsCapabilities?;
+  /// Experimental, non-standard capabilities that the server supports.
+  experimental: Map<String, Map<String, any>>?;
+  /// Present if the server supports sending log messages to the client.
+  logging: Map<String, any>?;
+  /// Present if the server supports argument autocompletion suggestions.
+  completions: Map<String, any>?;
+  /// Present if the server offers any prompt templates.
+  prompts: McpServerPromptsCapabilities?;
+  /// Present if the server offers any resources to read.
+  resources: McpServerResourcesCapabilities?;
+  /// Present if the server offers any tools to call.
+  tools: McpServerToolsCapabilities?;
 }
 
 @volatile
 type McpServerPromptsCapabilities {
-    /// Whether this server supports notifications for changes to the prompt list.
-    listChanged: bool?;
+  /// Whether this server supports notifications for changes to the prompt list.
+  listChanged: bool?;
 }
 
 @volatile
 type McpServerResourcesCapabilities {
-    /// Whether this server supports subscribing to resource updates.
-    subscribe: bool?;
-    /// Whether this server supports notifications for changes to the resource list.
-    listChanged: bool?;
+  /// Whether this server supports subscribing to resource updates.
+  subscribe: bool?;
+  /// Whether this server supports notifications for changes to the resource list.
+  listChanged: bool?;
 }
 
 @volatile
 type McpServerToolsCapabilities {
-    /// Whether this server supports notifications for changes to the tool list.
-    listChanged: bool?;
+  /// Whether this server supports notifications for changes to the tool list.
+  listChanged: bool?;
 }
 
 @volatile
 type McpToolsListResult extends McpResult {
-    tools: Array<McpTool>;
+  tools: Array<McpTool>;
 }
 
 @volatile
 type McpTool extends McpBaseMetadata {
-    /// Optional human-readable description of functionality
-    ///
-    /// This can be used by clients to improve the LLM's understanding of available tools.
-    /// It can be thought of like a "hint" to the model.
-    description: String?;
-    /// JSON Schema defining expected parameters
-    inputSchema: SchemaObject;
-    /// Optional JSON Schema defining expected output structure
-    outputSchema: SchemaObject?;
-    /// Optional properties describing tool behavior
-    annotations: Map<String, any>?;
+  /// Optional human-readable description of functionality
+  ///
+  /// This can be used by clients to improve the LLM's understanding of available tools.
+  /// It can be thought of like a "hint" to the model.
+  description: String?;
+  /// JSON Schema defining expected parameters
+  inputSchema: SchemaObject;
+  /// Optional JSON Schema defining expected output structure
+  outputSchema: SchemaObject?;
+  /// Optional properties describing tool behavior
+  annotations: Map<String, any>?;
 }
 
 @volatile
 abstract type McpRequestParams {
-    /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
-    _meta: Map<String, any>?;
+  /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
+  _meta: Map<String, any>?;
 }
 
 @volatile
 abstract type McpResult {
-    /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
-    _meta: Map<String, any>?;
+  /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
+  _meta: Map<String, any>?;
 }
 
 @volatile
 type McpToolsCallResult extends McpResult {
-    /// List of content objects that represent the unstructured result of the tool call.
-    content: Array<McpContentBlock>;
-    /// Optional JSON object that represents the structured result of the call.
-    structuredContent: any?;
-    /// Whether the tool call ended in an error.
-    ///
-    /// If not set, this is assumed to be false (the call was successful).
-    ///
-    /// Any errors that originate from the tool SHOULD be reported inside the result
-    /// object, with `isError` set to true, _not_ as an MCP protocol-level error
-    /// response. Otherwise, the LLM would not be able to see that an error occurred
-    /// and self-correct.
-    ///
-    /// However, any errors in _finding_ the tool, an error indicating that the
-    /// server does not support tool calls, or any other exceptional conditions,
-    /// should be reported as an MCP error response.
-    isError: bool?;
+  /// List of content objects that represent the unstructured result of the tool call.
+  content: Array<McpContentBlock>;
+  /// Optional JSON object that represents the structured result of the call.
+  structuredContent: any?;
+  /// Whether the tool call ended in an error.
+  ///
+  /// If not set, this is assumed to be false (the call was successful).
+  ///
+  /// Any errors that originate from the tool SHOULD be reported inside the result
+  /// object, with `isError` set to true, _not_ as an MCP protocol-level error
+  /// response. Otherwise, the LLM would not be able to see that an error occurred
+  /// and self-correct.
+  ///
+  /// However, any errors in _finding_ the tool, an error indicating that the
+  /// server does not support tool calls, or any other exceptional conditions,
+  /// should be reported as an MCP error response.
+  isError: bool?;
 }
 
 @volatile
 abstract type McpContentBlock {
-    type: McpContentType;
-    /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
-    _meta: Map<String, any>?;
-    /// Optional annotations for the client.
-    annotations: McpAnnotations?;
+  type: McpContentType;
+  /// See `https://modelcontextprotocol.io/specification/2025-06-18/basic/index#meta`
+  _meta: Map<String, any>?;
+  /// Optional annotations for the client.
+  annotations: McpAnnotations?;
 }
 
 /// `type` must be a `McpContentType::text`
 @volatile
 type McpTextContent extends McpContentBlock {
-    /// The text content of the message
-    text: String;
+  /// The text content of the message
+  text: String;
 }
 
 /// `type` must be a `McpContentType::image`
 @volatile
 type McpImageContent extends McpContentBlock {
-    /// The base64-encoded image data in bytes
-    data: String;
-    /// The MIME type of the image. Different providers may support different image types.
-    mimeType: String;
+  /// The base64-encoded image data in bytes
+  data: String;
+  /// The MIME type of the image. Different providers may support different image types.
+  mimeType: String;
 }
 
 /// `type` must be a `McpContentType::audio`
 @volatile
 type McpAudioContent extends McpContentBlock {
-    /// The base64-encoded audio data in bytes
-    data: String;
-    /// The MIME type of the audio. Different providers may support different audio types.
-    mimeType: String;
+  /// The base64-encoded audio data in bytes
+  data: String;
+  /// The MIME type of the audio. Different providers may support different audio types.
+  mimeType: String;
 }
 
 /// Can be a `McpContentType::resource` or `McpContentType::resource_link`
 @volatile
 type McpResourceContent extends McpContentBlock {
-    /// The URI of this resource.
-    uri: String;
-    /// A description of what this resource represents.
-    ///
-    /// This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
-    description: String?;
-    /// The MIME type of this resource, if known.
-    mimeType: String?;
-    /// The size of the raw resource content, in bytes (i.e., before base64 encoding or any tokenization), if known.
-    ///
-    /// This can be used by Hosts to display file sizes and estimate context window usage.
-    size: int?;
+  /// The URI of this resource.
+  uri: String;
+  /// A description of what this resource represents.
+  ///
+  /// This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
+  description: String?;
+  /// The MIME type of this resource, if known.
+  mimeType: String?;
+  /// The size of the raw resource content, in bytes (i.e., before base64 encoding or any tokenization), if known.
+  ///
+  /// This can be used by Hosts to display file sizes and estimate context window usage.
+  size: int?;
 }
 
 @volatile
 enum McpContentType {
-    text,
-    image,
-    audio,
-    resource_link,
-    resource,
+  text,
+  image,
+  audio,
+  resource_link,
+  resource,
 }
 
 @volatile
 type McpAnnotations {
-    /// Describes who the intended customer of this object or data is.
-    ///
-    /// It can include multiple entries to indicate content useful for multiple audiences (e.g., `["user", "assistant"]`).
-    audience: Array<McpRole>?;
-    /// Describes how important this data is for operating the server.
-    priority: McpPriority?;
-    /// The moment the resource was last modified, as an ISO 8601 formatted string.
-    ///
-    /// Should be an ISO 8601 formatted string (e.g., "2025-01-12T15:00:58Z").
-    ///
-    /// Examples: last activity timestamp in an open file, timestamp when the resource
-    /// was attached, etc.
-    lastModified: String?;
+  /// Describes who the intended customer of this object or data is.
+  ///
+  /// It can include multiple entries to indicate content useful for multiple audiences (e.g., `["user", "assistant"]`).
+  audience: Array<McpRole>?;
+  /// Describes how important this data is for operating the server.
+  priority: McpPriority?;
+  /// The moment the resource was last modified, as an ISO 8601 formatted string.
+  ///
+  /// Should be an ISO 8601 formatted string (e.g., "2025-01-12T15:00:58Z").
+  ///
+  /// Examples: last activity timestamp in an open file, timestamp when the resource
+  /// was attached, etc.
+  lastModified: String?;
 }
 
 @volatile
 enum McpPriority {
-    /// Indicates that the data is effectively required
-    MostImportant(1),
-    /// Indicates that the data is entirely optional
-    LeastImportant(0),
+  /// Indicates that the data is effectively required
+  MostImportant(1),
+  /// Indicates that the data is entirely optional
+  LeastImportant(0),
 }
 
 @volatile
 enum McpRole {
-    user,
-    assistant,
+  user,
+  assistant,
 }
 
 @volatile
 type McpToolsListParams extends McpRequestParams {
-    cursor: String?;
+  cursor: String?;
 }
 
 @volatile
 type McpToolsCallParams extends McpRequestParams {
-    name: String;
-    arguments: any?;
+  name: String;
+  arguments: any?;
 }
 
 @expose("initialize")

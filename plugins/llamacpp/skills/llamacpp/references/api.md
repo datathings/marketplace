@@ -1635,37 +1635,29 @@ const llama_token * llama_adapter_get_alora_invocation_tokens(
 ```
 Get the invocation tokens if this is an A-LoRA adapter.
 
-### llama_set_adapter_lora
+### llama_set_adapters_lora
 ```c
-int32_t llama_set_adapter_lora(
+int32_t llama_set_adapters_lora(
     struct llama_context * ctx,
-    struct llama_adapter_lora * adapter,
-    float scale);
+    struct llama_adapter_lora ** adapters,
+    size_t n_adapters,
+    float * scales);
 ```
-Add a loaded LoRA adapter to the context. Does not modify model weights.
+Set multiple LoRA adapters to the context with individual scaling factors. Replaces any currently active adapters.
 
 **Parameters:**
 - `ctx`: Context
-- `adapter`: LoRA adapter
-- `scale`: Scaling factor
+- `adapters`: Array of LoRA adapter pointers
+- `n_adapters`: Number of adapters in the array
+- `scales`: Array of scaling factors (one per adapter)
 
-### llama_rm_adapter_lora
-```c
-int32_t llama_rm_adapter_lora(
-    struct llama_context * ctx,
-    struct llama_adapter_lora * adapter);
-```
-Remove a specific LoRA adapter from the context. Returns -1 if not present.
+**Returns:** 0 on success, non-zero on failure
 
-### llama_clear_adapter_lora
-```c
-void llama_clear_adapter_lora(struct llama_context * ctx);
-```
-Remove all LoRA adapters from the context.
+**Note:** Pass `n_adapters = 0` to clear all adapters from the context.
 
-### llama_apply_adapter_cvec
+### llama_set_adapter_cvec
 ```c
-int32_t llama_apply_adapter_cvec(
+int32_t llama_set_adapter_cvec(
     struct llama_context * ctx,
     const float * data,
     size_t len,
@@ -1682,6 +1674,8 @@ Apply a loaded control vector to the context. If `data` is NULL, clear the curre
 - `n_embd`: Size of a single layer's control
 - `il_start`: Start layer (inclusive)
 - `il_end`: End layer (inclusive)
+
+**Returns:** 0 on success, non-zero on failure
 
 ---
 
