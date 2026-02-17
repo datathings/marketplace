@@ -17,7 +17,6 @@ GreyCat is a graph-based programming language with built-in persistence. Unlike 
 - **Parallel execution** - Job API with fork-join pattern and automatic transaction merging
 - **Type-safe APIs** - @expose + @permission decorators with full TypeScript SDK generation
 - **Zero-config persistence** - No ORM, no migrations, no serialization - just code
-- **React integration** - Official @greycat/web SDK with automatic type generation
 
 ## Skill Activation Triggers
 
@@ -29,29 +28,27 @@ This skill automatically activates when you're working with:
 - Files containing GreyCat syntax
 
 ### Language Features
-- **Decorators**: `@expose`, `@permission`, `@volatile`, `@role`, `@library`, `@include`, `@test`, `@format_indent`
+- **Decorators**: `@expose`, `@permission`, `@volatile`, `@role`, `@library`, `@include`, `@test`, `@format_indent`, `@format`, `@tags`
 - **Indexed Collections**: `nodeList`, `nodeIndex`, `nodeTime`, `nodeGeo`
-- **Node Operations**: Persisted nodes, transactions, node references (`node<Type>`)
-- **Abstract Types**: Service patterns, polymorphism, inheritance
-- **Parallel Processing**: Jobs, `await()`, `PeriodicTask`, fork-join patterns
+- **Node Operations**: Persisted nodes, transactions, node references (`node<T>` where `T` can be any defined type)
+- **Parallel Processing**: Asynchronous tasks, `await()`, `PeriodicTask`, fork-join patterns
 
 ### Framework Components
 - **Backend**: Data models, services, API endpoints, persistence patterns
-- **Frontend**: `@greycat/web` SDK, React integration, TypeScript type generation
-- **Libraries**: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent
+- **Frontend**: `@greycat/web` contains a WebComponent vanilla TypeScript SDK, a custom JSX Runtime, and the GreyCat SDK to communicate with the backend through HTTP and GCB
+- **Libraries**: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent, explorer
 
 ### CLI Commands
-- `greycat serve` - Start development server
+- `greycat serve` - Start server
 - `greycat test` - Run tests
-- `greycat run import` - Execute import functions
-- `greycat install` - Download library dependencies
-- `greycat-lang lint` - Check for errors
+- `greycat install` - Download libraries
+- `greycat-lang lint` - Type-check and lint `.gcl` files
 
 ### Use Cases
 - Building graph-based data models
 - Creating time-series or geo-spatial applications
 - Implementing RBAC with permissions and roles
-- Developing full-stack applications with React frontends
+- Developing full-stack applications
 - Working with persistent node structures
 - Debugging GreyCat applications
 
@@ -66,15 +63,14 @@ This skill automatically activates when you're working with:
 This skill transforms your AI assistant into a GreyCat development expert by providing:
 
 - **Complete language reference** - All GCL syntax, types, and patterns in one place
-- **Best practices** - Avoid common pitfalls with proven patterns (Services, Views, transactions)
-- **Full-stack guidance** - Both backend (.gcl) and frontend (React/TypeScript) development
+- **Best practices** - Avoid common pitfalls with proven patterns (apis, views, transactions)
+- **Full-stack guidance** - Both backend (.gcl) and frontend development
 - **Library coverage** - Complete API references for all 10+ GreyCat libraries
 - **Progressive disclosure** - Core patterns immediately available, detailed references loaded only when needed
 
 **Perfect for:**
 - GreyCat beginners learning the fundamentals
 - Experienced developers building production applications
-- Full-stack teams integrating React frontends
 - Data engineers working with time-series and geo-spatial data
 
 ## When to Use This Skill
@@ -84,9 +80,9 @@ Use this skill when you need help with:
 - Working with persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo)
 - Creating data models and services
 - Writing API endpoints with `@permission` decorators
-- Implementing parallel processing with Jobs
-- Integrating React frontends with `@greycat/web` SDK
-- Running GreyCat commands (serve, test, run import)
+- Implementing parallel processing with jobs
+- Creating frontends with `@greycat/web` SDK
+- Running GreyCat commands (serve, test, run)
 - Debugging GreyCat projects
 
 ## GreyCat vs. Traditional Stacks
@@ -95,10 +91,10 @@ Use this skill when you need help with:
 |---------------------|------------------|
 | Separate database (Postgres, MongoDB) | Built-in persistence in GCL |
 | ORM layer (Prisma, TypeORM) | Direct node references |
-| Manual indexing setup | nodeIndex, nodeTime, nodeGeo built-in |
-| Separate job queue (Bull, BeeQueue) | Job API with await() |
-| API framework (Express, Fastify) | @expose decorators |
-| Manual TypeScript types | Auto-generated from GCL |
+| Manual indexing setup | Built-in: nodeIndex, nodeTime, nodeGeo, nodeList |
+| Separate job queue (Bull, BeeQueue) | Asynchronous Job API |
+| Router API (Express, Fastify) | `@expose` decorators |
+| Manual TypeScript types | Auto-generated from GCL (`greycat codegen`) |
 
 **When to use GreyCat:**
 - Building graph-based applications with complex relationships
@@ -137,11 +133,11 @@ Concise reference covering:
 - **testing.md** - @test, Assert, setup/teardown conventions
 
 **Frontend Development:**
-- **frontend.md** - Complete React integration guide:
+- **frontend.md** - Complete Web integration guide:
   - @greycat/web SDK setup
   - TypeScript type generation
   - Authentication & authorization
-  - React Query integration
+  - Off-the-shelf SDK WebComponents
   - Error handling and best practices
 
 **Library References:**
@@ -217,7 +213,7 @@ Once installed, this skill will automatically activate when you're working on Gr
 **Example interactions:**
 - "Create a GreyCat data model for a city with buildings and residents"
 - "Help me implement parallel processing for analyzing cities"
-- "Set up React frontend integration with authentication"
+- "Create a frontend with authentication to interact with the backend"
 - "How do I use nodeTime for time-series data?"
 - "Debug this GreyCat function that's failing"
 
@@ -226,10 +222,8 @@ Once installed, this skill will automatically activate when you're working on Gr
 ```gcl
 // project.gcl
 @library("std", "7.5.125-dev");
-@include("backend");
 
-@permission("app.user", "app user permission");
-@role("user", "app.user", "public", "api", "files");
+@include("backend");
 
 fn main() { }
 ```
@@ -250,17 +244,16 @@ type City {
 @volatile
 type CityView {
     name: String;
-    streetCount: int;
+    street_count: int;
 }
 
 @expose
-@permission("app.user")
-fn getCities(): Array<CityView> {
+fn get_cities(): Array<CityView> {
     var results = Array<CityView>{};
     for (name, city in cities_by_name) {
         results.add(CityView {
             name: city->name,
-            streetCount: city->streets.size()
+            street_count: city->streets.size()
         });
     }
     return results;
