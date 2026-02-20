@@ -1,6 +1,6 @@
 # Datathings Marketplace
 
-Official Claude Code plugin marketplace by Datathings — skills and LSP support for GreyCat development and local LLM inference.
+Official Claude Code plugin marketplace by Datathings — skills and LSP support for GreyCat development, local LLM inference, and numerical linear algebra.
 
 ## Quick Start
 
@@ -52,6 +52,7 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 | **greycat-c** | Skill | 2.0.0 | GreyCat C API and Standard Library for native development |
 | **greycat-lsp** | LSP | 2.0.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
 | **llamacpp** | Skill | 2.0.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| **blas_lapack** | Skill | 2.0.0 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
 
 ## Installation
 
@@ -87,6 +88,11 @@ C SDK reference:
 llama.cpp API:
 ```bash
 /plugin install llamacpp@datathings
+```
+
+BLAS/LAPACK API:
+```bash
+/plugin install blas_lapack@datathings
 ```
 
 ### Verify
@@ -130,15 +136,24 @@ Complete llama.cpp C API (163 functions):
 - Sampling strategies (XTC, DRY, infill)
 - GGUF model support
 
+### blas_lapack
+
+Complete CBLAS & LAPACKE C API (1284 functions, LAPACK v3.12.1):
+- BLAS Level 1/2/3 vector and matrix operations
+- Linear system solvers (LU, Cholesky, LDL)
+- Eigenvalue/eigenvector computation, SVD, least squares
+- QR/LQ factorizations and auxiliary routines
+
 ## Standalone Skill Files
 
 The `./skills/` folder contains pre-packaged `.skill` files (zip archives) for use with other AI tools or manual installation:
 
 ```
 skills/
-├── greycat.skill      # GreyCat full-stack development
-├── greycat-c.skill    # GreyCat C API reference
-└── llamacpp.skill     # llama.cpp C API reference
+├── greycat.skill       # GreyCat full-stack development
+├── greycat-c.skill     # GreyCat C API reference
+├── llamacpp.skill      # llama.cpp C API reference
+└── blas_lapack.skill   # CBLAS & LAPACKE C API reference
 ```
 
 Each `.skill` file contains a `SKILL.md` with instructions and optional `references/` documentation. To regenerate:
@@ -240,6 +255,7 @@ This provides the C API reference, tensor operations, and native function implem
 - **GreyCat**: https://greycat.io | https://doc.greycat.io | https://get.greycat.io
 - **Datathings**: https://datathings.com
 - **llama.cpp**: https://github.com/ggml-org/llama.cpp
+- **LAPACK**: https://github.com/Reference-LAPACK/lapack
 - **Support**: contact@datathings.com
 - **Issues**: https://github.com/datathings/marketplace/issues
 

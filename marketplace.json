@@ -1,7 +1,7 @@
 {
   "name": "datathings",
   "version": "1.0.0",
-  "description": "Claude Code skills for GreyCat development and local LLM inference",
+  "description": "Claude Code skills for GreyCat development, local LLM inference, and numerical linear algebra",
   "author": {
     "name": "Datathings",
     "email": "contact@datathings.com",
@@ -27,6 +27,12 @@
       "path": "./plugins/llamacpp/skills/llamacpp",
       "version": "1.1.0",
       "description": "Complete llama.cpp C/C++ API reference for local LLM inference"
+    },
+    {
+      "name": "blas_lapack",
+      "path": "./plugins/blas_lapack/skills/blas_lapack",
+      "version": "2.0.0",
+      "description": "Complete CBLAS & LAPACKE C API reference for numerical linear algebra"
     }
   ],
   "keywords": [
@@ -37,6 +43,9 @@
     "agent-skills",
     "llm",
     "graph-database",
-    "time-series"
+    "time-series",
+    "blas",
+    "lapack",
+    "linear-algebra"
   ]
 }

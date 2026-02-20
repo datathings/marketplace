@@ -21,6 +21,7 @@ Thumbs.db
 
 # Upstream repositories (cloned for updates)
 plugins/llamacpp/llama.cpp/
+plugins/blas_lapack/lapack/
 
 # Local settings (user-specific)
 .claude/settings.local.json
