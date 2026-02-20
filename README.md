@@ -48,10 +48,10 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 
 | Plugin | Type | Version | Description |
 |--------|------|---------|-------------|
-| **greycat** | Skill | 1.9.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
-| **greycat-c** | Skill | 1.9.0 | GreyCat C API and Standard Library for native development |
-| **greycat-lsp** | LSP | 1.9.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| **llamacpp** | Skill | 1.9.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| **greycat** | Skill | 1.9.1 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| **greycat-c** | Skill | 1.9.1 | GreyCat C API and Standard Library for native development |
+| **greycat-lsp** | LSP | 1.9.1 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| **llamacpp** | Skill | 1.9.1 | llama.cpp C API reference (163 functions) for local LLM inference |
 
 ## Installation
 

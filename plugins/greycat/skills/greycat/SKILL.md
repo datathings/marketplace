@@ -116,6 +116,8 @@ fn main() { }
 
 **Casting**: Float→int rounds (≥0.5 up, <0.5 down): `var i = 42.9 as int; // 43`
 
+**String→number**: `parseNumber(s)` returns `any` (int or float). Cast to desired type: `var v = parseNumber(s) as float;` or `var i = parseNumber(s) as int;`
+
 **Time**: `time` (μs epoch), `duration` (`1_us`, `500_ms`, `5_s`, `30_min`, `7_hour`, `2_day`), `Date` (UI, needs timezone)
 
 **Geo**: `geo{lat, lng}` | Shapes: `GeoBox`, `GeoCircle`, `GeoPoly` (`.contains(geo)`)
