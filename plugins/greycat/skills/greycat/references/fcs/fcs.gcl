@@ -1,0 +1,75 @@
+/// Flow Cytometry Standard (FCS) file reader
+///
+/// Parses FCS files used in flow cytometry experiments.
+/// FCS is a standard format for storing multi-parameter flow cytometry data.
+///
+/// Example:
+///   var reader = FcsReader { path: "data.fcs" };
+///   var meta = reader.meta();
+///   while (reader.can_read()) {
+///     var event = reader.event();
+///     // Process event data
+///   }
+
+/// Reader for FCS (Flow Cytometry Standard) files
+///
+/// Streams events from FCS files, which contain multi-parameter measurements
+/// from flow cytometry experiments (e.g., cell analysis).
+type FcsReader {
+    /// Path to the FCS file
+    private path: String;
+
+    /// Read metadata from the FCS file header
+    ///
+    /// @return FCS file metadata including channels, version, and event count
+    native fn meta(): FcsMeta;
+
+    /// Read the next event from the file
+    ///
+    /// Each event contains measurements for all channels (parameters).
+    /// Array length equals number of channels.
+    ///
+    /// @return Array of measurements, one per channel (null if value missing)
+    native fn event(): Array<float?>;
+
+    /// Check if more events are available to read
+    ///
+    /// @return True if more events can be read, false if end of file reached
+    native fn can_read(): bool;
+}
+
+/// Metadata from an FCS file header
+///
+/// Contains information about the experiment, channels, and data dimensions.
+type FcsMeta {
+    /// Original FCS file name
+    file_name: String?;
+    /// FCS format version (e.g., "FCS3.0", "FCS3.1")
+    version: String?;
+    /// Channel (parameter) definitions
+    channels: Array<FcsChannel>?;
+    /// Total number of events (measurements) in the file
+    total_events: int?;
+    /// Total number of channels (parameters)
+    total_channels: int?;
+    /// Experiment end timestamp
+    end_time: String?;
+    /// Experiment start timestamp
+    begin_time: String?;
+}
+
+/// Channel (parameter) definition in an FCS file
+///
+/// Each channel represents a measured parameter (e.g., fluorescence intensity, cell size).
+type FcsChannel {
+    /// Short channel name (e.g., "FSC-A", "PE-A")
+    short_name: String;
+    /// Descriptive channel name (e.g., "Forward Scatter", "CD4")
+    long_name: String;
+    /// Maximum value range for this channel
+    range: int?;
+    /// Amplification gain applied to this channel
+    gain: float?;
+    /// Linear scale transformation as (offset, multiplier)
+    scale: Tuple<float, float>?;
+}

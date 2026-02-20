@@ -22,7 +22,7 @@ This library is ideal for Industry 4.0 applications, SCADA integration, IoT data
 Add the OPC UA library to your GreyCat project:
 
 ```gcl
-@library("opcua", "7.7.2-dev")
+@library("opcua", "7.7.120-dev")
 ```
 
 ## Quick Start
@@ -57,7 +57,7 @@ var client = OpcuaClient {
 };
 
 // Subscribe to node changes
-var subscriptionId = client.subscribe(
+client.subscribe(
   ["ns=2;s=ProductionCounter"],
   fn(data) {
     print("New value: ${data}");
@@ -66,9 +66,6 @@ var subscriptionId = client.subscribe(
     print("Error: ${error}");
   }
 );
-
-// Later: cancel subscription
-client.cancel_subscription(subscriptionId);
 ```
 
 ## Types
@@ -101,8 +98,8 @@ Main client for connecting to OPC UA servers.
 - `explore(rootId: String): Array<Array<OpcuaMeta>>` - Explore node tree
 
 **Subscription Methods:**
-- `subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function): int` - Subscribe to data changes
-- `read_events(nodeIds: Array<String>, callback_data: function, callback_error: function): int` - Subscribe to events
+- `subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function)` - Subscribe to data changes
+- `read_events(nodeIds: Array<String>, callback_data: function, callback_error: function)` - Subscribe to events
 - `cancel_subscription(subscription_id: int): bool` - Cancel subscription
 
 **Utility Methods:**
@@ -164,10 +161,23 @@ Node metadata including properties and attributes.
 - `browse_name: Tuple?` - Node's browse name
 - `display_name: Tuple?` - Human-readable name
 - `description: Tuple?` - Node description
-- `data_type: String?` - Data type for variable nodes
+- `write_mask: int?` - Write permissions mask
+- `user_write_mask: int?` - User-specific write permissions
+- `is_abstract: bool?` - Whether this is an abstract type
+- `symetric: bool?` - Whether reference is symmetric
+- `inverse_name: Tuple?` - Inverse name for references
+- `contains_no_loops: bool?` - Whether hierarchy contains loops
+- `event_notifier: int?` - Event notifier flags
 - `value: any?` - Current value
+- `data_type: String?` - Data type for variable nodes
+- `value_rang: int?` - Value rank (-3 to +3, indicating array dimensions)
+- `array_dimentions: Array?` - Array dimension sizes
 - `access_level: int?` - Read/write permissions
+- `user_access_level: int?` - User-specific access level
+- `minimum_sampling_interval: float?` - Minimum sampling interval in milliseconds
 - `historizing: bool?` - Whether history is recorded
+- `executable: bool?` - Whether method is executable
+- `user_executable: bool?` - User-specific executability
 
 **Example:**
 
@@ -340,6 +350,26 @@ for (endpoint in endpoints) {
 }
 ```
 
+## Standalone Functions
+
+### validate_opcua_name()
+
+Validates whether a string is a valid OPC UA node identifier format.
+
+**Signature:** `native fn validate_opcua_name(name: String): bool`
+
+**Returns:** `true` if the string is a valid OPC UA node ID format, `false` otherwise
+
+**Example:**
+
+```gcl
+var valid = validate_opcua_name("ns=2;s=Temperature");
+print("Valid: ${valid}"); // true
+
+var invalid = validate_opcua_name("not-a-node-id");
+print("Valid: ${invalid}"); // false
+```
+
 ## Methods
 
 ### read()
@@ -451,14 +481,14 @@ var allHistory = client.read_history("ns=2;s=TotalCount", null, null);
 
 Subscribes to node value changes for real-time monitoring.
 
-**Signature:** `fn subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function): int`
+**Signature:** `fn subscribe(nodeIds: Array<String>, callback_data: function, callback_error: function)`
 
-**Returns:** Subscription ID for later cancellation
+**Returns:** void
 
 **Example:**
 
 ```gcl
-var subId = client.subscribe(
+client.subscribe(
   ["ns=2;s=Temperature", "ns=2;s=Pressure"],
   fn(data) {
     print("Data update: ${data}");
@@ -473,21 +503,18 @@ while (client.is_connected()) {
   // Your application logic
   sleep(1s);
 }
-
-// Cleanup
-client.cancel_subscription(subId);
 ```
 
 ### read_events()
 
 Subscribes to OPC UA events (alarms, notifications).
 
-**Signature:** `fn read_events(nodeIds: Array<String>, callback_data: function, callback_error: function): int`
+**Signature:** `fn read_events(nodeIds: Array<String>, callback_data: function, callback_error: function)`
 
 **Example:**
 
 ```gcl
-var eventSubId = client.read_events(
+client.read_events(
   ["ns=2;i=5001"], // Server object
   fn(event: OpcuaEvent) {
     if (event.'Severity' > 500) {
@@ -580,7 +607,7 @@ var sensors = [
   "ns=2;s=Line1.Status"
 ];
 
-var subId = client.subscribe(
+client.subscribe(
   sensors,
   fn(data) {
     // Update dashboard

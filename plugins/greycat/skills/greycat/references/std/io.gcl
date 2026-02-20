@@ -424,3 +424,81 @@ type Smtp {
     /// Send the parameter mail through smtp protocol
     native fn send(email: Email);
 }
+
+/// A type representing an object on the remote S3 server
+type S3Object {
+    /// The key of the object (eg. `"24/07/02/record_1234.txt"`)
+    key: String;
+    /// The last modified time of the object
+    last_modified: time;
+    /// The size of the object in bytes
+    size: int;
+    /// The entity tag (hash of the object)
+    etag: String;
+}
+
+/// A type representing a bucket on the remote S3 server
+type S3Bucket {
+    /// The name of the bucket
+    name: String;
+    /// The creation date of the bucket
+    creation_date: time;
+}
+
+/// A type representing access/secret key based authentication
+type S3BasicCredentials {
+    /// The access key
+    access_key: String;
+    /// The secret key
+    secret_key: String;
+}
+
+/// A type representing a connection to a remote S3 server
+type S3 {
+    /// The host address of the S3 server (eg. `"localhost:9000"`)
+    host: String;
+    /// The AWS region
+    region: String;
+    /// The credentials required for the connection
+    credentials: S3BasicCredentials;
+    /// Forces the client to use path-style addressing for buckets
+    force_path_style: bool?;
+
+    /// Returns some or all (up to `1_000`) of the objects in a bucket with each request.
+    ///
+    /// - `prefix`: Limits the response to keys that begin with the specified prefix.
+    /// - `start_after`: StartAfter is where you want Amazon S3 to start listing from.
+    ///   Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
+    /// - `max_keys`: Sets the maximum number of keys returned in the response.
+    ///   By default, the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more.
+    native fn list_objects(bucket: String, prefix: String?, start_after: String?, max_keys: int?): Array<S3Object>;
+    /// Retrieves an object.
+    ///
+    /// - `bucket`: The bucket name containing the object.
+    /// - `key`: Key of the object to get.
+    /// - `filepath`: The content of the object will be written at this path.
+    native fn get_object(bucket: String, key: String, filepath: String);
+    /// Adds an object to a bucket.
+    ///
+    /// - `bucket`: The bucket name to which the PUT action was initiated.
+    /// - `filepath`: Path to the file whose contents will be uploaded as object body.
+    /// - `key`: Object key for witch the PUT action was initiated, this can contain virtual directories.
+    ///
+    /// ### Example:
+    /// ```gcl
+    /// s3.put_object("bucket-name", "/local/path/to/file.txt", "virtual/path/to/object.txt");
+    /// ```
+    native fn put_object(bucket: String, filepath: String, key: String);
+    /// Removes an object from a bucket.
+    ///
+    /// - `key`: Key name of the object to delete.
+    native fn delete_object(bucket: String, key: String);
+    /// Creates a new bucket. By creating a bucket, you become the bucket owner.
+    ///
+    /// - `bucket`: The name of the bucket to create.
+    native fn create_bucket(bucket: String);
+    /// Returns a list of all buckets owned by the authenticated sender of the request.
+    ///
+    /// - `prefix`: Limits the response to bucket names that begin with the specified bucket name prefix.
+    native fn list_buckets(prefix: String?): Array<S3Bucket>;
+}

@@ -422,11 +422,13 @@ if (!ctx) {
 }
 ```
 
-**New parameters in b7572:**
+**Notable parameters:**
 
-- `kv_unified` (bool) - Use unified KV cache buffer (experimental). Enables a more memory-efficient cache layout. Default: false.
+- `op_offload` (bool) - Offload host tensor operations to device for improved performance. Default: true.
 
-- `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false.
+- `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false. Note: setting to false when `n_seq_max > 1` can cause bad performance.
+
+- `kv_unified` (bool) - Use a unified buffer across input sequences when computing attention. Try disabling when `n_seq_max > 1` for improved performance when sequences do not share a large prefix. Default: true.
 
 **Example with SWA:**
 ```c
@@ -1583,7 +1585,7 @@ struct llama_adapter_lora * llama_adapter_lora_init(
     struct llama_model * model,
     const char * path_lora);
 ```
-Load a LoRA adapter from file. Adapters are automatically freed when the model is freed.
+Load a LoRA adapter from file. Adapters are automatically freed when the model is freed (since b8115, `llama_adapter_lora_free()` is deprecated).
 
 ### llama_adapter_meta_val_str
 ```c
@@ -1886,12 +1888,16 @@ Input data for `llama_encode`/`llama_decode`:
 ### llama_model_params
 Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
-- `n_gpu_layers`: Number of layers to store in VRAM
+- `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
 - `split_mode`: How to split the model across GPUs
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
 - `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
 - `use_mlock`: Force system to keep model in RAM
+- `check_tensors`: Validate model tensor data
+- `use_extra_bufts`: Use extra buffer types (for weight repacking)
+- `no_host`: Bypass host buffer allowing extra buffers to be used
+- `no_alloc`: Only load metadata and simulate memory allocations
 
 ### llama_context_params
 Context parameters (get defaults via `llama_context_default_params()`):
@@ -1906,6 +1912,9 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `pooling_type`: Pooling type
 - `attention_type`: Attention type
 - `flash_attn_type`: Flash attention configuration
+- `op_offload`: Offload host tensor operations to device
+- `swa_full`: Use full-size SWA cache
+- `kv_unified`: Use a unified buffer across input sequences
 
 ### llama_token_data / llama_token_data_array
 Used for sampling:

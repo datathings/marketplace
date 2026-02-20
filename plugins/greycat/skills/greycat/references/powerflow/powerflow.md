@@ -20,7 +20,7 @@ This library is ideal for power system planning, grid optimization, renewable en
 Add the PowerFlow library to your GreyCat project:
 
 ```gcl
-@library("powerflow", "7.7.2-dev")
+@library("powerflow", "7.7.120-dev")
 ```
 
 ## Quick Start
@@ -90,7 +90,7 @@ Main type for power system modeling and analysis.
 - `configure(nb_bus: int, nb_lines: int, nb_ext_grids: int)` - Initialize network size
 - `createBus(bus_id: int, vn_kv: float)` - Create a bus
 - `createLoad(bus_id: int, p_mw: float, q_mvar: float)` - Create a load at a bus
-- `createLine(line_id: int, from_bus_id: int, to_bus_id: int, length_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float)` - Create a transmission line
+- `createLine(line_id: int, from_bus_id: int, to_bus_id: int, lenght_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float)` - Create a transmission line (note: `lenght_km` is a known typo in the API)
 - `createExtGrid(bus_id: int, vm_p_u: float)` - Create external grid (slack bus)
 - `compute()` - Run power flow calculation
 - `getBusResult(bus_id: int): PowerBusResult` - Get bus calculation results
@@ -237,13 +237,13 @@ network.createLoad(10, 5.0, -2.0); // 5 MW, -2 MVar
 
 Creates a transmission line between two buses.
 
-**Signature:** `fn createLine(line_id: int, from_bus_id: int, to_bus_id: int, length_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float)`
+**Signature:** `fn createLine(line_id: int, from_bus_id: int, to_bus_id: int, lenght_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float)`
 
 **Parameters:**
 - `line_id: int` - Unique line identifier
 - `from_bus_id: int` - Starting bus
 - `to_bus_id: int` - Ending bus
-- `length_km: float` - Line length in kilometers
+- `lenght_km: float` - Line length in kilometers (note: parameter name is a known typo in the API)
 - `r_ohm_per_km: float` - Resistance in ohms per kilometer
 - `x_ohm_per_km: float` - Reactance in ohms per kilometer
 - `c_n_f_per_km: float` - Capacitance in nanofarads per kilometer

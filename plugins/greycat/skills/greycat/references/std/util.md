@@ -59,6 +59,10 @@ window.add(40.0);
 Assert::equalsd(window.avg()!!, 30.0, 0.001); // (20+30+40)/3
 Assert::equals(window.min(), 20.0);
 Assert::equals(window.max(), 40.0);
+
+// Median and standard deviation of the window
+var median = window.median(); // returns float?
+var std_dev = window.std();   // returns float?
 ```
 
 ### TimeWindow
@@ -71,6 +75,9 @@ var time_window = TimeWindow<float> { span: 5min };
 // Add timestamped data
 time_window.add(time::now(), temperature);
 time_window.add(time::now() + 30s, next_temp);
+
+// Advance the window in time without adding a value (expires old entries)
+time_window.update(time::now() + 10min);
 
 // Get statistics for recent data only
 var recent_avg = time_window.avg();
@@ -95,12 +102,36 @@ Assert::equalsd(profile.avg()!!, 20.0, 0.001);
 Assert::equals(profile.min, 10.0);
 Assert::equals(profile.max, 30.0);
 
+// Add multiple counts at once
+profile.addx(15.0, 5); // adds 15.0 five times
+
+// Merge another Gaussian into this one
+var other = Gaussian<float> {};
+other.add(25.0);
+other.add(35.0);
+profile.add_gaussian(other);
+
 // Normalization: (value-min)/(max-min)
 Assert::equalsd(profile.normalize(15.0)!!, 0.25, 0.001);
+
+// Inverse normalization: value*(max-min)+min
+var original = profile.inverse_normalize(0.25);
 
 // Standardization: (value-avg)/std
 var standardized = profile.standardize(25.0);
 Assert::isTrue(standardized > 0.0); // above average
+
+// Inverse standardization: (value*std)+avg
+var unstandardized = profile.inverse_standardize(standardized);
+
+// Confidence score for a value
+var conf = profile.confidence(25.0);
+
+// Probability density function (PDF) at a value
+var density = profile.pdf(20.0);
+
+// Cumulative distribution function (CDF) at a value
+var cumulative = profile.cdf(20.0);
 ```
 
 ### Histogram
@@ -116,12 +147,30 @@ for (_, score in test_scores) {
     histogram.add(score);
 }
 
+// Add with count: add a value multiple times
+histogram.addx(75.0, 10); // adds 75.0 ten times
+
 // Analyze distribution
 var median = histogram.percentile(0.5); // 50th percentile
 var top_10_percent = histogram.percentile(0.9);
 var below_passing = histogram.ratio_under(60.0); // fraction below 60
-var stats = histogram.stats(); // comprehensive statistics
+var stats = histogram.stats(); // comprehensive statistics (HistogramStats<T>)
+
+// Get all bins as Array<HistogramBin<T>>
+var bins = histogram.get_bins();
+for (_, bin_entry in bins) {
+    // Each HistogramBin has: bin (QuantizerSlotBound<T>), count, ratio, cumulative_count, cumulative_ratio
+    var bounds = bin_entry.bin; // QuantizerSlotBound with min, max, center
+    var count = bin_entry.count;
+    var ratio = bin_entry.ratio;
+}
 ```
+
+#### HistogramBin
+Represents a single bin in a histogram with count and ratio statistics. Fields: `bin: QuantizerSlotBound<T>`, `count: int`, `ratio: float`, `cumulative_count: int`, `cumulative_ratio: float`.
+
+#### HistogramStats
+Comprehensive statistics returned by `histogram.stats()`. Fields include all standard percentiles (`min`, `max`, `whisker_low`, `whisker_high`, `p1`, `p5`, `p10`, `p20`, `p25`, `p50`, `p75`, `p80`, `p90`, `p95`, `p99`), plus `sum: float`, `avg: T`, `std: T`, `size: int`.
 
 ### GaussianProfile
 Multi-dimensional Gaussian statistics indexed by quantized keys for categorical analysis.
@@ -138,9 +187,17 @@ profile.add(age_group, another_salary);
 // Get statistics per category
 var avg_salary_for_group = profile.avg(age_group);
 var salary_std_for_group = profile.std(age_group);
+var salary_sum_for_group = profile.sum(age_group);
+var salary_count_for_group = profile.count(age_group);
 ```
 
+#### GaussianProfileSlot
+Represents a single slot in a GaussianProfile, tracking per-bin statistics. Fields: `sum: int`, `sumsq: int`, `count: int`.
+
 ## Quantizers
+
+### QuantizerSlotBound
+Represents the bounds of a quantizer slot. Fields: `min: T`, `max: T`, `center: T`. Returned by `quantizer.bounds(slot)` and used in `HistogramBin`.
 
 ### LinearQuantizer
 Uniform binning with equal-width intervals
@@ -206,6 +263,9 @@ Seeded random number generator with uniform, normal, and Gaussian distributions.
 // Reproducible random numbers with fixed seed
 var rng = Random { seed: 12345 };
 
+// Random character between 'a' and 'z'
+var c = rng.char();
+
 // Test uniform distribution bounds
 var roll = rng.uniform(1, 7); // 1-6 inclusive
 Assert::isTrue(roll >= 1 && roll < 7);
@@ -213,7 +273,20 @@ Assert::isTrue(roll >= 1 && roll < 7);
 var probability = rng.uniformf(0.0, 1.0);
 Assert::isTrue(probability >= 0.0 && probability < 1.0);
 
-// Normal distribution should center around mean
+// Random geo point within bounding box
+var random_point = rng.uniformGeo(geo::new(40.0, -74.0), geo::new(41.0, -73.0));
+
+// Normal distribution with specified mean and standard deviation
+var value = rng.normal(50.0, 10.0); // avg=50, std=10
+
+// Sample from an existing Gaussian profile
+var profile = Gaussian<float> {};
+profile.add(10.0);
+profile.add(20.0);
+profile.add(30.0);
+var sampled = rng.gaussian(profile);
+
+// Fill collection with random uniform values
 var samples = Array<float> {};
 rng.fill(samples, 1000, 50.0, 60.0);
 Assert::equals(samples.size(), 1000);

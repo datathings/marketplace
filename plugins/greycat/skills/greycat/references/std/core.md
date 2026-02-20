@@ -106,6 +106,23 @@ var distance = "hello".levenshtein("hallo"); // Levenshtein distance
 
 // Normalization
 var normalized = "Café".nfkd_casefold(); // NFD normalized, casefolded
+
+// Character decomposition
+var chars = "Hello".chars(); // Chars { codepoints: ['H', 'e', 'l', 'l', 'o'] }
+var back = chars.to_string(); // "Hello"
+```
+
+### Chars
+Character decomposition of a String, providing access to individual codepoints.
+
+```gcl
+type Chars {
+    codepoints: Array<char>;
+}
+
+var chars = "Hello".chars();
+var codepoints = chars.codepoints; // Array<char>
+var original = chars.to_string(); // "Hello"
 ```
 
 ### Buffer
@@ -245,6 +262,8 @@ temperature.setAll('2025-01-02T00:00:00Z', [18.0, 19.0, 20.0], 1h);
 // Time-based queries
 var current = temperature.resolve(); // latest value
 var at_time = temperature.resolveAt('2025-01-01T00:30:00Z'); // closest previous
+var within = temperature.resolveAtWithin('2025-01-01T00:30:00Z', 1h); // closest previous within max dephase
+var resolved_time = temperature.resolveTimeAt('2025-01-01T00:30:00Z'); // closest previous timestamp
 var exact = temperature.getAt('2025-01-01T01:00:00Z');
 var time_value = temperature.resolveTimeValueAt('2025-01-01T00:30:00Z');
 
@@ -428,6 +447,9 @@ var value = tensor.get([0, 0]);
 tensor.setImag([0, 0], 0.5); // imaginary part
 var imag_val = tensor.getImag([0, 0]);
 
+// Appending values
+tensor.append(42.0); // append value (1D), array (2D), or tensor (general)
+
 // Operations
 tensor.add([0, 0], 0.5); // add to existing value
 tensor.fill(0.0); // fill all with value
@@ -447,10 +469,19 @@ var imag_part = var_imaginary_tensor();
 var absolute = complex_t.get_absolute_tensor();
 var phase = complex_t.get_phase_tensor(false); // radians
 
+// Capacity management
+tensor.setCapacity(1000); // pre-allocate capacity to avoid repeated resizes from append
+
 // Reshaping and slicing
 tensor.reshape([12]); // reshape to 1D
 var slice = tensor.slice([0, 0], [2, 2]); // 2x2 sub-tensor
-tensor.slide(5); // sliding window
+tensor.slide(5); // slide tensor 5 steps across the first dimension (useful for sliding windows, sequences, LSTM, Fourier)
+
+// Copying elements between tensors
+tensor.copyElementsFrom(src_tensor, 0, 5, 10); // copy 5 elements from src starting at pos 0, into tensor at pos 10
+
+// Reset
+tensor.reset(); // delete all tensor attributes and data
 
 // Scaling
 var scaled = tensor.scale(2.0, 1.0); // scale by 2.0

@@ -356,6 +356,12 @@ var tz = System::tz();
 // Access environment variables
 var home = System::getEnv("HOME");
 var path = System::getEnv("PATH");
+
+// Get all environment variables (requires admin permission)
+var all_envs = System::get_all_envs();
+for (_, entry in all_envs) {
+    println("${entry.0} = ${entry.1}");
+}
 ```
 
 ### License
@@ -407,6 +413,10 @@ var user_by_id = User::get(1);
 // Password management
 User::setPassword("alice", "new_secure_password");
 var password_valid = User::checkPassword("alice", "test_password");
+
+// User fields
+// groups_flags: int? - bitfield representing group membership flags
+// external: bool - whether the user is externally managed (e.g., via OIDC)
 ```
 
 ### UserGroup
@@ -419,12 +429,12 @@ for (_, entity in entities) {
     println("${entity.name}: active=${entity.activated}");
 }
 
-// Create or update entity
+// Create or update entity (returns the entity ID)
 var group = UserGroup {
     name: "developers",
     activated: true
 };
-var group_id = SecurityEntity::set(group);
+var group_id: int? = SecurityEntity::set(group);
 ```
 
 ### UserGroupPolicy
@@ -718,6 +728,7 @@ SecurityFields::set(SecurityFields {
     first_name: "givenName",
     last_name: "sn",
     roles: roles_map,
+    groups_claim: "groups",  // JWT claim name for groups
     groups: groups_map
 });
 ```

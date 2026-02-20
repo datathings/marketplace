@@ -97,7 +97,7 @@ Use `/greycat:command-name` in Claude Code:
 
 **project.gcl**:
 ```gcl
-@library("std", "7.7.68-dev");           // required
+@library("std", "7.7.113-dev");           // required
 @library("explorer", "7.7.0-dev");      // graph UI /explorer (dev)
 @include("backend");                     // ⚠️ project.gcl only - includes ALL .gcl
 
@@ -312,19 +312,24 @@ rm -rf gcdata && greycat run import  # ⚠️ DELETES DATA - confirm first
 
 ## Full-Stack Development
 
-**[references/frontend.md](references/frontend.md)** - React+GreyCat guide (1,013 lines): @greycat/web SDK, TypeScript codegen, auth, React Query, error handling.
+**[references/frontend.md](references/frontend.md)** - React+GreyCat guide: @greycat/web SDK, TypeScript codegen, auth, React Query, error handling.
 
 ## Local LLM Integration
 
 **[references/ai/llm.md](references/ai/llm.md)** - llama.cpp integration: model loading, text gen, chat, embeddings, LoRA.
 ```gcl
-@library("ai", "7.7.2-dev");
+@library("ai", "7.7.120-dev");
 var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
 var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
 ```
 
 ## Library References
 
-**[references/LIBRARIES.md](references/LIBRARIES.md)** - Complete catalog: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent.
+**[references/LIBRARIES.md](references/LIBRARIES.md)** - Complete type definitions and API signatures.
+
+**Core**: std (types, collections, I/O, runtime, util) · explorer (graph UI)
+**AI/ML**: [ai](references/ai/llm.md) (LLM) · [algebra](references/algebra/) (ML, NN, patterns, transforms, clustering, climate)
+**Integrations**: [kafka](references/kafka/kafka.md) · [postgres](references/sql/postgres.md) · [s3](references/s3/s3.md) · [opcua](references/opcua/opcua.md) · [ftp](references/ftp/ftp.md) (FTP/FTPS) · [ssh](references/ssh/ssh.md) (SFTP)
+**Domain**: [finance](references/finance/finance.md) (IBAN) · [powerflow](references/powerflow/powerflow.md) · [powergrid](references/powergrid/powergrid.md) · [fcs](references/fcs/fcs.md) (flow cytometry) · [useragent](references/useragent/useragent.md)
 
 **CLI**: [references/cli.md](references/cli.md) | **Docs**: https://doc.greycat.io/

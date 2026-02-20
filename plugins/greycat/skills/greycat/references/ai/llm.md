@@ -5,7 +5,7 @@ GreyCat's LLM API provides comprehensive access to llama.cpp for local language 
 ## Quick Start
 
 ```gcl
-@library("ai", "7.7.2-dev");
+@library("ai", "7.7.120-dev");
 
 // Load a model
 var model = Model::load("llama3", "./Llama-3.2-1B.gguf", ModelParams { n_gpu_layers: -1 });
@@ -183,12 +183,50 @@ println("Context size: ${info.n_ctx_train}");
 println("Vocab size: ${info.n_vocab}");
 println("Has encoder: ${info.has_encoder}");
 
-// Get metadata
+// Model description shorthand
+println(model.desc());
+
+// Get metadata by key
 var name = model.meta("general.name");
 var author = model.meta("general.author");
 
+// Iterate all metadata
+var count = model.meta_count();
+for (var i = 0; i < count; i++) {
+    var key = model.meta_key_by_index(i);
+    var val = model.meta_val_by_index(i);
+    println("${key}: ${val}");
+}
+
 // Get chat template
 var template = model.chat_template(null);
+```
+
+### Model Quantization
+
+```gcl
+// Quantize a model to a smaller format (no Model instance needed)
+Model::quantize("./model-f16.gguf", "./model-q4_k.gguf", QuantizeParams {
+    ftype: GgmlType::q4_k,
+    nthread: 4
+});
+```
+
+### Model State & Performance
+
+```gcl
+// Save model state to file
+model.save("./model-checkpoint.gguf");
+
+// Get performance data from last operation
+var perf = model.perf();
+println("Speed: ${perf.context.tokens_per_second} tok/s");
+
+// Print memory usage breakdown to log
+model.print_memory();
+
+// Convert a token ID to text with full control
+var piece = model.token_to_piece(42, 0, true);
 ```
 
 ### Performance Metrics
@@ -305,12 +343,22 @@ if (LLM::supports_gpu()) {
     println("GPU acceleration available");
 }
 println("Max devices: ${LLM::max_devices()}");
+println("Supports mmap: ${LLM::supports_mmap()}");
+println("Supports mlock: ${LLM::supports_mlock()}");
+println("Max parallel sequences: ${LLM::max_parallel_sequences()}");
 
 // Enable logging
 LLM::logging(true);
 
 // Built-in chat templates
-var templates = LLM::chat_templates();
+var templates = LLM::chat_builtin_templates();
+
+// Check if model fits in device memory
+var mparams = ModelParams { n_gpu_layers: -1 };
+var cparams = ContextParams { n_ctx: 4096 };
+if (LLM::params_fit("./model.gguf", mparams, cparams, 512_000_000, 512)) {
+    println("Model fits in device memory");
+}
 ```
 
 ## Types Reference
@@ -324,6 +372,16 @@ var templates = LLM::chat_templates();
 **GgmlType** - Quantization formats: `f32`, `f16`, `bf16`, `q4_0`, `q4_k`, `q5_k`, `q6_k`, `q8_0`, etc.
 
 **StopReason** - Generation stop: `max_tokens`, `eog_token`, `aborted`, `error`
+
+**SamplerType** - Sampler identifiers: `greedy`, `dist`, `top_k`, `top_p`, `min_p`, `typical`, `temp`, `temp_ext`, `xtc`, `top_n_sigma`, `mirostat`, `mirostat_v2`, `grammar`, `penalties`, `dry`, `logit_bias`, `infill`
+
+**FlashAttnType** - Flash attention mode: `disabled`, `enabled_for_fa` (only for FA-native models), `enabled_for_all`
+
+**AttentionType** - Attention mechanism: `unspecified`, `causal`, `non_causal`
+
+**RopeScalingType** - RoPE scaling: `unspecified`, `none`, `linear`, `yarn`, `longrope`
+
+**VocabType** - Vocabulary format: `none`, `spm` (SentencePiece), `bpe` (Byte-Pair Encoding), `wpm` (WordPiece), `ugm` (Unigram), `rwkv`, `plamo2`
 
 ### Result Types
 
@@ -342,14 +400,22 @@ type GenerationResult {
 ```gcl
 type ModelInfo {
     description: String;       // Model description
+    size: int;                 // Total model size in bytes
     n_params: int;             // Parameter count
-    n_ctx_train: int;          // Training context size
-    n_vocab: int;              // Vocabulary size
     n_embd: int;               // Embedding dimension
     n_layer: int;              // Layer count
+    n_head: int;               // Attention heads
+    n_head_kv: int;            // Key-value heads (GQA)
+    n_ctx_train: int;          // Training context size
+    n_vocab: int;              // Vocabulary size
+    vocab_type: VocabType;     // Vocabulary format
     has_encoder: bool;         // Encoder-decoder model
     has_decoder: bool;
-    // ... many more fields
+    is_recurrent: bool;        // Recurrent model (Mamba, RWKV)
+    is_hybrid: bool;           // Hybrid architecture
+    is_diffusion: bool;        // Diffusion-based model
+    chat_template: String?;    // Chat template (if available)
+    metadata: Map<String, String>; // All model metadata
 }
 ```
 
@@ -361,22 +427,100 @@ type ChatMessage {
 }
 ```
 
+### Context Parameters
+
+**ContextParams** - Full control over inference context:
+```gcl
+type ContextParams {
+    // Core
+    n_ctx: int?;                       // Context size (0 = from model)
+    n_batch: int?;                     // Logical max batch size
+    n_ubatch: int?;                    // Physical max batch size
+    n_seq_max: int?;                   // Max sequences for recurrent models
+    // Threading
+    n_threads: int?;                   // Threads for generation
+    n_threads_batch: int?;             // Threads for batch processing
+    // Attention & Pooling
+    rope_scaling_type: RopeScalingType?;
+    pooling_type: PoolingType?;        // Embedding pooling strategy
+    attention_type: AttentionType?;    // Attention mechanism
+    flash_attn_type: FlashAttnType?;   // Flash attention mode
+    // RoPE
+    rope_freq_base: float?;            // RoPE base frequency
+    rope_freq_scale: float?;           // RoPE frequency scaling factor
+    // YaRN (RoPE scaling)
+    yarn_ext_factor: float?;
+    yarn_attn_factor: float?;
+    yarn_beta_fast: float?;
+    yarn_beta_slow: float?;
+    yarn_orig_ctx: int?;
+    // KV Cache
+    defrag_thold: float?;              // KV cache defrag threshold
+    type_k: GgmlType?;                // K cache data type
+    type_v: GgmlType?;                // V cache data type
+    // Feature Flags
+    embeddings: bool?;                 // Extract embeddings with logits
+    normalize: bool?;                  // Normalize embeddings (L2 norm)
+    offload_kqv: bool?;               // Offload KQV ops to GPU
+    no_perf: bool?;                    // Disable performance timings
+    op_offload: bool?;                 // Offload host tensor ops to device
+    swa_full: bool?;                   // Full-size SWA cache
+    kv_unified: bool?;                 // Unified buffer for attention
+}
+```
+
 ### Advanced Sampler Parameters
 
 **SamplerParams** - Full control over sampling:
 ```gcl
 type SamplerParams {
     temperature: float?;       // Randomness (0.0-2.0)
+    dynatemp_range: float?;    // Dynamic temperature range
+    dynatemp_exponent: float?; // Dynamic temperature exponent
     top_k: int?;               // Top-K filter
     top_p: float?;             // Nucleus sampling
     min_p: float?;             // Min-P filter
+    xtc_threshold: float?;     // XTC sampling threshold
+    xtc_probability: float?;   // XTC sampling probability
     typical_p: float?;         // Typical sampling
     penalty: PenaltyParams?;   // Repetition penalties
     dry: DryParams?;           // DRY sampling
+    mirostat: MirostatParams?; // Mirostat v1 parameters
     mirostat_v2: MirostatV2Params?;
     grammar: String?;          // GBNF grammar
     logit_bias: Array<LogitBias>?;
     seed: int?;                // Random seed
+}
+```
+
+**QuantizeParams** - Model quantization configuration:
+```gcl
+type QuantizeParams {
+    nthread: int?;             // Threads (0 = auto)
+    ftype: GgmlType?;         // Target quantization format
+    allow_requantize: bool?;   // Allow requantizing from quantized source
+    quantize_output_tensor: bool?; // Quantize output.weight
+    only_copy: bool?;          // Copy tensors without quantization
+    pure: bool?;               // Disable k-quant mixtures
+    imatrix_file: String?;     // Importance matrix file path
+}
+```
+
+**MirostatParams** - Mirostat v1 sampling:
+```gcl
+type MirostatParams {
+    tau: float?;   // Target entropy
+    eta: float?;   // Learning rate
+    m: int?;       // Number of candidates
+}
+```
+
+**TokenData** - Single token with probability:
+```gcl
+type TokenData {
+    id: int;       // Token ID
+    logit: float;  // Unnormalized log probability
+    p: float;      // Probability (after softmax)
 }
 ```
 

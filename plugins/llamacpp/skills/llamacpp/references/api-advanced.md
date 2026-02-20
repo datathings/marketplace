@@ -24,7 +24,7 @@ struct llama_adapter_lora * llama_adapter_lora_init(
 Load a LoRA adapter from file.
 
 **Important:**
-- Adapters are automatically freed when the model is freed
+- Adapters are automatically freed when the model is freed (since b8115, `llama_adapter_lora_free()` is deprecated)
 - All adapters must be loaded before context creation
 
 ### llama_adapter_meta_val_str
@@ -209,6 +209,25 @@ void llama_memory_breakdown_print(const struct llama_context * ctx);
 ```
 Print a breakdown of per-device memory use via `LLAMA_LOG`.
 
+### Performance Data Structs
+
+```c
+struct llama_perf_context_data {
+    double t_start_ms;    // absolute start time
+    double t_load_ms;     // time needed for loading the model
+    double t_p_eval_ms;   // time needed for processing the prompt
+    double t_eval_ms;     // time needed for generating tokens
+    int32_t n_p_eval;     // number of prompt tokens
+    int32_t n_eval;       // number of generated tokens
+    int32_t n_reused;     // number of times a ggml compute graph had been reused
+};
+
+struct llama_perf_sampler_data {
+    double t_sample_ms;   // time needed for sampling in ms
+    int32_t n_sample;     // number of sampled tokens
+};
+```
+
 ### Logging
 
 ```c
@@ -328,12 +347,16 @@ Input data for `llama_encode`/`llama_decode`:
 ### llama_model_params
 Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
-- `n_gpu_layers`: Number of layers to store in VRAM
+- `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
 - `split_mode`: How to split the model across GPUs
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
 - `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
 - `use_mlock`: Force system to keep model in RAM
+- `check_tensors`: Validate model tensor data
+- `use_extra_bufts`: Use extra buffer types (for weight repacking)
+- `no_host`: Bypass host buffer allowing extra buffers to be used
+- `no_alloc`: Only load metadata and simulate memory allocations
 
 ### llama_context_params
 Context parameters (get defaults via `llama_context_default_params()`):
@@ -348,6 +371,9 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `pooling_type`: Pooling type
 - `attention_type`: Attention type
 - `flash_attn_type`: Flash attention configuration
+- `op_offload`: Offload host tensor operations to device
+- `swa_full`: Use full-size SWA cache
+- `kv_unified`: Use a unified buffer across input sequences
 
 ### llama_token_data / llama_token_data_array
 Used for sampling:

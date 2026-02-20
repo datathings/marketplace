@@ -95,6 +95,10 @@ Assert::equals(first_person.name, "John");
 // Parse JSON strings directly
 var parsed = Json<Person> {}.parse("{\"name\":\"Alice\",\"age\":30}");
 Assert::equals(parsed.name, "Alice");
+
+// Serialize any value to JSON string
+var json_str = Json::to_string(parsed);
+Assert::isNotNull(json_str);
 ```
 
 ### CsvWriter / CsvReader
@@ -121,12 +125,100 @@ while (reader.can_read()) {
     Assert::isNotNull(emp.name);
 }
 
+// Write a raw line directly (no automatic header generation)
+writer.write_line("custom,raw,line");
+writer.flush();
+
 // Re-use reader for multiple files
 reader.set_path("/path/to/other_employees.csv");
 Assert::isTrue(reader.can_read());
+
+// Get the last read line as raw string
+var last = reader.last_line();
 ```
 
 ## CSV Analysis & Code Generation
+
+### CsvFormat
+Configuration for CSV parsing and writing.
+
+```gcl
+var format = CsvFormat {
+    header_lines: 1,
+    separator: ',',
+    string_delimiter: '"',
+    decimal_separator: '.',
+    thousands_separator: '_',
+    trim: true,
+    format: "yyyy-MM-dd",
+    tz: TimeZone::Europe_Luxembourg,
+    strict: false,
+    nearest_time: false
+};
+```
+
+### CsvSharding
+Sharding configuration for partitioned CSV reading.
+
+```gcl
+var sharding = CsvSharding {
+    id: 0,
+    column: 2,
+    modulo: 4
+};
+var reader = CsvReader<MyType> { path: "/path/to/data.csv", sharding: sharding };
+```
+
+### CsvColumnStatistics
+Per-column statistics collected during CSV analysis.
+
+```gcl
+// Fields:
+//   name: String?             - column name as in CSV header
+//   example: any?             - one value
+//   null_count: int           - number of null values
+//   bool_count: int           - number of boolean values
+//   int_count: int            - number of integer values
+//   float_count: int          - number of float values
+//   string_count: int         - number of string values
+//   date_count: int           - number of date values
+//   date_format_count: Map<String, int>  - occurrence of each date format matched
+//   enumerable_count: Map<any, int>      - occurrences of enumerable values found
+//   profile: Gaussian         - statistics on numeric values
+```
+
+### CsvStatistics
+Aggregated statistics from CSV analysis across one or more files.
+
+```gcl
+// Fields:
+//   header_lines: int?
+//   separator: char?
+//   string_delimiter: char?
+//   decimal_separator: char?
+//   thousands_separator: char?
+//   columns: Array<CsvColumnStatistics>  - statistics per column
+//   line_count: int           - accumulated analyzed rows for all CSV files
+//   fail_count: int           - accumulated number of failed lines
+//   file_count: int           - number of CSV files explored
+```
+
+### CsvAnalysisConfig
+Configuration for CSV analysis behavior.
+
+```gcl
+var config = CsvAnalysisConfig {
+    header_lines: 1,
+    separator: ',',
+    string_delimiter: '"',
+    decimal_separator: '.',
+    thousands_separator: '_',
+    row_limit: 1000,
+    enumerable_limit: 50,
+    date_check_limit: 100,
+    date_formats: ["yyyy-MM-dd", "dd/MM/yyyy"]
+};
+```
 
 ### Csv
 Static utility for analyzing CSV files and generating GreyCat types.
@@ -212,6 +304,10 @@ Assert::equals(url.port, 8080);
 Assert::equals(url.path, "/users");
 Assert::equals(url.params?.get("active"), "true");
 Assert::equals(url.hash, "section1");
+
+// URL-encode a value
+var encoded = Url::encode("hello world&foo=bar");
+Assert::isNotNull(encoded);
 ```
 
 ### Http
@@ -236,6 +332,49 @@ Assert::isTrue(downloaded.size!! > 0);
 var payload = User { name: "John", email: "john@example.com" };
 var result = Http<User> {}.post("https://api.example.com/users", payload, headers);
 Assert::isNotNull(result);
+
+// PUT data
+var updated = Http<User> {}.put("https://api.example.com/users/1", payload, headers);
+Assert::isNotNull(updated);
+
+// Send a full HTTP request with HttpRequest/HttpResponse
+var request = HttpRequest {
+    method: HttpMethod::POST,
+    url: "https://api.example.com/users",
+    headers: headers,
+    body: "{\"name\":\"John\"}",
+    timeout: 30_s
+};
+
+var resp = Http<String> {}.send(request);
+Assert::equals(resp.status_code, 200);
+Assert::isNotNull(resp.content);
+```
+
+### HttpMethod
+Enum of supported HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`.
+
+### HttpRequest
+Request wrapper for `Http::send`.
+
+```gcl
+// Fields:
+//   method: HttpMethod
+//   url: String
+//   headers: Map<String, String>?
+//   body: String?
+//   timeout: duration?
+```
+
+### HttpResponse\<T\>
+Response wrapper returned by `Http::send`.
+
+```gcl
+// Fields:
+//   status_code: int
+//   headers: Map<String, String>
+//   content: T?
+//   error_msg: String?
 ```
 
 ## Email & Communication
@@ -259,6 +398,7 @@ var email = Email {
     from: "sender@example.com",
     to: ["recipient@example.com"],
     cc: ["cc@example.com"],
+    bcc: ["hidden@example.com"],
     subject: "Test Email",
     body: "<h1>Hello World</h1>",
     body_is_html: true
@@ -267,3 +407,49 @@ var email = Email {
 // Send email (would throw exception on failure)
 smtp.send(email);
 ```
+
+## S3 Object Storage (Built-in)
+
+S3-compatible object storage types are available directly in the standard library without requiring `@library("s3")`.
+
+### S3
+
+Connection to a remote S3-compatible server (AWS S3, MinIO, etc.).
+
+```gcl
+var s3 = S3 {
+    host: "s3.amazonaws.com",
+    region: "us-east-1",
+    credentials: S3BasicCredentials {
+        access_key: env("AWS_ACCESS_KEY"),
+        secret_key: env("AWS_SECRET_KEY")
+    },
+    force_path_style: true // required for MinIO
+};
+
+// Upload and download files
+s3.put_object("my-bucket", "/local/file.txt", "remote/path/file.txt");
+s3.get_object("my-bucket", "remote/path/file.txt", "/local/downloaded.txt");
+
+// List objects (up to 1000 per call, paginate with start_after)
+var objects = s3.list_objects("my-bucket", "prefix/", null, 100);
+for (obj in objects) {
+    println("${obj.key} - ${obj.size} bytes");
+}
+
+// Delete objects
+s3.delete_object("my-bucket", "old-file.txt");
+
+// Bucket management
+s3.create_bucket("new-bucket");
+var buckets = s3.list_buckets(null);
+```
+
+### S3Object
+Represents an object in S3: `key: String`, `last_modified: time`, `size: int`, `etag: String`.
+
+### S3Bucket
+Represents a bucket: `name: String`, `creation_date: time`.
+
+### S3BasicCredentials
+Authentication: `access_key: String`, `secret_key: String`.

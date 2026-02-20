@@ -46,6 +46,8 @@ External system integrations for databases, messaging, storage, and industrial p
 - **[postgres.md](sql/postgres.md)** | [postgres.gcl](sql/postgres.gcl) — PostgreSQL database with transactions, SQL execution, CSV import/export via COPY command (Postgres)
 - **[s3.md](s3/s3.md)** | [s3.gcl](s3/s3.gcl) — S3-compatible object storage for AWS S3 and MinIO (S3, S3Object, S3Bucket, upload/download/list)
 - **[opcua.md](opcua/opcua.md)** | [opcua.gcl](opcua/opcua.gcl) — OPC UA industrial automation protocol with read/write/subscribe, historical data, security modes (OpcuaClient)
+- **[ftp.md](ftp/ftp.md)** | [ftp.gcl](ftp/ftp.gcl) — FTP/FTPS file transfer with upload, download, list, and delete operations (Ftp, FtpEntry)
+- **[ssh.md](ssh/ssh.md)** | [ssh.gcl](ssh/ssh.gcl) [sftp.gcl](ssh/sftp.gcl) — SSH/SFTP secure file transfer with password and key-based authentication (Sftp, SshAuth, SftpFile)
 - **[useragent.md](useragent/useragent.md)** | [useragent.gcl](useragent/useragent.gcl) — User agent parsing for browser, OS, and device detection (UserAgent::parse)
 
 ## Domain-Specific Libraries
@@ -54,22 +56,28 @@ Specialized libraries for specific industries and applications:
 
 - **[finance.md](finance/finance.md)** | [finance.gcl](finance/finance.gcl) — IBAN parsing and validation for payment processing (Iban::parse, country/bank/account extraction)
 - **[powerflow.md](powerflow/powerflow.md)** | [powerflow.gcl](powerflow/powerflow.gcl) — Electrical power network analysis and load flow computation (PowerNetwork, bus/line results, grid optimization)
+- **[powergrid.md](powergrid/powergrid.md)** | [powergrid.gcl](powergrid/powergrid.gcl) — Power grid analysis with Newton-Raphson solver for bus, line, load, and external grid modeling (PowerNetwork, PowerBusResult, PowerLineResult)
+- **[fcs.md](fcs/fcs.md)** | [fcs.gcl](fcs/fcs.gcl) — Flow Cytometry Standard (FCS) file reader for streaming multi-parameter cell analysis data (FcsReader, FcsMeta, FcsChannel)
 
 ## Using Libraries in Your Project
 
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.7.68-dev");        // Standard library (required)
-@library("ai", "7.7.2-dev");        // AI/LLM support
-@library("algebra", "7.7.2-dev");   // ML and numerical computing
-@library("kafka", "7.7.2-dev");     // Kafka integration
-@library("sql", "7.7.2-dev");       // PostgreSQL support (postgres library)
-@library("s3", "7.7.2-dev");        // S3 storage
-@library("finance", "7.7.2-dev");   // Financial utilities
-@library("powerflow", "7.7.2-dev"); // Power flow analysis
-@library("opcua", "7.7.2-dev");     // OPC UA integration
-@library("useragent", "7.7.2-dev"); // User agent parsing
+@library("std", "7.7.113-dev");        // Standard library (required)
+@library("ai", "7.7.120-dev");        // AI/LLM support
+@library("algebra", "7.7.120-dev");   // ML and numerical computing
+@library("kafka", "7.7.120-dev");     // Kafka integration
+@library("sql", "7.7.120-dev");       // PostgreSQL support (postgres library)
+@library("s3", "7.7.105-dev");        // S3 storage
+@library("finance", "7.7.120-dev");   // Financial utilities
+@library("powerflow", "7.7.120-dev"); // Power flow analysis
+@library("opcua", "7.7.120-dev");     // OPC UA integration
+@library("useragent", "7.7.120-dev"); // User agent parsing
+@library("fcs", "7.7.120-dev");       // FCS support
+@library("ftp", "7.7.120-dev");       // FTP/SCP file transfer
+@library("powergrid", "7.7.120-dev"); // Power grid analysis
+@library("ssh", "7.7.120-dev");       // SSH/SFTP support
 @library("explorer", "7.7.0-dev");   // Graph UI (dev only)
 ```
 

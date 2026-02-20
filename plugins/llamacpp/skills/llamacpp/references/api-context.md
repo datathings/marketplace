@@ -38,11 +38,13 @@ if (!ctx) {
 
 - `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
 
-**New parameters in b7572:**
+**Notable parameters:**
 
-- `kv_unified` (bool) - Use unified KV cache buffer (experimental). Enables a more memory-efficient cache layout. Default: false.
+- `op_offload` (bool) - Offload host tensor operations to device for improved performance. Default: true.
 
-- `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false.
+- `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false. Note: setting to false when `n_seq_max > 1` can cause bad performance.
+
+- `kv_unified` (bool) - Use a unified buffer across input sequences when computing attention. Try disabling when `n_seq_max > 1` for improved performance when sequences do not share a large prefix. Default: true.
 
 **Example with Backend Sampling:**
 ```c

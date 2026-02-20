@@ -69,16 +69,16 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-model-info.md](references/api-model-info.md)** (193 lines) - Model properties, architecture detection **NEW**
 - **[api-context.md](references/api-context.md)** (412 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (417 lines) - Batch operations, inference, tokenization, chat
-- **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 19 sampling strategies (incl. adaptive-p) + backend sampling API
+- **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20 sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (359 lines) - LoRA adapters, performance, training
 
-**Total:** 195 active functions (b8067) across 6 organized files
+**Total:** 195 active functions (b8115) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all 195 function signatures and detailed usage.
+See **[references/api.md](references/api.md)** for all 195 function signatures.
 
 ## Common Workflows
 
@@ -153,19 +153,26 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
-  - [api-sampling.md](references/api-sampling.md) - All 19 sampling strategies (incl. adaptive-p) + backend sampling API
+  - [api-sampling.md](references/api-sampling.md) - All 20 sampling strategies (incl. adaptive-p) + backend sampling API
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training
 - **[references/workflows.md](references/workflows.md)** (1,616 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8067
+## What's New in b8115
 
-**Sampling:**
-- **Adaptive-p sampler** (`llama_sampler_init_adaptive_p()`) - Dynamically adjusts probability distribution to favor tokens near a target probability threshold over time
+**LoRA:**
+- `llama_adapter_lora_free()` is now **deprecated** - adapters are automatically freed with the associated model
 
-**LoRA API Overhaul:**
-- **New unified API**: `llama_set_adapters_lora()` replaces individual adapter functions, enabling multi-adapter support
-- **Control vectors**: `llama_set_adapter_cvec()` for control vector adapters
-- **Removed**: `llama_set_adapter_lora()`, `llama_apply_adapter_cvec()`, `llama_clear_adapter_lora()`, `llama_rm_adapter_lora()` (functionality merged into new API)
+**Context Params:**
+- `op_offload` (bool) - Offload host tensor operations to device for improved performance
+
+**Performance:**
+- `llama_perf_context_data.n_reused` - New field tracking number of times a compute graph was reused
+
+**Quantization:**
+- New `LLAMA_FTYPE_MOSTLY_MXFP4_MOE` (38) quantization type for MoE models
+
+**Model Support:**
+- Many new architectures: PaddleOCR-VL, JAIS-2, Kimi-K2.5, GLM-OCR, Qwen3.5, Modern BERT, Tiny Aya, and more
 
 ## Key Differences from Deprecated API
 
