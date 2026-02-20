@@ -1,0 +1,4 @@
+*.skill
+lapack/
+__pycache__/
+*.pyc
