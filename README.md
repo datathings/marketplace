@@ -1,6 +1,6 @@
 # Datathings Marketplace
 
-Official Claude Code plugin marketplace by Datathings — skills and LSP support for GreyCat development, local LLM inference, and numerical linear algebra.
+Official Claude Code plugin marketplace by Datathings — skills and LSP support for GreyCat development, local LLM inference, numerical linear algebra, and ggml tensor computation.
 
 ## Quick Start
 
@@ -48,11 +48,12 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 
 | Plugin | Type | Version | Description |
 |--------|------|---------|-------------|
-| **greycat** | Skill | 2.0.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
-| **greycat-c** | Skill | 2.0.0 | GreyCat C API and Standard Library for native development |
-| **greycat-lsp** | LSP | 2.0.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| **llamacpp** | Skill | 2.0.0 | llama.cpp C API reference (163 functions) for local LLM inference |
-| **blas_lapack** | Skill | 2.0.0 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| **greycat** | Skill | 2.1.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| **greycat-c** | Skill | 2.1.0 | GreyCat C API and Standard Library for native development |
+| **greycat-lsp** | LSP | 2.1.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| **llamacpp** | Skill | 2.1.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| **blas_lapack** | Skill | 2.1.0 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| **ggml** | Skill | 2.1.0 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
 
 ## Installation
 
@@ -93,6 +94,11 @@ llama.cpp API:
 BLAS/LAPACK API:
 ```bash
 /plugin install blas_lapack@datathings
+```
+
+ggml tensor library:
+```bash
+/plugin install ggml@datathings
 ```
 
 ### Verify
@@ -144,6 +150,16 @@ Complete CBLAS & LAPACKE C API (1284 functions, LAPACK v3.12.1):
 - Eigenvalue/eigenvector computation, SVD, least squares
 - QR/LQ factorizations and auxiliary routines
 
+### ggml
+
+C tensor computation library powering llama.cpp and many ML inference engines (v0.9.7, 560+ functions):
+- Lazy computation graph: define ops, then run on CPU/GPU/Metal/Vulkan backends
+- 40+ quantization formats (Q4_0, Q8_0, Q5_K, etc.) with mixed-precision matmul
+- GGUF v3 binary format: read/write model weights and typed metadata
+- Multi-backend scheduler splits graphs automatically across available hardware
+- Flash Attention, RoPE variants, and modern LLM ops built-in
+- AdamW/SGD optimizer with dataset and epoch management for training
+
 ## Standalone Skill Files
 
 The `./skills/` folder contains pre-packaged `.skill` files (zip archives) for use with other AI tools or manual installation:
@@ -153,7 +169,8 @@ skills/
 ├── greycat.skill       # GreyCat full-stack development
 ├── greycat-c.skill     # GreyCat C API reference
 ├── llamacpp.skill      # llama.cpp C API reference
-└── blas_lapack.skill   # CBLAS & LAPACKE C API reference
+├── blas_lapack.skill   # CBLAS & LAPACKE C API reference
+└── ggml.skill          # ggml C tensor library
 ```
 
 Each `.skill` file contains a `SKILL.md` with instructions and optional `references/` documentation. To regenerate:
@@ -255,6 +272,7 @@ This provides the C API reference, tensor operations, and native function implem
 - **GreyCat**: https://greycat.io | https://doc.greycat.io | https://get.greycat.io
 - **Datathings**: https://datathings.com
 - **llama.cpp**: https://github.com/ggml-org/llama.cpp
+- **ggml**: https://github.com/ggml-org/ggml
 - **LAPACK**: https://github.com/Reference-LAPACK/lapack
 - **Support**: contact@datathings.com
 - **Issues**: https://github.com/datathings/marketplace/issues

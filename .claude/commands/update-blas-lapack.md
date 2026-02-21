@@ -55,23 +55,26 @@ cd ..
 - Latest tags viewable at: https://github.com/Reference-LAPACK/lapack/tags
 - Stable release tags use format: `v3.X.Y` (e.g., `v3.12.0`, `v3.12.1`)
 
-### 2. Analyze API Changes
+### 2–6. Analyze & Update Documentation (subagent)
 
-Scan the two source-of-truth header files:
+**Dispatch a `general-purpose` subagent** via the `Task` tool for the analysis and
+documentation rewrite. This keeps the large header content out of the main context.
 
-- **`lapack/CBLAS/include/cblas.h`** - All CBLAS function prototypes (Level 1/2/3)
-- **`lapack/LAPACKE/include/lapacke.h`** - All LAPACKE function prototypes
+Provide the subagent with:
+- Path to CBLAS header: `plugins/blas_lapack/lapack/CBLAS/include/cblas.h`
+- Path to LAPACKE header: `plugins/blas_lapack/lapack/LAPACKE/include/lapacke.h`
+- Path to skill references: `plugins/blas_lapack/skills/blas_lapack/references/`
+- Old tag and new tag (from Step 1 output)
 
-Look for:
+The subagent should:
+
+**Analyze API Changes** — scan both source-of-truth headers for:
 - New functions added since last update
 - Deprecated or removed functions
 - Modified function signatures (parameter changes, return type changes)
 - New constants, enums, or data types
 
-### 3. Update Skill Documentation Files
-
-Update the following files in `skills/blas_lapack/references/`:
-
+**Update Skill Documentation Files** in `skills/blas_lapack/references/`:
 - **`blas-level1.md`** - Vector operations: dot, nrm2, asum, axpy, swap, copy, rot, scal
 - **`blas-level2.md`** - Matrix-vector operations: gemv, gbmv, trmv, trsv, symv, hemv, ger, syr, her
 - **`blas-level3.md`** - Matrix-matrix operations: gemm, symm, hemm, syrk, herk, trmm, trsm
@@ -83,26 +86,29 @@ Update the following files in `skills/blas_lapack/references/`:
 - **`lapacke-auxiliary.md`** - Norms, generators, orthogonal/unitary transforms, utilities
 - **`workflows.md`** - Working C examples and usage patterns
 
-### 4. Update Main SKILL.md
-
-- Update the LAPACK version tag in the documentation
-- Update the total function count in the overview section
+**Update Main SKILL.md:**
+- Keep SKILL.md **concise and dense** — it is always loaded into context, so every line
+  must earn its place; API details belong in `references/` files, not here
+- Update the LAPACK version tag
+- Update the total function count in the overview
 - Add notes about newly supported routines or features
 - Update the "Quick Reference" section with any critical new functions
 
-### 5. Remove Deprecated Content
-
+**Remove Deprecated Content:**
 - Search all documentation files for functions removed from the headers
 - Remove or replace deprecated function references
 - Update migration notes for breaking changes
 
-### 6. Validate Changes
-
+**Validate Changes:**
 - Cross-reference all documented CBLAS functions against `cblas.h`
 - Cross-reference all documented LAPACKE functions against `lapacke.h`
 - Ensure function signatures match exactly (parameter types, names, return types)
-- Verify that all new public API functions are documented
+- Verify all new public API functions are documented
 - Count functions to confirm totals match
+- Note: BLAS/LAPACK functions come in 4 precision variants (s/d/c/z) — ensure all are covered
+
+**The subagent should return a summary** of: routines added, routines removed, signatures
+changed, precision variants affected, and any breaking changes.
 
 ### 7. Package Updated Skill
 

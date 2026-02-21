@@ -1,7 +1,7 @@
 {
   "name": "datathings",
   "version": "1.0.0",
-  "description": "Claude Code skills for GreyCat development, local LLM inference, and numerical linear algebra",
+  "description": "Claude Code skills for GreyCat development, local LLM inference, numerical linear algebra, and ggml tensor computation",
   "author": {
     "name": "Datathings",
     "email": "contact@datathings.com",
@@ -33,6 +33,12 @@
       "path": "./plugins/blas_lapack/skills/blas_lapack",
       "version": "2.0.0",
       "description": "Complete CBLAS & LAPACKE C API reference for numerical linear algebra"
+    },
+    {
+      "name": "ggml",
+      "path": "./plugins/ggml/skills/ggml",
+      "version": "1.0.0",
+      "description": "ggml C tensor library skill - graph computation, GGUF I/O, multi-backend inference, and ML training"
     }
   ],
   "keywords": [
@@ -46,6 +52,9 @@
     "time-series",
     "blas",
     "lapack",
-    "linear-algebra"
+    "linear-algebra",
+    "ggml",
+    "tensor",
+    "gguf"
   ]
 }

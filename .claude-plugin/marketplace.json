@@ -10,31 +10,37 @@
       "name": "llamacpp",
       "source": "./plugins/llamacpp",
       "description": "llama.cpp C API reference skill - Complete documentation for 163 functions covering local LLM inference",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "greycat-c",
       "source": "./plugins/greycat-c",
       "description": "GreyCat C API & Standard Library skill - Native C SDK documentation for GreyCat",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "greycat",
       "source": "./plugins/greycat",
       "description": "Full-stack GreyCat development skill - GCL language, backend development, and React frontend integration",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "greycat-lsp",
       "source": "./plugins/greycat-lsp",
       "description": "GreyCat Language Server Protocol plugin - LSP support for .gcl files",
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     {
       "name": "blas_lapack",
       "source": "./plugins/blas_lapack",
       "description": "CBLAS & LAPACKE C API reference skill - Complete documentation for 1284 functions covering numerical linear algebra",
-      "version": "2.0.0"
+      "version": "2.1.0"
+    },
+    {
+      "name": "ggml",
+      "source": "./plugins/ggml",
+      "description": "ggml C tensor library skill - 560+ functions for graph computation, GGUF model I/O, multi-backend inference, and ML training",
+      "version": "2.1.0"
     }
   ]
 }

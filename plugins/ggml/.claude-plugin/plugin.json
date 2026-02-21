@@ -1,0 +1,13 @@
+{
+  "name": "ggml",
+  "version": "2.1.0",
+  "description": "ggml v0.9.7 C tensor library skill — 560+ functions for graph computation, GGUF I/O, multi-backend inference, and ML training",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["c", "ggml", "tensor", "inference", "gguf", "llm", "quantization"],
+  "skills": "./skills/"
+}

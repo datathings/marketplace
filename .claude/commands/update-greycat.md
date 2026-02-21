@@ -235,16 +235,24 @@ curl -s "https://get.greycat.io/files/sdk/web/"
 
 **Suggest to the user** what version to use based on what's available, matching the major.minor version of the libraries in `project.gcl`.
 
-## Step 8: Analyze Function Signatures
+## Step 8: Analyze Function Signatures (subagent)
 
-For each newly copied `.gcl` file:
-1. Read the file and extract all function signatures, type definitions, and method signatures
+**Dispatch a `general-purpose` subagent** via the `Task` tool for the GCL analysis and
+documentation rewrite. This keeps the large GCL file content out of the main context.
+
+Provide the subagent with:
+- Path to updated GCL files: `plugins/greycat/skills/greycat/references/` (just synced)
+- Path to existing markdown docs in the same directory
+- Old versions and new versions (from Steps 1–2 output)
+
+The subagent should, for each updated `.gcl` file:
+1. Extract all function signatures, type definitions, and method signatures
 2. Compare with the existing markdown documentation
-3. Identify any new functions, changed signatures, or deprecated functions
-4. Update the markdown documentation to reflect the changes:
+3. Identify new functions, changed signatures, or removed functions
+4. Update the markdown documentation:
    - Add documentation for new functions
    - Update parameter types/names for changed signatures
-   - Mark deprecated functions if they were removed
+   - Remove functions that no longer exist
    - Ensure all examples are still valid
 
 Focus on documenting:
@@ -252,6 +260,13 @@ Focus on documenting:
 - Type definitions and their fields
 - Method signatures with parameters and return types
 - Any breaking changes or new features
+
+Keep SKILL.md **concise and dense** — it is always loaded into context, so every line must
+earn its place. API details belong in the per-library reference files, not in SKILL.md.
+
+**The subagent should return a summary** of: libraries updated, functions added, functions
+removed, signatures changed, and any breaking changes — so the main context can report
+the outcome.
 
 ## Step 9: Re-package the Skill
 
