@@ -1,7 +1,7 @@
 {
   "name": "datathings",
   "version": "1.0.0",
-  "description": "Claude Code skills for GreyCat development, local LLM inference, numerical linear algebra, and ggml tensor computation",
+  "description": "Claude Code skills for GreyCat development, local LLM inference, numerical linear algebra, ggml tensor computation, NVIDIA CUDA, OpenCL cross-platform GPU/CPU parallel computing, AMD ROCm GPU computing, pandapower power systems analysis, power-grid-model distribution power system analysis, vLLM high-throughput LLM inference, and Ollama local LLM runtime",
   "author": {
     "name": "Datathings",
     "email": "contact@datathings.com",
@@ -39,6 +39,48 @@
       "path": "./plugins/ggml/skills/ggml",
       "version": "1.0.0",
       "description": "ggml C tensor library skill - graph computation, GGUF I/O, multi-backend inference, and ML training"
+    },
+    {
+      "name": "cuda",
+      "path": "./plugins/cuda/skills/cuda",
+      "version": "1.0.0",
+      "description": "NVIDIA CUDA C/C++ skill - Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, and Cooperative Groups"
+    },
+    {
+      "name": "opencl",
+      "path": "./plugins/opencl/skills/opencl",
+      "version": "1.0.0",
+      "description": "OpenCL SDK C/C++ skill - cross-platform GPU/CPU parallel computing with C API, C++ wrapper, and SDK utilities"
+    },
+    {
+      "name": "rocm",
+      "path": "./plugins/rocm/skills/rocm",
+      "version": "1.0.0",
+      "description": "AMD ROCm GPU computing skill - HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting"
+    },
+    {
+      "name": "pandapower",
+      "path": "./plugins/pandapower/skills/pandapower",
+      "version": "1.0.0",
+      "description": "pandapower Python skill - power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and network visualization"
+    },
+    {
+      "name": "powergridmodel",
+      "path": "./plugins/powergridmodel/skills/powergridmodel",
+      "version": "1.0.0",
+      "description": "power-grid-model Python skill - steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations with batch and parallel computation"
+    },
+    {
+      "name": "vllm",
+      "path": "./plugins/vllm/skills/vllm",
+      "version": "1.0.0",
+      "description": "vLLM Python skill - high-throughput LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs"
+    },
+    {
+      "name": "ollama",
+      "path": "./plugins/ollama/skills/ollama",
+      "version": "1.0.0",
+      "description": "Ollama REST API skill - run and manage local LLMs with chat, generate, embeddings, and custom model creation"
     }
   ],
   "keywords": [
@@ -55,6 +97,21 @@
     "linear-algebra",
     "ggml",
     "tensor",
-    "gguf"
+    "gguf",
+    "cuda",
+    "gpu",
+    "nvidia",
+    "cublas",
+    "cufft",
+    "opencl",
+    "khronos",
+    "heterogeneous-computing",
+    "gpgpu",
+    "rocm",
+    "hip",
+    "amd",
+    "rocblas",
+    "rocfft",
+    "rocrand"
   ]
 }

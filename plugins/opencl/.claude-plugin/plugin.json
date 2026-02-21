@@ -1,0 +1,13 @@
+{
+  "name": "opencl",
+  "version": "2.3.0",
+  "description": "OpenCL SDK (Khronos Group) v2025.07.23 C/C++ skill — cross-platform GPU/CPU parallel computing with ~60 C API functions, C++ wrapper, and SDK utilities",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["c", "cpp", "opencl", "gpu", "parallel-computing", "khronos", "gpgpu", "heterogeneous"],
+  "skills": "./skills/"
+}

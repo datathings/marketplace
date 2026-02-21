@@ -1,0 +1,13 @@
+{
+  "name": "vllm",
+  "version": "2.3.0",
+  "description": "vLLM v0.16.0 skill: offline batch inference, OpenAI-compatible server, LoRA adapters, multimodal inputs, embeddings, and structured outputs.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["python", "vllm", "llm-inference", "openai-compatible", "gpu"],
+  "skills": "./skills/"
+}

@@ -296,34 +296,40 @@ Also update the top-level `description` field in `marketplace.json` to mention t
 
 ### 9. Update README.md
 
-Add the new skill in four places:
+Add the new skill in five places:
 
-**Plugins table** (in the `## Plugins` section):
+**1. Overview Plugins table** (`## Plugins`) — include the correct Category:
 ```markdown
-| **<skill-name>** | Skill | 1.0.0 | <short description of the library and skill coverage> |
+| **<skill-name>** | <Category> | Skill | 1.0.0 | <short description of the library and skill coverage> |
 ```
 
-**Install instructions** (in `### Install Plugins`):
-```markdown
-<lib name>:
-\`\`\`bash
+Categories: `GreyCat Technology`, `Agentic AI`, `High Performance Math & GPU`, `Power Grid Management`
+
+**2. Category section install command** — add to the install block in the appropriate category section (`## GreyCat Technology`, `## Agentic AI`, `## High Performance Math & GPU Computing`, or `## Power Grid Management`):
+```
 /plugin install <skill-name>@datathings
-\`\`\`
 ```
 
-**Plugin Details section** (add a `### <skill-name>` subsection):
+**3. Plugin Details section** — add an `#### <skill-name>` entry under the matching `### <Category>` subsection:
 ```markdown
-### <skill-name>
+#### <skill-name>
 
-<2-3 sentences describing what the library does and what the skill provides>
+<1-2 sentences describing what the library does and what the skill provides>
 - Key capability 1
 - Key capability 2
 ```
 
-**Standalone Skill Files list** (in `## Standalone Skill Files`):
+**4. Standalone Skill Files list** (`## Standalone Skill Files`):
 ```markdown
 ├── <skill-name>.skill     # <short description>
 ```
+
+**5. Links section** (`## Links`) — add the upstream GitHub repository:
+```markdown
+- **<Library Name>**: https://github.com/<org>/<repo>
+```
+
+Insert it near other libraries in the same category for consistency.
 
 ### 10. Package the Skill
 
@@ -484,6 +490,6 @@ Fill in all `<placeholders>` with the actual values for the specific library.
 - [ ] `.gitignore` excludes the cloned repo directory and `*.skill`
 - [ ] `.claude-plugin/marketplace.json` includes the new plugin entry
 - [ ] `marketplace.json` (legacy) includes the new skill entry
-- [ ] `README.md` updated in all four locations (table, install, details, skill files list)
+- [ ] `README.md` updated in all five locations (plugins table, category install command, plugin details, standalone skill files list, links section)
 - [ ] `./package.sh <skill-name>` runs successfully and produces `skills/<skill-name>.skill`
 - [ ] `.claude/commands/update_<skill_name>.md` created with library-specific update instructions

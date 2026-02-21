@@ -1,0 +1,13 @@
+{
+  "name": "ollama",
+  "version": "2.3.0",
+  "description": "Run and manage local LLMs via Ollama's REST API, with support for text generation, chat, embeddings, and custom model creation.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["ollama", "llm", "local-ai", "inference", "embeddings", "rest-api"],
+  "skills": "./skills/"
+}

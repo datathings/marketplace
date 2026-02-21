@@ -1,0 +1,13 @@
+{
+  "name": "powergridmodel",
+  "version": "2.3.0",
+  "description": "power-grid-model Python skill - high-performance steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations with 22 component types and batch/parallel computation",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com"
+  },
+  "license": "MPL-2.0",
+  "repository": "https://github.com/datathings/marketplace",
+  "keywords": ["python", "power-grid-model", "power-system", "load-flow", "short-circuit", "state-estimation", "energy"],
+  "skills": "./skills/"
+}
