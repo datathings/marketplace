@@ -227,6 +227,24 @@ var lambda = fn(x: int): int { x * 2 };
 for (k: K, v: V in map) { }; for (i, v in nullable?) { }  // ✅ use ? for nullable
 ```
 
+// First-class function parameters — use `function` keyword (not fn(T): R)
+// Calling a `function` parameter returns `any?` — cast the result
+```gcl
+abstract type ArrayUtils {
+    static fn filter(arr: Array<any>, pred: function): Array<any> {
+        var result = Array<any> {};
+        for (var i = 0; i < arr.size(); i++) {
+            if (pred(arr[i]) as bool) { result.add(arr[i]); }
+        }
+        return result;
+    }
+}
+
+fn isEven(x: int): bool { return x % 2 == 0; }
+var evens = ArrayUtils::filter(nums, isEven);  // pass named function by reference
+```
+**Key rules**: declare param as `function` (not `fn(T): R`); calls return `any?` — always cast (`f(x) as bool`, `f(x) as int`); pass by name at call site (no lambda syntax needed).
+
 ## Services & Patterns
 
 ```gcl
@@ -302,6 +320,7 @@ fn process(node_name: String) { }
 | `for(i, v in nullable_list)` | `for(i, v in nullable_list?)` |
 | `fn doX(): void` | `fn doX()` |
 | `City{name: "X"}` | `City{name: "X", streets: nodeList<...>{}}` |
+| `fn(T): R` as param type | `function` keyword: `fn process(arr: Array<any>, pred: function)` |
 
 **Double-bang OK** for global registry lookups: `var config = ConfigRegistry::getConfig(key)!!;`
 

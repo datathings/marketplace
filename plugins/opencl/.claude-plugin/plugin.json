@@ -1,6 +1,6 @@
 {
   "name": "opencl",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "OpenCL SDK (Khronos Group) v2025.07.23 C/C++ skill — cross-platform GPU/CPU parallel computing with ~60 C API functions, C++ wrapper, and SDK utilities",
   "author": {
     "name": "Datathings",
