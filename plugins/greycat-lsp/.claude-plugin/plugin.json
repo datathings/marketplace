@@ -1,6 +1,6 @@
 {
   "name": "greycat-lsp",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "GreyCat Language Server Protocol plugin - Provides LSP support for .gcl files including code completion, diagnostics, go-to-definition, and hover information.",
   "author": {
     "name": "Datathings",

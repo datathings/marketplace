@@ -1,4 +1,4 @@
-@library("std", "7.7.113-dev");      // Standard library (required)
+@library("std", "7.7.147-dev");      // Standard library (required)
 @library("explorer", "7.7.0-dev");   // Graph UI (dev only)
 
 @library("ai", "7.7.120-dev");        // AI/LLM support

@@ -68,6 +68,14 @@ var freq_data = Tensor {};
 fft.transform(time_data, freq_data);
 ```
 
+### Instance Methods
+
+#### get_nb_sample(): int
+Returns the number of samples this FFT engine was configured for.
+
+#### get_inverse_mode(): bool
+Returns whether this FFT engine operates in inverse mode (`true` for frequency-to-time, `false` for time-to-frequency).
+
 ### High-Level Analysis
 
 #### transform_table(timeseries: Table, timeseries_complex: Tensor, frequency_complex: Tensor): Table

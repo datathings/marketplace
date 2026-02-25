@@ -61,7 +61,7 @@ while (reader.can_read()) {
 ```
 
 ### TextWriter / TextReader
-UTF-8 text file operations with line-based I/O.
+Text file operations with line-based I/O. TextWriter writes UTF-8. TextReader reads byte data line by line (does not perform UTF-8 validation).
 
 ```gcl
 // Write text lines

@@ -16,13 +16,16 @@ The K-means module provides:
 ```typescript
 // Automatic clustering with optimal cluster count
 var result = Kmeans::meta_meta_learning(
-  tensor: data,              // [samples, features]
-  maxClusters: 10,           // Try 2-10 clusters
-  stopRatio: 0.1,            // Stop if improvement < 10%
+  tensors: data_list,          // nodeList<Tensor>, each [batch, features]
+  max_clusters: 10,            // Try 2-10 clusters
+  stop_ratio: 0.1,             // Stop if improvement < 10%
+  nb_meta_rounds: 100,
+  nb_rounds: 20,
   seed: 42,
-  metaRounds: 100,
-  rounds: 20,
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 var centroids = result.bestResult!!.centroids;
@@ -35,8 +38,8 @@ println("Optimal clusters: ${centroids.shape()[0]}");
 | Type | Purpose |
 |------|---------|
 | `Kmeans` | Static methods for K-means clustering |
-| `KmeanResult` | Single clustering result |
-| `KmeanMetaResult` | Meta-learning result (multiple runs) |
+| `KmeansResult` | Single clustering result |
+| `KmeansMetaResult` | Meta-learning result (multiple runs) |
 
 ---
 
@@ -46,16 +49,14 @@ Static methods for K-means clustering operations.
 
 ### Configuration
 
-#### configure(nb_clusters: int, nb_features: int, tensor_type: TensorType, features_min: float, features_max: float, calculateInterClusterStats: bool): ComputeModel (static)
+#### configure(nb_clusters: int, nb_features: int, tensor_type: TensorType, calculate_inter_cluster_stats: bool): ComputeModel (static)
 Creates K-means computational model.
 
 **Parameters:**
 - `nb_clusters`: Number of clusters (k)
 - `nb_features`: Number of features per sample
 - `tensor_type`: f32 or f64
-- `features_min`: Min value for centroid initialization
-- `features_max`: Max value for centroid initialization
-- `calculateInterClusterStats`: Compute inter-cluster distances
+- `calculate_inter_cluster_stats`: Compute inter-cluster distances
 
 **Returns:** ComputeModel for K-means
 
@@ -65,8 +66,6 @@ var model = Kmeans::configure(
   nb_clusters: 5,
   nb_features: 10,
   tensor_type: TensorType::f64,
-  features_min: 0.0,
-  features_max: 1.0,
   calculateInterClusterStats: true
 );
 ```
@@ -171,10 +170,16 @@ Gets inter-cluster distance matrix [clusters, clusters].
 
 ### Utility Methods
 
-#### replaceEmptyClusters(engine: ComputeEngine): bool (static)
-Replaces empty clusters with random samples.
+#### replaceEmptyClusters(engine: ComputeEngine, tensors: nodeList\<Tensor\>, features_gaussian: GaussianND, replace_empty_clusters_mode: KmeansMode): bool (static)
+Replaces empty clusters with new centroids to avoid degeneracy.
 
-**Returns:** true if empty clusters were found
+**Parameters:**
+- `engine`: The ComputeEngine instance
+- `tensors`: List of input data tensors to sample from
+- `features_gaussian`: Statistics of the feature space
+- `replace_empty_clusters_mode`: Mode for generating replacement centroids
+
+**Returns:** true if empty clusters were found and replaced
 
 #### sortClusters(engine: ComputeEngine) (static)
 Sorts clusters by centroid sum (for consistent ordering).
@@ -183,74 +188,94 @@ Sorts clusters by centroid sum (for consistent ordering).
 
 ## High-Level Learning Methods
 
-### learning(tensor: Tensor, nbClusters: int, seed: int, rounds: int?, featuresMin: float, featuresMax: float, calculateInterClusterStats: bool): KmeanResult (static)
+### learning(tensors: nodeList\<Tensor\>, features_gaussian: GaussianND, nb_clusters: int, nb_rounds: int, seed: int, initialization_mode: KmeansMode, replace_empty_clusters_mode: KmeansMode, calculate_inter_cluster_stats: bool): KmeansResult (static)
 Runs standard K-means for fixed cluster count and seed.
 
 **Parameters:**
-- `tensor`: Data [samples, features]
-- `nbClusters`: Number of clusters
+- `tensors`: Data as a nodeList of Tensors, each [batch, features]
+- `features_gaussian`: Pre-computed GaussianND statistics of the feature space
+- `nb_clusters`: Number of clusters
+- `nb_rounds`: Number of iterations
 - `seed`: Random seed
-- `rounds`: Number of iterations (default: 20)
-- `featuresMin`, `featuresMax`: Feature ranges
-- `calculateInterClusterStats`: Compute inter-cluster stats
+- `initialization_mode`: Mode for centroid initialization (fromInput, randomUniform, randomNormal)
+- `replace_empty_clusters_mode`: Mode for replacing empty clusters
+- `calculate_inter_cluster_stats`: Compute inter-cluster stats
 
-**Returns:** KmeanResult with centroids, assignments, loss, etc.
+**Returns:** KmeansResult with centroids, assignments, loss, etc.
 
 **Example:**
 ```typescript
+// Compute feature statistics first
+var features_gaussian = GaussianND {};
+for (i, t in tensors) {
+  features_gaussian.learn(t);
+}
+
 var result = Kmeans::learning(
-  data,
-  nbClusters: 5,
+  tensors,
+  features_gaussian,
+  nb_clusters: 5,
+  nb_rounds: 30,
   seed: 42,
-  rounds: 30,
-  featuresMin: 0.0,
-  featuresMax: 1.0,
-  calculateInterClusterStats: true
+  initialization_mode: KmeansMode::fromInput,
+  replace_empty_clusters_mode: KmeansMode::randomUniform,
+  calculate_inter_cluster_stats: true
 );
 
 println("Loss: ${result.loss}");
 println("Centroids: ${result.centroids}");
 ```
 
-### meta_learning(tensor: Tensor, nbClusters: int, seed: int, metaRounds: int?, rounds: int?, calculateInterClusterStats: bool): KmeanMetaResult (static)
+### meta_learning(tensors: nodeList\<Tensor\>, nb_clusters: int, nb_meta_rounds: int, nb_rounds: int, seed: int, parallel: bool, initialization_mode: KmeansMode?, replace_empty_clusters_mode: KmeansMode?, calculate_inter_cluster_stats: bool): KmeansMetaResult (static)
 Runs multiple K-means with different initializations, returns best.
 
 **Parameters:**
-- `tensor`: Data
-- `nbClusters`: Fixed cluster count
+- `tensors`: Data as a nodeList of Tensors
+- `nb_clusters`: Fixed cluster count
+- `nb_meta_rounds`: Number of random restarts (default: 100)
+- `nb_rounds`: Iterations per run (default: 20)
 - `seed`: Base random seed
-- `metaRounds`: Number of random restarts (default: 100)
-- `rounds`: Iterations per run (default: 20)
-- `calculateInterClusterStats`: Compute stats
+- `parallel`: Whether to run meta-rounds in parallel using Job
+- `initialization_mode`: Optional centroid initialization mode (random if null)
+- `replace_empty_clusters_mode`: Optional empty cluster replacement mode (random if null)
+- `calculate_inter_cluster_stats`: Compute stats
 
-**Returns:** KmeanMetaResult with best result and all run losses
+**Returns:** KmeansMetaResult with best result and all meta-round losses
 
 **Example:**
 ```typescript
 var result = Kmeans::meta_learning(
-  data,
-  nbClusters: 5,
+  tensors,
+  nb_clusters: 5,
+  nb_meta_rounds: 100,
+  nb_rounds: 20,
   seed: 42,
-  metaRounds: 100,
-  rounds: 20,
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 println("Best loss: ${result.bestResult!!.loss}");
-println("Run losses: ${result.runDistances}");
+println("Meta-round losses: ${result.metaRoundsLoss}");
 ```
 
-### meta_meta_learning(tensor: Tensor, maxClusters: int, stopRatio: float, seed: int, metaRounds: int?, rounds: int?, calculateInterClusterStats: bool): KmeanMetaResult (static)
+### meta_meta_learning(tensors: nodeList\<Tensor\>, max_clusters: int, stop_ratio: float, nb_meta_rounds: int, nb_rounds: int, seed: int, parallel: bool, initialization_mode: KmeansMode?, replace_empty_clusters_mode: KmeansMode?, calculate_inter_cluster_stats: bool): KmeansMetaResult (static)
 Automatically finds optimal cluster count.
 
 **Parameters:**
-- `tensor`: Data
-- `maxClusters`: Maximum clusters to try
-- `stopRatio`: Stop if improvement < this ratio (0.0-1.0)
+- `tensors`: Data as a nodeList of Tensors
+- `max_clusters`: Maximum clusters to try
+- `stop_ratio`: Stop if improvement < this ratio (0.0-1.0)
+- `nb_meta_rounds`: Number of random restarts per cluster count
+- `nb_rounds`: Iterations per run
 - `seed`: Base seed
-- `metaRounds`, `rounds`: As above
+- `parallel`: Whether to run meta-rounds in parallel
+- `initialization_mode`: Optional centroid initialization mode
+- `replace_empty_clusters_mode`: Optional empty cluster replacement mode
+- `calculate_inter_cluster_stats`: Compute inter-cluster stats
 
-**Returns:** KmeanMetaResult for optimal cluster count
+**Returns:** KmeansMetaResult for optimal cluster count
 
 **Algorithm:**
 1. Try k=2, 3, 4, ...
@@ -261,13 +286,16 @@ Automatically finds optimal cluster count.
 **Example:**
 ```typescript
 var result = Kmeans::meta_meta_learning(
-  data,
-  maxClusters: 15,
-  stopRatio: 0.1,     // Stop if improvement < 10%
+  tensors,
+  max_clusters: 15,
+  stop_ratio: 0.1,     // Stop if improvement < 10%
+  nb_meta_rounds: 100,
+  nb_rounds: 20,
   seed: 42,
-  metaRounds: 100,
-  rounds: 20,
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 var k = result.bestResult!!.centroids.shape()[0];
@@ -278,14 +306,16 @@ println("Optimal clusters: ${k}");
 
 ## Results
 
-### KmeanResult
+### KmeansResult
 
 Single clustering result.
 
 ```typescript
-type KmeanResult {
+type KmeansResult {
+  roundsLoss: Array<float>;            // Loss per round
+  initMode: KmeansMode;                // Initialization mode used
+  replaceClustersMode: KmeansMode;     // Empty cluster replacement mode
   loss: float;                         // Total within-cluster distance
-  roundsDistances: Array<float>;       // Loss per round
   centroids: Tensor?;                  // [clusters, features]
   clusters_count: Tensor?;             // [clusters] - samples per cluster
   clusters_sum_distance: Tensor?;      // [clusters] - total distance
@@ -314,29 +344,29 @@ for (i in 0..result.clusters_count!!.size()) {
 println("Most compact cluster: ${best_cluster}");
 ```
 
-### KmeanMetaResult
+### KmeansMetaResult
 
 Meta-learning result.
 
 ```typescript
-type KmeanMetaResult {
-  runDistances: Array<float>;  // Loss for each run
-  bestResult: KmeanResult?;    // Best clustering
+type KmeansMetaResult {
+  metaRoundsLoss: Array<float>;    // Loss for each meta-round
+  bestResult: KmeansResult?;       // Best clustering
 }
 ```
 
 **Example:**
 ```typescript
-println("Tried ${result.runDistances.size()} initializations");
+println("Tried ${result.metaRoundsLoss.size()} initializations");
 println("Best loss: ${result.bestResult!!.loss}");
-println("Worst loss: ${max(result.runDistances)}");
+println("Worst loss: ${max(result.metaRoundsLoss)}");
 ```
 
 ---
 
 ## Inference Engine
 
-### getInferenceEngine(bestResult: KmeanResult, maxBatchSize: int, calculateInterClusterStats: bool): ComputeEngine (static)
+### getInferenceEngine(bestResult: KmeansResult, maxBatchSize: int, calculate_inter_cluster_stats: bool): ComputeEngine (static)
 Creates an engine for fast cluster assignment.
 
 **Parameters:**
@@ -349,7 +379,7 @@ Creates an engine for fast cluster assignment.
 **Example:**
 ```typescript
 // Train
-var train_result = Kmeans::meta_learning(train_data, 5, 42, 100, 20, false);
+var train_result = Kmeans::meta_learning(train_tensors, 5, 100, 20, 42, true, null, null, false);
 
 // Create inference engine
 var infer_engine = Kmeans::getInferenceEngine(
@@ -369,34 +399,33 @@ var new_assignments = Kmeans::cluster(infer_engine, new_data);
 ### Basic K-means
 
 ```typescript
-// Prepare data
+// Prepare data as nodeList of Tensors
+var tensors = nodeList<Tensor> {};
 var data = Tensor {};
 data.init(TensorType::f64, Array<int> {1000, 10}); // 1000 samples, 10 features
 // ... fill data ...
+tensors.add(data);
 
-// Find min/max for initialization
-var arr = data.initPos();
-var min_val = data.get(arr) as float;
-var max_val = data.get(arr) as float;
-while (data.incPos(arr)) {
-  var val = data.get(arr) as float;
-  min_val = min(min_val, val);
-  max_val = max(max_val, val);
+// Compute feature statistics
+var features_gaussian = GaussianND {};
+for (i, t in tensors) {
+  features_gaussian.learn(t);
 }
 
 // Run K-means with k=5
 var result = Kmeans::learning(
-  data,
-  nbClusters: 5,
+  tensors,
+  features_gaussian,
+  nb_clusters: 5,
+  nb_rounds: 30,
   seed: 42,
-  rounds: 30,
-  featuresMin: min_val,
-  featuresMax: max_val,
-  calculateInterClusterStats: true
+  initialization_mode: KmeansMode::fromInput,
+  replace_empty_clusters_mode: KmeansMode::randomUniform,
+  calculate_inter_cluster_stats: true
 );
 
 println("Final loss: ${result.loss}");
-println("Convergence: ${result.roundsDistances}");
+println("Convergence: ${result.roundsLoss}");
 
 // Analyze clusters
 for (i in 0..5) {
@@ -411,13 +440,16 @@ for (i in 0..5) {
 ```typescript
 // Let algorithm find optimal k
 var result = Kmeans::meta_meta_learning(
-  data,
-  maxClusters: 20,
-  stopRatio: 0.05,    // Stop if improvement < 5%
+  tensors,
+  max_clusters: 20,
+  stop_ratio: 0.05,    // Stop if improvement < 5%
+  nb_meta_rounds: 50,  // 50 random restarts per k
+  nb_rounds: 20,       // 20 iterations per restart
   seed: 42,
-  metaRounds: 50,     // 50 random restarts per k
-  rounds: 20,         // 20 iterations per restart
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 var k = result.bestResult!!.centroids.shape()[0];
@@ -425,7 +457,7 @@ println("Optimal number of clusters: ${k}");
 
 // Visualize elbow
 println("\nLoss by cluster count:");
-for (i, loss in result.runDistances) {
+for (i, loss in result.metaRoundsLoss) {
   println("k=${i+2}: ${loss}");
 }
 ```
@@ -438,13 +470,16 @@ var customer_features = Tensor {}; // [customers, features]
 // Features: [purchase_frequency, avg_order_value, recency, ...]
 
 var result = Kmeans::meta_meta_learning(
-  customer_features,
-  maxClusters: 10,
-  stopRatio: 0.1,
+  customer_tensors,
+  max_clusters: 10,
+  stop_ratio: 0.1,
+  nb_meta_rounds: 100,
+  nb_rounds: 30,
   seed: 42,
-  metaRounds: 100,
-  rounds: 30,
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 var k = result.bestResult!!.centroids.shape()[0];
@@ -473,16 +508,22 @@ var segments = Kmeans::cluster(infer_engine, new_customers);
 
 ```typescript
 // Reduce image to k dominant colors
+var pixel_tensors = nodeList<Tensor> {};
 var image_pixels = Tensor {}; // [width*height, 3] - RGB values
+pixel_tensors.add(image_pixels);
+
+var pixel_stats = GaussianND {};
+pixel_stats.learn(image_pixels);
 
 var result = Kmeans::learning(
-  image_pixels,
-  nbClusters: 16,     // 16 colors
+  pixel_tensors,
+  pixel_stats,
+  nb_clusters: 16,     // 16 colors
+  nb_rounds: 50,
   seed: 42,
-  rounds: 50,
-  featuresMin: 0.0,
-  featuresMax: 255.0,
-  calculateInterClusterStats: false
+  initialization_mode: KmeansMode::randomUniform,
+  replace_empty_clusters_mode: KmeansMode::randomUniform,
+  calculate_inter_cluster_stats: false
 );
 
 // Centroids are the dominant colors
@@ -500,12 +541,15 @@ var assignments = result.assignment; // [width*height]
 var normal_data = Tensor {}; // Normal samples
 
 var result = Kmeans::meta_learning(
-  normal_data,
-  nbClusters: 5,
+  normal_tensors,
+  nb_clusters: 5,
+  nb_meta_rounds: 100,
+  nb_rounds: 20,
   seed: 42,
-  metaRounds: 100,
-  rounds: 20,
-  calculateInterClusterStats: true
+  parallel: true,
+  initialization_mode: null,
+  replace_empty_clusters_mode: null,
+  calculate_inter_cluster_stats: true
 );
 
 // Create inference engine
@@ -602,7 +646,7 @@ for (i in 0..counts.size()) {
 ### Reproducibility
 ```typescript
 // Always set seed for reproducible results
-var result = Kmeans::meta_learning(data, 5, 42, 100, 20, true);
+var result = Kmeans::meta_learning(tensors, 5, 100, 20, 42, true, null, null, true);
 // Same result every time with seed=42
 ```
 

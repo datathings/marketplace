@@ -1,6 +1,6 @@
 {
   "name": "cuda",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "NVIDIA CUDA C/C++ skill - Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, and Cooperative Groups for GPU-accelerated computing",
   "author": {
     "name": "Datathings",

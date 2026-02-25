@@ -64,12 +64,12 @@ Specialized libraries for specific industries and applications:
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.7.113-dev");        // Standard library (required)
+@library("std", "7.7.147-dev");        // Standard library (required)
 @library("ai", "7.7.120-dev");        // AI/LLM support
 @library("algebra", "7.7.120-dev");   // ML and numerical computing
 @library("kafka", "7.7.120-dev");     // Kafka integration
 @library("sql", "7.7.120-dev");       // PostgreSQL support (postgres library)
-@library("s3", "7.7.105-dev");        // S3 storage
+@library("s3", "7.7.120-dev");        // S3 storage
 @library("finance", "7.7.120-dev");   // Financial utilities
 @library("powerflow", "7.7.120-dev"); // Power flow analysis
 @library("opcua", "7.7.120-dev");     // OPC UA integration

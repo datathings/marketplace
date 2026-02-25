@@ -579,10 +579,13 @@ GreyCat supports the Model Context Protocol for LLM integration. MCP enables AI 
 var init_params = McpInitializeParams {
     protocolVersion: "2025-06-18",
     capabilities: McpClientCapabilities {
-        roots: McpClientRoots { listChanged: true }
+        roots: McpClientRoots { listChanged: true },
+        sampling: null,
+        elicitation: null // client supports elicitation from server
     },
     clientInfo: McpImplementation {
         name: "my-client",
+        title: "My Client App", // human-readable display name
         version: "1.0.0"
     }
 };
@@ -590,6 +593,7 @@ var init_params = McpInitializeParams {
 var result = mcp_initialize(init_params);
 println("Server protocol version: ${result.protocolVersion}");
 println("Server: ${result.serverInfo.name} ${result.serverInfo.version}");
+println("Instructions: ${result.instructions}"); // server usage hints
 ```
 
 ### MCP Tools
@@ -599,8 +603,10 @@ println("Server: ${result.serverInfo.name} ${result.serverInfo.version}");
 var tools_list = mcp_tools_list(null);
 for (_, tool in tools_list.tools) {
     println("Tool: ${tool.name}");
-    println("  Title: ${tool.title}");
+    println("  Title: ${tool.title}"); // human-readable display name
     println("  Description: ${tool.description}");
+    // tool.outputSchema - optional JSON Schema defining expected output structure
+    // tool.annotations - optional properties describing tool behavior
 }
 
 // Call a tool
@@ -613,12 +619,15 @@ var call_result = mcp_tools_call(call_params);
 if (call_result.isError) {
     error("Tool call failed");
 } else {
+    // Unstructured content blocks
     for (_, content in call_result.content) {
         if (content.type == McpContentType::text) {
             var text_content = content as McpTextContent;
             println(text_content.text);
         }
     }
+    // Structured result (optional JSON object matching outputSchema)
+    var structured = call_result.structuredContent;
 }
 ```
 
@@ -647,13 +656,13 @@ var audio = McpAudioContent {
     mimeType: "audio/mp3"
 };
 
-// Resource content
+// Resource content (type can be resource or resource_link)
 var resource = McpResourceContent {
     type: McpContentType::resource,
     uri: "file:///path/to/resource",
     description: "Important data file",
     mimeType: "application/json",
-    size: 1024
+    size: 1024 // raw content size in bytes (before base64 encoding)
 };
 ```
 

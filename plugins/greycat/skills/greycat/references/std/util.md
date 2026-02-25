@@ -301,6 +301,8 @@ Assert::equals(calculated_result, expected_value);
 Assert::equalsd(pi_approximation, 3.14159, 0.001); // float comparison with epsilon
 Assert::equalst(tensor_a, tensor_b, 0.01); // tensor comparison with epsilon
 Assert::isTrue(validation_passed);
+Assert::isFalse(should_not_happen);
+Assert::isNull(optional_value);
 Assert::isNotNull(database_connection);
 ```
 
@@ -325,26 +327,40 @@ Assert::equalsd(tracker.progress, 1.0, 0.001); // 100% complete
 ```
 
 ### Crypto
-Cryptographic functions including SHA hashing, Base64 encoding, URL encoding, and PKCS1 signing.
+Cryptographic functions including SHA hashing, HMAC, PKCS1 signing, Base64/Base64URL encoding, hex encoding, and URL encoding.
 
 ```gcl
-// Hash functions
+// SHA hash functions (binary and hex output)
 var input = "hello world";
-var sha1_result = Crypto::sha1hex(input);
-var sha256_result = Crypto::sha256hex(input);
+var sha1_bin = Crypto::sha1(input); // binary SHA-1
+var sha1_hex = Crypto::sha1hex(input); // hex-encoded SHA-1
+var sha256_bin = Crypto::sha256(input); // binary SHA-256
+var sha256_hex = Crypto::sha256hex(input); // hex-encoded SHA-256
 
-Assert::isNotNull(sha1_result);
-Assert::isNotNull(sha256_result);
-Assert::isTrue(sha1_result.size() > 0);
-Assert::isTrue(sha256_result.size() > sha1_result.size());
+// PKCS1 signing with SHA-256
+var signature = Crypto::sha256_sign_pkcs1(input, "/path/to/private_key.pem");
+var signature_hex = Crypto::sha256_sign_pkcs1_hex(input, "/path/to/private_key.pem");
 
-// Encoding/decoding round trip
+// HMAC-SHA256 (hex-encoded)
+var hmac = Crypto::sha256_hmac_hex(input, "secret_key");
+
+// Base64 encoding/decoding round trip
 var original = "test string with spaces";
 var encoded = Crypto::base64_encode(original);
 var decoded = Crypto::base64_decode(encoded);
 Assert::equals(decoded, original);
 
-// URL encoding round trip
+// Base64URL encoding/decoding (URL-safe variant)
+var b64url_encoded = Crypto::base64url_encode(original);
+var b64url_decoded = Crypto::base64url_decode(b64url_encoded);
+Assert::equals(b64url_decoded, original);
+
+// Hex encoding/decoding
+var hex_encoded = Crypto::hex_encode(original);
+var hex_decoded = Crypto::hex_decode(hex_encoded);
+Assert::equals(hex_decoded, original);
+
+// URL encoding/decoding round trip
 var url_encoded = Crypto::url_encode("param with spaces & symbols");
 var url_decoded = Crypto::url_decode(url_encoded);
 Assert::equals(url_decoded, "param with spaces & symbols");

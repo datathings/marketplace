@@ -25,6 +25,14 @@ var fields = my_type.fields();
 var error_code = type::enum_by_name<ErrorCode>(typeof ErrorCode, "runtime_error");
 var code_name = type::enum_name(ErrorCode::timeout); // "timeout"
 var code_offset = type::enum_offset(ErrorCode::timeout); // 6
+
+// Field access by offset (meta programming)
+var field_offset = my_type.field_offset_by_name("username"); // returns int?
+type::field_set(target_obj, 0, "new_value"); // set field by offset
+var val = type::field_get(target_obj, 0); // get field by offset
+
+// Copy all fields from one object to another
+type::fields_set_from(dst_obj, src_obj, true); // clone=true copies values
 ```
 
 ### field
@@ -36,6 +44,7 @@ var field_info = my_type.field_by_name("username");
 var field_name = field_info?.name();
 var field_type = field_info?.type();
 var is_nullable = field_info?.is_nullable();
+var field_offset = field_info?.offset(); // positional offset within the type
 ```
 
 ### bool
@@ -83,11 +92,16 @@ Immutable UTF-8 string type with comprehensive manipulation methods.
 ```gcl
 // String comparison and searching
 var text = "Hello World";
+var cmp = text.compare("Hello"); // -1 (less), 0 (equal), 1 (more)
 Assert::isTrue(text.startsWith("Hello"));
 Assert::isTrue(text.endsWith("World"));
 Assert::isTrue(text.contains("lo Wo"));
+Assert::equals(text.get(0), 'H'); // char at offset
 Assert::equals(text.indexOf('W'), 6);
+Assert::equals(text.indexOfFrom('l', 4), 8); // search from offset 4
+Assert::equals(text.lastIndexOf('l'), 9); // last occurrence
 Assert::equals(text.indexOfString("World"), 6);
+Assert::equals(text.indexOfStringFrom("lo", 5), -1); // search from offset 5
 
 // String transformation
 var lower = text.lowercase(); // "hello world"
@@ -135,6 +149,12 @@ buffer.add(" ");
 buffer.add("World");
 Assert::equals(buffer.toString(), "Hello World");
 Assert::equals(buffer.size(), 11);
+var ch = buffer.get(0); // get char at index
+
+// Padded addition: add value with max length and pad character
+buffer.clear();
+buffer.add_and_pad("Hi", 10, ' '); // "Hi        " (padded to 10 chars)
+
 buffer.clear();
 ```
 
@@ -159,6 +179,7 @@ Assert::equals(numbers.index_of(20), 1);
 // Manipulation
 numbers.swap(0, 1);
 numbers.sort(SortOrder::asc);
+numbers.sort_by(name_field, SortOrder::asc); // sort by object field
 numbers.remove(0);
 numbers.remove_first();
 numbers.remove_last();
@@ -403,6 +424,7 @@ poi.set(geo{51.5074, -0.1278}, "Big Ben");
 // Query by location
 var location = poi.get(geo{48.8566, 2.3522});
 var resolved = poi.resolve(geo{48.86, 2.35}); // nearest
+var entry = poi.resolveEntry(0); // returns Tuple<geo, T>? with key and value
 
 // Range queries
 var box_count = poi.rangeSize(
@@ -536,6 +558,9 @@ for (_, result in results) {
 }
 
 Assert::equals(index.size(), 2);
+
+// Wrap an array of floats into a 1D tensor (convenience method)
+var wrapped = VectorIndex::wrap([0.1, 0.2, 0.3], TensorType::f32);
 ```
 
 ## Geographic Types

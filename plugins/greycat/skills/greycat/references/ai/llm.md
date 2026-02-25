@@ -64,9 +64,11 @@ var model = Model::load_from_splits("name", [
 - `n_gpu_layers: int?` - Layers to GPU (0 = CPU, -1 = all)
 - `split_mode: SplitMode?` - Multi-GPU split mode (none, layer, row)
 - `main_gpu: int?` - GPU index when split_mode is none
+- `tensor_split: Array<float>?` - Proportion of tensor rows per GPU (for split_mode layer/row)
 - `vocab_only: bool?` - Load vocabulary only (for tokenization)
 - `use_mmap: bool?` - Use memory-mapped files
 - `use_mlock: bool?` - Prevent swapping
+- `check_tensors: bool?` - Validate tensor data during loading
 
 ### Text Generation
 
@@ -170,7 +172,22 @@ var text = model.detokenize(tokens, true, false);
 // Single token operations
 var piece = model.token_to_text(token_id);
 var score = model.token_score(token_id);
+var attr = model.token_attr(token_id); // TokenAttr bitfield
 var is_eog = model.is_eog_token(token_id);
+var is_ctrl = model.is_control_token(token_id);
+
+// Special tokens
+var sep = model.token_sep();
+var pad = model.token_pad();
+var mask = model.token_mask();
+var nl = model.token_nl();
+var cls = model.token_cls(); // -1 if not available
+var adds_sep = model.add_sep_token();
+
+// Fill-in-the-middle (FIM) tokens
+var fim_pre = model.token_fim_pre();
+var fim_suf = model.token_fim_suf();
+var fim_mid = model.token_fim_mid();
 ```
 
 ### Model Information
@@ -200,6 +217,12 @@ for (var i = 0; i < count; i++) {
 
 // Get chat template
 var template = model.chat_template(null);
+
+// For classifier models: get label by output index
+var label = model.cls_label(0);
+
+// For encoder-decoder models: get decoder start token
+var dec_start = model.decoder_start_token(); // -1 if not applicable
 ```
 
 ### Model Quantization
@@ -359,6 +382,16 @@ var cparams = ContextParams { n_ctx: 4096 };
 if (LLM::params_fit("./model.gguf", mparams, cparams, 512_000_000, 512)) {
     println("Model fits in device memory");
 }
+
+// Additional utility functions
+println("Supports RPC: ${LLM::supports_rpc()}");
+println("Time (us): ${LLM::time_us()}");
+println("Max tensor buft overrides: ${LLM::max_tensor_buft_overrides()}");
+var fa_name = LLM::flash_attn_type_name(FlashAttnType::enabled_for_fa);
+
+// Build split model file paths
+var split = LLM::split_path("model", 2, 4); // "model-00002-of-00004.gguf"
+var prefix = LLM::split_prefix("model-00002-of-00004.gguf", 2, 4); // extract prefix
 ```
 
 ## Types Reference
@@ -383,6 +416,10 @@ if (LLM::params_fit("./model.gguf", mparams, cparams, 512_000_000, 512)) {
 
 **VocabType** - Vocabulary format: `none`, `spm` (SentencePiece), `bpe` (Byte-Pair Encoding), `wpm` (WordPiece), `ugm` (Unigram), `rwkv`, `plamo2`
 
+**RopeType** - RoPE type: `none`, `norm` (normal), `neox` (NeoX-style)
+
+**TokenAttr** - Token attributes: `undefined`, `unknown`, `unused`, `normal`, `control`, `user_defined`, `byte`, `normalized`, `lstrip`, `rstrip`, `single_word`
+
 ### Result Types
 
 **GenerationResult:**
@@ -402,18 +439,34 @@ type ModelInfo {
     description: String;       // Model description
     size: int;                 // Total model size in bytes
     n_params: int;             // Parameter count
+    // Architecture dimensions
     n_embd: int;               // Embedding dimension
+    n_embd_inp: int;           // Input embedding dimension (encoder-decoder)
     n_layer: int;              // Layer count
     n_head: int;               // Attention heads
     n_head_kv: int;            // Key-value heads (GQA)
+    n_swa: int;                // Sliding window attention size (0 = none)
+    n_cls_out: int;            // Classifier output dimensions
+    // Context and vocabulary
     n_ctx_train: int;          // Training context size
     n_vocab: int;              // Vocabulary size
     vocab_type: VocabType;     // Vocabulary format
+    // RoPE parameters
+    rope_type: RopeType;       // RoPE type (none, norm, neox)
+    rope_freq_scale_train: float; // RoPE frequency scaling from training
+    // Model capabilities
     has_encoder: bool;         // Encoder-decoder model
     has_decoder: bool;
     is_recurrent: bool;        // Recurrent model (Mamba, RWKV)
     is_hybrid: bool;           // Hybrid architecture
     is_diffusion: bool;        // Diffusion-based model
+    // Special tokens
+    add_bos: bool;             // Add BOS token automatically
+    add_eos: bool;             // Add EOS token automatically
+    token_bos: int;            // BOS token ID
+    token_eos: int;            // EOS token ID
+    token_eot: int;            // EOT (End-of-Turn) token ID
+    // Chat and metadata
     chat_template: String?;    // Chat template (if available)
     metadata: Map<String, String>; // All model metadata
 }

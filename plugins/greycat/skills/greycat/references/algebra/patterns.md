@@ -55,11 +55,12 @@ var detections = engine.detect(PatternDetectionSensitivity {
 ### PatternDetectors
 ```typescript
 enum PatternDetectors {
+  none("None");
   euclidean("Euclidean");
   fft("FFT");
   dtw("DTW");
-  sax("SAX");
   random("Random");
+  sax("SAX");
 }
 ```
 
