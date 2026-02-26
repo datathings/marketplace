@@ -10,79 +10,79 @@
       "name": "llamacpp",
       "source": "./plugins/llamacpp",
       "description": "llama.cpp C API reference skill - Complete documentation for 163 functions covering local LLM inference",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "greycat-c",
       "source": "./plugins/greycat-c",
       "description": "GreyCat C API & Standard Library skill - Native C SDK documentation for GreyCat",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "greycat",
       "source": "./plugins/greycat",
       "description": "Full-stack GreyCat development skill - GCL language, backend development, and React frontend integration",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "greycat-lsp",
       "source": "./plugins/greycat-lsp",
       "description": "GreyCat Language Server Protocol plugin - LSP support for .gcl files",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "blas_lapack",
       "source": "./plugins/blas_lapack",
       "description": "CBLAS & LAPACKE C API reference skill - Complete documentation for 1284 functions covering numerical linear algebra",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "ggml",
       "source": "./plugins/ggml",
       "description": "ggml C tensor library skill - 560+ functions for graph computation, GGUF model I/O, multi-backend inference, and ML training",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "cuda",
       "source": "./plugins/cuda",
       "description": "NVIDIA CUDA C/C++ skill - Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, and Cooperative Groups for GPU-accelerated computing",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "opencl",
       "source": "./plugins/opencl",
       "description": "OpenCL SDK C/C++ skill - cross-platform GPU/CPU parallel computing with C API, C++ wrapper, and SDK utilities",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "rocm",
       "source": "./plugins/rocm",
       "description": "AMD ROCm GPU computing skill - HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "pandapower",
       "source": "./plugins/pandapower",
       "description": "pandapower Python skill - power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and network visualization",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "powergridmodel",
       "source": "./plugins/powergridmodel",
       "description": "power-grid-model Python skill - steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations with batch and parallel computation",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "vllm",
       "source": "./plugins/vllm",
       "description": "vLLM Python skill - high-throughput LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs",
-      "version": "2.3.2"
+      "version": "2.4.0"
     },
     {
       "name": "ollama",
       "source": "./plugins/ollama",
       "description": "Ollama REST API skill - run and manage local LLMs with chat, generate, embeddings, and custom model creation",
-      "version": "2.3.2"
+      "version": "2.4.0"
     }
   ]
 }
