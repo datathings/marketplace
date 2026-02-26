@@ -1,6 +1,6 @@
 {
   "name": "ollama",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "Run and manage local LLMs via Ollama's REST API, with support for text generation, chat, embeddings, and custom model creation.",
   "author": {
     "name": "Datathings",

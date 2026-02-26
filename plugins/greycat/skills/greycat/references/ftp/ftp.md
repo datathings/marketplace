@@ -20,7 +20,7 @@ This library is ideal for integrating with legacy file transfer systems, exchang
 Add the FTP library to your GreyCat project:
 
 ```gcl
-@library("ftp", "7.7.120-dev")
+@library("ftp", "7.7.138-dev")
 ```
 
 ## Quick Start

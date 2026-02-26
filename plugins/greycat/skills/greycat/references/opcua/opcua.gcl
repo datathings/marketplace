@@ -200,7 +200,7 @@ type OpcuaClient {
     private url: String;
     /// Security mode for the connection
     private security_mode: OpcuaSecurityMode;
-    /// Security policy (optional, auto-negotiated if not set)
+    /// Security policy (optional, http://opcfoundation.org/UA/SecurityPolicy#None if not set)
     private security_policy: OpcuaSecurityPolicy?;
     /// Username/password credentials (optional)
     private credentials: OpcuaCredentials?;

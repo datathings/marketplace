@@ -20,7 +20,7 @@ This library is ideal for building microservices that communicate via event stre
 Add the Kafka library to your GreyCat project:
 
 ```gcl
-@library("kafka", "7.7.120-dev")
+@library("kafka", "7.7.138-dev")
 ```
 
 ## Quick Start
