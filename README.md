@@ -48,22 +48,22 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 | Plugin | Category | Type | Version | Description |
 |--------|----------|------|---------|-------------|
 | ***GreyCat Technology*** | | | | |
-| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.0 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
-| [**greycat-lsp**](#greycat-lsp) | GreyCat Technology | LSP | 2.4.0 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.0 | GreyCat C API and Standard Library for native development |
+| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.1 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| [**greycat-lsp**](#greycat-lsp) | GreyCat Technology | LSP | 2.4.1 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.1 | GreyCat C API and Standard Library for native development |
 | ***Agentic AI*** | | | | |
-| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.4.0 | llama.cpp C API reference (163 functions) for local LLM inference |
-| [**ggml**](#ggml) | Agentic AI | Skill | 2.4.0 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
-| [**vllm**](#vllm) | Agentic AI | Skill | 2.4.0 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
-| [**ollama**](#ollama) | Agentic AI | Skill | 2.4.0 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
+| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.4.1 | llama.cpp C API reference (163 functions) for local LLM inference |
+| [**ggml**](#ggml) | Agentic AI | Skill | 2.4.1 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
+| [**vllm**](#vllm) | Agentic AI | Skill | 2.4.1 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
+| [**ollama**](#ollama) | Agentic AI | Skill | 2.4.1 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
 | ***High Performance Math & GPU*** | | | | |
-| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.4.0 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
-| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.4.0 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
-| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.4.0 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
-| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.4.0 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
+| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.4.1 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.4.1 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
+| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.4.1 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
+| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.4.1 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
 | ***Power Grid Management*** | | | | |
-| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.4.0 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
-| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.4.0 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
+| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.4.1 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
+| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.4.1 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
 
 ---
 

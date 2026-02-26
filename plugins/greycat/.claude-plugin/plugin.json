@@ -1,6 +1,6 @@
 {
   "name": "greycat",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Comprehensive GreyCat backend development skill for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, React integration, and all standard libraries.",
   "author": {
     "name": "Datathings",

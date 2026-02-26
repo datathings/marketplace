@@ -1,6 +1,6 @@
 {
   "name": "vllm",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "vLLM v0.16.0 skill: offline batch inference, OpenAI-compatible server, LoRA adapters, multimodal inputs, embeddings, and structured outputs.",
   "author": {
     "name": "Datathings",

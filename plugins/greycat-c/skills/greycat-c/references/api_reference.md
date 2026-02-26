@@ -57,13 +57,13 @@ Defines all primitive type aliases, the GreyCat type system enum, the universal 
 
 ```c
 typedef struct {
-    f32_t real;
-    f32_t imag;
+    f32_t r;  // Real part
+    f32_t i;  // Imaginary part
 } c64_t;   // 64-bit complex (two 32-bit floats)
 
 typedef struct {
-    f64_t real;
-    f64_t imag;
+    f64_t r;  // Real part
+    f64_t i;  // Imaginary part
 } c128_t;  // 128-bit complex (two 64-bit doubles)
 ```
 
@@ -165,6 +165,17 @@ typedef struct {
     u32_t left;   // Type offset (identifies the enum type)
     u32_t right;  // Value offset (identifies the enum value within the type)
 } gc_slot_tuple_u32_t;
+```
+
+### gc_f32_conv_t — Float/Uint32 Conversion Union
+
+Conversion union for reinterpreting `f32` as `u32` (and vice versa) without aliasing violations:
+
+```c
+typedef union gc_f32_conv_t_ {
+    f32_t f;  // Float interpretation
+    u32_t u;  // Unsigned integer interpretation
+} gc_f32_conv_t;
 ```
 
 ### Compiler / Visibility Macros
@@ -1391,12 +1402,12 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 | `gc_core_tensor__get_descriptor(t)` | Get a pointer to the descriptor |
 | `gc_core_tensor__set_descriptor(t, desc)` | Replace the descriptor |
 | `gc_core_tensor__set_proxy(tensor, proxy)` | Set the proxy owner object |
-| `gc_core_tensor__diff(t1, t2, ctx)` | Compute the L2 difference between two tensors |
+| `gc_core_tensor__diff(t1, t2, ctx)` | Compute the sum of absolute element-wise differences between two tensors |
 | `gc_core_tensor__check_shape(shape, tot_size, skip_zero)` | Validate a shape array |
 | `gc_core_tensor__pos_to_offset(self, p[], ctx)` | Convert multi-dimensional position to flat offset |
 | `gc_core_tensor__update_capacity(tensor, ctx)` | Reallocate data to match descriptor size |
 | `gc_core_tensor__reset_internal(self)` | Reset internal state (descriptor + data pointer) |
-| `gc_core_tensor__clone_internal(dst, src)` | Copy descriptor from src to dst (shallow) |
+| `gc_core_tensor__clone_internal(dst, src)` | Deep-copy tensor internals from src to dst (allocates new data buffer) |
 | `gc_core_tensor__print(self, name)` | Print tensor contents to stdout (debug) |
 
 ### Descriptor Utilities

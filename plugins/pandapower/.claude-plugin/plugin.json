@@ -1,6 +1,6 @@
 {
   "name": "pandapower",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "pandapower v3.4.0 Python skill - power systems analysis with 80+ functions for AC/DC power flow, OPF, short circuit (IEC 60909), and state estimation",
   "author": {
     "name": "Datathings",
