@@ -19,7 +19,7 @@ This library is ideal for bioinformatics pipelines, clinical data analysis, qual
 Add the FCS library to your GreyCat project:
 
 ```gcl
-@library("fcs", "7.7.138-dev")
+@library("fcs", "7.7.151-dev")
 ```
 
 ## Quick Start

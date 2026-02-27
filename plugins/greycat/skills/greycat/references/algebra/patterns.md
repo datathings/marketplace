@@ -49,6 +49,7 @@ var detections = engine.detect(PatternDetectionSensitivity {
 | `PatternDetectionEngineState` | Engine state management |
 | `Detection` / `OverlappingDetection` | Detection results |
 | `PatternDetectionSensitivity` | Detection parameters |
+| `DistanceMetrics` | Euclidean and DTW distance computation |
 
 ## Enums
 
@@ -595,6 +596,38 @@ for (threshold in [0.7, 0.8, 0.9]) {
   println("Threshold ${threshold}: ${engine.state?.detections?.size()} detections");
 }
 ```
+
+---
+
+## Utility Types
+
+### DistanceMetrics
+
+Static utility for computing distance between tensor representations of patterns.
+
+```typescript
+// Euclidean distance between two tensors
+var dist = DistanceMetrics::euclidean(tensor_a, tensor_b);
+
+// Dynamic Time Warping distance (requires pre-allocated workspace tensor)
+var workspace = Tensor {};
+workspace.init(TensorType::f64, [tensor_a.size(), tensor_b.size()]);
+var dtw_dist = DistanceMetrics::dtw(tensor_a, tensor_b, workspace);
+```
+
+**Methods:**
+- `euclidean(t1: Tensor, t2: Tensor): float` - Euclidean distance between two tensors
+- `dtw(t1: Tensor, t2: Tensor, workspace: Tensor): float` - Dynamic Time Warping distance (workspace tensor must be pre-allocated)
+
+### PatternDetectionEngine::windowToTensor (static)
+
+Converts pattern and time window tables into a tensor for distance computation.
+
+```typescript
+PatternDetectionEngine::windowToTensor(pattern_table, window_table, output_tensor, MatchingNormalisation::as_is);
+```
+
+**Signature:** `static fn windowToTensor(pattern: Table<any>, timeWindow: Table<any>, tensor: Tensor, matchingNormalisation: MatchingNormalisation)`
 
 ---
 

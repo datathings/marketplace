@@ -21,7 +21,7 @@ This library is ideal for grid planning, contingency analysis, voltage stability
 Add the PowerGrid library to your GreyCat project:
 
 ```gcl
-@library("powergrid", "7.7.138-dev")
+@library("powergrid", "7.7.151-dev")
 ```
 
 ## Quick Start

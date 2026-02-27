@@ -194,8 +194,12 @@ type Task {
   status: TaskStatus;
   progress: float?;
 
-  /// set globally the progress for parent task, accepted value are between 0 and 1.
-  static native fn progress(progress: float);
+  /// set the number of expected steps for this task
+  static native fn expected_steps(total_expected_steps: int);
+
+  /// add number of steps to the current task, this function can be called from task or job context
+  static native fn add_steps(steps: int);
+
   static native fn parentId(): int;
   static native fn id(): int;
 

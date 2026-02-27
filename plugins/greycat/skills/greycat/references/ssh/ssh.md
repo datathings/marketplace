@@ -20,7 +20,7 @@ This library is ideal for automated file transfers, remote server management, se
 Add the SSH library to your GreyCat project:
 
 ```gcl
-@library("ssh", "7.7.138-dev")
+@library("ssh", "7.7.151-dev")
 ```
 
 ## Quick Start

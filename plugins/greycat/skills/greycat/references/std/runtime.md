@@ -48,8 +48,9 @@ Represents an executing or completed task with metadata and status tracking.
 var task_id = Task::id();
 var parent_id = Task::parentId();
 
-// Report progress (0.0 to 1.0)
-Task::progress(0.5); // 50% complete
+// Report progress via steps
+Task::expected_steps(100); // total expected steps
+Task::add_steps(50); // mark 50 steps done (progress = 0.5)
 
 // Query running tasks
 var active_tasks = Task::running();

@@ -1,6 +1,6 @@
 {
   "name": "blas_lapack",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "Complete CBLAS and LAPACKE C API reference (LAPACK v3.12.1) covering 1284 functions across BLAS Level 1/2/3 vector and matrix operations, linear system solvers, eigenvalue/eigenvector computation, SVD, least squares, matrix factorizations, and auxiliary routines for scientific computing and high-performance numerical linear algebra.",
   "author": {
     "name": "Datathings",
