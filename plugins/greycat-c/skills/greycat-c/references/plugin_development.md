@@ -127,12 +127,57 @@ type Model {
 All native functions follow the same signature:
 
 ```c
-void gc_<module>_<Type>__<method_name>(gc_machine_t *ctx)
+void gc_<module>_<Type>__<methodName>(gc_machine_t *ctx)
 ```
 
 - Double underscore `__` separates type from method
 - Always takes `gc_machine_t *ctx` as sole parameter
 - Returns void (result set via `gc_machine__set_result`)
+
+### Nativegen Naming Convention (CRITICAL)
+
+When GCL code declares a `native` function, the GreyCat compiler auto-generates `nativegen.c` and `nativegen.h`. These files contain `extern` declarations with **exact symbol names** that the runtime resolves at dlopen time. Your C function names **MUST match exactly** or you'll get `undefined symbol` errors at runtime.
+
+**The naming formula:**
+
+| GCL Declaration | C Function Name |
+|----------------|-----------------|
+| Type method: `native fn foo()` in type `MyType` in module `my_module` | `gc_my_module_MyType__foo` |
+| Module function: `native fn bar()` in module `my_module` | `gc_my_module__bar` |
+
+**Rules:**
+1. `<module>` = the GCL module name (from the file's module path), using underscores as-is
+2. `<Type>` = the GCL type name **exactly as written** (PascalCase preserved)
+3. `__` (double underscore) separates the type from the method name
+4. `<methodName>` = the GCL method name **exactly as written** (camelCase preserved)
+5. Do NOT use snake_case for the method name — keep the GCL casing
+
+**Example — GCL to C mapping:**
+
+```gcl
+// File: lib/my_plugin/text_normalizer/TextNormalizer.gcl
+// Module: text_normalizer
+
+abstract type TextNormalizer {
+    native static fn rejoinHyphenatedWords(text: String): String;
+    native static fn stripHtmlTags(text: String): String;
+    native static fn normalizeAdvancedWithMaps(text: String, options: NormOptions, ...): String;
+}
+```
+
+```c
+// nativegen.h auto-generates:
+extern void gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords(gc_machine_t *ctx);
+extern void gc_text_normalizer_TextNormalizer__stripHtmlTags(gc_machine_t *ctx);
+extern void gc_text_normalizer_TextNormalizer__normalizeAdvancedWithMaps(gc_machine_t *ctx);
+
+// Your C implementations MUST use these exact names:
+void gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords(gc_machine_t *ctx) { ... }
+void gc_text_normalizer_TextNormalizer__stripHtmlTags(gc_machine_t *ctx) { ... }
+void gc_text_normalizer_TextNormalizer__normalizeAdvancedWithMaps(gc_machine_t *ctx) { ... }
+```
+
+**Common mistake:** Using a custom naming convention like `gc_text_search_normalizer_rejoin_hyphenated_words` instead of the nativegen-expected `gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords`. This compiles but fails at runtime with `undefined symbol` errors during dlopen.
 
 ### Static vs Instance Methods
 
@@ -527,9 +572,18 @@ void my_function(gc_machine_t *ctx) {
     } else if (type0 == gc_type_object) {
         gc_object_t *obj = gc_machine__get_param(ctx, 0).object;
     } else if (type0 == gc_type_static_field) {
-        // Enum value: .tu32.right is the enum variant index
+        // Enum value: .tu32.right is the enum variant index (ordinal)
         u32_t enum_val = gc_machine__get_param(ctx, 0).tu32.right;
     }
+
+    // ⚠️  COMMON BUG: GCL enums are gc_type_static_field, NOT gc_type_int.
+    // Using gc_type_int to read an enum parameter will ALWAYS hit the default
+    // fallback because the type check fails silently. The enum ordinal is in
+    // .tu32.right, NOT .i64. This is the #1 cause of "enum variant is ignored"
+    // bugs in native functions.
+    //
+    //   WRONG:  (gc_machine__get_param_type(ctx, 0) == gc_type_int) ? slot.i64 : 0
+    //   RIGHT:  (gc_machine__get_param_type(ctx, 0) == gc_type_static_field) ? (i64_t)slot.tu32.right : 0
 
     // Check object type with inheritance support
     if (type0 == gc_type_object) {
@@ -861,13 +915,23 @@ static enum lib_pooling_type gc_to_lib_pooling_type(u32_t gc_value) {
     }
 }
 
-// Apply enum parameter
+// Apply enum from an object field
 void apply_pooling(gc_object_t *params, struct lib_config *cfg, gc_machine_t *ctx) {
     gc_type_t type;
     gc_slot_t val = gc_object__get_at(params, FIELD_OFFSET, &type, ctx);
     if (type == gc_type_static_field) {
         cfg->pooling_type = gc_to_lib_pooling_type(val.tu32.right);
     }
+}
+
+// Read enum from a native function parameter — same gc_type_static_field / .tu32.right pattern
+void my_native_fn(gc_machine_t *ctx) {
+    gc_slot_t slot = gc_machine__get_param(ctx, 0);
+    // CORRECT: check gc_type_static_field, read .tu32.right
+    i64_t variant = (gc_machine__get_param_type(ctx, 0) == gc_type_static_field)
+                        ? (i64_t)slot.tu32.right : 0;
+    // WRONG (silent bug — always hits default):
+    // i64_t variant = (gc_machine__get_param_type(ctx, 0) == gc_type_int) ? slot.i64 : 0;
 }
 ```
 

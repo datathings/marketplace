@@ -37,6 +37,20 @@ u32_t count = gc_machine__get_param_nb(ctx);
 gc_slot_t self = gc_machine__this(ctx);                  // 'this' for instance methods
 ```
 
+**Enum parameter handling (CRITICAL — common source of bugs):**
+
+GCL enum values are **NOT** `gc_type_int`. They are `gc_type_static_field` and the ordinal is in `.tu32.right`, not `.i64`.
+
+```c
+// WRONG — enum will always hit the default fallback:
+i64_t variant = (gc_machine__get_param_type(ctx, 0) == gc_type_int) ? slot.i64 : 0;
+
+// CORRECT — reads the enum ordinal properly:
+i64_t variant = (gc_machine__get_param_type(ctx, 0) == gc_type_static_field) ? (i64_t)slot.tu32.right : 0;
+```
+
+The `.tu32` field is a struct with `.left` (type offset, identifies the enum type) and `.right` (value offset / ordinal within the enum). For dispatch purposes you almost always want `.tu32.right`.
+
 **Setting results:**
 ```c
 gc_machine__set_result(ctx, (gc_slot_t){.i64 = 42}, gc_type_int);
@@ -44,6 +58,8 @@ gc_machine__set_result(ctx, (gc_slot_t){.f64 = 3.14}, gc_type_float);
 gc_machine__set_result(ctx, (gc_slot_t){.b = true}, gc_type_bool);
 gc_machine__set_result(ctx, (gc_slot_t){.object = obj}, gc_type_object);
 gc_object__un_mark(obj, ctx);  // CRITICAL for objects -- prevents premature GC
+// Returning an enum value (e.g., MyEnum::variant2 where variant2 is ordinal 1):
+gc_machine__set_result(ctx, (gc_slot_t){.tu32 = {.left = 0, .right = 1}}, gc_type_static_field);
 ```
 
 **Error handling:**
@@ -181,7 +197,34 @@ Build native GreyCat plugins in C with proper lifecycle management, type configu
 
 ## Key Patterns
 
-**Function naming:** `gc_<module>_<Type>__<method_name>(gc_machine_t *ctx)`
+**Function naming (CRITICAL — must match nativegen):** `gc_<module>_<Type>__<methodName>(gc_machine_t *ctx)`
+
+When GreyCat compiles GCL code with `native` function declarations, it auto-generates `nativegen.c` and `nativegen.h` files. The nativegen `extern` declarations define the **exact C symbol names** the runtime will look for at dlopen time. Your C function definitions **MUST** use these exact names or you'll get `undefined symbol` errors.
+
+**Naming convention:**
+- Type method: `gc_<gcl_module>_<GclType>__<methodName>` (double underscore before method)
+- Module function: `gc_<gcl_module>__<functionName>` (double underscore before function)
+- The `<gcl_module>` comes from the GCL file's module path (e.g., `text_normalizer` for a file in the `text_normalizer/` module)
+- The `<GclType>` matches the GCL type name exactly (PascalCase)
+- The `<methodName>` matches the GCL method name exactly (camelCase)
+
+**Example mapping (GCL → C):**
+```
+// GCL (in module "text_normalizer", type TextNormalizer):
+//   native static fn rejoinHyphenatedWords(text: String): String;
+//
+// nativegen.h generates:
+//   extern void gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords(gc_machine_t *ctx);
+//
+// Your C implementation MUST be named:
+void gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords(gc_machine_t *ctx) { ... }
+
+// GCL (in module "bm25_engine", type BM25Engine):
+//   native static fn computeIDF(docFreq: int, totalDocs: int): float;
+//
+// C implementation:
+void gc_bm25_engine_BM25Engine__computeIDF(gc_machine_t *ctx) { ... }
+```
 
 **Plugin lifecycle:** `link -> lib_start -> [worker_start -> native calls -> worker_stop] -> lib_stop`
 

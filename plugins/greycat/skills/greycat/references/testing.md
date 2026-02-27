@@ -25,6 +25,14 @@ fn teardown() { }         // After tests
 @test fn following_test() { Assert::equals(*n, 42); }  // Sees prior change
 ```
 
+## Running a Specific Test
+
+Target a single test function using `module::function` syntax:
+```bash
+greycat test dfr_engine_test::test_dfr_variant
+```
+The module name is the test file name without the `.gcl` extension.
+
 ## Test Files
 
 `*_test.gcl` excluded from `greycat build`:

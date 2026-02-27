@@ -114,9 +114,18 @@ fn main() { }
 
 **Primitives**: `int` (64-bit, `1_000_000`), `float` (`3.14`), `bool`, `char`, `String` (`"${name}"`)
 
-**Casting**: Float→int rounds (≥0.5 up, <0.5 down): `var i = 42.9 as int; // 43`
+**Casting — `as int` vs `floor()`**:
+- `x as int` — **ROUNDS** (nearest integer): `0.5 as int` → 1, `1.5 as int` → 2, `2.4 as int` → 2
+- `floor(x) as int` — **FLOORS** (truncates toward −∞): `0.5` → 0, `1.5` → 1, `2.9` → 2
 
-**String→number**: `parseNumber(s)` returns `any` (int or float). Cast to desired type: `var v = parseNumber(s) as float;` or `var i = parseNumber(s) as int;`
+**⚠️ CRITICAL**: When computing indices, buckets, or anything from float division, use `floor(x) as int`, NOT `x as int`:
+```gcl
+var raw = 5.0 / 10.0;              // 0.5
+var wrong = raw as int;             // ❌ 1 (rounds!)
+var correct = floor(raw) as int;    // ✅ 0 (floors!)
+```
+
+**String→number**: `parseNumber(s)` returns `any` (int or float). Cast: `var v = parseNumber(s) as float;` or `var i = parseNumber(s) as int;` (safe for integer strings like `"3"`, use `floor(parseNumber(s)) as int` if you expect truncation for `"3.7"`)
 
 **Time**: `time` (μs epoch), `duration` (`1_us`, `500_ms`, `5_s`, `30_min`, `7_hour`, `2_day`), `Date` (UI, needs timezone)
 
@@ -281,7 +290,7 @@ for (job in jobs) { results.add(job.result()); }
 
 ## Testing
 
-Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`.
+Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`. Run a single test: `greycat test module_name::test_fn_name` (e.g., `greycat test dfr_engine_test::test_dfr_variant`).
 
 ```gcl
 @test fn test_city_creation() {
@@ -321,6 +330,7 @@ fn process(node_name: String) { }
 | `fn doX(): void` | `fn doX()` |
 | `City{name: "X"}` | `City{name: "X", streets: nodeList<...>{}}` |
 | `fn(T): R` as param type | `function` keyword: `fn process(arr: Array<any>, pred: function)` |
+| `(x / y) as int` for floor | `floor(x / y) as int` — `as int` rounds, `floor()` truncates |
 
 **Double-bang OK** for global registry lookups: `var config = ConfigRegistry::getConfig(key)!!;`
 
