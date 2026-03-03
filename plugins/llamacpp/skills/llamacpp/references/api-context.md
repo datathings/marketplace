@@ -32,12 +32,6 @@ if (!ctx) {
 }
 ```
 
-**New parameters in b7631:**
-
-- `samplers` (`struct llama_sampler_seq_config *`) - [EXPERIMENTAL] Backend sampler chain configuration. Enables GPU-accelerated sampling as part of the computation graph. The caller must keep the sampler chains alive. Samplers must be sampler chains (use `llama_sampler_chain_init`). Default: NULL.
-
-- `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
-
 **Notable parameters:**
 
 - `op_offload` (bool) - Offload host tensor operations to device for improved performance. Default: true.
@@ -45,6 +39,14 @@ if (!ctx) {
 - `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false. Note: setting to false when `n_seq_max > 1` can cause bad performance.
 
 - `kv_unified` (bool) - Use a unified buffer across input sequences when computing attention. Try disabling when `n_seq_max > 1` for improved performance when sequences do not share a large prefix. Default: true.
+
+- `defrag_thold` (float) - [DEPRECATED] Defragment the KV cache if holes/size > threshold, <= 0 disabled. This parameter is deprecated and should not be used in new code.
+
+**Backend Sampling parameters [EXPERIMENTAL]:**
+
+- `samplers` (`struct llama_sampler_seq_config *`) - Backend sampler chain configuration. Enables GPU-accelerated sampling as part of the computation graph. The caller must keep the sampler chains alive. Samplers must be sampler chains (use `llama_sampler_chain_init`). Default: NULL.
+
+- `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
 
 **Example with Backend Sampling:**
 ```c

@@ -65,20 +65,20 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (220 lines) - Initialization, parameters, model loading
-- **[api-model-info.md](references/api-model-info.md)** (193 lines) - Model properties, architecture detection **NEW**
-- **[api-context.md](references/api-context.md)** (412 lines) - Context, memory (KV cache), state management
-- **[api-inference.md](references/api-inference.md)** (417 lines) - Batch operations, inference, tokenization, chat
-- **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20 sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (359 lines) - LoRA adapters, performance, training
+- **[api-core.md](references/api-core.md)** (229 lines) - Initialization, parameters, model loading
+- **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
+- **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
+- **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
+- **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
+- **[api-advanced.md](references/api-advanced.md)** (397 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 195 active functions (b8115) across 6 organized files
+**Total:** ~195 active functions (b8191) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all 195 function signatures.
+See **[references/api.md](references/api.md)** for all ~195 function signatures.
 
 ## Common Workflows
 
@@ -148,31 +148,33 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,086 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,178 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading
-  - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection
+  - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
-  - [api-sampling.md](references/api-sampling.md) - All 20 sampling strategies (incl. adaptive-p) + backend sampling API
-  - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training
-- **[references/workflows.md](references/workflows.md)** (1,616 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
+  - [api-sampling.md](references/api-sampling.md) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
+  - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
+- **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8115
+## What's New in b8191
 
-**LoRA:**
-- `llama_adapter_lora_free()` is now **deprecated** - adapters are automatically freed with the associated model
+**Deprecations:**
+- `defrag_thold` in `llama_context_params` is now **deprecated** - KV cache defragmentation threshold is no longer used
+- `llama_vocab_cls()` is now **deprecated** - use `llama_vocab_bos()` instead (CLS is equivalent to BOS)
+- `llama_sampler_init_grammar_lazy()` is now **deprecated** - use `llama_sampler_init_grammar_lazy_patterns()` instead
+
+**Model Metadata:**
+- New `llama_model_meta_key` enum with well-known sampling metadata keys (top_k, top_p, min_p, temp, XTC, mirostat, penalties, etc.)
+- Models can now embed recommended sampling parameters in GGUF metadata
 
 **Context Params:**
-- `op_offload` (bool) - Offload host tensor operations to device for improved performance
+- `kv_unified` (bool) - Use a unified buffer across input sequences for attention computation
+- `swa_full` (bool) - Allocate full-size SWA cache for models with Sliding Window Attention
 
-**Performance:**
-- `llama_perf_context_data.n_reused` - New field tracking number of times a compute graph was reused
-
-**Quantization:**
-- New `LLAMA_FTYPE_MOSTLY_MXFP4_MOE` (38) quantization type for MoE models
-
-**Model Support:**
-- Many new architectures: PaddleOCR-VL, JAIS-2, Kimi-K2.5, GLM-OCR, Qwen3.5, Modern BERT, Tiny Aya, and more
+**State Management:**
+- `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` replaces `LLAMA_STATE_SEQ_FLAGS_SWA_ONLY` (backwards-compat alias kept)
+- Extended state sequence functions (`_ext` variants) for partial state management
 
 ## Key Differences from Deprecated API
 
@@ -184,5 +186,7 @@ If you're updating old code:
 - Use `llama_vocab_*()` functions instead of `llama_token_*()`
 - Use `llama_state_*()` functions instead of deprecated state functions
 - Use `llama_set_adapters_lora()` instead of `llama_set_adapter_lora()` for LoRA adapters
+- Use `llama_vocab_bos()` instead of `llama_vocab_cls()` (CLS is equivalent to BOS)
+- Use `llama_sampler_init_grammar_lazy_patterns()` instead of `llama_sampler_init_grammar_lazy()`
 
 See the API reference for complete mappings.

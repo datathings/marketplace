@@ -52,6 +52,9 @@ var parent_id = Task::parentId();
 Task::expected_steps(100); // total expected steps
 Task::add_steps(50); // mark 50 steps done (progress = 0.5)
 
+// Legacy progress reporting (deprecated, use expected_steps + add_steps instead)
+Task::progress(0.5); // 50% complete
+
 // Query running tasks
 var active_tasks = Task::running();
 for (_, task in active_tasks) {

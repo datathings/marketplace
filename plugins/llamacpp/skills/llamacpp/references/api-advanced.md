@@ -331,6 +331,19 @@ Run a training epoch.
 ```c
 #define LLAMA_DEFAULT_SEED 0xFFFFFFFF
 #define LLAMA_TOKEN_NULL -1
+
+#define LLAMA_FILE_MAGIC_GGLA 0x67676c61u // 'ggla'
+#define LLAMA_FILE_MAGIC_GGSN 0x6767736eu // 'ggsn'
+#define LLAMA_FILE_MAGIC_GGSQ 0x67677371u // 'ggsq'
+
+#define LLAMA_SESSION_MAGIC   LLAMA_FILE_MAGIC_GGSN
+#define LLAMA_SESSION_VERSION 9
+
+#define LLAMA_STATE_SEQ_MAGIC   LLAMA_FILE_MAGIC_GGSQ
+#define LLAMA_STATE_SEQ_VERSION 2
+
+// State sequence flags
+#define LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY 1  // work only with partial states (SWA KV cache or recurrent cache)
 ```
 
 ## Key Data Structures
@@ -371,9 +384,12 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `pooling_type`: Pooling type
 - `attention_type`: Attention type
 - `flash_attn_type`: Flash attention configuration
+- `defrag_thold`: [DEPRECATED] KV cache defrag threshold
 - `op_offload`: Offload host tensor operations to device
 - `swa_full`: Use full-size SWA cache
 - `kv_unified`: Use a unified buffer across input sequences
+- `samplers`: [EXPERIMENTAL] Backend sampler chain configuration
+- `n_samplers`: Number of backend sampler configurations
 
 ### llama_token_data / llama_token_data_array
 Used for sampling:

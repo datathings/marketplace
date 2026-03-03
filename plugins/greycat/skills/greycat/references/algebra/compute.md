@@ -469,6 +469,7 @@ static var_input_name: String = "input";
 static var_output_name: String = "output";
 static var_weight_name: String = "weight";
 static var_bias_name: String = "bias";
+static var_mult_name: String = "mult";
 
 name: String;
 type: TensorType;
@@ -509,8 +510,9 @@ Linear transformation with activation: `output = activation(input × weight + bi
 **Fields:**
 Same as `ComputeLayerLinear` plus:
 ```typescript
-activation: ComputeActivation?;  // Activation function
+static var_mult_name: String = "mult";
 static var_pre_activation_name: String = "pre_activation";
+activation: ComputeActivation?;  // Activation function
 ```
 
 **Most common layer type** in neural networks.
@@ -686,6 +688,7 @@ static var_loss_name: String = "loss";
 static var_class_weights_name: String = "class_weights";
 static var_predicted_classes_name: String = "predicted_classes";
 static var_probabilities_name: String = "probabilities";
+static var_sum_reduce_name: String = "sum_reduce";
 
 name: String;
 loss_type: ComputeClassificationLoss;  // categorical or sparse
@@ -787,7 +790,46 @@ ComputeOperationSign { input, output }
 ComputeOperationSin { input, output }
 ComputeOperationCos { input, output }
 ComputeOperationTan { input, output }
-// ... and their inverses/hyperbolic variants
+ComputeOperationAcos { input, output }
+ComputeOperationAcosh { input, output }
+ComputeOperationAsin { input, output }
+ComputeOperationAsinh { input, output }
+ComputeOperationAtan { input, output }
+ComputeOperationAtanh { input, output }
+ComputeOperationCosh { input, output }
+ComputeOperationSinh { input, output }
+
+// Activation-like
+ComputeOperationLeCunTanh { input, output }
+```
+
+### Two-Input Operations
+
+```typescript
+ComputeOperationAddBias { input, input2, output }  // Add bias vector
+ComputeOperationAvg { input, input2, output }       // Average of two tensors
+ComputeOperationEuclidean { input, input2, output }  // Euclidean distance
+```
+
+### Power Operations
+
+```typescript
+ComputeOperationRaiseToPower {
+  input: String,
+  output: String,
+  power: float  // Raise each element to this power
+}
+```
+
+### Filter Operations
+
+```typescript
+ComputeOperationFilter {
+  input: String,
+  output: String,
+  mask: String,
+  nbOutputs: int  // Number of output features after filtering
+}
 ```
 
 ### Matrix Operations
@@ -846,6 +888,20 @@ ComputeOperationScale {
   input: String,
   output: String,
   alpha: float  // Multiply by constant
+}
+
+ComputeOperationLogSoftmax {
+  input: String,
+  output: String,
+  axis: int?  // Axis for softmax (optional)
+}
+
+ComputeOperationSumIf {
+  input: String,
+  ifCondition: String,
+  output: String,
+  counts: String,
+  classes: int  // Number of classes
 }
 ```
 

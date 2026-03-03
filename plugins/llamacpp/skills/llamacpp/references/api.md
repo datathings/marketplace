@@ -292,6 +292,27 @@ const char * llama_model_cls_label(const struct llama_model * model, uint32_t i)
 ```
 Get the label of a classifier output by index. Returns NULL if no label provided.
 
+### Metadata Enum: llama_model_meta_key
+
+The `llama_model_meta_key` enum defines well-known sampling metadata keys that can be stored in the model's GGUF metadata:
+
+```c
+enum llama_model_meta_key {
+    LLAMA_MODEL_META_KEY_SAMPLING_SEQUENCE,
+    LLAMA_MODEL_META_KEY_SAMPLING_TOP_K,
+    LLAMA_MODEL_META_KEY_SAMPLING_TOP_P,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIN_P,
+    LLAMA_MODEL_META_KEY_SAMPLING_XTC_PROBABILITY,
+    LLAMA_MODEL_META_KEY_SAMPLING_XTC_THRESHOLD,
+    LLAMA_MODEL_META_KEY_SAMPLING_TEMP,
+    LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_LAST_N,
+    LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_REPEAT,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_TAU,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_ETA,
+};
+```
+
 ### llama_model_meta_val_str
 ```c
 int32_t llama_model_meta_val_str(
@@ -312,7 +333,7 @@ Get the number of metadata key/value pairs.
 ```c
 const char * llama_model_meta_key_str(enum llama_model_meta_key key);
 ```
-Get sampling metadata key name. Returns NULL if the key is invalid.
+Get sampling metadata key name for a well-known key. Returns NULL if the key is invalid.
 
 ### llama_model_meta_key_by_index
 ```c
@@ -1872,6 +1893,19 @@ Run a training epoch.
 ```c
 #define LLAMA_DEFAULT_SEED 0xFFFFFFFF
 #define LLAMA_TOKEN_NULL -1
+
+#define LLAMA_FILE_MAGIC_GGLA 0x67676c61u // 'ggla'
+#define LLAMA_FILE_MAGIC_GGSN 0x6767736eu // 'ggsn'
+#define LLAMA_FILE_MAGIC_GGSQ 0x67677371u // 'ggsq'
+
+#define LLAMA_SESSION_MAGIC   LLAMA_FILE_MAGIC_GGSN
+#define LLAMA_SESSION_VERSION 9
+
+#define LLAMA_STATE_SEQ_MAGIC   LLAMA_FILE_MAGIC_GGSQ
+#define LLAMA_STATE_SEQ_VERSION 2
+
+// State sequence flags
+#define LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY 1  // work only with partial states (SWA KV cache or recurrent cache)
 ```
 
 ## Key Data Structures
@@ -1912,9 +1946,12 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `pooling_type`: Pooling type
 - `attention_type`: Attention type
 - `flash_attn_type`: Flash attention configuration
+- `defrag_thold`: [DEPRECATED] KV cache defrag threshold
 - `op_offload`: Offload host tensor operations to device
 - `swa_full`: Use full-size SWA cache
 - `kv_unified`: Use a unified buffer across input sequences
+- `samplers`: [EXPERIMENTAL] Backend sampler chain configuration
+- `n_samplers`: Number of backend sampler configurations
 
 ### llama_token_data / llama_token_data_array
 Used for sampling:

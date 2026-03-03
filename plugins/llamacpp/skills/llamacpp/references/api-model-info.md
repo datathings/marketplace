@@ -89,6 +89,29 @@ const char * llama_model_cls_label(const struct llama_model * model, uint32_t i)
 ```
 Get the label of a classifier output by index. Returns NULL if no label provided.
 
+### Metadata Enum: llama_model_meta_key
+
+The `llama_model_meta_key` enum defines well-known sampling metadata keys that can be stored in the model's GGUF metadata. Use with `llama_model_meta_key_str()` to get the string name.
+
+```c
+enum llama_model_meta_key {
+    LLAMA_MODEL_META_KEY_SAMPLING_SEQUENCE,
+    LLAMA_MODEL_META_KEY_SAMPLING_TOP_K,
+    LLAMA_MODEL_META_KEY_SAMPLING_TOP_P,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIN_P,
+    LLAMA_MODEL_META_KEY_SAMPLING_XTC_PROBABILITY,
+    LLAMA_MODEL_META_KEY_SAMPLING_XTC_THRESHOLD,
+    LLAMA_MODEL_META_KEY_SAMPLING_TEMP,
+    LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_LAST_N,
+    LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_REPEAT,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_TAU,
+    LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_ETA,
+};
+```
+
+These keys allow models to embed recommended sampling parameters in their metadata.
+
 ### llama_model_meta_val_str
 ```c
 int32_t llama_model_meta_val_str(
@@ -109,7 +132,7 @@ Get the number of metadata key/value pairs.
 ```c
 const char * llama_model_meta_key_str(enum llama_model_meta_key key);
 ```
-Get sampling metadata key name. Returns NULL if the key is invalid.
+Get sampling metadata key name for a well-known key. Returns NULL if the key is invalid.
 
 ### llama_model_meta_key_by_index
 ```c

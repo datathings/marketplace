@@ -64,20 +64,20 @@ Specialized libraries for specific industries and applications:
 Add libraries to your `project.gcl`:
 
 ```gcl
-@library("std", "7.7.154-dev");        // Standard library (required)
-@library("ai", "7.7.151-dev");        // AI/LLM support
-@library("algebra", "7.7.151-dev");   // ML and numerical computing
-@library("kafka", "7.7.151-dev");     // Kafka integration
-@library("sql", "7.7.151-dev");       // PostgreSQL support (postgres library)
+@library("std", "7.7.158-dev");        // Standard library (required)
+@library("ai", "7.7.164-dev");        // AI/LLM support
+@library("algebra", "7.7.164-dev");   // ML and numerical computing
+@library("kafka", "7.7.164-dev");     // Kafka integration
+@library("sql", "7.7.164-dev");       // PostgreSQL support (postgres library)
 @library("s3", "7.7.105-dev");        // S3 storage
-@library("finance", "7.7.151-dev");   // Financial utilities
-@library("powerflow", "7.7.151-dev"); // Power flow analysis
-@library("opcua", "7.7.151-dev");     // OPC UA integration
-@library("useragent", "7.7.151-dev"); // User agent parsing
-@library("fcs", "7.7.151-dev");       // FCS support
-@library("ftp", "7.7.151-dev");       // FTP/SCP file transfer
-@library("powergrid", "7.7.151-dev"); // Power grid analysis
-@library("ssh", "7.7.151-dev");       // SSH/SFTP support
+@library("finance", "7.7.164-dev");   // Financial utilities
+@library("powerflow", "7.7.164-dev"); // Power flow analysis
+@library("opcua", "7.7.164-dev");     // OPC UA integration
+@library("useragent", "7.7.164-dev"); // User agent parsing
+@library("fcs", "7.7.164-dev");       // FCS support
+@library("ftp", "7.7.164-dev");       // FTP/SCP file transfer
+@library("powergrid", "7.7.164-dev"); // Power grid analysis
+@library("ssh", "7.7.164-dev");       // SSH/SFTP support
 @library("explorer", "7.7.0-dev");   // Graph UI (dev only)
 ```
 

@@ -184,6 +184,43 @@ Replaces empty clusters with new centroids to avoid degeneracy.
 #### sortClusters(engine: ComputeEngine) (static)
 Sorts clusters by centroid sum (for consistent ordering).
 
+#### nextRandomMode(rnd: Random): KmeansMode (static)
+Selects a random initialization mode.
+
+**Parameters:**
+- `rnd`: Random number generator instance
+
+**Returns:** Randomly selected KmeansMode (fromInput, randomUniform, or randomNormal)
+
+#### initializeClusters(engine: ComputeEngine, tensors: nodeList\<Tensor\>, features_gaussian: GaussianND, initialization_mode: KmeansMode) (static)
+Initializes cluster centroids using the specified initialization mode.
+
+**Parameters:**
+- `engine`: The ComputeEngine instance
+- `tensors`: List of input data tensors to sample from
+- `features_gaussian`: Statistics of the feature space for random initialization
+- `initialization_mode`: Mode for initializing centroids (fromInput, randomUniform, or randomNormal)
+
+#### initializeClustersFromTensor(engine: ComputeEngine, tensor: Tensor, features_gaussian: GaussianND, initialization_mode: KmeansMode) (static)
+Initializes cluster centroids from a single tensor dataset.
+
+**Parameters:**
+- `engine`: The ComputeEngine instance
+- `tensor`: Input data tensor to sample from
+- `features_gaussian`: Statistics of the feature space for random initialization
+- `initialization_mode`: Mode for initializing centroids
+
+#### replaceEmptyClustersFromTensor(engine: ComputeEngine, tensor: Tensor, features_gaussian: GaussianND, replace_empty_clusters_mode: KmeansMode): bool (static)
+Replaces empty clusters with new centroids sampled from a single tensor.
+
+**Parameters:**
+- `engine`: The ComputeEngine instance
+- `tensor`: Input data tensor to sample from
+- `features_gaussian`: Statistics of the feature space
+- `replace_empty_clusters_mode`: Mode for generating replacement centroids
+
+**Returns:** true if empty clusters were found and replaced
+
 ---
 
 ## High-Level Learning Methods
@@ -224,6 +261,41 @@ var result = Kmeans::learning(
 
 println("Loss: ${result.loss}");
 println("Centroids: ${result.centroids}");
+```
+
+### single_learning(tensor: Tensor, features_gaussian: GaussianND, nb_clusters: int, nb_rounds: int, seed: int, initialization_mode: KmeansMode, replace_empty_clusters_mode: KmeansMode, calculate_inter_cluster_stats: bool): KmeansResult (static)
+Runs standard K-means on a single tensor (entire dataset in one batch).
+
+**Parameters:**
+- `tensor`: Input data tensor of shape [totalSamples, features]
+- `features_gaussian`: Pre-computed GaussianND statistics of the feature space
+- `nb_clusters`: Number of clusters
+- `nb_rounds`: Number of iterations
+- `seed`: Random seed
+- `initialization_mode`: Mode for centroid initialization (fromInput, randomUniform, randomNormal)
+- `replace_empty_clusters_mode`: Mode for replacing empty clusters
+- `calculate_inter_cluster_stats`: Compute inter-cluster stats
+
+**Returns:** KmeansResult with centroids, assignments, loss, etc.
+
+**Example:**
+```typescript
+// Compute feature statistics first
+var features_gaussian = GaussianND {};
+features_gaussian.learn(data_tensor);
+
+var result = Kmeans::single_learning(
+  data_tensor,
+  features_gaussian,
+  nb_clusters: 5,
+  nb_rounds: 30,
+  seed: 42,
+  initialization_mode: KmeansMode::fromInput,
+  replace_empty_clusters_mode: KmeansMode::randomUniform,
+  calculate_inter_cluster_stats: true
+);
+
+println("Loss: ${result.loss}");
 ```
 
 ### meta_learning(tensors: nodeList\<Tensor\>, nb_clusters: int, nb_meta_rounds: int, nb_rounds: int, seed: int, parallel: bool, initialization_mode: KmeansMode?, replace_empty_clusters_mode: KmeansMode?, calculate_inter_cluster_stats: bool): KmeansMetaResult (static)

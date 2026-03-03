@@ -200,6 +200,9 @@ type Task {
   /// add number of steps to the current task, this function can be called from task or job context
   static native fn add_steps(steps: int);
 
+  /// Temporary retro compatibility
+  static native fn progress(v: float);
+
   static native fn parentId(): int;
   static native fn id(): int;
 

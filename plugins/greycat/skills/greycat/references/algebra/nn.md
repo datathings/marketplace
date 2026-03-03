@@ -76,6 +76,23 @@ nn.addDenseLayer(
 );
 ```
 
+#### addActivationLayer(activation: ComputeActivation)
+Adds a standalone activation layer.
+
+```typescript
+nn.addActivationLayer(ComputeActivationRelu {});
+```
+
+#### addFilterLayer(output: int, maskValues: Array\<int\>)
+Adds a feature filtering layer. The mask must have exactly `output` non-zero elements.
+
+```typescript
+nn.addFilterLayer(
+  5,                                  // 5 output features
+  Array<int> {1, 0, 1, 1, 0, 1, 1}   // Select features 0, 2, 3, 5, 6
+);
+```
+
 #### addLSTMLayer(output: int, layers: int, sequences: int, use_bias: bool, return_sequences: bool, bidirectional: bool, config: InitializerConfig?)
 Adds LSTM recurrent layer.
 
@@ -209,6 +226,13 @@ Computes loss without training.
 var val_loss = nn.validation(engine);
 ```
 
+#### test(engine: ComputeEngine): Tensor
+Computes loss without training (same as validation, for test set evaluation).
+
+```typescript
+var test_loss = nn.test(engine);
+```
+
 #### endEpoch(engine: ComputeEngine)
 Signals end of epoch.
 
@@ -240,6 +264,13 @@ Gets last prediction (after calling predict with null input).
 nn.getInput(engine).fill(X_test);
 var _ = nn.predict(engine, null);
 var predictions = nn.getPrediction(engine);
+```
+
+#### getDisplayLoss(engine: ComputeEngine): Tensor
+Computes loss in original (un-normalized) scale for display purposes. If post-processing is configured, the loss is computed using inverse-scaled outputs.
+
+```typescript
+var display_loss = nn.getDisplayLoss(engine);
 ```
 
 ### Complete Regression Example
@@ -486,6 +517,13 @@ var nn = AutoEncoderNetwork::new(
 
 ### Configuration
 
+#### setLoss(loss_type: ComputeRegressionLoss?, reduction: ComputeReduction?)
+Sets loss function for the autoencoder.
+
+```typescript
+nn.setLoss(ComputeRegressionLoss::square, ComputeReduction::mean);
+```
+
 #### setEncoderLayer(layerIndex: int)
 Sets which layer is the encoding (latent) representation.
 
@@ -538,6 +576,13 @@ Gets latent encoding.
 
 #### getDecoding(engine: ComputeEngine): Tensor
 Gets decoded output.
+
+#### getDisplayLoss(engine: ComputeEngine): Tensor
+Computes loss in original (un-normalized) scale for display purposes.
+
+```typescript
+var display_loss = nn.getDisplayLoss(engine);
+```
 
 ### Complete AutoEncoder Example
 
