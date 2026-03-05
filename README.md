@@ -48,7 +48,7 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 | Plugin | Category | Type | Version | Description |
 |--------|----------|------|---------|-------------|
 | ***GreyCat Technology*** | | | | |
-| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.5 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.5 | Full-stack GreyCat development — GCL language, graph persistence, frontend integration |
 | [**greycat-lsp**](#greycat-lsp) | GreyCat Technology | LSP | 2.4.5 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
 | [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.5 | GreyCat C API and Standard Library for native development |
 | ***Agentic AI*** | | | | |
@@ -122,7 +122,7 @@ Activates on `.gcl` files and GreyCat topics. Provides:
 - Concurrency patterns (Jobs, await)
 - Standard library (core, io, runtime, util)
 - Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
-- React integration (@greycat/web)
+- Frontend integration (@greycat/web SDK)
 
 #### greycat-lsp
 
@@ -273,6 +273,19 @@ For developing or testing marketplace plugins locally:
 ```bash
 /plugin marketplace add /path/to/marketplace
 ```
+
+### Local Plugin Install (Dev)
+
+Install all greycat-related plugins locally using symlinks at version `0.0.0`, so changes in the repo are reflected immediately without publishing:
+
+```bash
+./local-install.sh          # Symlink greycat, greycat-c, greycat-lsp into Claude's plugin cache
+./local-install.sh --clean  # Remove the local dev plugins
+```
+
+This creates symlinks from `~/.claude/plugins/cache/datathings/<plugin>/0.0.0/` pointing to the local `plugins/<plugin>/` directories, registers them in `installed_plugins.json`, and enables them in `settings.json`. Restart Claude Code after running.
+
+Requires `jq`.
 
 ### Bump Versions
 
