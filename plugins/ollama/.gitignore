@@ -1,0 +1,4 @@
+*.skill
+ollama/
+__pycache__/
+*.pyc

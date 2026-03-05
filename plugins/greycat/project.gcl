@@ -1,0 +1,22 @@
+@library("std", "7.7.158-dev");      // Standard library (required)
+@library("explorer", "7.7.0-dev");   // Graph UI (dev only)
+
+@library("ai", "7.7.164-dev");        // AI/LLM support
+@library("algebra", "7.7.164-dev");   // ML and numerical computing
+@library("kafka", "7.7.164-dev");     // Kafka integration
+@library("sql", "7.7.164-dev");       // PostgreSQL support (postgres library)
+@library("s3", "7.7.105-dev");        // S3 storage
+@library("finance", "7.7.164-dev");   // Financial utilities
+@library("powerflow", "7.7.164-dev"); // Power flow analysis
+@library("opcua", "7.7.164-dev");     // OPC UA integration
+@library("useragent", "7.7.164-dev"); // User agent parsing
+@library("fcs", "7.7.164-dev");       // FCS support
+@library("ftp", "7.7.164-dev");       // FTP/SCP file transfer
+@library("powergrid", "7.7.164-dev"); // Power grid analysis
+@library("ssh", "7.7.164-dev");       // SSH/SFTP support
+
+fn main() {
+    // s3_example::main();
+    // sql_example::main();
+    // ai_example::main();
+}

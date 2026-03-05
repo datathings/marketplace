@@ -1,5 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
 lib/
 webroot/
 bin/
 files/
-__pycache__/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Upstream repositories (cloned for updates)
+plugins/llamacpp/llama.cpp/
+plugins/blas_lapack/lapack/
+
+# Local settings (user-specific)
+.claude/settings.local.json

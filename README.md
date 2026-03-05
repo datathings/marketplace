@@ -1,286 +1,337 @@
-# GreyCat Skill
+# Datathings Marketplace
 
-A comprehensive skill for building GreyCat backend applications with the graph-based language and built-in persistence.
+We are [Datathings](https://datathings.com), specializing in high-performance software for large-scale data infrastructure. Our foundation is [GreyCat](https://greycat.io) — a temporal graph database and programming language built for efficiency at scale, with native agentic AI capabilities. On that foundation, we built [Kopr](https://kopr-twin.com): a digital twin managing Luxembourg's entire electricity distribution grid — 1 million grid assets, 330,000 delivery points, and 45 billion meter readings per year, with machine learning running continuously over live sensor data.
 
-## Overview
+The plugins here bring that stack to your AI agent: GreyCat's runtime and language tools, the numerical and GPU computing libraries behind high-performance inference and optimization, and widely-used power systems analysis frameworks for anyone building in that domain.
 
-This skill provides expert guidance for developing with GreyCat - a unique language that combines graph-based programming with built-in persistence. It covers everything from basic syntax to advanced patterns for building production-ready applications.
+## Quick Start
 
-## What is GreyCat?
+**Install GreyCat:**
 
-GreyCat is a graph-based programming language with built-in persistence. Unlike traditional databases, GreyCat applications are **evolving coded structures** where your data model, business logic, and persistence are unified in a single codebase.
-
-**Key Features:**
-- **Unified persistence** - Data, schema, and logic in one evolving codebase (not a separate database)
-- **Graph-native references** - Lightweight 64-bit node references instead of heavy object graphs
-- **Built-in indexing** - nodeIndex (hash), nodeTime (time-series), nodeGeo (spatial), nodeList (ordered)
-- **Parallel execution** - Job API with fork-join pattern and automatic transaction merging
-- **Type-safe APIs** - @expose + @permission decorators with full TypeScript SDK generation
-- **Zero-config persistence** - No ORM, no migrations, no serialization - just code
-
-## Skill Activation Triggers
-
-This skill automatically activates when you're working with:
-
-### File Types & Extensions
-- `.gcl` files (GreyCat source code)
-- GreyCat project structures with `project.gcl`
-- Files containing GreyCat syntax
-
-### Language Features
-- **Decorators**: `@expose`, `@permission`, `@volatile`, `@role`, `@library`, `@include`, `@test`, `@format_indent`, `@format`, `@tags`
-- **Indexed Collections**: `nodeList`, `nodeIndex`, `nodeTime`, `nodeGeo`
-- **Node Operations**: Persisted nodes, transactions, node references (`node<T>` where `T` can be any defined type)
-- **Parallel Processing**: Asynchronous tasks, `await()`, `PeriodicTask`, fork-join patterns
-
-### Framework Components
-- **Backend**: Data models, services, API endpoints, persistence patterns
-- **Frontend**: `@greycat/web` contains a WebComponent vanilla TypeScript SDK, a custom JSX Runtime, and the GreyCat SDK to communicate with the backend through HTTP and GCB
-- **Libraries**: std, ai, algebra, kafka, sql, s3, opcua, finance, powerflow, useragent, explorer
-
-### CLI Commands
-- `greycat serve` - Start server
-- `greycat test` - Run tests
-- `greycat install` - Download libraries
-- `greycat-lang lint` - Type-check and lint `.gcl` files
-
-### Use Cases
-- Building graph-based data models
-- Creating time-series or geo-spatial applications
-- Implementing RBAC with permissions and roles
-- Developing full-stack applications
-- Working with persistent node structures
-- Debugging GreyCat applications
-
-### When This Skill Does NOT Activate
-- General graph databases (Neo4j, ArangoDB, JanusGraph)
-- Generic React applications (without @greycat/web)
-- SQL databases (PostgreSQL, MySQL, SQLite)
-- Traditional ORM frameworks (Prisma, TypeORM, Sequelize)
-
-## Why This Skill?
-
-This skill transforms your AI assistant into a GreyCat development expert by providing:
-
-- **Complete language reference** - All GCL syntax, types, and patterns in one place
-- **Best practices** - Avoid common pitfalls with proven patterns (apis, views, transactions)
-- **Full-stack guidance** - Both backend (.gcl) and frontend development
-- **Library coverage** - Complete API references for all 10+ GreyCat libraries
-- **Progressive disclosure** - Core patterns immediately available, detailed references loaded only when needed
-
-**Perfect for:**
-- GreyCat beginners learning the fundamentals
-- Experienced developers building production applications
-- Data engineers working with time-series and geo-spatial data
-
-## When to Use This Skill
-
-Use this skill when you need help with:
-- Building GreyCat applications (`.gcl` files)
-- Working with persisted nodes and indexed collections (nodeList, nodeIndex, nodeTime, nodeGeo)
-- Creating data models and services
-- Writing API endpoints with `@permission` decorators
-- Implementing parallel processing with jobs
-- Creating frontends with `@greycat/web` SDK
-- Running GreyCat commands (serve, test, run)
-- Debugging GreyCat projects
-
-## GreyCat vs. Traditional Stacks
-
-| Traditional Approach | GreyCat Approach |
-|---------------------|------------------|
-| Separate database (Postgres, MongoDB) | Built-in persistence in GCL |
-| ORM layer (Prisma, TypeORM) | Direct node references |
-| Manual indexing setup | Built-in: nodeIndex, nodeTime, nodeGeo, nodeList |
-| Separate job queue (Bull, BeeQueue) | Asynchronous Job API |
-| Router API (Express, Fastify) | `@expose` decorators |
-| Manual TypeScript types | Auto-generated from GCL (`greycat codegen`) |
-
-**When to use GreyCat:**
-- Building graph-based applications with complex relationships
-- Time-series or geo-spatial data with built-in indexing
-- Need persistence without ORM complexity
-- Want unified backend + frontend type safety
-
-**When NOT to use GreyCat:**
-- Standard CRUD apps (traditional frameworks may be simpler)
-- Existing database migration requirements
-- Team has no capacity to learn a new language/paradigm
-
-## What's Included
-
-### Core Documentation (SKILL.md)
-
-Concise reference covering:
-- Project setup and architecture
-- Type system and nullability
-- Nodes and persistence
-- Indexed collections
-- Services and API patterns
-- Abstract types and inheritance
-- Parallelization basics
-- Testing and common pitfalls
-
-### Detailed References
-
-**Backend Development:**
-- **nodes.md** - Deep dive into persistence, transactions, indexed collections
-- **data_structures.md** - Tensor, Table, Buffer, Windows, Stack, Queue
-- **concurrency.md** - Jobs, await, parallel writes, Tasks, PeriodicTask
-- **io.md** - CSV/JSON reading/writing, File operations, HTTP client, SMTP
-- **time.md** - Time handling, Date, duration, format specifiers
-- **permissions.md** - RBAC, @permission, @role, SSO integration
-- **testing.md** - @test, Assert, setup/teardown conventions
-
-**Frontend Development:**
-- **frontend.md** - Complete Web integration guide:
-  - @greycat/web SDK setup
-  - TypeScript type generation
-  - Authentication & authorization
-  - Off-the-shelf SDK WebComponents
-  - Error handling and best practices
-
-**Library References:**
-- Complete GCL type definitions for all GreyCat libraries:
-  - **std/** - Core types, I/O, runtime, utilities
-  - **ai/** - LLM integration (llama.cpp)
-  - **algebra/** - ML, neural networks, numerical computing
-  - **kafka/** - Apache Kafka integration
-  - **sql/** - PostgreSQL integration
-  - **s3/** - Amazon S3 integration
-  - **opcua/** - Industrial protocol integration
-  - **finance/** - Financial modeling
-  - **powerflow/** - Electrical power flow analysis
-
-## Repository Structure
-
-```
-greycat-language.skill/
-├── README.md              # This file
-├── marketplace.json       # Skill marketplace metadata
-├── package.sh            # Packaging script
-└── greycat/              # Skill content
-    ├── SKILL.md          # Main skill documentation
-    └── references/       # Detailed reference files
-        ├── frontend.md
-        ├── nodes.md
-        ├── time.md
-        ├── concurrency.md
-        ├── data_structures.md
-        ├── io.md
-        ├── permissions.md
-        ├── testing.md
-        └── [library GCL definitions]
-```
-
-## Building the Skill
-
-To package the skill for distribution:
-
+Linux, Mac or FreeBSD (x64, arm64):
 ```bash
-./package.sh              # Creates greycat.skill in current directory
-./package.sh /path/to/dir # Creates greycat.skill in specified directory
+curl -fsSL https://get.greycat.io/install.sh | bash -s dev
 ```
 
-The script:
-- Validates SKILL.md frontmatter
-- Packages all files from `greycat/` directory
-- Creates a `.skill` file (zip archive with .skill extension)
-- Excludes development files (node_modules, cache, etc.)
-
-## Installation
-
-### From Marketplace
-
-```bash
-# Install via skills marketplace
-skills install greycat
+Windows (x64, arm64):
+```powershell
+iwr https://get.greycat.io/install_dev.ps1 -useb | iex
 ```
 
-### Manual Installation
+**⚠️ Important: Restart your terminal after installing GreyCat**
 
-```bash
-git clone git@hub.datathings.com:greycat/skill/greycat-language.skill.git
-cd greycat-language.skill
-./package.sh
-# Install the greycat.skill file to your AI assistant's skills directory
+**Install Claude Code:**
+
+Follow the installation instructions at [https://code.claude.com/docs/en/setup](https://code.claude.com/docs/en/setup)
+
+**Add the marketplace:**
+
+```
+/plugin marketplace add datathings/marketplace
 ```
 
-## Usage Examples
+**Install plugins:**
 
-Once installed, this skill will automatically activate when you're working on GreyCat projects.
-
-**Example interactions:**
-- "Create a GreyCat data model for a city with buildings and residents"
-- "Help me implement parallel processing for analyzing cities"
-- "Create a frontend with authentication to interact with the backend"
-- "How do I use nodeTime for time-series data?"
-- "Debug this GreyCat function that's failing"
-
-## Quick Start Example
-
-```gcl
-// project.gcl
-@library("std", "7.5.125-dev");
-
-@include("backend");
-
-fn main() { }
+```
+/plugin install greycat@datathings
 ```
 
-```gcl
-// backend/src/model/city.gcl
-var cities_by_name: nodeIndex<String, node<City>>;
+**Try it:**
 
-type City {
-    name: String;
-    country: node<Country>;
-    streets: nodeList<node<Street>>;
-}
+Run Claude in a demo folder, then paste this prompt:
+```
+Use your greycat skill to create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy with back references for bidirectional navigation (country contains cities, cities contain streets, etc., and children reference their parents). Add geo coordinates (latitude, longitude) to appropriate nodes. Houses should have temperature sensors storing time series data. Generate two sample CSV files: `./data/addresses.csv` (with house IDs) and `./data/temperatures.csv` (with house_id, date, value columns), and create an importer that loads both on startup (import the CSVs on main if the country index size is 0). Expose all important API endpoints. Create comprehensive API documentation and expose meaningful functions as MCP.
 ```
 
-```gcl
-// backend/src/api/city_api.gcl
-@volatile
-type CityView {
-    name: String;
-    street_count: int;
-}
+## Plugins
 
-@expose
-fn get_cities(): Array<CityView> {
-    var results = Array<CityView>{};
-    for (name, city in cities_by_name) {
-        results.add(CityView {
-            name: city->name,
-            street_count: city->streets.size()
-        });
-    }
-    return results;
-}
-```
-
-## Contributing
-
-Contributions are welcome! This skill is maintained by the GreyCat team at DataThings.
-
-## Resources
-
-- [Official GreyCat Documentation](https://doc.greycat.io/)
-- [GreyCat Installation](https://get.greycat.io/)
-- [Skills Marketplace](https://skillsmp.com/)
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Support
-
-For issues or questions:
-- Open an issue in this repository
-- Visit [GreyCat Documentation](https://doc.greycat.io/)
-- Contact DataThings support
+| Plugin | Category | Type | Version | Description |
+|--------|----------|------|---------|-------------|
+| ***GreyCat Technology*** | | | | |
+| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.5 | Full-stack GreyCat development — GCL language, graph persistence, React integration |
+| [**greycat-lsp**](#greycat-lsp) | GreyCat Technology | LSP | 2.4.5 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
+| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.5 | GreyCat C API and Standard Library for native development |
+| ***Agentic AI*** | | | | |
+| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.4.5 | llama.cpp C API reference (163 functions) for local LLM inference |
+| [**ggml**](#ggml) | Agentic AI | Skill | 2.4.5 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
+| [**vllm**](#vllm) | Agentic AI | Skill | 2.4.5 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
+| [**ollama**](#ollama) | Agentic AI | Skill | 2.4.5 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
+| ***High Performance Math & GPU*** | | | | |
+| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.4.5 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.4.5 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
+| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.4.5 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
+| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.4.5 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
+| ***Power Grid Management*** | | | | |
+| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.4.5 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
+| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.4.5 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
 
 ---
 
-**Built for AI-assisted development** - Enhancing GreyCat productivity
+## GreyCat Technology
+
+GreyCat is both a database and a programming language — stateful, graph-native, and designed to expose functions directly as HTTP APIs or MCP endpoints. Install these plugins when building with GreyCat or extending it at the native level.
+
+```
+/plugin install greycat@datathings
+/plugin install greycat-c@datathings
+/plugin install greycat-lsp@datathings
+```
+
+## Agentic AI
+
+The inference stack for running AI locally: ggml provides the tensor computation engine and GGUF model format, while llama.cpp builds a complete LLM inference API on top of it. Both plug directly into GreyCat-backed applications or any native pipeline.
+
+```
+/plugin install llamacpp@datathings
+/plugin install ggml@datathings
+/plugin install vllm@datathings
+/plugin install ollama@datathings
+```
+
+## High Performance Math & GPU Computing
+
+The compute stack for high-performance numerical work: foundational linear algebra (BLAS/LAPACK) and full GPU acceleration across NVIDIA CUDA, OpenCL, and AMD ROCm.
+
+```
+/plugin install blas_lapack@datathings
+/plugin install cuda@datathings
+/plugin install opencl@datathings
+/plugin install rocm@datathings
+```
+
+## Power Grid Management
+
+[Kopr](https://kopr-twin.com) — our electricity distribution digital twin built on GreyCat — manages 1 million grid assets and 45 billion annual meter readings, with optimal power flow and grid analysis capabilities built in. We include these libraries because they were instrumental in our testing and validation work.
+
+```
+/plugin install pandapower@datathings
+/plugin install powergridmodel@datathings
+```
+
+---
+
+## Plugin Details
+
+### GreyCat Technology
+
+#### greycat
+
+Activates on `.gcl` files and GreyCat topics. Provides:
+- GCL syntax, types, decorators (@expose, @permission, @volatile)
+- Indexed collections (nodeIndex, nodeList, nodeTime, nodeGeo)
+- Concurrency patterns (Jobs, await)
+- Standard library (core, io, runtime, util)
+- Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
+- React integration (@greycat/web)
+
+#### greycat-lsp
+
+IDE features for `.gcl` files. **Requires** `greycat-lang` in PATH.
+- Code completion, diagnostics, hover info
+- Go to definition, find references
+
+```bash
+which greycat-lang  # Verify installation
+```
+
+#### greycat-c
+
+Reference for native C development with GreyCat:
+- C API functions, tensor operations
+- Native function implementation
+
+### Agentic AI
+
+#### llamacpp
+
+Complete llama.cpp C API (163 functions):
+- Model loading, inference, tokenization
+- Sampling strategies (XTC, DRY, infill)
+- GGUF model support
+
+#### ggml
+
+C tensor computation library powering llama.cpp and many ML inference engines (v0.9.7, 560+ functions):
+- Lazy computation graph with CPU/GPU/Metal/Vulkan backends and automatic multi-backend scheduling
+- 40+ quantization formats (Q4_0 → Q5_K), GGUF v3 I/O, Flash Attention, RoPE, AdamW/SGD training
+
+#### vllm
+
+vLLM (v0.16.0) — high-throughput Python inference engine for large language models:
+- Offline batch inference (`LLM` class) and OpenAI-compatible server (`vllm serve`) with streaming
+- LoRA adapters, multimodal inputs, structured outputs (JSON/regex/grammar), and paged attention
+
+#### ollama
+
+Ollama (v0.16.3) — local LLM runtime with a simple REST API on localhost:
+- Text generation, chat, and embeddings via REST API with streaming support
+- Model management (pull/push/delete) and custom model creation via Modelfile
+
+### High Performance Math & GPU Computing
+
+#### blas_lapack
+
+Complete CBLAS & LAPACKE C API (1284 functions, LAPACK v3.12.1):
+- BLAS Level 1/2/3 vector and matrix operations; linear solvers (LU, Cholesky, LDL)
+- Eigenvalue/SVD/least squares decompositions; QR/LQ factorizations
+
+#### cuda
+
+NVIDIA CUDA parallel computing platform (cuda-samples v13.1, CUDALibrarySamples main). Complete reference for GPU-accelerated C/C++ development:
+- Runtime API (device, memory, streams, kernel launch); math libraries: cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver
+- Thrust (STL-like GPU algorithms) and Cooperative Groups (thread synchronization)
+
+#### opencl
+
+Khronos Group OpenCL SDK (v2025.07.23) for cross-platform GPU/CPU parallel computing in C and C++:
+- C API (~60 functions) and C++ wrapper (opencl.hpp with RAII types) for platform/device management, memory, and kernels
+- Full NDRange execution (1D/2D/3D), events, profiling, and out-of-order queues
+
+#### rocm
+
+AMD ROCm GPU computing stack (rocm-7.2.0) for HIP-based GPU development:
+- HIP C++ kernels with full compute libraries (rocBLAS, rocFFT, rocRAND, rocSOLVER, rocSPARSE, rocWMMA)
+- Profiling (rocProfiler, rocm-smi) and CUDA portability via hipify-perl
+
+### Power Grid Management
+
+#### pandapower
+
+pandapower (v3.4.0) — Python library for modeling and analyzing electric power networks:
+- AC/DC power flow, optimal power flow, short-circuit (IEC 60909), and state estimation
+- 15+ benchmark networks (IEEE, CIGRE, Kerber) and visualization with matplotlib/plotly
+
+#### powergridmodel
+
+power-grid-model (v1.13.10) — high-performance Python/C++ library for steady-state distribution power system analysis:
+- Symmetric and asymmetric three-phase power flow, state estimation, and IEC 60909 short-circuit analysis
+- Batch/N-1 contingency analysis with multi-threaded parallel execution; 22 component types
+
+---
+
+## Standalone Skill Files
+
+The `./skills/` folder contains pre-packaged `.skill` files (zip archives) for use with other AI tools or manual installation:
+
+```
+skills/
+├── greycat.skill       # GreyCat full-stack development
+├── greycat-c.skill     # GreyCat C API reference
+├── llamacpp.skill      # llama.cpp C API reference
+├── blas_lapack.skill   # CBLAS & LAPACKE C API reference
+├── ggml.skill          # ggml C tensor library
+├── cuda.skill          # NVIDIA CUDA C/C++ GPU programming
+├── opencl.skill        # OpenCL cross-platform GPU/CPU parallel computing
+├── rocm.skill          # AMD ROCm GPU computing (HIP + libraries)
+├── pandapower.skill    # pandapower Python power systems analysis
+├── powergridmodel.skill  # power-grid-model Python distribution power system analysis
+├── vllm.skill          # vLLM high-throughput Python LLM inference
+└── ollama.skill        # Ollama local LLM runtime REST API
+```
+
+Each `.skill` file contains a `SKILL.md` with instructions and optional `references/` documentation. To regenerate:
+
+```bash
+./package.sh           # Interactive skill selection
+./package.sh -a        # Package all skills
+./package.sh greycat   # Package specific skill
+```
+
+## Configuration
+
+Add to `.claude/settings.json` (project or `~/.claude/settings.json` for global):
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "datathings": {
+      "source": { "source": "github", "repo": "datathings/marketplace" }
+    }
+  },
+  "enabledPlugins": {
+    "greycat@datathings": true,
+    "greycat-lsp@datathings": true
+  }
+}
+```
+
+## Management Commands
+
+```bash
+/plugin list                              # List installed plugins
+/plugin update greycat@datathings         # Update a plugin
+/plugin uninstall greycat@datathings      # Remove a plugin
+/plugin marketplace list                  # List marketplaces
+/plugin marketplace remove datathings     # Remove marketplace
+```
+
+## Development
+
+### Local Marketplace
+
+For developing or testing marketplace plugins locally:
+```bash
+/plugin marketplace add /path/to/marketplace
+```
+
+### Bump Versions
+
+Update all plugin versions at once:
+```bash
+./bump-version.sh           # Show current versions
+./bump-version.sh 1.3.0     # Bump all plugins to 1.3.0
+```
+
+### Package Skills
+
+Generate standalone `.skill` files for distribution:
+```bash
+./package.sh                # Interactive skill selection
+./package.sh -a             # Package all skills
+./package.sh greycat        # Package specific skill
+```
+
+### Native GreyCat C Libraries
+
+To develop native GreyCat C libraries (custom functions implemented in C), install the **greycat-c** plugin:
+```bash
+/plugin install greycat-c@datathings
+```
+
+This provides the C API reference, tensor operations, and native function implementation patterns required for extending GreyCat with C code.
+
+## Troubleshooting
+
+**Skills not activating**: Verify with `/plugin list`, ensure enabled in settings.
+
+**LSP not working**: Check `greycat-lang --version` is installed and in PATH.
+
+## Links
+
+- **GreyCat**: https://greycat.io | https://doc.greycat.io | https://get.greycat.io
+- **Datathings**: https://datathings.com
+- **Kopr**: https://kopr-twin.com
+- **llama.cpp**: https://github.com/ggml-org/llama.cpp
+- **ggml**: https://github.com/ggml-org/ggml
+- **LAPACK**: https://github.com/Reference-LAPACK/lapack
+- **CUDA samples**: https://github.com/NVIDIA/cuda-samples
+- **CUDA Library Samples**: https://github.com/NVIDIA/CUDALibrarySamples
+- **OpenCL SDK**: https://github.com/KhronosGroup/OpenCL-SDK
+- **ROCm**: https://github.com/ROCm/ROCm
+- **ROCm Examples**: https://github.com/ROCm/rocm-examples
+- **vLLM**: https://github.com/vllm-project/vllm
+- **Ollama**: https://github.com/ollama/ollama
+- **pandapower**: https://github.com/pandapower/pandapower
+- **power-grid-model**: https://github.com/PowerGridModel/power-grid-model
+- **Support**: contact@datathings.com
+- **Issues**: https://github.com/datathings/marketplace/issues
+
+## License
+
+Apache-2.0
+
+## Contact Us
+
+We're [Datathings](https://datathings.com) — the team behind [GreyCat](https://greycat.io) and [Kopr](https://kopr-twin.com), Luxembourg's electricity distribution digital twin.
+
+If you're exploring GreyCat for your infrastructure, building agentic AI into production systems, or working on large-scale grid operations and want to talk to people who've done it — reach out at [contact@datathings.com](mailto:contact@datathings.com).

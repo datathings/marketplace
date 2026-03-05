@@ -1,0 +1,4 @@
+*.skill
+OpenCL-SDK/
+__pycache__/
+*.pyc

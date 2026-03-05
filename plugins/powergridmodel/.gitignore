@@ -1,0 +1,4 @@
+*.skill
+power-grid-model/
+__pycache__/
+*.pyc

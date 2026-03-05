@@ -1,0 +1,163 @@
+/// Power flow analysis and electrical network simulation
+///
+/// Provides Newton-Raphson-based power flow solver for analyzing electrical networks.
+/// Models buses, lines, loads, and external grids to compute voltage, current, and power flows.
+///
+/// Example:
+///   var network = PowerNetwork {};
+///   network.configure(3, 2, 1);  // 3 buses, 2 lines, 1 external grid
+///   network.createBus(0, 20.0);   // Bus 0 at 20kV
+///   network.createExtGrid(0, 1.0); // External grid at bus 0
+///   network.createLine(0, 0, 1, 10.0, 0.1, 0.4, 9.7, 0.5);
+///   network.compute();
+///   var result = network.getBusResult(0);
+
+//enum PowerSwitchType {
+//  ls;
+//  cb;
+//  lbs;
+//  ds;
+//}
+//
+//enum PowerElementType {
+//  l;
+//  t;
+//  t3;
+//  b;
+//}
+
+/// Power flow computation result for a bus in the electrical network
+///
+/// Contains voltage, current, and phase angle information after power flow analysis.
+type PowerBusResult {
+  /// Voltage magnitude (absolute value)
+  abs: float;
+  /// Voltage phase angle in radians
+  angle_radians: float;
+  /// Real component of voltage
+  voltage: float;
+  /// Imaginary component of voltage
+  voltage_img: float;
+  /// Real component of current
+  current: float;
+  /// Imaginary component of current
+  current_img: float;
+}
+
+/// Power flow computation result for a transmission line
+///
+/// Contains power flows, losses, currents, and voltages at both ends of the line.
+type PowerLineResult {
+  /// Active power flow into the line at "from" bus [MW]
+  p_from_mw: float;
+  /// Reactive power flow into the line at "from" bus [MVar]
+  q_from_mvar: float;
+  /// Active power flow into the line at "to" bus [MW]
+  p_to_mw: float;
+  /// Reactive power flow into the line at "to" bus [MVar]
+  q_to_mvar: float;
+  /// Active power losses of the line [MW]
+  pl_mw: float;
+  /// Reactive power consumption of the line [MVar]
+  ql_mvar: float;
+  /// Current at from bus [kA]
+  i_from_ka: float;
+  /// Current at to bus [kA]
+  i_to_ka: float;
+  /// Maximum of i_from_ka and i_to_ka [kA]
+  i_ka: float;
+  /// Voltage magnitude at from bus in per-unit
+  vm_from_pu: float;
+  /// Voltage magnitude at to bus in per-unit
+  vm_to_pu: float;
+  /// Voltage angle at from bus [radians]
+  va_from_radians: float;
+  /// Voltage angle at to bus [radians]
+  va_to_radians: float;
+  /// Line loading [%]
+  loading_percent: float;
+}
+
+/// Electrical power network model and power flow solver
+///
+/// Build a network by configuring size, then creating buses, lines, loads, and external grids.
+/// Call compute() to run Newton-Raphson power flow analysis.
+///
+/// Workflow:
+///   1. configure() - Set network size
+///   2. createBus(), createLine(), createLoad(), createExtGrid() - Build topology
+///   3. compute() - Run power flow analysis
+///   4. getBusResult(), getLineResult() - Read results
+type PowerNetwork {
+  /// Convergence tolerance for Newton-Raphson solver
+  private tolerance: float?;
+  /// Maximum iterations for Newton-Raphson solver
+  private max_iteration: int?;
+
+  /// Configure the network dimensions before adding components
+  ///
+  /// Must be called first before creating any buses, lines, or grids.
+  ///
+  /// @param nb_bus Total number of buses in the network
+  /// @param nb_lines Total number of transmission lines
+  /// @param nb_ext_grids Total number of external grid connections (slack buses)
+  native fn configure(nb_bus: int, nb_lines: int, nb_ext_grids: int, nb_loads: int);
+
+  /// Create a bus (node) in the network
+  ///
+  /// @param bus_id Unique identifier for this bus (0 to nb_bus-1)
+  /// @param vn_kv Nominal voltage level in kilovolts (kV)
+  native fn createBus(bus_id: int, vn_kv: float);
+
+  /// Create a load connected to a bus
+  ///
+  /// @param bus_id The bus where this load is connected
+  /// @param p_mw Active power consumption in megawatts (MW)
+  /// @param q_mvar Reactive power consumption in megavolt-amperes reactive (MVar)
+  native fn createLoad(bus_id: int, p_mw: float, q_mvar: float);
+
+  /// Create a transmission line between two buses
+  ///
+  /// @param line_id Unique identifier for this line (0 to nb_lines-1)
+  /// @param from_bus_id Starting bus ID
+  /// @param to_bus_id Ending bus ID
+  /// @param lenght_km Line length in kilometers
+  /// @param r_ohm_per_km Resistance in ohms per kilometer
+  /// @param x_ohm_per_km Reactance in ohms per kilometer
+  /// @param c_n_f_per_km Capacitance in nanofarads per kilometer
+  /// @param max_i_ka Maximum current rating in kiloamperes (kA)
+  native fn createLine(line_id: int, from_bus_id: int, to_bus_id: int, lenght_km: float, r_ohm_per_km: float, x_ohm_per_km: float, c_n_f_per_km: float, max_i_ka: float);
+
+  /// Create an external grid connection (slack bus)
+  ///
+  /// The external grid acts as a reference bus with fixed voltage.
+  ///
+  /// @param bus_id The bus where the external grid is connected
+  /// @param vm_p_u Voltage magnitude in per-unit (typically 1.0)
+  native fn createExtGrid(bus_id: int, vm_p_u: float);
+
+  /// Run the Newton-Raphson power flow analysis
+  ///
+  /// Solves the power flow equations to compute voltages, currents, and power flows
+  /// throughout the network. Results can be retrieved via getBusResult() and getLineResult().
+  ///
+  /// Throws an error if the solver fails to converge.
+  native fn compute();
+
+  /// Get power flow results for a specific bus
+  ///
+  /// @param bus_id The bus ID to query
+  /// @return PowerBusResult containing voltage, current, and phase angle
+  native fn getBusResult(bus_id: int): PowerBusResult;
+
+  /// Get power flow results for a specific transmission line
+  ///
+  /// @param line_id The line ID to query
+  /// @return PowerLineResult containing power flows, losses, and currents
+  native fn getLineResult(line_id: int): PowerLineResult;
+
+  /// Get numerical checksum for validation purposes
+  ///
+  /// @return Array of floats representing solver convergence metrics
+  native fn getCheckSum(): Array<float>;
+}

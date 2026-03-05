@@ -1,0 +1,96 @@
+/// FTP/FTPS client for file transfer operations.
+///
+/// Supports three protocols:
+/// - ftp://   - Standard FTP (unencrypted)
+/// - ftps://  - FTP over SSL/TLS (encrypted)
+///
+/// Examples:
+/// ```gcl
+/// // FTP connection
+/// var ftp = Ftp {
+///   url: "ftp://ftp.example.com",
+///   credentials: "username:password"
+/// };
+///
+/// // FTPS (secure FTP)
+/// var ftps = Ftp {
+///   url: "ftps://secure.example.com:990",
+///   credentials: "user:pass"
+/// };
+///
+/// // Anonymous FTP (no credentials)
+/// var anon = Ftp {
+///   url: "ftp://ftp.gnu.org/gnu"
+/// };
+/// ```
+type Ftp {
+    /// Base URL of the FTP/FTPS server.
+    /// Must include the protocol scheme (`ftp://`, or `ftps://`).
+    /// Can optionally include port number (e.g., `"ftp://example.com:2121"`).
+    private url: String;
+
+    /// Optional credentials in the format `"username:password"`.
+    /// If `null` attempts anonymous login.
+    private credentials: String?;
+
+    /// Optional timeout before aborting, defaults to `30s`
+    private timeout: duration?;
+
+    /// Downloads a file from the remote server to local filesystem.
+    ///
+    /// @param remote: remote file path (relative to base URL)
+    /// @param local: local filesystem path where the file will be saved
+    ///
+    /// Example:
+    /// ```gcl
+    /// ftp.get("uploads/report.csv", "/path/to/report.csv");
+    /// ```
+    native fn get(remote: String, local: String);
+
+    /// Lists files and directories at the specified remote path.
+    ///
+    /// @param dirpath: remote directory path (relative to base URL). Trailing slash is added automatically if missing.
+    /// @return: array containing the directory listing as `FtpEntry`
+    ///
+    /// Example:
+    /// ```gcl
+    /// var list = ftp.list("path/to/dir");
+    /// ```
+    native fn list(dirpath: String): Array<FtpEntry>;
+
+    /// Deletes a file on the remote server.
+    ///
+    /// @param filepath: remote file path to delete (relative to base URL)
+    ///
+    /// Example:
+    /// ```gcl
+    /// ftp.delete("path/to/file_to_delete.txt");
+    /// ```
+    native fn delete(filepath: String);
+
+    /// Uploads a file from local filesystem to the remote server.
+    ///
+    /// @param local: local filesystem path of the file to upload
+    /// @param remote: remote file path on the server (relative to base URL)
+    ///
+    /// Example:
+    /// ```gcl
+    /// ftp.put("/path/to/data.json", "uploads/data.json");
+    /// ```
+    native fn put(local: String, remote: String);
+}
+
+/// Represents a single file or directory entry from an FTP listing.
+///
+/// The modify time is in RFC 3659 format: YYYYMMDDhhmmss[.sss] (UTC).
+/// Example: `"20260126153045"` = January 26, 2026, 15:30:45 UTC
+type FtpEntry {
+    /// Name of the file or directory
+    name: String;
+    /// True if this entry is a directory, false if it's a file
+    is_dir: bool;
+    /// Size in bytes (only meaningful when `is_dir` is `true`)
+    size: int;
+    /// Last modification time in RFC 3659 format (`YYYYMMDDhhmmss`)
+    modify: String;
+}

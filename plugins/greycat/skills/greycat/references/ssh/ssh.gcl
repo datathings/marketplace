@@ -1,0 +1,52 @@
+/// SSH authentication configuration, can either be:
+/// - `SshPasswordAuth`
+/// - `SshKeyAuth`
+abstract type SshAuth {
+    /// SSH username for server login
+    private username: String;
+}
+
+/// Password-based SSH authentication
+type SshPasswordAuth extends SshAuth {
+    /// Password for the SSH user account
+    private password: String;
+}
+
+/// Public key SSH authentication
+type SshKeyAuth extends SshAuth {
+    /// Path to the SSH public key file (e.g., `"/home/user/.ssh/id_ed25519.pub"`)
+    private pubkey: String;
+    /// Path to the SSH private key file (e.g., `"/home/user/.ssh/id_ed25519"`)
+    private privkey: String;
+    /// Passphrase to decrypt the private key file (`null` for unencrypted keys)
+    private passphrase: String?;
+}
+
+/// Metadata information about a remote file
+///
+/// Fields are not necessarity all provided
+type FileStat {
+    /// File size in bytes
+    size: int?;
+    /// Owner ID
+    uid: int?;
+    /// Owning group ID
+    gid: int?;
+    /// Permissions (mode)
+    perm: int?;
+    /// Last access time
+    atime: time?;
+    /// Last modification time
+    mtime: time?;
+}
+
+enum FileType {
+    NamedPipe,
+    CharDevice,
+    Directory,
+    BlockDevice,
+    RegularFile,
+    Symlink,
+    Socket,
+    Other,
+}

@@ -1,0 +1,56 @@
+type Sftp {
+    /// Server address and optional port (e.g., `"example.com"`, `"192.168.1.10:22"`)
+    private addr: String;
+    /// SSH authentication method: `SshPasswordAuth` or `SshKeyAuth`
+    private auth: SshAuth;
+
+    /// Downloads a file from the remote server to local filesystem.
+    ///
+    /// @param remote: remote file path
+    /// @param local: local filesystem path where the file will be saved
+    ///
+    /// Example:
+    /// ```gcl
+    /// sftp.get("/uploads/report.csv", "/path/to/report.csv");
+    /// ```
+    native fn get(remote: String, local: String);
+
+    /// Lists files and directories at the specified remote path.
+    ///
+    /// @param dirpath: remote directory path
+    /// @return: array containing the directory listing as `SftpFile`
+    ///
+    /// Example:
+    /// ```gcl
+    /// var list = sftp.list("/path/to/dir/");
+    /// ```
+    native fn list(dirpath: String): Array<SftpFile>;
+
+    /// Deletes a file on the remote server.
+    ///
+    /// @param filepath: remote file path to delete
+    ///
+    /// Example:
+    /// ```gcl
+    /// sftp.delete("/path/to/file_to_delete.txt");
+    /// ```
+    native fn delete(filepath: String);
+
+    /// Uploads a file from local filesystem to the remote server.
+    /// *Note that remote directories will be created automatically if not found.*
+    ///
+    /// @param local: local filesystem path of the file to upload
+    /// @param remote: remote file path on the server
+    ///
+    /// Example:
+    /// ```gcl
+    /// sftp.put("/path/to/data.json", "/uploads/data.json");
+    /// ```
+    native fn put(local: String, remote: String);
+}
+
+type SftpFile {
+    path: String;
+    stat: FileStat;
+    type: FileType;
+}

@@ -1,0 +1,33 @@
+/// PostgreSQL is a native type that allows you to interact with a PostgreSQL database.
+///
+/// The `csv_to_table` method requires the `COPY` command to be enabled in the PostgreSQL server.
+/// Make sure the user has the necessary permissions to use these commands. Also, COPY commands and transactions are
+/// mutually exclusive, make sure to terminate any ongoing transaction before using these methods.
+
+type Postgres {
+    /// The URL of the PostgreSQL server.
+    private url: String;
+    /// The port number of the PostgreSQL server.
+    private port: String;
+    /// The name of the PostgreSQL database.
+    private db_name: String;
+    /// The login username for the PostgreSQL database. This field is optional.
+    private login: String?;
+    /// The login password for the PostgreSQL database. This field is optional.
+    private password: String?;
+
+    /// Begin a new transaction.
+    native fn begin();
+    /// Rollback the current transaction.
+    native fn rollback();
+    /// Commit the current transaction.
+    native fn commit();
+    /// Execute a SQL query on the PostgreSQL database. If the query is a SELECT statement,
+    /// the result(s) are returned as a Table, otherwise, `null` is returned.
+    native fn execute(query: String): any?;
+    /// Import data from a CSV file into a specified table. Optionally specify column names and the separator character.
+    native fn csv_to_table(path: String, table_name: String, cols_name: Array<String>?, sep: char);
+    //native fn table_to_csv(path: String, table_name: String, cols_name: Array<String>?, sep: char);
+    /// Export the results of a SQL query to a CSV file using the specified separator character.
+    native fn query_to_csv(path: String, query: String, sep: char);
+}

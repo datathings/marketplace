@@ -1,76 +1,117 @@
 {
-  "name": "greycat",
+  "name": "datathings",
   "version": "1.0.0",
-  "description": "Comprehensive GreyCat backend development skill for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, React integration, and all standard libraries.",
-  "author": "DataThings",
-  "license": "MIT",
-  "repository": "https://hub.datathings.com/greycat/skill/greycat-language.skill",
-  "homepage": "https://hub.datathings.com/greycat/skill/greycat-language.skill#readme",
-
+  "description": "Claude Code skills for GreyCat development, local LLM inference, numerical linear algebra, ggml tensor computation, NVIDIA CUDA, OpenCL cross-platform GPU/CPU parallel computing, AMD ROCm GPU computing, pandapower power systems analysis, power-grid-model distribution power system analysis, vLLM high-throughput LLM inference, and Ollama local LLM runtime",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "Apache-2.0",
   "skills": [
     {
-      "id": "greycat",
-      "path": "greycat",
-      "entry": "SKILL.md",
-      "category": "frameworks",
-      "keywords": [
-        "gcl",
-        "graph database",
-        "data persistence",
-        "node references",
-        "indexed collections",
-        "nodeIndex",
-        "nodeList",
-        "nodeTime",
-        "nodeGeo",
-        "@expose",
-        "@permission",
-        "@volatile",
-        "greycat serve",
-        "greycat test",
-        ".gcl files",
-        "evolving coded structures",
-        "backend framework",
-        "fullstack",
-        "@greycat/web",
-        "Jobs",
-        "await",
-        "time-series",
-        "geo-spatial"
-      ],
-      "examples": [
-        "Create a GreyCat data model for cities with nodeIndex",
-        "Implement parallel processing with Jobs and await",
-        "Set up React frontend with @greycat/web SDK",
-        "Build API endpoints with @expose and @permission",
-        "Work with time-series data using nodeTime"
-      ],
-      "tags": [
-        "greycat",
-        "backend",
-        "graph-database",
-        "persistence",
-        "time-series",
-        "geo-spatial",
-        "react",
-        "typescript",
-        "full-stack",
-        "api-development",
-        "parallel-processing",
-        "data-modeling",
-        "machine-learning",
-        "event-driven",
-        "integrations"
-      ],
-      "compatibility": {
-        "assistant": "claude",
-        "min_version": "3.0"
-      }
+      "name": "greycat",
+      "path": "./plugins/greycat/skills/greycat",
+      "version": "1.0.0",
+      "description": "GreyCat full-stack development for graph-based language with built-in persistence"
+    },
+    {
+      "name": "greycat-c",
+      "path": "./plugins/greycat-c/skills/greycat-c",
+      "version": "1.0.0",
+      "description": "GreyCat C API and Standard Library for native development"
+    },
+    {
+      "name": "llamacpp",
+      "path": "./plugins/llamacpp/skills/llamacpp",
+      "version": "1.1.0",
+      "description": "Complete llama.cpp C/C++ API reference for local LLM inference"
+    },
+    {
+      "name": "blas_lapack",
+      "path": "./plugins/blas_lapack/skills/blas_lapack",
+      "version": "2.0.0",
+      "description": "Complete CBLAS & LAPACKE C API reference for numerical linear algebra"
+    },
+    {
+      "name": "ggml",
+      "path": "./plugins/ggml/skills/ggml",
+      "version": "1.0.0",
+      "description": "ggml C tensor library skill - graph computation, GGUF I/O, multi-backend inference, and ML training"
+    },
+    {
+      "name": "cuda",
+      "path": "./plugins/cuda/skills/cuda",
+      "version": "1.0.0",
+      "description": "NVIDIA CUDA C/C++ skill - Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, and Cooperative Groups"
+    },
+    {
+      "name": "opencl",
+      "path": "./plugins/opencl/skills/opencl",
+      "version": "1.0.0",
+      "description": "OpenCL SDK C/C++ skill - cross-platform GPU/CPU parallel computing with C API, C++ wrapper, and SDK utilities"
+    },
+    {
+      "name": "rocm",
+      "path": "./plugins/rocm/skills/rocm",
+      "version": "1.0.0",
+      "description": "AMD ROCm GPU computing skill - HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting"
+    },
+    {
+      "name": "pandapower",
+      "path": "./plugins/pandapower/skills/pandapower",
+      "version": "1.0.0",
+      "description": "pandapower Python skill - power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and network visualization"
+    },
+    {
+      "name": "powergridmodel",
+      "path": "./plugins/powergridmodel/skills/powergridmodel",
+      "version": "1.0.0",
+      "description": "power-grid-model Python skill - steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations with batch and parallel computation"
+    },
+    {
+      "name": "vllm",
+      "path": "./plugins/vllm/skills/vllm",
+      "version": "1.0.0",
+      "description": "vLLM Python skill - high-throughput LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs"
+    },
+    {
+      "name": "ollama",
+      "path": "./plugins/ollama/skills/ollama",
+      "version": "1.0.0",
+      "description": "Ollama REST API skill - run and manage local LLMs with chat, generate, embeddings, and custom model creation"
     }
   ],
-
-  "install": {
-    "type": "git",
-    "command": "git clone https://hub.datathings.com/greycat/skill/greycat-language.skill.git"
-  }
+  "keywords": [
+    "claude-code",
+    "skills",
+    "greycat",
+    "llama-cpp",
+    "agent-skills",
+    "llm",
+    "graph-database",
+    "time-series",
+    "blas",
+    "lapack",
+    "linear-algebra",
+    "ggml",
+    "tensor",
+    "gguf",
+    "cuda",
+    "gpu",
+    "nvidia",
+    "cublas",
+    "cufft",
+    "opencl",
+    "khronos",
+    "heterogeneous-computing",
+    "gpgpu",
+    "rocm",
+    "hip",
+    "amd",
+    "rocblas",
+    "rocfft",
+    "rocrand"
+  ]
 }

@@ -1,0 +1,5 @@
+*.skill
+ROCm/
+rocm-examples/
+__pycache__/
+*.pyc
