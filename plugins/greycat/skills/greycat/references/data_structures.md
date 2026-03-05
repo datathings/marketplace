@@ -116,12 +116,3 @@ var stack = Stack<int>{}; stack.push(1); stack.push(2); var top = stack.pop();
 var queue = Queue<int>{}; queue.enqueue(1); queue.enqueue(2); var front = queue.dequeue();
 ```
 
-## Set
-
-Unordered unique elements:
-
-```gcl
-var set = Set<String>{}; set.add("a"); set.add("b"); set.add("a");  // Only one "a"
-var hasA = set.contains("a");  // true
-set.remove("a");
-```

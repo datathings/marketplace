@@ -24,9 +24,13 @@ GreyCat is a graph-based programming language with built-in persistence. Unlike 
 This skill automatically activates when you're working with:
 
 ### File Types & Extensions
-- `.gcl` files (GreyCat source code)
-- GreyCat project structures with `project.gcl`
+- `.gcl` source file (GreyCat module)
+- GreyCat project entrypoint: `project.gcl`
 - Files containing GreyCat syntax
+
+### Module names are UNIQUE
+Every `.gcl` file's basename (without extension) is its module identifier. Two files named `todo.gcl` in different directories will clash. Use distinct names: `todo_model.gcl`, `todo_service.gcl`, `api.gcl`, `todo_test.gcl`.
+
 
 ### Language Features
 - **Decorators**: `@expose`, `@permission`, `@volatile`, `@role`, `@library`, `@include`, `@test`, `@format_indent`

@@ -12,17 +12,20 @@ Unified language + database (temporal/graph/vector) + web server + MCP. Built fo
 **Quick Start**:
 ```gcl
 // Model + index
-var users_by_id: nodeIndex<int, node<User>>;
-type User { name: String; email: String; }
+var users_by_id: nodeIndex<int, node<AppUser>>;
 
-// CRUD service
-abstract type UserService {
-    static fn create(name: String): node<User> { var u = node<User>{User{name}}; users_by_id.set(u->id, u); return u; }
-    static fn find(id: int): node<User>? { return users_by_id.get(id); }
+type AppUser {
+    name: String;
+    email: String;
+
+    // CRUD service
+    static fn create(name: String): node<AppUser> { var u = node<AppUser>{AppUser{name}}; users_by_id.set(u->id, u); return u; }
+    static fn find(id: int): node<AppUser>? { return users_by_id.get(id); }
 }
 
 // API endpoint
-@expose @permission("public") fn getUsers(): Array<UserView> { /* ... */ }
+@expose
+fn getUsers(): Array<UserView> { /* ... */ }
 
 // Time-series query
 for (t: time, temp: float in temperatures[start..end]) { info("${t}: ${temp}"); }
@@ -93,18 +96,32 @@ Use `/greycat:command-name` in Claude Code:
 
 ## Architecture
 
-**Dirs**: `project.gcl` (entry), `backend/src/model/` (models+indices), `backend/src/service/` (XxxService), `backend/src/api/` (@expose), `backend/src/edi/` (import/export)
+### Backend
+**Feature layout**
+- `project.gcl` - Entry point, libs, permissions, roles, main(), init()
+- `backend/src/<feature>/<feature>.gcl` - Data models + global indices
+- `backend/src/<feature>/<feature>_api.gcl` - @expose + @permission functions, @volatile response types
+- `backend/src/<feature>/<feature>_import.gcl` - Import from another format
+- `backend/src/<feature>/<feature>_export.gcl` - Export into another format
+- `backend/test/<feature>_test.gcl` - Tests a feature
+
+If the feature is small or has no API needed:
+- `backend/src/<feature>.gcl` - Data models + global indices
+
+### Frontend (optional, if required)
+**Pages layout**
+- `frontend/<page>/index.html` - *Optional*, if a frontend is required
+- `frontend/<page>/index.tsx` - *Optional*, if a frontend is required
+- `frontend/<page>/<other_page>.html` - *Optional*, if a frontend is required and multiple pages needed
+- `frontend/<page>/<other_page>.tsx` - *Optional*, if a frontend is required and multiple pages needed
 
 **project.gcl**:
 ```gcl
-@library("std", "7.7.158-dev");           // required
-@library("explorer", "7.7.0-dev");      // graph UI /explorer (dev)
-@include("backend");                     // ⚠️ project.gcl only - includes ALL .gcl
+@library("std", "7.7.158-dev");    // required
+@library("explorer", "7.7.0-dev"); // administration app served at /explorer
 
-@permission("app.admin", "description");
-@role("admin", "app.admin", "public", "admin", "api", "files");
+@include("backend");               // ⚠️ project.gcl only - includes ALL .gcl recursively
 
-@format_indent(4); @format_line_width(280);
 fn main() { }
 ```
 
@@ -120,9 +137,9 @@ fn main() { }
 
 **⚠️ CRITICAL**: When computing indices, buckets, or anything from float division, use `floor(x) as int`, NOT `x as int`:
 ```gcl
-var raw = 5.0 / 10.0;              // 0.5
-var wrong = raw as int;             // ❌ 1 (rounds!)
-var correct = floor(raw) as int;    // ✅ 0 (floors!)
+var raw = 5.0 / 10.0;            // 0.5
+var wrong = raw as int;          // ❌ 1 (rounds!)
+var correct = floor(raw) as int; // ✅ 0 (floors!)
 ```
 
 **String→number**: `parseNumber(s)` returns `any` (int or float). Cast: `var v = parseNumber(s) as float;` or `var i = parseNumber(s) as int;` (safe for integer strings like `"3"`, use `floor(parseNumber(s)) as int` if you expect truncation for `"3.7"`)
@@ -140,76 +157,113 @@ var list = Array<String>{}; var map = Map<String, int>{};  // ✅ use {}, NOT ::
 
 Non-null by default. Use `?` for nullable:
 ```gcl
-var city: City?;  // nullable
-city?.name?.size(); city?.name ?? "Unknown"; data.get("key")!!;
-if (country == null) { return null; }
-return country->name;  // ✅ no !! after null check
+var city: City?;                   // nullable
+city?.name?.size();                // optional chaining
+city?.name ?? "Unknown";           // nullish coalescing
+data.get("key")!!;                 // non-null assertion
+if (city == null) { return null; }
+city->name;                        // ✅ no !! needed (control flow analysis)
 ```
 
-**⚠️ Parens for cast + coalescing**: `(answer as String?) ?? "default"` NOT `answer as String? ?? "default"`
+
+**⚠️ Paren expr for cast + coalescing**: `(answer as String?) ?? "default"` NOT `answer as String? ?? "default"`
 
 **⚠️ NO TERNARY** — use if/else: `if (valid) { result = "yes"; } else { result = "no"; }`
 
 ## Nodes (Persistence)
 
-64-bit refs to persistent containers:
+Nodes are 64b references to persistent data. Core graph storage mechanism.
+
 ```gcl
 type Country { name: String; code: int; }
-var obj = Country { name: "LU", code: 352 };  // RAM
-var n = node<Country>{obj};                    // persisted
-*n; n->name; n.resolve(); n->name = "X"; node<int>{0}.set(5);
+var o = Country { name: "LU", code: 352 }; // RAM only
+var n = node<Country>{ o };                // persisted
+
+*n;            // dereference
+n->name;       // equivalent to `(*n).name`
+n.resolve();   // calls method on the `node` type, not the inner `T`
+n->name = "X"; // modify object field (mutates the graph)
+n.set(5);      // replace the inner data with the given `T`
 ```
 
-**Sharing**: `type City { country: node<Country>; }` (64-bit ref) vs embedded (heavy)
+**Use node refs to share data**: `type City { country: node<Country>; }` light 64b value vs full Country object
 
-**Multi-index ownership** (objects belong to ONE node, store refs):
+**Single ownership model**: objects belong to **ONE** node only. For multi-index, store nodes:
 ```gcl
-var by_id = nodeList<node<Item>>{}; var by_name = nodeIndex<String, node<Item>>{};
-var item = node<Item>{ Item{} };
-by_id.set(1, item); by_name.set("x", item);  // both point to same
+var by_id = nodeList<node<Item>> {};
+var by_name = nodeIndex<String, node<Item>> {};
+var item = node<Item> { Item {} }; // only one item
+by_id.set(1, item); by_name.set("x", item); // both share the same node to item
 ```
 
-**Transactions**: Atomic per function, rollback on error. **Patterns, multi-index, transaction safety** → [references/nodes.md](references/nodes.md)
+**Transactions**: atomic per function, rollback on error.
 
-## Indexed Collections
+**Patterns, multi-index, transaction safety** → [references/nodes.md](references/nodes.md)
 
-| Persisted | Key | In-Memory |
-|-----------|-----|-----------|
-| `node<T>` | — | `Array<T>`, `Map<K,V>` |
-| `nodeList<node<T>>` | int | `Stack<T>`, `Queue<T>` |
-| `nodeIndex<K, node<V>>` | hash | `Set<T>`, `Tuple<A,B>` |
-| `nodeTime<node<T>>` | time | `Buffer`, `Table`, `Tensor` |
-| `nodeGeo<node<T>>` | geo | `TimeWindow`, `SlidingWindow` |
+## Node collections
+
+| Key    | In-Memory      | Persisted               |
+| ------ | -------------- | ----------------------- |
+| `int`  | `Array<T>`     | `nodeList<node<T>>`     |
+| `K`    | `Map<K, V>`    | `nodeIndex<K, node<V>>` |
+| `time` | `Map<time, V>` | `nodeTime<node<T>>`     |
+| `geo`  | `Map<geo, V>`  | `nodeGeo<node<T>>`      |
+
+**Other collections**: `Stack<T>`, `Queue<T>`, `Set<T>`
 
 ```gcl
-var temps = nodeTime<float>{}; temps.setAt(t1, 20.5);
-for (t: time, v: float in temps[from..to]) { }
+// nodeTime - interpolates between points
+var nt = nodeTime<float> {};
+nt.setAt(t1, 20.5);
+for (t, v in nt[from..to]) {}
 
-var idx = nodeIndex<String, node<X>>{}; idx.set("key", val); idx.get("key");  // ⚠️ set/get, NOT add
-var list = nodeList<node<X>>{}; for (i: int, v in list[0..100]) { }
-var geo_idx = nodeGeo<node<B>>{}; for (pos: geo, b in geo_idx.filter(GeoBox{...})) { }
+// nodeIndex - uses set/get (NOT add)
+var ni = nodeIndex<String, node<X>> {};
+ni.set("key", val); ni.get("key");
+
+// nodeList
+var nl = nodeList<node<X>> {};
+for (i, v in nl[0..100]) {}
+
+// nodeGeo
+var ng = nodeGeo<node<B>> {};
+for (pos, b in ng.filter(GeoBox { /*...*/ })) {}
 ```
 
 **Sampling**: `nodeTime::sample([series], start, end, 1000, SamplingMode::adaptative, null, null)` — Modes: `fixed`, `fixed_reg`, `adaptative`, `dense`
 
 **Sort**: `cities.sort_by(City::population, SortOrder::desc);`
 
-**⚠️ CRITICAL**: Non-nullable `nodeList`, `nodeIndex`, `nodeTime`, `Array` attributes MUST initialize:
+**⚠️ CRITICAL: Initialize non-nullable fields and nodes generics can never be nullable**
 ```gcl
-var city = node<City>{ City{ name: "Paris", country: country_node,
-    streets: nodeList<node<Street>>{}  }};  // ⚠️ MUST init!
+type Box { x: int; }
+var b = Box {};        // WRONG: `x` is non-nullable
+var b = Box { x: 42 }; // RIGHT
+
+var n = node<String> {};         // WRONG: `String` is not nullable
+var n = node<String> { "text" }; // RIGHT
+var n = node<String?> {};        // RIGHT
 ```
 
 ## Module Variables
 
-Root-level vars must be nodes/indexes (auto-persisted):
+Root-level variables must be nodes → graph entrypoints:
 ```gcl
-var count: node<int?>; fn main() { count.set((count.resolve() ?? 0) + 1); }
+var count: node<int?>; // node generic param needs to be nullable
+var by_id: nodeList<float>; // node collections do not need nullable generic param
+fn main() { count.set((count.resolve() ?? 0) + 1); }
 ```
 
-**Global indices auto-initialize**: Module `nodeIndex`/`nodeList`/`nodeTime`/`nodeGeo` — no `{}` needed. Collection ATTRIBUTES in types still need `{}`.
+**Module variables are auto-initialized**: `node`, `nodeIndex`, `nodeList`, `nodeTime`, `nodeGeo` are automatically initialized by GreyCat — no `{}` needed:
+```gcl
+// ✅ Global variables — no initialization needed
+var cities_by_name: nodeIndex<String, node<City>>;
+var all_users: nodeList<node<User>>;
 
-## Model vs API Types
+// ⚠️ Non-nullable object fields still need initialization
+```
+
+## Modules
 
 **Models** — store node refs, global indices first:
 ```gcl
@@ -219,14 +273,23 @@ type City { name: String; country: node<Country>; streets: nodeList<node<Street>
 
 **API** — return `Array<XxxView>` with `@volatile`, never nodeList:
 ```gcl
-@volatile type CityView { name: String; country_name: String; street_count: int; }
-@expose @permission("public") fn getCities(): Array<CityView> { ... }  // ⚠️ REQUIRES @expose for HTTP
+@volatile
+type CityView { name: String; country_name: String; street_count: int; }
+@expose
+fn getCities(): Array<CityView> { ... }  // ⚠️ REQUIRES @expose for HTTP
 ```
 
 **MCP exposure** (sparingly — only high-value APIs):
 ```gcl
-@expose @tag("mcp") @permission("public") fn searchCities(query: String): Array<CityView> { ... }
+/// Explain the behavior for LLM to know about the tool
+///
+/// @param query Explain the query param (eg. format constraints, etc.)
+@expose
+@tag("mcp")
+fn searchCities(query: String): Array<CityView> { ... }
 ```
+
+MCP-exposed endpoints should always have documentation that explains the tool
 
 ## Functions & Control Flow
 
@@ -254,15 +317,9 @@ var evens = ArrayUtils::filter(nums, isEven);  // pass named function by referen
 ```
 **Key rules**: declare param as `function` (not `fn(T): R`); calls return `any?` — always cast (`f(x) as bool`, `f(x) as int`); pass by name at call site (no lambda syntax needed).
 
-## Services & Patterns
+## Patterns
 
 ```gcl
-// Service pattern: static functions for business logic
-abstract type CountryService {
-    static fn create(name: String): node<Country> { ... }
-    static fn find(name: String): node<Country>? { return countries_by_name.get(name); }
-}
-
 // Inheritance: abstract methods, polymorphism
 abstract type Building { address: String; fn calculateTax(): float; }
 type House extends Building { fn calculateTax(): float { return value * 0.01; } }
@@ -282,23 +339,23 @@ try { op(); } catch (ex) { error("${ex}"); }
 ```gcl
 var jobs = Array<Job<ResultType>> {};
 for (item in items) { jobs.add(Job<ResultType> { function: processFn, arguments: [item] }); }
-await(jobs, MergeStrategy::last_wins);
+await(jobs, MergeStrategy::strict);
 for (job in jobs) { results.add(job.result()); }
 ```
 
-**Key**: `Job<T>` generic, `MergeStrategy::last_wins`, no nested await. **Worker pools, PeriodicTask, async HTTP, patterns** → [references/concurrency.md](references/concurrency.md)
+**Key**: `Job<T>` generic, `MergeStrategy::strict`, no nested await. **Worker pools, PeriodicTask, async HTTP, patterns** → [references/concurrency.md](references/concurrency.md)
 
 ## Testing
 
-Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`. Run a single test: `greycat test module_name::test_fn_name` (e.g., `greycat test dfr_engine_test::test_dfr_variant`).
+Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`. Run a single test: `greycat test module_name::test_fn_name` (e.g., `greycat test dfr_engine_test::test_dfr_variant`). Run all tests from a single module `greycat test module_name`
 
 ```gcl
-@test fn test_city_creation() {
-    var city = City::create("Paris", country_node);
-    Assert::equals(city->name, "Paris");
-}
 fn setup() { /* runs before tests */ }
 fn teardown() { /* cleanup after tests */ }
+@test
+fn some_test() {
+    Assert::equals(1, 1);
+}
 ```
 
 **Assert**: `equals(a, b)`, `equalsd(a, b, epsilon)`, `isTrue(v)`, `isFalse(v)`, `isNull(v)`, `isNotNull(v)`. **Organization, mocking, fixtures, CI/CD** → [references/testing.md](references/testing.md)
@@ -308,12 +365,12 @@ fn teardown() { /* cleanup after tests */ }
 **⚠️ Reserved Keywords**: `limit`, `node`, `type`, `var`, `fn` — do NOT use as variable/attribute names:
 ```gcl
 // ❌ WRONG
-type User { limit: int; type: String; }  // reserved!
-fn process(node: String) { }             // reserved!
+fn process(fn: String) { } // reserved!
+fn foo() { var var; }      // reserved!
 
 // ✅ CORRECT
-type User { max_limit: int; user_type: String; }
-fn process(node_name: String) { }
+fn process(f: String) { }
+fn foo() { var v; }
 ```
 
 | ❌ Wrong | ✅ Correct |
@@ -323,35 +380,56 @@ fn process(node_name: String) { }
 | `@permission(public)` | `@permission("public")` |
 | `@permission("api") fn getX()` | `@expose @permission("api") fn getX()` |
 | `for(i=0;i<n;i++)` | `for (i, v in list)` |
-| `nodeList<City>` | `nodeList<node<City>>` |
-| `fn getX(): nodeList<...>` | `fn getX(): Array<XxxView>` |
+| `nodeList<City>` | `nodeList<node<City>>` for complex types |
 | `nodeIndex.add(k, v)` | `nodeIndex.set(k, v)` |
 | `for(i, v in nullable_list)` | `for(i, v in nullable_list?)` |
 | `fn doX(): void` | `fn doX()` |
-| `City{name: "X"}` | `City{name: "X", streets: nodeList<...>{}}` |
-| `fn(T): R` as param type | `function` keyword: `fn process(arr: Array<any>, pred: function)` |
+| `fn somefn(f: fn(T): R)` | `fn somefn(f: function)` |
 | `(x / y) as int` for floor | `floor(x / y) as int` — `as int` rounds, `floor()` truncates |
 
-**Double-bang OK** for global registry lookups: `var config = ConfigRegistry::getConfig(key)!!;`
+**Non-null assertions** are fine in the case of control-flow analysis not being able to understand nullability in complex flows
 
 ## ABI & Database
 
-**DEV**: Delete deprecated fields. Reset `gcdata/` on schema changes. Add non-nullable → make nullable first: `newField: int?`
-```bash
-rm -rf gcdata && greycat run import  # ⚠️ DELETES DATA - confirm first
+```gcl
+// v0
+type Foo {
+    type: String;
+}
+```
+
+```gcl
+// v1
+type Foo {
+    type: String;
+    foo: int;
+}
+```
+Running greycat will output: `ERROR: abi update failed: can't add a non-nullable field "foo" in type "project.Foo"`
+
+Fix:
+```gcl
+// v1
+type Foo {
+    type: String;
+    foo: int?; // nullable field is always valid for updates
+}
 ```
 
 ## Full-Stack Development
 
-**[references/frontend.md](references/frontend.md)** - @greycat/web SDK guide: TypeScript codegen, auth, API patterns, error handling.
+**[references/frontend.md](references/frontend.md)** - @greycat/web SDK guide: codegen, TypeScript/JavaScript, auth, API patterns, error handling.
 
 ## Local LLM Integration
 
 **[references/ai/llm.md](references/ai/llm.md)** - llama.cpp integration: model loading, text gen, chat, embeddings, LoRA.
 ```gcl
 @library("ai", "7.7.164-dev");
-var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
-var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
+
+fn main() {
+    var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });
+    var result = model.chat([ChatMessage { role: "user", content: "Hello!" }], null, null);
+}
 ```
 
 ## Library References

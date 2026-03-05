@@ -17,7 +17,7 @@ fn main() {
         Job { function: project::long_computation, arguments: [100_000] }
     };
 
-    await(jobs);  // Blocks until all complete
+    await(jobs, MergeStrategy::strict);  // Blocks until all complete
 
     for (_, job in jobs) { var result = job.result(); }
 }
@@ -37,7 +37,7 @@ fn main() {
     };
 
     try {
-        await(jobs);
+        await(jobs, MergeStrategy::strict);
     } catch (err) {
         for (i, job in jobs) {
             var res = job.result();
@@ -57,7 +57,7 @@ var sensor_list: nodeList<node<Sensor>>;
 
 fn main() {
     var jobs = Array<Job>{ Job { function: project::import }, Job { function: project::import } };
-    await(jobs);
+    await(jobs, MergeStrategy::strict);
 
     // Aggregate results after await
     for (_, job in jobs) {

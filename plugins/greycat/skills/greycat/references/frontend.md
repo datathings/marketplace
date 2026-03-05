@@ -29,7 +29,7 @@ export default defineConfig({
 ```json
 {
   "compilerOptions": { "target": "ES2020", "lib": ["ES2020", "DOM", "DOM.Iterable"], "module": "ESNext", "moduleResolution": "bundler", "strict": true },
-  "include": ["src", "../project.d.ts"]
+  "include": ["src", "project.d.ts"]
 }
 ```
 

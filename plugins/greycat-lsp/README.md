@@ -72,13 +72,18 @@ The LSP is configured in `.lsp.json`:
 
 ```json
 {
-  "greycat": {
-    "command": "greycat-lang",
-    "args": ["server"],
-    "extensionToLanguage": {
-      ".gcl": "greycat"
+    "greycat": {
+        "command": "greycat-lang",
+        "args": ["server"],
+        "extensionToLanguage": {
+            ".gcl": "greycat"
+        },
+        "transport": "stdio",
+        "initializationOptions": {},
+        "settings": {},
+        "startupTimeout": 30000,
+        "maxRestarts": 3
     }
-  }
 }
 ```
 
