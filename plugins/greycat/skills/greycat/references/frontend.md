@@ -342,7 +342,6 @@ try {
 | Wrong | Correct |
 |-------|---------|
 | `gc.getStats()` | `gc.project.getStats()` |
-| `{ role: user.role }` | `{ role: user.role.key! }` |
 | App renders before SDK init | `gc.sdk.init().then(() => import('./main'))` |
 | Forgot `greycat codegen ts` | Run after every backend changes |
 | Direct gc calls everywhere | Use service layer with retry |
@@ -362,4 +361,3 @@ try {
 - [ ] Serialize enums with `.key!`
 - [ ] Test type safety: No `any` types
 - [ ] Verify error handling
-- [ ] Convert time (us -> ms) for display
