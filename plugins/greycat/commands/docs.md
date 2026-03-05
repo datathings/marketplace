@@ -78,7 +78,7 @@ grep -rn "@expose" backend/src/api/ --include="*.gcl"
 **C. From Frontend** (if exists):
 ```bash
 # Check package.json for dependencies
-cat frontend/package.json | grep -E "react|typescript|vite"
+cat frontend/package.json | grep -E "typescript|vite"
 
 # Find pages
 find frontend/src/pages -name "*.tsx" 2>/dev/null
@@ -108,7 +108,7 @@ find data/ -name "*.gguf" 2>/dev/null
 
 **Technology Stack**:
 - Backend: GreyCat [version] (GCL language)
-- [If has_frontend] Frontend: React + TypeScript + [build tool]
+- [If has_frontend] Frontend: TypeScript + [build tool]
 - [If has AI libs] AI/ML: llama.cpp, embeddings
 - [List other detected libraries: kafka, sql, etc.]
 
@@ -218,8 +218,8 @@ See [API Documentation](#api-documentation) for full details.
 [If has_frontend]
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/              # React pages
-│   │   ├── components/         # React components
+│   │   ├── pages/              # Pages
+│   │   ├── components/         # Components
 │   │   └── api/                # API client
 │   └── package.json
 [If has data]
@@ -244,7 +244,7 @@ greycat codegen ts              # Generate TypeScript types
 cd frontend
 pnpm dev                        # Dev server
 pnpm build                      # Production build
-pnpm lint                       # Lint TypeScript/React
+pnpm lint                       # Lint TypeScript
 pnpm test                       # Run tests
 \`\`\`
 

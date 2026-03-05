@@ -77,7 +77,7 @@ greycat install            # Install libraries
 pnpm install               # First time setup
 pnpm dev                   # Dev server (proxies to backend)
 pnpm build                 # Build frontend/ → webroot/
-pnpm lint                  # Lint TypeScript/React
+pnpm lint                  # Lint TypeScript
 pnpm test                  # Run tests
 \`\`\`
 
@@ -86,9 +86,9 @@ pnpm test                  # Run tests
 ## Stack
 
 **Backend**: GreyCat [version] (GCL)
-**Frontend** (if exists): React + TypeScript + Vite, Tailwind CSS, React Router, TanStack Query
+**Frontend** (if exists): TypeScript + Vite, @greycat/web SDK
 **Libraries**: \`@library("std", "[version]")\`, \`@library("explorer", "[version]")\`
-**Testing**: Vitest + React Testing Library (backend: @test annotation)
+**Testing**: Vitest (backend: @test annotation)
 
 **Frontend Setup**: Config files in root (package.json, vite.config.ts, tsconfig.json), source in frontend/, builds to webroot/
 **Frontend Dependencies**: Use exact versions (e.g., \`"5.6.9"\` instead of \`"^5.6.9"\`)
@@ -235,7 +235,7 @@ fn document(id: String): Document {
 **Collections**: \`Array<T> {}\`, \`Map<K,V> {}\`, \`nodeIndex<K, node<V>>\`, initialize collection attributes
 **Naming**: snake_case fields, camelCase functions
 
-### Frontend (React/TypeScript) - if exists
+### Frontend (TypeScript) - if exists
 
 **Components** (MANDATORY): Named export + memo, props interface ABOVE component, JSDoc
 \`\`\`tsx
@@ -251,7 +251,7 @@ export const SearchResults = memo(function SearchResults({ results, isLoading }:
 **Exception**: Default export for pages only
 
 **Hooks**: use* prefix, useCallback w/ deps, useMemo for derived, return objects
-**React Query**: queryKey arrays w/ all deps, staleTime config, enabled for conditional
+**Services**: Named export objects, withRetry wrapper, explicit return types from project.d.ts
 **Services**: Named export objects, explicit return types from project.d.ts
 **State**: URL (useSearchParams), localStorage, Context (theme/user)
 **Styling**: Theme constants, Tailwind utilities, NO inline styles except dynamic values
@@ -451,9 +451,9 @@ fi
 ### Step 2: Detect Project Features
 
 ```bash
-# Check for frontend (frontend/ directory or package.json with React)
+# Check for frontend (frontend/ directory or package.json with @greycat/web)
 HAS_FRONTEND=false
-if [ -d "frontend" ] || ([ -f "package.json" ] && grep -q "react" package.json); then
+if [ -d "frontend" ] || ([ -f "package.json" ] && grep -q "@greycat/web" package.json); then
     HAS_FRONTEND=true
 fi
 

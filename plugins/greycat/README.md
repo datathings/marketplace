@@ -17,7 +17,7 @@ GreyCat is a graph-based programming language with built-in persistence. Unlike 
 - **Parallel execution** - Job API with fork-join pattern and automatic transaction merging
 - **Type-safe APIs** - @expose + @permission decorators with full TypeScript SDK generation
 - **Zero-config persistence** - No ORM, no migrations, no serialization - just code
-- **React integration** - Official @greycat/web SDK with automatic type generation
+- **Frontend integration** - Official @greycat/web SDK with automatic type generation
 
 ## Skill Activation Triggers
 
@@ -37,7 +37,7 @@ This skill automatically activates when you're working with:
 
 ### Framework Components
 - **Backend**: Data models, services, API endpoints, persistence patterns
-- **Frontend**: `@greycat/web` SDK, React integration, TypeScript type generation
+- **Frontend**: `@greycat/web` SDK, TypeScript type generation
 - **Standard library**: core, io, runtime, util
 - **Pro libraries**: ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent
 
@@ -52,13 +52,13 @@ This skill automatically activates when you're working with:
 - Building graph-based data models
 - Creating time-series or geo-spatial applications
 - Implementing RBAC with permissions and roles
-- Developing full-stack applications with React frontends
+- Developing full-stack applications with TypeScript frontends
 - Working with persistent node structures
 - Debugging GreyCat applications
 
 ### When This Skill Does NOT Activate
 - General graph databases (Neo4j, ArangoDB, JanusGraph)
-- Generic React applications (without @greycat/web)
+- Generic frontend applications (without @greycat/web)
 - SQL databases (PostgreSQL, MySQL, SQLite)
 - Traditional ORM frameworks (Prisma, TypeORM, Sequelize)
 
@@ -68,14 +68,14 @@ This skill transforms your AI assistant into a GreyCat development expert by pro
 
 - **Complete language reference** - All GCL syntax, types, and patterns in one place
 - **Best practices** - Avoid common pitfalls with proven patterns (Services, Views, transactions)
-- **Full-stack guidance** - Both backend (.gcl) and frontend (React/TypeScript) development
+- **Full-stack guidance** - Both backend (.gcl) and frontend (TypeScript) development
 - **Library coverage** - Complete API references for all 10+ GreyCat libraries
 - **Progressive disclosure** - Core patterns immediately available, detailed references loaded only when needed
 
 **Perfect for:**
 - GreyCat beginners learning the fundamentals
 - Experienced developers building production applications
-- Full-stack teams integrating React frontends
+- Full-stack teams integrating TypeScript frontends
 - Data engineers working with time-series and geo-spatial data
 
 ## When to Use This Skill
@@ -86,7 +86,7 @@ Use this skill when you need help with:
 - Creating data models and services
 - Writing API endpoints with `@permission` decorators
 - Implementing parallel processing with Jobs
-- Integrating React frontends with `@greycat/web` SDK
+- Integrating TypeScript frontends with `@greycat/web` SDK
 - Running GreyCat commands (serve, test, run import)
 - Debugging GreyCat projects
 
@@ -138,11 +138,11 @@ Concise reference covering:
 - **testing.md** - @test, Assert, setup/teardown conventions
 
 **Frontend Development:**
-- **frontend.md** - Complete React integration guide:
-  - @greycat/web SDK setup
+- **frontend.md** - @greycat/web SDK integration guide:
+  - SDK setup and Vite plugin
   - TypeScript type generation
   - Authentication & authorization
-  - React Query integration
+  - Service layer patterns
   - Error handling and best practices
 
 **Library References:**
@@ -217,7 +217,7 @@ Once installed, this skill will automatically activate when you're working on Gr
 **Example interactions:**
 - "Create a GreyCat data model for a city with buildings and residents"
 - "Help me implement parallel processing for analyzing cities"
-- "Set up React frontend integration with authentication"
+- "Set up frontend integration with authentication"
 - "How do I use nodeTime for time-series data?"
 - "Debug this GreyCat function that's failing"
 

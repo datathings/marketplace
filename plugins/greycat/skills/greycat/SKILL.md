@@ -79,7 +79,7 @@ Use `/greycat:command-name` in Claude Code:
 | `/greycat:optimize` | Auto-fix performance issues | Quick checks |
 | `/greycat:apicheck` | Review @expose endpoints | After endpoints added |
 | `/greycat:coverage` | Test coverage + suggestions | After sprints |
-| `/greycat:frontend` | React/TS frontend review | Frontend features |
+| `/greycat:frontend` | Frontend review | Frontend features |
 | `/greycat:docs` | Generate README, API docs | Before releases |
 | `/greycat:typecheck` | Advanced type safety | After type changes |
 
@@ -343,7 +343,7 @@ rm -rf gcdata && greycat run import  # ⚠️ DELETES DATA - confirm first
 
 ## Full-Stack Development
 
-**[references/frontend.md](references/frontend.md)** - React+GreyCat guide: @greycat/web SDK, TypeScript codegen, auth, React Query, error handling.
+**[references/frontend.md](references/frontend.md)** - @greycat/web SDK guide: TypeScript codegen, auth, API patterns, error handling.
 
 ## Local LLM Integration
 
