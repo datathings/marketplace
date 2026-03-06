@@ -274,19 +274,6 @@ For developing or testing marketplace plugins locally:
 /plugin marketplace add /path/to/marketplace
 ```
 
-### Local Plugin Install (Dev)
-
-Install all greycat-related plugins locally using symlinks at version `0.0.0`, so changes in the repo are reflected immediately without publishing:
-
-```bash
-./local-install.sh          # Symlink greycat, greycat-c, greycat-lsp into Claude's plugin cache
-./local-install.sh --clean  # Remove the local dev plugins
-```
-
-This creates symlinks from `~/.claude/plugins/cache/datathings/<plugin>/0.0.0/` pointing to the local `plugins/<plugin>/` directories, registers them in `installed_plugins.json`, and enables them in `settings.json`. Restart Claude Code after running.
-
-Requires `jq`.
-
 ### Bump Versions
 
 Update all plugin versions at once:

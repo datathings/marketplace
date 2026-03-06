@@ -8,6 +8,21 @@
   },
   "license": "MIT",
   "repository": "https://github.com/datathings/marketplace",
-  "keywords": ["greycat", "backend", "graph-database", "persistence", "time-series", "geo-spatial", "typescript", "full-stack", "api-development", "parallel-processing", "data-modeling", "machine-learning", "event-driven", "integrations"],
+  "keywords": [
+    "greycat",
+    "database",
+    "graph-database",
+    "persistence",
+    "time-series",
+    "geo-spatial",
+    "full-stack",
+    "api-development",
+    "parallel-processing",
+    "data-modeling",
+    "machine-learning",
+    "lsp",
+    "language-server",
+    "gcl"
+  ],
   "skills": "./skills/"
 }

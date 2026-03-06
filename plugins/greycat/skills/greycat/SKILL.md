@@ -7,34 +7,7 @@ description: "Use when working with .gcl files or GreyCat projects - efficient l
 
 Unified language + database (temporal/graph/vector) + web server + MCP. Built for billion-scale digital twins.
 
-**Nav**: [Types](#types) • [Nullability](#nullability) • [Nodes](#nodes-persistence) • [Collections](#indexed-collections) • [Commands](#commands) • [Testing](#testing) • [Pitfalls](#common-pitfalls)
-
-**Quick Start**:
-```gcl
-// Model + index
-var users_by_id: nodeIndex<int, node<AppUser>>;
-
-type AppUser {
-    name: String;
-    email: String;
-
-    // CRUD service
-    static fn create(name: String): node<AppUser> { var u = node<AppUser>{AppUser{name}}; users_by_id.set(u->id, u); return u; }
-    static fn find(id: int): node<AppUser>? { return users_by_id.get(id); }
-}
-
-// API endpoint
-@expose
-fn getUsers(): Array<UserView> { /* ... */ }
-
-// Time-series query
-for (t: time, temp: float in temperatures[start..end]) { info("${t}: ${temp}"); }
-
-// Parallel processing
-var jobs = Array<Job<Result>> {};
-for (item in items) { jobs.add(Job<Result>{function: process, arguments: [item]}); }
-await(jobs, MergeStrategy::last_wins);
-```
+**Nav**: [Types](#types) • [Nullability](#nullability) • [Nodes](#nodes-persistence) • [Collections](#node-collections) • [Commands](#commands) • [Testing](#testing) • [Pitfalls](#common-pitfalls)
 
 ## Installation
 
@@ -59,11 +32,11 @@ Verify with `greycat --version`, restart shell if needed.
 | `greycat-lang lint --fix` | **Auto-fix errors** | **Run after code changes** |
 | `greycat-lang lint` | Check only | CI/CD pipelines |
 | `greycat-lang fmt` | Format files | In-place |
-| `greycat-lang server` | Start LSP | `--stdio` for IDE |
+| `greycat-lang server` | Start LSP | `--stdio` for transport |
 
 **Environment**: All `--options` have `GREYCAT_*` env equivalents. Use `.env` next to `project.gcl`.
 
-**⚠️ CRITICAL**: After generating/modifying .gcl files, IMMEDIATELY run `greycat-lang lint --fix` and verify 0 errors.
+**⚠️ CRITICAL**: After modifying .gcl files, always check LSP for diagnostics
 
 **Dev mode**: `--user=1` bypasses auth (NEVER in production).
 
@@ -88,41 +61,47 @@ Use `/greycat:command-name` in Claude Code:
 
 ## Language Server (LSP)
 
-**[references/lsp.md](references/lsp.md)** - IDE integration (VS Code, Neovim, Emacs), diagnostics, programmatic clients.
+`greycat-lang server --stdio` — completion (`.`, `>`, `:`, `@` triggers), go-to-def, hover, diagnostics, formatting, rename, references.
 
-**Quick start**: `greycat-lang server --stdio` for IDE features (completion, go-to-def, hover, diagnostics, formatting).
-
-**CLI reference**: [references/cli.md](references/cli.md)
+**⚠️ CRITICAL**: **Always open `project.gcl` first** before any other `.gcl` file. The language server needs `project.gcl` to initialize the project context (resolve libraries, discover source files). Without this, diagnostics, completion, and go-to-definition will not work correctly.
 
 ## Architecture
 
-### Backend
-**Feature layout**
 - `project.gcl` - Entry point, libs, permissions, roles, main(), init()
-- `backend/src/<feature>/<feature>.gcl` - Data models + global indices
-- `backend/src/<feature>/<feature>_api.gcl` - @expose + @permission functions, @volatile response types
-- `backend/src/<feature>/<feature>_import.gcl` - Import from another format
-- `backend/src/<feature>/<feature>_export.gcl` - Export into another format
-- `backend/test/<feature>_test.gcl` - Tests a feature
 
-If the feature is small or has no API needed:
-- `backend/src/<feature>.gcl` - Data models + global indices
+### Backend template
+Use `<feature>` like eg `src/todo/todo.gcl`, `src/todo_api.gcl`, etc.
 
-### Frontend (optional, if required)
-**Pages layout**
-- `frontend/<page>/index.html` - *Optional*, if a frontend is required
-- `frontend/<page>/index.tsx` - *Optional*, if a frontend is required
-- `frontend/<page>/<other_page>.html` - *Optional*, if a frontend is required and multiple pages needed
-- `frontend/<page>/<other_page>.tsx` - *Optional*, if a frontend is required and multiple pages needed
+- `src/<feature>/<feature>.gcl` - Data models + global indices
+- `src/<feature>/<feature>_api.gcl` - `@expose` functions and associated `@volatile` types
+- `src/<feature>/<feature>_reader.gcl` - Readers from another format (CSV, JSON, Parquet, etc.)
+- `src/<feature>/<feature>_writer.gcl` - Writers into another format (CSV, JSON, Parquet, etc.)
+- `test/<feature>_test.gcl` - Tests for a feature
+
+If the feature is small or has no `@expose`, readers or writers needed:
+- `src/<feature>.gcl` - One file for everything, split in multiple files only when too complex
+
+### Frontend template (optional, see [references/frontend.md](references/frontend.md))
+MPA with `app/` as Vite root (default for `@greycat/web/vite-plugin`). Each page has its own `index.html` entry point. Build output goes to `webroot/`.
+
+- `app/<page>/index.html` - The page entrypoint
+- `app/<page>/index.ts` - The page script entrypoint (or `.js`, `.tsx` depending on user requirements)
+- `app/components/<component>/` - Shared components across pages
 
 **project.gcl**:
 ```gcl
 @library("std", "7.7.158-dev");    // required
 @library("explorer", "7.7.0-dev"); // administration app served at /explorer
 
-@include("backend");               // ⚠️ project.gcl only - includes ALL .gcl recursively
+@include("src");
+@include("test");
 
-fn main() { }
+fn main() {
+    // Entrypoint of the application:
+    // - setup periodic tasks
+    // - trigger initial imports of 3rd-party data
+    // etc.
+}
 ```
 
 **Conventions**: snake_case files, PascalCase types, `_prefix` unused, `*_test.gcl` tests
@@ -347,7 +326,7 @@ for (job in jobs) { results.add(job.result()); }
 
 ## Testing
 
-Run `greycat test`. Test files: `*_test.gcl` in `./backend/test/`. Run a single test: `greycat test module_name::test_fn_name` (e.g., `greycat test dfr_engine_test::test_dfr_variant`). Run all tests from a single module `greycat test module_name`
+Run `greycat test`. Test files: `*_test.gcl` in `./test/`. Run a single test: `greycat test module_name::test_fn_name` (e.g., `greycat test dfr_engine_test::test_dfr_variant`). Run all tests from a single module `greycat test module_name`
 
 ```gcl
 fn setup() { /* runs before tests */ }
@@ -422,7 +401,6 @@ type Foo {
 
 ## Local LLM Integration
 
-**[references/ai/llm.md](references/ai/llm.md)** - llama.cpp integration: model loading, text gen, chat, embeddings, LoRA.
 ```gcl
 @library("ai", "7.7.164-dev");
 
@@ -432,13 +410,12 @@ fn main() {
 }
 ```
 
-## Library References
+Use LSP for full AI library API (Model, ChatMessage, Sampler, Context, LoRA).
 
-**[references/LIBRARIES.md](references/LIBRARIES.md)** - Complete type definitions and API signatures.
+## Libraries & References
 
-**Core**: std (types, collections, I/O, runtime, util) · explorer (graph UI)
-**AI/ML**: [ai](references/ai/llm.md) (LLM) · [algebra](references/algebra/) (ML, NN, patterns, transforms, clustering, climate)
-**Integrations**: [kafka](references/kafka/kafka.md) · [postgres](references/sql/postgres.md) · [s3](references/s3/s3.md) · [opcua](references/opcua/opcua.md) · [ftp](references/ftp/ftp.md) (FTP/FTPS) · [ssh](references/ssh/ssh.md) (SFTP)
-**Domain**: [finance](references/finance/finance.md) (IBAN) · [powerflow](references/powerflow/powerflow.md) · [powergrid](references/powergrid/powergrid.md) · [fcs](references/fcs/fcs.md) (flow cytometry) · [useragent](references/useragent/useragent.md)
+**[references/libraries.md](references/libraries.md)** — available libraries with `@library()` declarations.
 
-**CLI**: [references/cli.md](references/cli.md) | **Docs**: https://doc.greycat.io/
+Use the LSP (hover, completion, go-to-def) for type signatures and API details.
+
+**Versions & downloads**: https://get.greycat.io | **Docs**: https://doc.greycat.io/ | **CLI**: [references/cli.md](references/cli.md)

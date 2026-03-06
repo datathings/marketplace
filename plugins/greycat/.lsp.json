@@ -1,7 +1,7 @@
 {
     "greycat": {
         "command": "greycat-lang",
-        "args": ["server"],
+        "args": ["server", "--stdio"],
         "extensionToLanguage": {
             ".gcl": "greycat"
         },

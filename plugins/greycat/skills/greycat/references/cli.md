@@ -119,7 +119,7 @@ greycat defrag --store_paths=./gcdata
 **greycat-lang lint** - Check GCL for errors. **⚠️ CRITICAL**: Always run after generating/modifying .gcl files. Exit 0=no errors, 1=errors found.
 ```bash
 greycat-lang lint
-greycat-lang lint --project=./backend/project.gcl
+greycat-lang lint --project=./project.gcl
 ```
 
 **greycat-lang fmt** - Format GCL files in-place. Respects @format_indent, @format_line_width.
