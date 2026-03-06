@@ -1,6 +1,6 @@
 ---
 name: greycat
-description: "Use when working with .gcl files or GreyCat projects - efficient language with unified temporal/graph/vector database, built-in web server, native MCP for billion-scale digital twins"
+description: "Generates and maintains .gcl files for GreyCat projects. Provides language syntax, node persistence patterns, typed CSV/JSON I/O, time series, geo coordinates, API exposure, and MCP tagging. Use when creating, editing, or debugging .gcl code, or when the user references GreyCat, nodeIndex, nodeTime, nodeList, or project.gcl."
 ---
 
 # GreyCat
@@ -52,13 +52,21 @@ Use `/greycat:command-name` in Claude Code:
 | `/greycat:docs` | Generate README, API docs | Before releases |
 | `/greycat:typecheck` | Advanced type safety | After type changes |
 
-## Language Server (LSP)
+## Validation Workflow
 
-`greycat-lang server --stdio` — completion, go-to-def, hover, diagnostics, formatting, rename, references.
+After every code change, check for errors using the LSP or lint:
 
-**CRITICAL**: **Always open `project.gcl` first** before any other `.gcl` file. The LSP needs it to initialize the project context.
+1. **LSP diagnostics (preferred)** — appear automatically when editing `.gcl` files. Check diagnostics after each write/edit. The LSP provides inline errors, hover info, and go-to-definition.
+2. **`greycat-lang lint` (fallback)** — use when LSP diagnostics are unavailable or for batch checking:
 
-**CRITICAL**: After modifying .gcl files, always check LSP for diagnostics.
+```bash
+greycat-lang lint -p project.gcl          # check all project files
+greycat-lang lint --fix -p project.gcl    # auto-fix what it can
+```
+
+Repeat until zero errors.
+
+**Always open `project.gcl` first** before any other `.gcl` file. The LSP needs it to initialize the project context — opening other files first will not trigger analysis.
 
 ## Architecture
 
@@ -101,9 +109,9 @@ fn main() {}
 
 **String→number**: `parseNumber(s)` returns `any`. Cast: `parseNumber(s) as float` or `parseNumber(s) as int`.
 
-**Time**: `time` (μs epoch), `duration` (`1_us`, `500_ms`, `5_s`, `30_min`, `7_hour`, `2_day`), `Date` (UI, needs timezone)
+**Time**: `time` (μs epoch), `duration` (`1_us`, `500_ms`, `5_s`, `30_min`, `7_hour`, `2_day`), `Date` (UI, needs timezone). Convert: `Date::parse("2025-01-15 08:00", "%Y-%m-%d %H:%M").to_time(TimeZone::UTC)`. Use `TimeZone::` enum values (e.g. `TimeZone::"Europe/Luxembourg"`), never raw strings.
 
-**Geo**: `geo{lat, lng}` | Shapes: `GeoBox`, `GeoCircle`, `GeoPoly` (`.contains(geo)`)
+**Geo**: `geo{lat, lng}` (positional, no field names). Access via **methods**: `location.lat()`, `location.lng()`, `location.distance(other)`. Shapes: `GeoBox`, `GeoCircle`, `GeoPoly` (`.contains(geo)`)
 
 ```gcl
 var list = Array<String>{}; var map = Map<String, int>{};  // use {}, NOT ::new()
@@ -201,7 +209,7 @@ for (i, v in nl[0..100]) {}
 
 **Sort**: `cities.sort_by(City::population, SortOrder::desc);`
 
-**CRITICAL: Initialize non-nullable fields; node generics can never be nullable:**
+**Initialize all non-nullable fields, including node collections inside type constructors:**
 ```gcl
 var b = Box {};        // WRONG: non-nullable fields unset
 var b = Box { x: 42 }; // RIGHT
@@ -209,6 +217,11 @@ var b = Box { x: 42 }; // RIGHT
 var n = node<String> {};         // WRONG
 var n = node<String> { "text" }; // RIGHT
 var n = node<String?> {};        // RIGHT (nullable generic)
+
+// Node collections inside types need explicit {} in constructors:
+type City { name: String; streets: nodeIndex<String, node<Street>>; }
+var c = node<City> { City { name: "Paris" } };                                          // WRONG
+var c = node<City> { City { name: "Paris", streets: nodeIndex<String, node<Street>> {} } }; // RIGHT
 ```
 
 ## Module Variables
@@ -321,6 +334,12 @@ fn some_test() {
 | `fn doX(): void` | `fn doX()` |
 | `fn somefn(f: fn(T): R)` | `fn somefn(f: function)` |
 | `(x / y) as int` for floor | `floor(x / y) as int` |
+| `geo { lat: x, lng: y }` | `geo{x, y}` (positional, no spaces/names) |
+| `date.to_time("UTC")` | `date.to_time(TimeZone::UTC)` (enum) |
+| `date.toTime(tz)` | `date.to_time(tz)` (snake_case) |
+| `City { name: "X" }` (missing nodeIndex) | `City { name: "X", streets: nodeIndex<..> {} }` |
+
+**Native (primitive) types** (`geo`, `time`, `duration`, etc.) have no fields — use methods for access, never field syntax. Construction varies by type: `geo` uses positional `geo{lat, lng}`, `time` uses literals (`5_time`) or static methods (`time::now()`, `time::new(epoch, unit)`, `time::parse(str, fmt)`), `duration` uses literals (`1_us`, `500_ms`) or static methods (`duration::new(v, unit)`).
 
 ## ABI & Database
 
