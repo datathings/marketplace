@@ -48,22 +48,21 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 | Plugin | Category | Type | Version | Description |
 |--------|----------|------|---------|-------------|
 | ***GreyCat Technology*** | | | | |
-| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.5 | Full-stack GreyCat development — GCL language, graph persistence, frontend integration |
-| [**greycat-lsp**](#greycat-lsp) | GreyCat Technology | LSP | 2.4.5 | Language Server Protocol for `.gcl` files (completion, diagnostics, hover) |
-| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.5 | GreyCat C API and Standard Library for native development |
+| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.4.6 | Full-stack GreyCat development — GCL language, graph persistence, LSP, frontend integration |
+| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.4.6 | GreyCat C API and Standard Library for native development |
 | ***Agentic AI*** | | | | |
-| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.4.5 | llama.cpp C API reference (163 functions) for local LLM inference |
-| [**ggml**](#ggml) | Agentic AI | Skill | 2.4.5 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
-| [**vllm**](#vllm) | Agentic AI | Skill | 2.4.5 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
-| [**ollama**](#ollama) | Agentic AI | Skill | 2.4.5 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
+| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.4.6 | llama.cpp C API reference (163 functions) for local LLM inference |
+| [**ggml**](#ggml) | Agentic AI | Skill | 2.4.6 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
+| [**vllm**](#vllm) | Agentic AI | Skill | 2.4.6 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
+| [**ollama**](#ollama) | Agentic AI | Skill | 2.4.6 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
 | ***High Performance Math & GPU*** | | | | |
-| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.4.5 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
-| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.4.5 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
-| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.4.5 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
-| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.4.5 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
+| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.4.6 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.4.6 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
+| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.4.6 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
+| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.4.6 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
 | ***Power Grid Management*** | | | | |
-| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.4.5 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
-| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.4.5 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
+| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.4.6 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
+| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.4.6 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
 
 ---
 
@@ -74,7 +73,6 @@ GreyCat is both a database and a programming language — stateful, graph-native
 ```
 /plugin install greycat@datathings
 /plugin install greycat-c@datathings
-/plugin install greycat-lsp@datathings
 ```
 
 ## Agentic AI
@@ -116,23 +114,14 @@ The compute stack for high-performance numerical work: foundational linear algeb
 
 #### greycat
 
-Activates on `.gcl` files and GreyCat topics. Provides:
+Activates on `.gcl` files and GreyCat projects. Provides:
 - GCL syntax, types, decorators (@expose, @permission, @volatile)
 - Indexed collections (nodeIndex, nodeList, nodeTime, nodeGeo)
 - Concurrency patterns (Jobs, await)
 - Standard library (core, io, runtime, util)
 - Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
 - Frontend integration (@greycat/web SDK)
-
-#### greycat-lsp
-
-IDE features for `.gcl` files. **Requires** `greycat-lang` in PATH.
-- Code completion, diagnostics, hover info
-- Go to definition, find references
-
-```bash
-which greycat-lang  # Verify installation
-```
+- LSP support (completion, diagnostics, hover, go-to-def) — requires `greycat-lang` in PATH
 
 #### greycat-c
 
@@ -249,8 +238,7 @@ Add to `.claude/settings.json` (project or `~/.claude/settings.json` for global)
     }
   },
   "enabledPlugins": {
-    "greycat@datathings": true,
-    "greycat-lsp@datathings": true
+    "greycat@datathings": true
   }
 }
 ```
@@ -304,7 +292,7 @@ This provides the C API reference, tensor operations, and native function implem
 
 **Skills not activating**: Verify with `/plugin list`, ensure enabled in settings.
 
-**LSP not working**: Check `greycat-lang --version` is installed and in PATH.
+**LSP not working**: Check `greycat-lang --version` is installed and in PATH. The LSP is included in the greycat plugin.
 
 ## Links
 
