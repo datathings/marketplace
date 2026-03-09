@@ -5,15 +5,9 @@
 ### Basic CsvReader
 
 ```gcl
-var format = CsvFormat {
-    separator: ';',
-    string_delimiter: '\'',
-    decimal_separator: ','
-};
-
-var reader = CsvReader { path: "./data.csv", format: format };
+var reader = CsvReader { path: "./data.csv" };
 while (reader.can_read()) {
-    var row = reader.read();  // Array<any?>
+    var row = reader.read(); // Array<any?>
 }
 ```
 
@@ -24,20 +18,16 @@ while (reader.can_read()) {
 type Entry {
     id: int;
     name: String;
-    values: Array<int>;  // Greedy - consumes remaining columns
+    values: Array<int>; // Greedy - consumes remaining columns
 }
 
-var reader = CsvReader<Entry> {
-    path: "files/entries.csv",
-    format: CsvFormat { header_lines: 1 }
-};
-
+var reader = CsvReader<Entry> { path: "files/entries.csv" };
 while (reader.can_read()) {
-    var entry = reader.read();  // Entry object
+    var entry = reader.read(); // Entry object
 }
 ```
 
-### Special CSV Types
+### CSV features
 
 ```gcl
 type Record {
@@ -50,44 +40,29 @@ type Record {
 }
 ```
 
-### CsvFormat Options
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| header_lines | int? | Lines to skip |
-| separator | char? | Column separator (default `,`) |
-| decimal_separator | char? | Decimal point (default `.`) |
-| thousands_separator | char? | Thousands separator |
-| string_delimiter | char? | String quote char |
-| format | String? | Date format |
-| tz | TimeZone? | Timezone |
-
 ### CsvWriter
 
 ```gcl
-var writer = CsvWriter {
-    path: "./data.csv",
-    format: CsvFormat { separator: ';', decimal_separator: ',' }
-};
+var writer = CsvWriter { path: "./data.csv" };
 writer.write(["John", "Doe", time::now(), 56]);
 ```
 
 ## JSON
 
-### Read JSON File
+### Read File
 
 ```gcl
 var reader = JsonReader { path: "data.json" };
-while (reader.available() > 0) {
-    var obj = reader.read();  // Map with key-value pairs
+while (reader.can_read()) {
+    var obj = reader.read(); // Map with key-value pairs
 }
 ```
 
-### Parse JSON String
+### Parse
 
 ```gcl
-var reader = Json{};
-var parsed = reader.parse(jsonString as String);
+var j = Json<String> {};
+var s = j.parse("\"hello\"");
 ```
 
 ### Typed JSON Reading
@@ -174,7 +149,7 @@ Http::getFile("https://example.com/file", "./local.json", null);
 ```gcl
 var request = { sampling: ["live"], ids: [uuid] };
 var result = Http::post(endpoint, request, headers);
-var parsed = JsonReader::parse(result as String);
+var parsed = Json {}.parse(result as String);
 ```
 
 ### Generic HTTP Client

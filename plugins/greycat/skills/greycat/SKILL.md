@@ -275,14 +275,14 @@ fn applyAll(arr: Array<any>, f: function) {
 }
 ```
 
-## Patterns
+## Modelling
 
 ```gcl
 abstract type Building { address: String; fn calculateTax(): float; }
 type House extends Building { fn calculateTax(): float { return value * 0.01; } }
 ```
 
-More → [references/patterns.md](references/patterns.md)
+More → [references/modelling.md](references/modelling.md)
 
 ## Logging & Error Handling
 
@@ -304,22 +304,13 @@ More → [references/concurrency.md](references/concurrency.md)
 
 ## Testing
 
-Run `greycat test`. Single test: `greycat test module_name::test_fn_name`. Single module: `greycat test module_name`.
+Run `greycat test --quiet`. Single test: `greycat test module_name::test_fn_name`. Single module: `greycat test module_name`.
 
-```gcl
-fn setup() { /* runs before tests */ }
-fn teardown() { /* cleanup */ }
-@test
-fn some_test() {
-    Assert::equals(1, 1);
-}
-```
-
-**Assert**: `equals`, `equalsd(a, b, epsilon)`, `isTrue`, `isFalse`, `isNull`, `isNotNull`. More → [references/testing.md](references/testing.md)
+More → [references/testing.md](references/testing.md)
 
 ## Common Pitfalls
 
-**Reserved keywords**: `limit`, `node`, `type`, `var`, `fn` — do NOT use as variable/attribute names.
+**Reserved keywords**: `limit`, `node`, `type`, `var`, `fn` — do NOT use as variable/param names.
 
 | Wrong | Correct |
 |-------|---------|

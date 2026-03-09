@@ -13,14 +13,14 @@ my-project/
 ├── project.gcl
 ├── src/<feature>/
 ├── app/
-│   ├── vite-env.d.ts              # Vite ambient declarations
+│   ├── vite-env.d.ts
 │   ├── index.html
 │   ├── index.tsx
 │   ├── <page>/
 │   │   ├── index.html
 │   │   └── index.tsx
 │   └── components/<comp>/
-│       ├── <comp>.tsx             # Web component + ambient declarations
+│       ├── <comp>.tsx
 │       └── <comp>.css
 ├── vite.config.ts
 ├── tsconfig.json
@@ -68,7 +68,10 @@ export default defineConfig({
     "jsx": "react-jsx",
     "jsxImportSource": "@greycat/web",
     "sourceMap": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "~/*": ["app/*"]
+    }
   },
   "include": ["app", "project.d.ts"]
 }
@@ -82,6 +85,61 @@ export default defineConfig({
 declare module '*.css?raw' {
   const content: string;
   export default content;
+}
+```
+
+## Using with Other Frameworks (Vue, React, Svelte, etc.)
+
+The `greycat()` vite plugin works alongside any framework's vite plugin. Two requirements:
+
+1. **`noDefaultConfig: true`** — prevents the greycat plugin from overriding the framework's rollup output config (entry/chunk/asset file names, MPA input discovery)
+2. **`root: 'app'`** — always use `app/`, not `frontend/` or `src/`
+
+The greycat plugin still provides:
+- Dev server proxy (forwards `{module}::{function}` calls to GreyCat backend)
+- `gzip: true` option for production compression
+
+**vite.config.ts** — use this exact template, replacing `frameworkPlugin` with your framework's plugin:
+```typescript
+import { defineConfig } from 'vite';
+import { greycat } from '@greycat/web/vite-plugin';
+import frameworkPlugin from '<framework-vite-plugin>';
+
+export default defineConfig({
+  root: 'app',
+  plugins: [greycat({ noDefaultConfig: true, gzip: true }), frameworkPlugin()],
+  build: {
+    outDir: '../webroot',
+    emptyOutDir: true,
+  },
+});
+```
+
+| Framework | Plugin import | Plugin call |
+|-----------|--------------|-------------|
+| Vue | `import vue from '@vitejs/plugin-vue'` | `vue()` |
+| React | `import react from '@vitejs/plugin-react'` | `react()` |
+| Svelte | `import { svelte } from '@sveltejs/vite-plugin-svelte'` | `svelte()` |
+| Solid | `import solid from 'vite-plugin-solid'` | `solid()` |
+
+**Vite version**: use Vite 7+ (Rolldown-based) by default. Vite 7 replaces esbuild+Rollup with Rolldown (Rust-based unified bundler) for faster builds. Install with `pnpm add -D vite@latest`.
+
+**tsconfig.json** — adapt `jsx` and `include` for the framework:
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["app/*"]
+    }
+  },
+  "include": ["app"]
 }
 ```
 
@@ -121,30 +179,10 @@ await gc.sdk.init();
 Each component file declares its own ambient types at the bottom:
 
 ```tsx
-import style from './my-comp.css?raw';
+import { registerCustomElement } from '@greycat/web';
 
-export class MyComp extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: 'open' });
-  }
+export class MyComp extends HTMLElement {} // classic WebComponent
 
-  connectedCallback() {
-    this._render();
-  }
-
-  private _render() {
-    this.shadowRoot!.innerHTML = '';
-    this.shadowRoot!.appendChild(
-      <>
-        <style>{style}</style>
-        <div className="container">content</div>
-      </>,
-    );
-  }
-}
-
-// Ambient type declarations — colocated with the component
 declare global {
   interface HTMLElementTagNameMap {
     'my-comp': MyComp;
@@ -158,34 +196,31 @@ declare global {
     }
   }
 }
+
+registerCustomElement('my-comp', MyComp);
 ```
 
 **Registration** in the page entry:
 ```tsx
 import '@greycat/web';
-import { MyComp } from './components/my-comp/my-comp';
 
 await gc.sdk.init();
 
-customElements.define('my-comp', MyComp);
+await import('./components/my-comp'); // import after init to have access to global `gc` namespace statically
 document.body.appendChild(<my-comp />);
 ```
 
-**Key points:**
 - JSX namespace is `GreyCat.JSX`, not the global `JSX`
 - Register in both `HTMLElementTagNameMap` and `GreyCat.JSX.IntrinsicElements`
-- Each component owns its `declare global` block — no shared declaration file needed
+- Each component owns its `declare global` block
 
 ## API Calls
 
 All calls use POST. Codegen produces typed functions:
 
 ```typescript
-// Simple
 const todos = await gc.todo_api.getTodos();
-
-// With complex params — use Type.createFrom()
-await gc.todo_api.updateTodo(id, gc.todo_api.TodoUpdate.createFrom({ title: "New" }));
+await gc.todo_api.updateTodo(id, new gc.todo_api.TodoUpdate("New"));
 ```
 
 ```bash
@@ -213,7 +248,7 @@ gc.sdk.logout();
 
 | Wrong | Correct |
 |-------|---------|
-| `class="foo"` in JSX | `className="foo"` or `className={{ x: cond }}` |
+| `class="foo"` in JSX | `className="foo"` |
 | Global `JSX.IntrinsicElements` | `GreyCat.JSX.IntrinsicElements` in `declare global` |
 | Missing `skipLibCheck` | Always `skipLibCheck: true` |
 | CSS `?raw` decl in file with `import` | Separate ambient `vite-env.d.ts` (no imports) |
@@ -221,3 +256,8 @@ gc.sdk.logout();
 | `npm install @greycat/web` | Full tgz URL from get.greycat.io |
 | Render before `gc.sdk.init()` | Always `await gc.sdk.init()` first |
 | Forgot `greycat codegen ts` | Run after every backend change |
+| `root: 'frontend'` or `root: 'src'` | Always `root: 'app'` |
+| `greycat()` with Vue/React/etc. | `greycat({ noDefaultConfig: true, gzip: true })` |
+| Manual vite proxy config | `greycat()` plugin handles proxy automatically |
+| `/api/getTodos` fetch path | `POST /{module}::{function}` (e.g., `/todo_api::getTodos`) |
+| Vite 6 or older (esbuild+Rollup) | Vite 7+ (Rolldown) — `pnpm add -D vite@7.3.1` |

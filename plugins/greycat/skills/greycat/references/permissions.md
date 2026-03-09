@@ -27,24 +27,29 @@ HTTP requests use cookie/bearer tokens with User ID + permissions.
 ## Defining Permissions
 
 ```gcl
-@permission("app.admin", "desc"); @permission("app.user", "desc");
-@role("custom", "app.admin", "app.user");
+@permission("new-perm", "Description of new-perm");
+@role("new-role", "public", "api", "new-perm"); // new role
+@role("api", "new-perm"); // add perm to std-defined role
 ```
 
 ## Function Decorators
 
 ```gcl
-@expose @permission("api") fn myFunction(): String { return "Hello"; }
-@permission("super", "normal") fn test() {  // OR logic
-    if (User::hasPermission("normal")) { /* normal */ } else { /* super */ }
-}
+@expose // means @permission("api") by default, override by setting another explicitly
+fn myFunction(): String { return "Hello"; }
+
+@permission("super", "normal")
+fn test() {}
 ```
 
 ## Public Access
 
 ```gcl
-@role("public", "api", "files");  // Allow anonymous
-@expose @permission("public") fn hello(name: String): String { return "Hello ${name}"; }
+@role("public", "api", "files");  // Allows API+FILES for public role
+
+@expose
+@permission("public") // Allows unregistered user to call `hello`
+fn hello(name: String): String { return "Hello ${name}"; }
 ```
 
 ## Runtime Check
@@ -61,7 +66,7 @@ Generated in `gcdata/security/`: `password`, `private_key`, `user_policy.gcb`. *
 
 OpenID Connect (Azure AD, Keycloak):
 ```bash
-greycat serve --oid_client_id=<ID> --oid_config_url=https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration
+greycat serve --oid_client_id=<string> --oid_config_url=https://login.microsoftonline.com/{TENANT}/v2.0/.well-known/openid-configuration
 ```
 Maps SSO roles to internal roles automatically.
 

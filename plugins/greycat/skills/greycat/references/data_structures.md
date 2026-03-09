@@ -15,7 +15,7 @@ In-memory structures for small data:
 
 ```gcl
 var arr = Array<float>{1.2, 3.4, 5.0};
-var arrB = [1.2, 3.4];  // Shorthand (typing unknown)
+var arrB = [1.2, 3.4, 5.0];  // Shorthand (typing inferred ONLY if literals + same type)
 
 for (k, v in arr) { println("Index: ${k}, value ${v}"); }
 

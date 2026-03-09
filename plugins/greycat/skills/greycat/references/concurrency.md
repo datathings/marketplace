@@ -99,10 +99,14 @@ fn task(foo: node<Foo>) {
 ## Tasks (Async HTTP)
 
 Execute functions asynchronously via HTTP header:
-
 ```bash
-curl -H "task:''" -X POST -d '[]' http://localhost:8080/project::long_computation
+curl -H "task:true" -X POST -d '[]' http://localhost:8080/project::long_computation
 # Returns Task object immediately
+```
+
+Via `@greycat/web` sdk:
+```typescript
+const task = await gc.project.long_computation.spawn(); // Generated exposed function come with `.spawn` for task creation
 ```
 
 ### Task Object

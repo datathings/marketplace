@@ -14,12 +14,13 @@
 ### Initialize Time
 
 ```gcl
-var t1 = time::now();                                    // Current system time
-var t2 = 5_time;                                         // 5 μs after epoch
-var t3 = -1000000_time;                                  // 1s before epoch
-var t4 = time::new(23, DurationUnit::hours);            // 23 hours after epoch
-var t5 = time::new(1684163705, DurationUnit::seconds);  // POSIX epoch
-var t6 = time::parse("07/06/2023 10:57:32", "%d/%m/%Y %H:%M:%S");
+var t1 = time::now(); // Current system time
+var t2 = 5_time; // 5 μs after epoch
+var t3 = -1000000_time; // 1s before epoch
+var t4 = time::new(23, DurationUnit::hours); // 23 hours after epoch
+var t5 = time::new(1684163705, DurationUnit::seconds); // POSIX epoch
+var t6 = time::parse("07/06/2023 10:57:32", "%d/%m/%Y %H:%M:%S"); // format parse
+var t7 = '2026-03-09T10:41:42Z'; // ISO-8601 literal
 ```
 
 ### Format Time
@@ -56,7 +57,7 @@ var d2 = Date::parse("07/06/2023 10:57:32", "%d/%m/%Y %H:%M:%S");
 ### Convert Back to Time
 
 ```gcl
-var t = date.to_time(null);  // Convert to UTC time
+var t = date.to_time(null);  // Convert to time using runtime tz (default UTC)
 
 // Handle invalid dates (DST gaps)
 var t = date.to_nearest_time(tz);  // Finds nearest valid time
@@ -72,7 +73,7 @@ var d1 = duration::new(5, DurationUnit::microseconds);
 var d2 = duration::new(2, DurationUnit::days);
 var d3 = duration::newf(1.5, DurationUnit::years);  // Float value
 
-// Shorthand literals (suffix notation)
+// Shorthand literals (suffix notation, optional `_` for readability)
 var d4 = 1_us;      // 1 microsecond
 var d5 = 500_ms;    // 500 milliseconds
 var d6 = 5.6_s;     // 5.6 seconds
@@ -81,7 +82,7 @@ var d8 = 7_hour;    // 7 hours
 var d9 = 2_day;     // 2 days
 
 // ⚠️ Only these suffixes are valid:
-//    _us, _ms, _s, _min, _hour, _day
+//    us, ms, s, min, hour, day
 // ❌ These do NOT work:
 //    _microsecond, _millisecond, _second, _minute (verbose forms not supported)
 //    _month, _year (ambiguous - use smaller denominations like 30_day or 365_day)
@@ -90,12 +91,29 @@ var d9 = 2_day;     // 2 days
 ### Duration Operations
 
 ```gcl
-if (d4 > d5) { }    // Compare
-var sum = 10_s + 10_s;   // Add
-var diff = 10_s - 5_s;   // Subtract
+if (d4 > d5) { }    // Ordering
+Assert::equals(3s + 3s, 6s);
+Assert::equals(3s - 3s, 0s);
+Assert::equals(3s * 2, 6s);
+Assert::equals(3s / 2, 1500ms);
+Assert::equals(2 * 3s, 6s);
 
 println(d.to(DurationUnit::seconds));   // Integer seconds
 println(d.tof(DurationUnit::hours));    // Fractional hours
+```
+
+### Unsupported operations
+```gcl
+2 / 3s
+2 % 3s
+2 - 3s
+2 + 3s
+3s % 2
+3s - 2
+3s + 2
+3s % 3s
+3s / 3s
+3s * 3s
 ```
 
 ## DurationUnit
@@ -104,14 +122,14 @@ Fixed microsecond values:
 
 | Unit | Microseconds | Shorthand | Example |
 |------|--------------|-----------|---------|
-| microseconds | 1 | `_us` | `1_us`, `100_us` |
-| milliseconds | 1e3 | `_ms` | `500_ms`, `1_ms` |
-| seconds | 1e6 | `_s` | `30_s`, `1.5_s` |
-| minutes | 60e6 | `_min` | `5_min`, `30_min` |
-| hours | 3600e6 | `_hour` | `1_hour`, `24_hour` |
-| days | 86400e6 | `_day` | `1_day`, `7_day` |
+| microseconds | 1 | `us` | `1_us`, `100_us` |
+| milliseconds | 1e3 | `ms` | `500_ms`, `1_ms` |
+| seconds | 1e6 | `s` | `30_s`, `1.5_s` |
+| minutes | 60e6 | `min` | `5_min`, `30_min` |
+| hours | 3600e6 | `hour` | `1_hour`, `24_hour` |
+| days | 86400e6 | `day` | `1_day`, `7_day` |
 
-**Note**: Maximum duration is `_day`. For longer periods, use multiples (e.g., `30_day`, `365_day`) or CalendarUnit for calendar-aware operations.
+**Note**: Maximum duration is `day`. For longer periods, use multiples (e.g., `30_day`, `365_day`) or CalendarUnit for calendar-aware operations.
 
 ## CalendarUnit
 

@@ -1,6 +1,6 @@
 # Testing
 
-Run: `greycat test` ([cli.md](cli.md) for options)
+Run: `greycat test --quiet` ([cli.md](cli.md) for options)
 
 ## Test Functions
 

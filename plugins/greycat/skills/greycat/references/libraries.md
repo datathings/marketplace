@@ -34,4 +34,5 @@ Latest versions: https://get.greycat.io
 
 ```bash
 greycat install    # downloads all declared @library dependencies
+greycat install --force # if lib,webroot,bin manually modified
 ```
