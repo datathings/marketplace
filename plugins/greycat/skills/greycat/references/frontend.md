@@ -2,6 +2,18 @@
 
 @greycat/web — TypeScript SDK with JSX runtime for real DOM elements. Not on npmjs.org.
 
+## Contents
+- Project Structure
+- Setup (package.json, vite.config.ts, tsconfig.json)
+- Using with Other Frameworks (Vue, React, Svelte, etc.)
+- SDK Init
+- JSX Rules
+- Web Component Pattern
+- API Calls
+- Enums
+- Authentication
+- Common Pitfalls
+
 **Flow**: `GCL → greycat codegen ts → project.d.ts → TypeScript → gc namespace`
 
 ## Project Structure

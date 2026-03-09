@@ -10,7 +10,7 @@ abstract type Building {
     year_built: int;
 
     fn calculate_tax(): float;  // Abstract - must be implemented
-    fn get_age(): int { return 2024 - year_built; }  // Concrete - shared
+    fn get_age(): int { return Date::from_time(time::now(), null).years - year_built; }  // Concrete - shared
 }
 
 type House extends Building {

@@ -86,14 +86,16 @@ See [references/frontend.md](references/frontend.md) for full setup.
 
 **project.gcl**:
 ```gcl
-@library("std", "7.7.158-dev");    // required
-@library("explorer", "7.7.0-dev"); // administration app served at /explorer
+@library("std", "<version>");       // required — fetch latest: curl https://get.greycat.io/files/core/stable/latest
+@library("explorer", "<version>");  // administration app served at /explorer
 
 @include("src");
 @include("test");
 
 fn main() {}
 ```
+
+**Fetching latest library versions**: `curl https://get.greycat.io/files/<lib>/stable/latest` — returns `<MAJOR>.<MINOR>/<MAJOR>.<MINOR>.<PATCH>-<BRANCH>` (use the part after `/`). Exception: `std` uses `core` as the URL path (all others match: `ai`, `explorer`, `algebra`, etc.).
 
 **Conventions**: snake_case files, PascalCase types, `_prefix` unused, `*_test.gcl` tests
 
@@ -347,7 +349,7 @@ type Foo { name: String; new_field: int?; }  // nullable = safe ABI update
 ## Local LLM Integration
 
 ```gcl
-@library("ai", "7.7.164-dev");
+@library("ai", "<version>");  // fetch latest: curl https://get.greycat.io/files/ai/stable/latest
 
 fn main() {
     var model = Model::load("llama", "./model.gguf", ModelParams { n_gpu_layers: -1 });

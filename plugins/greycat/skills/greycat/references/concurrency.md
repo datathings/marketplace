@@ -1,5 +1,10 @@
 # Concurrency & Tasks
 
+## Contents
+- Jobs (Parallel Execution): error handling, parallel writes, await limitations
+- Tasks (Async HTTP): task object, status, results
+- Periodic Tasks: scheduler API, periodicity types, options, management
+
 ## Jobs (Parallel Execution)
 
 Jobs enable parallel computation with fork-join pattern:
@@ -80,14 +85,14 @@ fn import(): Array<node<Sensor>> {
 Objects resolved before `await` become invalid after:
 
 ```gcl
-// ❌ Wrong - resolved_foo becomes stale after await
+// Wrong - resolved_foo becomes stale after await
 fn task(foo: node<Foo>) {
     var resolved_foo = foo.resolve();
     await(jobs);
     resolved_foo.status = "Done";  // ERROR
 }
 
-// ✅ Correct - use arrow operator or set to null before await
+// Correct - use arrow operator or set to null before await
 fn task(foo: node<Foo>) {
     var resolved_foo = foo.resolve();
     resolved_foo = null;  // Clear before await
