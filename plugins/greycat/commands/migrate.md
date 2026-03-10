@@ -70,7 +70,7 @@ echo "==========================================================================
 echo ""
 
 # Find all model files
-MODEL_FILES=$(find backend/src/model -name "*.gcl" -type f)
+MODEL_FILES=$(find src/model -name "*.gcl" -type f)
 
 echo "Model files found:"
 echo "$MODEL_FILES" | sed 's/^/  /'
@@ -256,7 +256,7 @@ AskUserQuestion({
 **Generate migration function**:
 
 ```gcl
-// Generated: backend/src/migration/migrate_20260109_add_device_priority.gcl
+// Generated: src/migration/migrate_20260109_add_device_priority.gcl
 
 fn migrate_add_device_priority() {
     info("Starting migration: add Device.priority field");
@@ -318,7 +318,7 @@ greycat-lang lint --fix
 echo "Checking usage of field 'old_field' in Device type..."
 
 # Search for usage
-USAGE=$(grep -r "device->old_field" backend/ --include="*.gcl")
+USAGE=$(grep -r "device->old_field" src/ --include="*.gcl")
 
 if [ -z "$USAGE" ]; then
     echo "✓ No usages found - safe to remove"
@@ -387,7 +387,7 @@ AskUserQuestion({
 **Create migration file**:
 
 ```gcl
-// backend/src/migration/migrate_YYYYMMDD_description.gcl
+// src/migration/migrate_YYYYMMDD_description.gcl
 
 fn migrate_transform_user_names() {
     info("Starting migration: transform user names");
@@ -521,7 +521,7 @@ AskUserQuestion({
 **Step 2: Generate Import Function**
 
 ```gcl
-// backend/src/import/import_devices_csv.gcl
+// src/import/import_devices_csv.gcl
 
 fn import_devices_from_csv() {
     info("Starting CSV import...");
@@ -595,7 +595,7 @@ AskUserQuestion({
 **Step 2: Generate Export Function**
 
 ```gcl
-// backend/src/export/export_devices_csv.gcl
+// src/export/export_devices_csv.gcl
 
 fn export_devices_to_csv() {
     info("Starting CSV export...");

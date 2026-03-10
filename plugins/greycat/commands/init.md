@@ -372,10 +372,10 @@ export default defineConfig({
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["frontend/src/*"]
+      "@/*": ["app/*"]
     }
   },
-  "include": ["frontend/src"]
+  "include": ["app"]
 }
 \`\`\`
 

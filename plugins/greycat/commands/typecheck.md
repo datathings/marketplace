@@ -33,7 +33,7 @@ Ensure all API response types are marked @volatile.
 
 ```bash
 # Extract all @expose functions and their return types
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//'
+grep -rn "@expose" src/api/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//'
 ```
 
 ### Step 1.2: Check Each Return Type
@@ -46,7 +46,7 @@ For each return type found:
 ### Example Output
 
 ```
-📍 backend/src/api/search_api.gcl:63
+📍 src/api/search_api.gcl:63
 
 ⚠️ MISSING @volatile: API response type not marked as volatile
 
@@ -54,7 +54,7 @@ Function:
   @expose
   fn semanticSearch(...): PaginatedResult<SearchResultView> {
 
-Type Definition (backend/src/api/api_types.gcl:45):
+Type Definition (src/api/api_types.gcl:45):
   type PaginatedResult<T> {  ← Missing @volatile
       items: Array<T>;
       total: int;
@@ -86,7 +86,7 @@ Detect misuse of persistent collections (nodeList/nodeIndex/nodeTime/nodeGeo) in
 
 ```bash
 # Find all persistent collection declarations
-grep -rn "nodeList\|nodeIndex\|nodeTime\|nodeGeo" backend/src/ --include="*.gcl" -B 3 -A 3
+grep -rn "nodeList\|nodeIndex\|nodeTime\|nodeGeo" src/ --include="*.gcl" -B 3 -A 3
 ```
 
 ### Step 2.2: Classify Usage Context
@@ -95,7 +95,7 @@ For each occurrence, determine context:
 
 **✅ LEGITIMATE (Global variable)**:
 ```gcl
-// In backend/src/model/data.gcl (module-level)
+// In src/model/data.gcl (module-level)
 var documents: nodeList<node<Document>>;
 ```
 
@@ -123,7 +123,7 @@ fn process(items: nodeList<T>) {  ← Should be Array
 ### Example Output
 
 ```
-📍 backend/src/service/builder.gcl:34
+📍 src/service/builder.gcl:34
 
 ⚠️ TYPE SAFETY: Local variable using persistent collection
 
@@ -159,10 +159,10 @@ Find potential null pointer dereferences and missing null checks.
 
 ```bash
 # Find .resolve() chains without null checks
-grep -rn "\.resolve()\..*\." backend/src/ --include="*.gcl"
+grep -rn "\.resolve()\..*\." src/ --include="*.gcl"
 
 # Find arrow operator chains
-grep -rn "->.*->" backend/src/ --include="*.gcl"
+grep -rn "->.*->" src/ --include="*.gcl"
 ```
 
 ### Step 3.2: Analyze Safety
@@ -175,7 +175,7 @@ Check if null checking exists before dereference:
 ### Example Output
 
 ```
-📍 backend/src/service/document_service.gcl:67
+📍 src/service/document_service.gcl:67
 
 ⚠️ NULL SAFETY: Potential null pointer dereference
 
@@ -225,7 +225,7 @@ Find non-nullable collections that might not be initialized:
 
 ```bash
 # Find type fields with collections
-grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" backend/src/model/ --include="*.gcl"
+grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/model/ --include="*.gcl"
 ```
 
 Check if they're nullable or always initialized.
@@ -233,7 +233,7 @@ Check if they're nullable or always initialized.
 ### Example Output
 
 ```
-📍 backend/src/model/document.gcl:12
+📍 src/model/document.gcl:12
 
 ⚠️ TYPE SAFETY: Non-nullable collection not always initialized
 
@@ -243,7 +243,7 @@ Type:
       chunks: nodeList<node<Chunk>>;  ← Non-nullable
   }
 
-Usage (backend/src/service/import.gcl:45):
+Usage (src/service/import.gcl:45):
   var doc = Document {
       id: "123"
       // chunks not initialized ← RUNTIME ERROR
@@ -272,14 +272,14 @@ Find collections storing objects instead of node references:
 
 ```bash
 # Find nodeList/nodeIndex not storing nodes
-grep -rn "nodeList<[^n]" backend/src/ --include="*.gcl"
-grep -rn "nodeIndex<.*,\s*[^n]" backend/src/ --include="*.gcl"
+grep -rn "nodeList<[^n]" src/ --include="*.gcl"
+grep -rn "nodeIndex<.*,\s*[^n]" src/ --include="*.gcl"
 ```
 
 ### Example Output
 
 ```
-📍 backend/src/model/data.gcl:8
+📍 src/model/data.gcl:8
 
 ⚠️ TYPE SAFETY: Storing objects directly in persistent collection
 
@@ -311,13 +311,13 @@ Detect generic type parameters on static functions (not allowed in GreyCat).
 
 ```bash
 # Find static fn with <T> syntax
-grep -rn "static fn.*<.*>.*(" backend/src/ --include="*.gcl"
+grep -rn "static fn.*<.*>.*(" src/ --include="*.gcl"
 ```
 
 ### Example Output
 
 ```
-📍 backend/src/service/utils.gcl:12
+📍 src/service/utils.gcl:12
 
 ❌ TYPE ERROR: Generic type parameter on static function
 
@@ -402,11 +402,11 @@ CRITICAL ISSUES (Fix Immediately)
 ===============================================================================
 
 1. COMPILATION ERROR: Generic static function
-   📍 backend/src/service/utils.gcl:12
+   📍 src/service/utils.gcl:12
    [Details above]
 
 2. COMPILATION ERROR: Generic static function
-   📍 backend/src/service/helper.gcl:34
+   📍 src/service/helper.gcl:34
    [Details above]
 
 ===============================================================================
@@ -414,7 +414,7 @@ HIGH PRIORITY ISSUES
 ===============================================================================
 
 1. RUNTIME ERROR: Uninitialized collection
-   📍 backend/src/model/document.gcl:12
+   📍 src/model/document.gcl:12
    [Details above]
 
 ...
@@ -446,7 +446,7 @@ greycat build
 
 ## Success Criteria
 
-✓ **All files scanned** (.gcl files in backend/src/)
+✓ **All files scanned** (.gcl files in src/)
 ✓ **Volatile decorators checked** on API response types
 ✓ **Collection usage validated** (persistent vs non-persistent)
 ✓ **Null safety analyzed** (potential NPEs)
@@ -498,7 +498,7 @@ greycat build      # ✓ Builds successfully
 # → MEDIUM: 18 (to address next sprint)
 
 # 7. Commit
-git add backend/
+git add src/
 git commit -m "fix: resolve type safety issues (CRITICAL+HIGH)"
 ```
 
@@ -508,7 +508,7 @@ git commit -m "fix: resolve type safety issues (CRITICAL+HIGH)"
 
 **Use Before**:
 - `/apicheck` - Fix type issues before API review
-- `/backend` - Type check before general cleanup
+- `/src` - Type check before general cleanup
 - `/docs` - Ensure types are correct before documentation
 
 **Use After**:

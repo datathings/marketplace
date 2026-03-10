@@ -52,7 +52,7 @@ Use Glob to find all test files:
 
 ```bash
 # Find all test files
-find backend/test -name "*_test.gcl" -o -name "*test.gcl" 2>/dev/null
+find src/test -name "*_test.gcl" -o -name "*test.gcl" 2>/dev/null
 ```
 
 Analyze each test file to extract:
@@ -94,19 +94,19 @@ Find all services, API endpoints, and critical business logic:
 **A. Find All Services** (abstract types with static functions):
 ```bash
 # Search for abstract types (services)
-grep -r "^abstract type.*Service" backend/src/service/ --include="*.gcl"
+grep -r "^abstract type.*Service" src/service/ --include="*.gcl"
 ```
 
 **B. Find All API Endpoints** (@expose functions):
 ```bash
 # Search for @expose functions
-grep -r "@expose" backend/src/api/ --include="*.gcl" -A 2
+grep -r "@expose" src/api/ --include="*.gcl" -A 2
 ```
 
 **C. Find All Model Types**:
 ```bash
 # Search for type definitions
-grep -r "^type [A-Z]" backend/src/model/ --include="*.gcl"
+grep -r "^type [A-Z]" src/model/ --include="*.gcl"
 ```
 
 **D. Find Critical Business Logic**:
@@ -120,7 +120,7 @@ For each discovered item, check if tests exist:
 
 **Service Functions**:
 ```gcl
-// Service: backend/src/service/auth/user_service.gcl
+// Service: src/service/auth/user_service.gcl
 abstract type UserService {
     static fn createUser(...): User;      // ⚠️ No test found
     static fn getUserByEmail(...): User?; // ✓ Tested in user_service_test.gcl
@@ -130,7 +130,7 @@ abstract type UserService {
 
 **API Endpoints**:
 ```gcl
-// API: backend/src/api/search_api.gcl
+// API: src/api/search_api.gcl
 @expose
 @permission("app.user")
 fn search(query: String, ...): SearchResponse {  // ⚠️ No integration test
@@ -140,7 +140,7 @@ fn search(query: String, ...): SearchResponse {  // ⚠️ No integration test
 
 **Model Validation**:
 ```gcl
-// Model: backend/src/model/user.gcl
+// Model: src/model/user.gcl
 type User {
     email: String;
 
@@ -177,7 +177,7 @@ Where:
 
 For each gap, create actionable test suggestions with:
 
-1. **Test file name**: `backend/test/xxx_test.gcl`
+1. **Test file name**: `src/test/xxx_test.gcl`
 2. **Test function names**: Specific to scenario
 3. **Test code template**: Ready-to-use skeleton
 4. **Priority**: HIGH/MEDIUM/LOW (based on risk score)
@@ -189,7 +189,7 @@ Generate test templates based on code patterns:
 
 **Template 1: Service Function Test**
 ```gcl
-// backend/test/user_service_test.gcl
+// src/test/user_service_test.gcl
 
 @test
 fn test_create_user_valid_input() {
@@ -228,7 +228,7 @@ fn test_create_user_invalid_email() {
 
 **Template 2: API Endpoint Test**
 ```gcl
-// backend/test/api/search_api_test.gcl
+// src/test/api/search_api_test.gcl
 
 @test
 fn test_search_valid_query() {
@@ -274,7 +274,7 @@ fn test_search_requires_permission() {
 
 **Template 3: Validation Logic Test**
 ```gcl
-// backend/test/model/user_test.gcl
+// src/test/model/user_test.gcl
 
 @test
 fn test_user_validate_valid_email() {
@@ -360,7 +360,7 @@ RISK SUMMARY:
 HIGH PRIORITY TEST GAPS (Risk Score > 70)
 ===============================================================================
 
-📍 backend/src/service/auth/user_service.gcl
+📍 src/service/auth/user_service.gcl
 
 ⚠️ UNTESTED: UserService::createUser
    Risk Score: 95 (HIGH)
@@ -380,12 +380,12 @@ HIGH PRIORITY TEST GAPS (Risk Score > 70)
    4. test_create_user_invalid_role
    5. test_create_user_weak_password
 
-   Test File: backend/test/user_service_test.gcl
+   Test File: src/test/user_service_test.gcl
    Estimated Effort: 30 minutes
 
 ---
 
-📍 backend/src/api/payment_api.gcl
+📍 src/api/payment_api.gcl
 
 ⚠️ UNTESTED: processPayment
    Risk Score: 98 (HIGH)
@@ -405,14 +405,14 @@ HIGH PRIORITY TEST GAPS (Risk Score > 70)
    4. test_process_payment_network_error
    5. test_process_payment_duplicate_transaction
 
-   Test File: backend/test/api/payment_api_test.gcl
+   Test File: src/test/api/payment_api_test.gcl
    Estimated Effort: 60 minutes
 
 ===============================================================================
 MEDIUM PRIORITY TEST GAPS (Risk Score 40-70)
 ===============================================================================
 
-📍 backend/src/service/search/search_service.gcl
+📍 src/service/search/search_service.gcl
 
 ⚠️ UNTESTED: SearchService::buildQuery
    Risk Score: 62 (MEDIUM)
@@ -431,7 +431,7 @@ MEDIUM PRIORITY TEST GAPS (Risk Score 40-70)
    3. test_build_query_with_date_range
    4. test_build_query_empty_input
 
-   Test File: backend/test/search_service_test.gcl
+   Test File: src/test/search_service_test.gcl
    Estimated Effort: 20 minutes
 
 ===============================================================================
@@ -469,7 +469,7 @@ PRIORITY: Complete Sprint 1 before next release
 
 For each high-priority gap, create ready-to-use test file templates:
 
-**File: backend/test/user_service_test.gcl** (generated)
+**File: src/test/user_service_test.gcl** (generated)
 ```gcl
 // AUTO-GENERATED TEST TEMPLATE
 // TODO: Implement test assertions based on your business logic
@@ -537,7 +537,7 @@ D) Generate all suggested tests (HIGH + MEDIUM + LOW)
 ### Step 4: Generate Test Templates
 
 Based on user choice, create test files:
-- Use Write tool to create `backend/test/xxx_test.gcl` files
+- Use Write tool to create `src/test/xxx_test.gcl` files
 - Include TODO comments for user to complete
 - Add descriptive test names and structure
 - Include edge cases and error scenarios
@@ -568,7 +568,7 @@ echo "  3. Add more test cases as needed"
 **Service Functions**:
 ```bash
 # Find all static functions in services
-grep -rn "static fn" backend/src/service/ --include="*.gcl"
+grep -rn "static fn" src/service/ --include="*.gcl"
 
 # For each function, check if test exists
 # Search pattern: test_<snake_case_function_name>
@@ -577,7 +577,7 @@ grep -rn "static fn" backend/src/service/ --include="*.gcl"
 **API Endpoints**:
 ```bash
 # Find all @expose functions
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 5
+grep -rn "@expose" src/api/ --include="*.gcl" -A 5
 
 # Extract function signature
 # Check if integration test exists
@@ -586,10 +586,10 @@ grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 5
 **Model Methods**:
 ```bash
 # Find all type methods
-grep -rn "^\s*fn [a-z]" backend/src/model/ --include="*.gcl"
+grep -rn "^\s*fn [a-z]" src/model/ --include="*.gcl"
 
 # Exclude simple getters/setters
-# Check for tests in backend/test/model/
+# Check for tests in src/test/model/
 ```
 
 ### Complexity Calculation
@@ -609,7 +609,7 @@ grep -o '\(if\|else\|match\|for\|while\)' file.gcl | wc -l
 **Call Sites** (usage):
 ```bash
 # Search for function calls across codebase
-grep -r "FunctionName(" backend/ --include="*.gcl" | wc -l
+grep -r "FunctionName(" src/ --include="*.gcl" | wc -l
 ```
 
 ---
@@ -645,7 +645,7 @@ grep -r "FunctionName(" backend/ --include="*.gcl" | wc -l
 # 2. Review HIGH priority gaps (12 items)
 # 3. Choose to generate templates for HIGH priority
 
-# 4. Templates created in backend/test/
+# 4. Templates created in src/test/
 #    - user_service_test.gcl (6 tests)
 #    - payment_api_test.gcl (5 tests)
 

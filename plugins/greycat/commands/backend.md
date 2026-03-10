@@ -35,14 +35,14 @@ Identify unused code that can be safely removed.
 **A. Find All Type Definitions**:
 ```bash
 # Find all types (excluding @volatile API response types initially)
-grep -rn "^type [A-Z]" backend/src/ --include="*.gcl" | grep -v "@volatile"
+grep -rn "^type [A-Z]" src/ --include="*.gcl" | grep -v "@volatile"
 ```
 
 **B. Check Usage**:
 For each type found, search for references:
 ```bash
 # Search for type name usage across codebase
-grep -r "TypeName" backend/ --include="*.gcl" | grep -v "^type TypeName"
+grep -r "TypeName" src/ --include="*.gcl" | grep -v "^type TypeName"
 ```
 
 **C. Categorize**:
@@ -52,7 +52,7 @@ grep -r "TypeName" backend/ --include="*.gcl" | grep -v "^type TypeName"
 
 **Output Format**:
 ```
-📍 backend/src/model/old_model.gcl:42
+📍 src/model/old_model.gcl:42
 
 ❌ UNUSED TYPE: OldDataStructure
    References: 0
@@ -67,20 +67,20 @@ grep -r "TypeName" backend/ --include="*.gcl" | grep -v "^type TypeName"
 **A. Find All Functions**:
 ```bash
 # Find static functions (services)
-grep -rn "static fn [a-z_]" backend/src/service/ --include="*.gcl"
+grep -rn "static fn [a-z_]" src/service/ --include="*.gcl"
 
 # Find type methods
-grep -rn "^\s*fn [a-z_]" backend/src/model/ --include="*.gcl"
+grep -rn "^\s*fn [a-z_]" src/model/ --include="*.gcl"
 
 # Find API endpoints
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 1
+grep -rn "@expose" src/api/ --include="*.gcl" -A 1
 ```
 
 **B. Check Usage**:
 For each function:
 ```bash
 # Search for function calls
-grep -r "FunctionName(" backend/ --include="*.gcl"
+grep -r "FunctionName(" src/ --include="*.gcl"
 ```
 
 **C. Special Cases**:
@@ -90,7 +90,7 @@ grep -r "FunctionName(" backend/ --include="*.gcl"
 
 **Output Format**:
 ```
-📍 backend/src/service/data/helper_service.gcl:156
+📍 src/service/data/helper_service.gcl:156
 
 ❌ UNUSED FUNCTION: processOldFormat
    References: 0 call sites
@@ -108,13 +108,13 @@ grep -r "FunctionName(" backend/ --include="*.gcl"
 **A. Find Global Variables**:
 ```bash
 # Find module-level variables
-grep -rn "^var [a-z_]" backend/src/model/ --include="*.gcl"
+grep -rn "^var [a-z_]" src/model/ --include="*.gcl"
 ```
 
 **B. Check Usage**:
 ```bash
 # Search for variable references
-grep -r "variableName" backend/ --include="*.gcl"
+grep -r "variableName" src/ --include="*.gcl"
 ```
 
 **C. Important**:
@@ -123,7 +123,7 @@ grep -r "variableName" backend/ --include="*.gcl"
 
 **Output Format**:
 ```
-📍 backend/src/model/cache.gcl:12
+📍 src/model/cache.gcl:12
 
 ⚠️ UNUSED VARIABLE: temp_cache
    Type: nodeIndex<String, String>
@@ -137,9 +137,9 @@ grep -r "variableName" backend/ --include="*.gcl"
 
 ```bash
 # Files with no references from other files
-for file in backend/src/**/*.gcl; do
+for file in src/**/*.gcl; do
     filename=$(basename "$file" .gcl)
-    refs=$(grep -r "$filename" backend/ --include="*.gcl" | grep -v "$file" | wc -l)
+    refs=$(grep -r "$filename" src/ --include="*.gcl" | grep -v "$file" | wc -l)
     if [ $refs -eq 0 ]; then
         echo "Unused file: $file"
     fi
@@ -150,12 +150,12 @@ done
 
 ```bash
 # Find large commented blocks (potential dead code)
-grep -rn "^//.*fn \|^//.*type \|^//.*var " backend/ --include="*.gcl"
+grep -rn "^//.*fn \|^//.*type \|^//.*var " src/ --include="*.gcl"
 ```
 
 **Output Format**:
 ```
-📍 backend/src/service/old_service.gcl:45-78
+📍 src/service/old_service.gcl:45-78
 
 ⚠️ COMMENTED CODE: 33 lines
    Content: Old implementation of processData function
@@ -176,8 +176,8 @@ Identify repeated code patterns that could be refactored.
 **A. Repeated Validation Logic**:
 ```bash
 # Search for similar validation patterns
-grep -rn "if.*== null.*return null" backend/ --include="*.gcl"
-grep -rn "if.*\.size\(\) == 0.*return" backend/ --include="*.gcl"
+grep -rn "if.*== null.*return null" src/ --include="*.gcl"
+grep -rn "if.*\.size\(\) == 0.*return" src/ --include="*.gcl"
 ```
 
 **Example Output**:
@@ -185,9 +185,9 @@ grep -rn "if.*\.size\(\) == 0.*return" backend/ --include="*.gcl"
 📍 DUPLICATION: Null checks (8 occurrences)
 
 Locations:
-  - backend/src/service/user_service.gcl:23
-  - backend/src/service/document_service.gcl:45
-  - backend/src/service/search_service.gcl:67
+  - src/service/user_service.gcl:23
+  - src/service/document_service.gcl:45
+  - src/service/search_service.gcl:67
   ... (5 more)
 
 Pattern:
@@ -214,13 +214,13 @@ Suggestion:
 **B. Repeated Query Patterns**:
 ```bash
 # Find similar loops over global indices
-grep -rn "for.*in.*_by_id" backend/ --include="*.gcl" -A 3
+grep -rn "for.*in.*_by_id" src/ --include="*.gcl" -A 3
 ```
 
 **C. Repeated Type Conversions**:
 ```bash
 # Find repeated mapping logic
-grep -rn "\.map\|for.*in.*{" backend/ --include="*.gcl" -B 2 -A 5
+grep -rn "\.map\|for.*in.*{" src/ --include="*.gcl" -B 2 -A 5
 ```
 
 ### Step 2.2: Find Similar Type Definitions
@@ -229,7 +229,7 @@ Compare types with similar field structures:
 
 ```bash
 # Extract all type definitions
-grep -rn "^type [A-Z]" backend/src/model/ --include="*.gcl" -A 10
+grep -rn "^type [A-Z]" src/model/ --include="*.gcl" -A 10
 ```
 
 Analyze for:
@@ -241,13 +241,13 @@ Analyze for:
 ```
 📍 SIMILAR TYPES: DocumentView and DocumentDetailView
 
-DocumentView (backend/src/api/api_types.gcl:45):
+DocumentView (src/api/api_types.gcl:45):
   - id: String
   - title: String
   - date: time?
   - type: String
 
-DocumentDetailView (backend/src/api/api_types.gcl:89):
+DocumentDetailView (src/api/api_types.gcl:89):
   - id: String
   - title: String
   - date: time?
@@ -275,9 +275,9 @@ Use heuristics to detect copy-pasted code:
 📍 DUPLICATED BLOCK: Error handling (identical in 3 locations)
 
 Locations:
-  - backend/src/api/user_api.gcl:67-74
-  - backend/src/api/document_api.gcl:123-130
-  - backend/src/api/search_api.gcl:45-52
+  - src/api/user_api.gcl:67-74
+  - src/api/document_api.gcl:123-130
+  - src/api/search_api.gcl:45-52
 
 Code (8 lines):
   try {
@@ -315,7 +315,7 @@ Identify GreyCat-specific anti-patterns and bad practices.
 
 ```bash
 # Find local variable declarations with persistent types
-grep -rn "var.*= nodeList\|var.*= nodeIndex" backend/ --include="*.gcl" -B 2 -A 2
+grep -rn "var.*= nodeList\|var.*= nodeIndex" src/ --include="*.gcl" -B 2 -A 2
 ```
 
 **Analysis**:
@@ -324,7 +324,7 @@ grep -rn "var.*= nodeList\|var.*= nodeIndex" backend/ --include="*.gcl" -B 2 -A 
 
 **Example Output**:
 ```
-📍 backend/src/service/builder_service.gcl:34
+📍 src/service/builder_service.gcl:34
 
 ⚠️ ANTI-PATTERN: Local variable using nodeList
 
@@ -354,14 +354,14 @@ Priority: HIGH
 
 ```bash
 # Find @expose functions
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 5
+grep -rn "@expose" src/api/ --include="*.gcl" -A 5
 
 # For each, check return type has @volatile
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/search_api.gcl:23
+📍 src/api/search_api.gcl:23
 
 ⚠️ ANTI-PATTERN: Missing @volatile on API response type
 
@@ -371,7 +371,7 @@ Function:
       ...
   }
 
-Type Definition (backend/src/api/api_types.gcl:45):
+Type Definition (src/api/api_types.gcl:45):
   type SearchResults {  ← Missing @volatile decorator
       items: Array<ResultView>;
       total: int;
@@ -397,13 +397,13 @@ Priority: MEDIUM
 
 ```bash
 # Find nodeList/nodeIndex storing objects not nodes
-grep -rn "nodeList<[^n].*>" backend/ --include="*.gcl"
-grep -rn "nodeIndex<.*,\s*[^n].*>" backend/ --include="*.gcl"
+grep -rn "nodeList<[^n].*>" src/ --include="*.gcl"
+grep -rn "nodeIndex<.*,\s*[^n].*>" src/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/model/data.gcl:12
+📍 src/model/data.gcl:12
 
 ⚠️ ANTI-PATTERN: Storing objects directly in nodeList
 
@@ -429,14 +429,14 @@ Priority: HIGH (breaks persistence model)
 
 ```bash
 # Find type fields with collections
-grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" backend/src/model/ --include="*.gcl"
+grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/model/ --include="*.gcl"
 ```
 
 Check if initialization happens in object creation.
 
 **Example Output**:
 ```
-📍 backend/src/model/document.gcl:8
+📍 src/model/document.gcl:8
 
 ⚠️ ANTI-PATTERN: Non-nullable collection not initialized
 
@@ -446,7 +446,7 @@ Type:
       chunks: nodeList<node<Chunk>>;  ← Non-nullable, must initialize
   }
 
-Usage (backend/src/service/import_service.gcl:45):
+Usage (src/service/import_service.gcl:45):
   var doc = node<Document>{ Document {
       id: "123",
       // chunks not initialized ← WILL FAIL at runtime
@@ -474,12 +474,12 @@ Priority: HIGH (runtime error)
 
 ```bash
 # Find potential null dereference
-grep -rn "\.resolve()\..*\..*\|->.*->.*" backend/ --include="*.gcl"
+grep -rn "\.resolve()\..*\..*\|->.*->.*" src/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/service/data_service.gcl:67
+📍 src/service/data_service.gcl:67
 
 ⚠️ ANTI-PATTERN: Potential null pointer dereference
 
@@ -507,12 +507,12 @@ Identify performance bottlenecks and inefficiencies.
 
 ```bash
 # Find loops with potential expensive operations
-grep -rn "for.*in.*{" backend/ --include="*.gcl" -A 10 | grep -E "\.resolve\(\)|\.get\(|->.*->"
+grep -rn "for.*in.*{" src/ --include="*.gcl" -A 10 | grep -E "\.resolve\(\)|\.get\(|->.*->"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/service/query_service.gcl:89
+📍 src/service/query_service.gcl:89
 
 ⚠️ OPTIMIZATION: Repeated node resolution in loop
 
@@ -544,12 +544,12 @@ Analyze query patterns to suggest missing indices:
 
 ```bash
 # Find linear searches that could use indices
-grep -rn "for.*in.*if.*==.*return" backend/ --include="*.gcl"
+grep -rn "for.*in.*if.*==.*return" src/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/service/user_service.gcl:34
+📍 src/service/user_service.gcl:34
 
 ⚠️ OPTIMIZATION: Linear search could use index
 
@@ -586,12 +586,12 @@ Priority: HIGH
 
 ```bash
 # Find loops that could use for-in syntax or better iteration
-grep -rn "for (.*=.*;.*<.*\.size().*;.*++)" backend/ --include="*.gcl"
+grep -rn "for (.*=.*;.*<.*\.size().*;.*++)" src/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/service/processor.gcl:56
+📍 src/service/processor.gcl:56
 
 ⚠️ OPTIMIZATION: C-style loop could use for-in
 
@@ -618,14 +618,14 @@ Priority: LOW (readability improvement)
 
 ```bash
 # Find @expose functions returning full objects
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 10
+grep -rn "@expose" src/api/ --include="*.gcl" -A 10
 ```
 
 Check if response includes unnecessary fields.
 
 **Example Output**:
 ```
-📍 backend/src/api/document_api.gcl:45
+📍 src/api/document_api.gcl:45
 
 ⚠️ OPTIMIZATION: API returning too much data
 
@@ -665,14 +665,14 @@ Priority: MEDIUM
 
 ```bash
 # Find local variables with node types
-grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" backend/src --include="*.gcl" | \
+grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" src --include="*.gcl" | \
     grep "    " | \  # Has indentation (not module-level)
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Local variable using persistent type"
     done
 
 # Find function returns with nodeList/nodeIndex
-grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" backend/src --include="*.gcl" | \
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gcl" | \
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Function returning persistent collection"
     done
@@ -680,7 +680,7 @@ grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" backend/src --inclu
 
 **Example Output**:
 ```
-📍 backend/src/service/processor.gcl:120
+📍 src/service/processor.gcl:120
 
 🔴 CRITICAL: Unnecessary node allocation
 
@@ -722,20 +722,20 @@ Priority: CRITICAL
 
 ```bash
 # Look for custom sort implementations
-grep -rn "fn [a-z_]*sort" backend/src --include="*.gcl" -A 20 | \
+grep -rn "fn [a-z_]*sort" src --include="*.gcl" -A 20 | \
     grep -A 15 "for.*for" | \  # Nested loops suggest manual sort
     head -20
 
 # Look for custom min/max
-grep -rn "fn find_\(max\|min\)" backend/src --include="*.gcl"
+grep -rn "fn find_\(max\|min\)" src --include="*.gcl"
 
 # Look for custom string join
-grep -rn "fn [a-z_]*join" backend/src --include="*.gcl" -A 10
+grep -rn "fn [a-z_]*join" src --include="*.gcl" -A 10
 ```
 
 **Example Output**:
 ```
-📍 backend/src/util/array_utils.gcl:23
+📍 src/util/array_utils.gcl:23
 
 🟡 MEDIUM: Reimplemented native function
 
@@ -774,7 +774,7 @@ Priority: MEDIUM
 
 ```bash
 # Find functions with single return statement calling another function
-for file in $(find backend/src -name "*.gcl"); do
+for file in $(find src -name "*.gcl"); do
     awk '/^fn [a-z_].*{$/ {
         func_line = NR;
         func = $0;
@@ -788,7 +788,7 @@ done
 
 **Example Output**:
 ```
-📍 backend/src/api/user_api.gcl:67
+📍 src/api/user_api.gcl:67
 
 🟡 MEDIUM: Useless function wrapper
 
@@ -820,7 +820,7 @@ Priority: LOW
 
 ```bash
 # Find nested loops with conditionals (potential O(n²))
-grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 5 | \
+grep -rn "for.*in.*{" src --include="*.gcl" -A 5 | \
     grep -B 1 "for.*in.*{" | \
     grep -A 3 "if.*==" | \
     head -30
@@ -828,7 +828,7 @@ grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 5 | \
 
 **Example Output**:
 ```
-📍 backend/src/processor/matcher.gcl:89
+📍 src/processor/matcher.gcl:89
 
 🔴 CRITICAL: O(n²) algorithmic complexity
 
@@ -879,7 +879,7 @@ Check for proper service abstraction:
 
 ```bash
 # Find abstract types (services)
-grep -rn "^abstract type.*Service" backend/src/service/ --include="*.gcl"
+grep -rn "^abstract type.*Service" src/service/ --include="*.gcl"
 ```
 
 Verify:
@@ -892,9 +892,9 @@ Verify:
 ✓ GOOD: Proper service organization
 
 Services found:
-  - UserService (backend/src/service/auth/user_service.gcl)
-  - DocumentService (backend/src/service/data/document_service.gcl)
-  - SearchService (backend/src/service/search/search_service.gcl)
+  - UserService (src/service/auth/user_service.gcl)
+  - DocumentService (src/service/data/document_service.gcl)
+  - SearchService (src/service/search/search_service.gcl)
 
 Pattern compliance:
   ✓ All use abstract type
@@ -908,14 +908,14 @@ Global indices must be defined before types that use them:
 
 ```bash
 # Check definition order in model files
-grep -rn "^var\|^type" backend/src/model/ --include="*.gcl"
+grep -rn "^var\|^type" src/model/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
 ⚠️ WARNING: Index defined after type that uses it
 
-File: backend/src/model/data.gcl
+File: src/model/data.gcl
 
 Line 10: type Document {
 Line 15:     // references documents_by_id
@@ -938,14 +938,14 @@ Verify all @expose functions have @permission decorator:
 
 ```bash
 # Find @expose without @permission
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 1 | grep -v "@permission"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 1 | grep -v "@permission"
 ```
 
 **Example Output**:
 ```
 ⚠️ WARNING: @expose function missing @permission
 
-Function: backend/src/api/admin_api.gcl:34
+Function: src/api/admin_api.gcl:34
   @expose
   fn deleteUser(userId: String): bool {  ← Missing @permission
       ...
@@ -971,7 +971,7 @@ Check for proper error handling in API functions:
 
 ```bash
 # Find @expose functions without try-catch
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 20 | grep -v "try\|catch"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 20 | grep -v "try\|catch"
 ```
 
 ---
@@ -1032,7 +1032,7 @@ git status
 ```bash
 # For each unused function, use Edit tool to remove
 # Example:
-# Edit file: backend/src/service/helper.gcl
+# Edit file: src/service/helper.gcl
 # Remove lines 45-67 (unused function processOldFormat)
 ```
 
@@ -1093,7 +1093,7 @@ Report each fix applied and verify with lint.
 ===============================================================================
 BACKEND REVIEW & CLEANUP REPORT
 ===============================================================================
-Project: backend/src/
+Project: src/
 Files Analyzed: 45 .gcl files
 Analysis Date: 2024-01-15
 
@@ -1127,19 +1127,19 @@ HIGH PRIORITY ISSUES
 ===============================================================================
 
 1. SECURITY: Missing @permission on admin function
-   📍 backend/src/api/admin_api.gcl:34
+   📍 src/api/admin_api.gcl:34
    Priority: HIGH
    Effort: 5 minutes
    [Details above]
 
 2. ANTI-PATTERN: Local variable using nodeList
-   📍 backend/src/service/builder.gcl:67
+   📍 src/service/builder.gcl:67
    Priority: HIGH
    Effort: 2 minutes
    [Details above]
 
 3. PERFORMANCE: Missing index on frequent query
-   📍 backend/src/service/user_service.gcl:34
+   📍 src/service/user_service.gcl:34
    Priority: HIGH
    Effort: 15 minutes
    [Details above]
@@ -1158,7 +1158,7 @@ MEDIUM PRIORITY ISSUES
 
 ## Success Criteria
 
-✓ **All backend files scanned** (.gcl files in backend/src/)
+✓ **All backend files scanned** (.gcl files in src/)
 ✓ **Dead code identified** with safe-to-delete classification
 ✓ **Duplications detected** with refactoring suggestions
 ✓ **Anti-patterns found** with fix recommendations
@@ -1200,7 +1200,7 @@ greycat-lang lint  # ✓ Passes
 greycat test       # ✓ All tests pass
 
 # 6. Commit
-git add backend/
+git add src/
 git commit -m "Backend cleanup: remove dead code, fix anti-patterns"
 
 # 7. Address remaining issues

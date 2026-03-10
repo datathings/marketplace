@@ -53,12 +53,12 @@ Ensure TypeScript best practices are followed.
 **Find `any` usage**:
 ```bash
 # Search for 'any' type usage
-grep -rn ": any\|<any>" frontend/src/ --include="*.ts" --include="*.tsx"
+grep -rn ": any\|<any>" app/ --include="*.ts" --include="*.tsx"
 ```
 
 **Example Output**:
 ```
-frontend/src/components/DataTable.tsx:45
+app/components/DataTable.tsx:45
 
 CODE QUALITY: Using 'any' type
 
@@ -87,12 +87,12 @@ Impact: Type safety, maintainability
 
 ```bash
 # Find service calls not using withRetry
-grep -rn "gc\.\w\+(" frontend/src/services/ --include="*.ts" | grep -v "withRetry"
+grep -rn "gc\.\w\+(" app/services/ --include="*.ts" | grep -v "withRetry"
 ```
 
 **Example Output**:
 ```
-frontend/src/services/documentService.ts:12
+app/services/documentService.ts:12
 
 CODE QUALITY: Service call without retry wrapper
 
@@ -115,7 +115,7 @@ Impact: Reliability, error handling
 
 ```bash
 # Run bundle analyzer (if available)
-cd frontend && npm run analyze 2>/dev/null || echo "No bundle analyzer configured"
+cd app && npm run analyze 2>/dev/null || echo "No bundle analyzer configured"
 ```
 
 Look for:
@@ -127,7 +127,7 @@ Look for:
 
 ```bash
 # Find large pages without lazy loading
-grep -rn "import.*from.*pages" frontend/src/ --include="*.ts" --include="*.tsx" | grep -v "lazy\|dynamic"
+grep -rn "import.*from.*pages" app/ --include="*.ts" --include="*.tsx" | grep -v "lazy\|dynamic"
 ```
 
 ---
@@ -138,7 +138,7 @@ grep -rn "import.*from.*pages" frontend/src/ --include="*.ts" --include="*.tsx" 
 
 ```bash
 # Find similar patterns
-find frontend/src -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -20
+find app -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -20
 ```
 
 Manually review large files for duplication.
@@ -151,14 +151,14 @@ Manually review large files for duplication.
 
 ```bash
 # Find dangerouslySetInnerHTML or innerHTML usage
-grep -rn "dangerouslySetInnerHTML\|innerHTML" frontend/src/ --include="*.ts" --include="*.tsx"
+grep -rn "dangerouslySetInnerHTML\|innerHTML" app/ --include="*.ts" --include="*.tsx"
 ```
 
 ### Step 4.2: Sensitive Data in Client
 
 ```bash
 # Find potential secrets in code
-grep -rn "api.*key\|secret\|password" frontend/src/ --include="*.ts" --include="*.tsx" -i
+grep -rn "api.*key\|secret\|password" app/ --include="*.ts" --include="*.tsx" -i
 ```
 
 ---
@@ -169,11 +169,11 @@ grep -rn "api.*key\|secret\|password" frontend/src/ --include="*.ts" --include="
 
 **Detect package manager**:
 ```bash
-if [ -f "frontend/package-lock.json" ]; then
+if [ -f "app/package-lock.json" ]; then
     PKG_MGR="npm"
-elif [ -f "frontend/pnpm-lock.yaml" ]; then
+elif [ -f "app/pnpm-lock.yaml" ]; then
     PKG_MGR="pnpm"
-elif [ -f "frontend/yarn.lock" ]; then
+elif [ -f "app/yarn.lock" ]; then
     PKG_MGR="yarn"
 else
     PKG_MGR="npm"
@@ -182,7 +182,7 @@ fi
 
 **Run analyzer**:
 ```bash
-cd frontend
+cd app
 
 # Check if knip is configured
 if grep -q "knip" package.json; then
@@ -233,7 +233,7 @@ LOW (Nice to Have):
 
 ## Success Criteria
 
-- **All frontend files scanned** (.ts/.tsx in frontend/src/)
+- **All frontend files scanned** (.ts/.tsx in app/)
 - **TypeScript quality checked** (any usage, type safety)
 - **Performance analyzed** (bundle, lazy loading)
 - **Architecture reviewed** (duplication, organization)

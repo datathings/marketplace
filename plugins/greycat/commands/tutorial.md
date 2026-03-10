@@ -415,8 +415,8 @@ Best practices for data modeling:
 4. Keep model files separate from services
 
 File structure:
-  backend/src/model/user.gcl       - type User + indices
-  backend/src/service/user_service.gcl - business logic
+  src/model/user.gcl       - type User + indices
+  src/service/user_service.gcl - business logic
 ```
 
 **Example** - City/Country hierarchy with complete model.

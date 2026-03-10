@@ -76,20 +76,20 @@ if [ ! -f "project.gcl" ]; then
 fi
 
 # Check standard directories exist
-if [ ! -d "backend/src/model" ]; then
-    mkdir -p backend/src/model
+if [ ! -d "src/model" ]; then
+    mkdir -p src/model
 fi
 
-if [ ! -d "backend/src/service" ]; then
-    mkdir -p backend/src/service
+if [ ! -d "src/service" ]; then
+    mkdir -p src/service
 fi
 
-if [ ! -d "backend/src/api" ]; then
-    mkdir -p backend/src/api
+if [ ! -d "src/api" ]; then
+    mkdir -p src/api
 fi
 
-if [ ! -d "backend/test" ]; then
-    mkdir -p backend/test
+if [ ! -d "src/test" ]; then
+    mkdir -p src/test
 fi
 ```
 
@@ -171,13 +171,13 @@ AskUserQuestion({
 
 ```bash
 # Check for existing services
-EXISTING_SERVICES=$(find backend/src/service -name "*_service.gcl" 2>/dev/null | head -3)
+EXISTING_SERVICES=$(find src/service -name "*_service.gcl" 2>/dev/null | head -3)
 
 # Check for existing models
-EXISTING_MODELS=$(find backend/src/model -name "*.gcl" 2>/dev/null | head -3)
+EXISTING_MODELS=$(find src/model -name "*.gcl" 2>/dev/null | head -3)
 
 # Check for existing APIs
-EXISTING_APIS=$(find backend/src/api -name "*_api.gcl" 2>/dev/null | head -3)
+EXISTING_APIS=$(find src/api -name "*_api.gcl" 2>/dev/null | head -3)
 ```
 
 **Detect patterns** using Read tool:
@@ -192,7 +192,7 @@ EXISTING_APIS=$(find backend/src/api -name "*_api.gcl" 2>/dev/null | head -3)
 
 ### A. Generate Model File
 
-**File**: `backend/src/model/{entity_name_snake}.gcl`
+**File**: `src/model/{entity_name_snake}.gcl`
 
 **Template for CRUD**:
 
@@ -236,7 +236,7 @@ var device_id_counter: node<int?>;
 
 ### B. Generate Service File
 
-**File**: `backend/src/service/{entity_name_snake}_service.gcl`
+**File**: `src/service/{entity_name_snake}_service.gcl`
 
 **Template**:
 
@@ -369,7 +369,7 @@ abstract type DeviceService {
 
 ### C. Generate API File
 
-**File**: `backend/src/api/{entity_name_snake}_api.gcl`
+**File**: `src/api/{entity_name_snake}_api.gcl`
 
 **Template**:
 
@@ -579,7 +579,7 @@ fn delete_device(id: int) {
 
 ### D. Generate Test File
 
-**File**: `backend/test/{entity_name_snake}_test.gcl`
+**File**: `src/test/{entity_name_snake}_test.gcl`
 
 **Template**:
 
@@ -787,17 +787,17 @@ SCAFFOLD COMPLETE
 
 Generated files for entity: Device
 
-✓ backend/src/model/device.gcl (32 lines)
+✓ src/model/device.gcl (32 lines)
   - Device type with 5 fields
   - 2 global indices (by_id, by_name)
   - ID counter
 
-✓ backend/src/service/device_service.gcl (87 lines)
+✓ src/service/device_service.gcl (87 lines)
   - create, find_by_id, find_by_name, list_all
   - update_name, update_status
   - delete with validation
 
-✓ backend/src/api/device_api.gcl (98 lines)
+✓ src/api/device_api.gcl (98 lines)
   - 3 volatile types (DeviceView, DeviceCreate, DeviceUpdate)
   - 5 API endpoints (@expose):
     - GET get_devices() [@permission("public")]
@@ -806,7 +806,7 @@ Generated files for entity: Device
     - PUT update_device(id, data) [@permission("admin")]
     - DELETE delete_device(id) [@permission("admin")]
 
-✓ backend/test/device_test.gcl (112 lines)
+✓ src/test/device_test.gcl (112 lines)
   - 8 test cases covering CRUD and validation
 
 ===============================================================================
@@ -815,7 +815,7 @@ Lint: ✓ All files passed
 
 Next steps:
   1. Review generated code and customize as needed
-  2. Run tests: greycat test backend/test/device_test.gcl
+  2. Run tests: greycat test src/test/device_test.gcl
   3. Start server: greycat serve
   4. Test endpoints:
      curl http://localhost:8080/create_device -d '{"name":"Test","lat":48.8,"lng":2.3,"status":"active"}'

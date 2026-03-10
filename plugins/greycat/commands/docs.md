@@ -36,18 +36,18 @@ echo "Analyzing project structure..."
 # Check for frontend
 HAS_FRONTEND=false
 if [ -d "frontend" ]; then
-    HAS_FRONTEND=true
+    HAS_app=true
 fi
 
 # Check for tests
 HAS_TESTS=false
-if [ -d "backend/test" ]; then
+if [ -d "src/test" ]; then
     HAS_TESTS=true
 fi
 
 # Count files and data
-BACKEND_FILES=$(find backend/src -name "*.gcl" | wc -l)
-TEST_FILES=$(find backend/test -name "*_test.gcl" 2>/dev/null | wc -l)
+src_FILES=$(find src -name "*.gcl" | wc -l)
+TEST_FILES=$(find src/test -name "*_test.gcl" 2>/dev/null | wc -l)
 ```
 
 ### Step 1.2: Extract Project Information
@@ -63,25 +63,25 @@ grep "@permission\|@role" project.gcl
 # Extract main function to understand entry point
 ```
 
-**B. From Backend**:
+**B. From src**:
 ```bash
 # Find all types (data model)
-grep -rn "^type [A-Z]" backend/src/model/ --include="*.gcl"
+grep -rn "^type [A-Z]" src/model/ --include="*.gcl"
 
 # Find all services
-grep -rn "^abstract type.*Service" backend/src/service/ --include="*.gcl"
+grep -rn "^abstract type.*Service" src/service/ --include="*.gcl"
 
 # Find all API endpoints
-grep -rn "@expose" backend/src/api/ --include="*.gcl"
+grep -rn "@expose" src/api/ --include="*.gcl"
 ```
 
 **C. From Frontend** (if exists):
 ```bash
 # Check package.json for dependencies
-cat frontend/package.json | grep -E "typescript|vite"
+cat app/package.json | grep -E "typescript|vite"
 
 # Find pages
-find frontend/src/pages -name "*.tsx" 2>/dev/null
+find app/pages -name "*.tsx" 2>/dev/null
 ```
 
 **D. From Data**:
@@ -107,7 +107,7 @@ find data/ -name "*.gguf" 2>/dev/null
 [Auto-generated project description based on detected features]
 
 **Technology Stack**:
-- Backend: GreyCat [version] (GCL language)
+- src: GreyCat [version] (GCL language)
 - [If has_frontend] Frontend: TypeScript + [build tool]
 - [If has AI libs] AI/ML: llama.cpp, embeddings
 - [List other detected libraries: kafka, sql, etc.]
@@ -139,14 +139,14 @@ cd [project-name]
 greycat install
 
 # [If has_frontend] Install frontend dependencies
-cd frontend
+cd app
 pnpm install
 cd ..
 \`\`\`
 
 ### Running the Application
 
-**Backend**:
+**src**:
 \`\`\`bash
 # Start GreyCat server
 greycat serve
@@ -157,7 +157,7 @@ greycat serve
 
 **[If has_frontend] Frontend**:
 \`\`\`bash
-cd frontend
+cd app
 pnpm dev
 
 # Frontend will start on http://localhost:3000
@@ -177,7 +177,7 @@ greycat run importVector
 ### Data Model
 
 **Core Node Types**:
-[Auto-extracted from backend/src/model/]
+[Auto-extracted from src/model/]
 
 \`\`\`
 [Generate simple ASCII art or list of types with relationships]
@@ -208,7 +208,7 @@ See [API Documentation](#api-documentation) for full details.
 \`\`\`
 .
 ├── project.gcl                 # Entry point, libraries, permissions
-├── backend/
+├── src/
 │   ├── src/
 │   │   ├── model/              # Data types and global indices
 │   │   ├── service/            # Business logic services
@@ -229,7 +229,7 @@ See [API Documentation](#api-documentation) for full details.
 
 ### Common Commands
 
-**Backend (GreyCat)**:
+**src (GreyCat)**:
 \`\`\`bash
 greycat build                   # Build project
 greycat-lang lint               # Lint code (run after each change!)
@@ -241,7 +241,7 @@ greycat codegen ts              # Generate TypeScript types
 
 **[If has_frontend] Frontend**:
 \`\`\`bash
-cd frontend
+cd app
 pnpm dev                        # Dev server
 pnpm build                      # Production build
 pnpm lint                       # Lint TypeScript
@@ -261,17 +261,17 @@ greycat-lang lint
 # 4. Test your changes
 greycat test
 
-# 5. [If has_frontend] Update frontend types if backend changed
+# 5. [If has_frontend] Update frontend types if src changed
 greycat codegen ts
 \`\`\`
 
 ## Testing
 
 [If has_tests]
-**Backend Tests**:
+**src Tests**:
 \`\`\`bash
 greycat test                    # Run all tests
-greycat test backend/test/specific_test.gcl  # Run specific test
+greycat test src/test/specific_test.gcl  # Run specific test
 \`\`\`
 
 Current test coverage: [X test files, Y test functions]
@@ -279,7 +279,7 @@ Current test coverage: [X test files, Y test functions]
 [If has_frontend with tests]
 **Frontend Tests**:
 \`\`\`bash
-cd frontend
+cd app
 pnpm test                       # Run tests
 pnpm test:coverage              # Coverage report
 \`\`\`
@@ -371,7 +371,7 @@ rm -rf gcdata && greycat run import
 
 **[If has_frontend] Frontend API Errors**:
 \`\`\`bash
-# Ensure backend is running
+# Ensure src is running
 greycat serve
 
 # Regenerate TypeScript types
@@ -384,7 +384,7 @@ greycat codegen ts
 
 [Auto-generate current stats]
 
-- Backend Files: [X] .gcl files
+- src Files: [X] .gcl files
 - Data Model: [Y] types
 - API Endpoints: [Z] @expose functions
 - Services: [N] service classes
@@ -434,7 +434,7 @@ Generate comprehensive API documentation from @expose endpoints.
 
 ```bash
 # Find all API endpoints
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 20
+grep -rn "@expose" src/api/ --include="*.gcl" -A 20
 ```
 
 For each endpoint, extract:
@@ -646,7 +646,7 @@ Document Model Context Protocol (MCP) server if project uses @tag("mcp").
 
 ```bash
 # Find functions tagged with @tag("mcp")
-grep -rn '@tag("mcp")' backend/ --include="*.gcl" -A 10
+grep -rn '@tag("mcp")' src/ --include="*.gcl" -A 10
 ```
 
 ### Step 3.2: Generate MCP.md

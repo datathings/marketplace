@@ -35,7 +35,7 @@ Ensure all endpoints are secure and properly protected.
 **Find @expose without @permission**:
 ```bash
 # Find all @expose functions
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -B 1 -A 5 | grep -A 5 -B 1 "@expose"
+grep -rn "@expose" src/api/ --include="*.gcl" -B 1 -A 5 | grep -A 5 -B 1 "@expose"
 ```
 
 For each @expose function, verify:
@@ -45,7 +45,7 @@ For each @expose function, verify:
 
 **Output Format**:
 ```
-📍 backend/src/api/admin_api.gcl:45
+📍 src/api/admin_api.gcl:45
 
 ⚠️ SECURITY: Missing @permission decorator
 
@@ -77,7 +77,7 @@ Check for dangerous input patterns:
 
 ```bash
 # Find endpoints that take String parameters (potential injection)
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 10 | grep "fn.*String"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 10 | grep "fn.*String"
 ```
 
 Verify each endpoint validates input:
@@ -88,7 +88,7 @@ Verify each endpoint validates input:
 
 **Example Output**:
 ```
-📍 backend/src/api/search_api.gcl:23
+📍 src/api/search_api.gcl:23
 
 ⚠️ SECURITY: Insufficient input validation
 
@@ -130,7 +130,7 @@ Check for endpoints returning sensitive information:
 
 ```bash
 # Find endpoints returning User, Password, Token types
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 10 | grep -E "User|Password|Token|Secret|Key"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 10 | grep -E "User|Password|Token|Secret|Key"
 ```
 
 Verify:
@@ -140,7 +140,7 @@ Verify:
 
 **Example Output**:
 ```
-📍 backend/src/api/user_api.gcl:67
+📍 src/api/user_api.gcl:67
 
 ⚠️ SECURITY: Potential sensitive data exposure
 
@@ -195,12 +195,12 @@ Find endpoints that should check authentication:
 
 ```bash
 # Find mutation operations with public permission
-grep -rn '@permission("public")' backend/src/api/ --include="*.gcl" -A 10 | grep -E "fn (create|update|delete|set|modify|remove)"
+grep -rn '@permission("public")' src/api/ --include="*.gcl" -A 10 | grep -E "fn (create|update|delete|set|modify|remove)"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/document_api.gcl:89
+📍 src/api/document_api.gcl:89
 
 ⚠️ SECURITY: Mutation allowed without authentication
 
@@ -246,14 +246,14 @@ Find list endpoints without pagination:
 
 ```bash
 # Find endpoints returning Array without pagination parameters
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 10 | grep "Array<"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 10 | grep "Array<"
 ```
 
 Check if endpoint has offset/limit parameters:
 
 **Example Output**:
 ```
-📍 backend/src/api/document_api.gcl:34
+📍 src/api/document_api.gcl:34
 
 ⚠️ PERFORMANCE: Missing pagination on list endpoint
 
@@ -315,12 +315,12 @@ Find endpoints with potentially expensive operations:
 
 ```bash
 # Find nested loops in @expose functions
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 50 | grep -E "for.*for"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 50 | grep -E "for.*for"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/stats_api.gcl:45
+📍 src/api/stats_api.gcl:45
 
 ⚠️ PERFORMANCE: Expensive nested loops in endpoint
 
@@ -374,12 +374,12 @@ Find endpoints that might have N+1 query issues:
 
 ```bash
 # Look for loops with individual node resolutions
-grep -rn "for.*in.*" backend/src/api/ --include="*.gcl" -A 5 | grep "\.resolve()"
+grep -rn "for.*in.*" src/api/ --include="*.gcl" -A 5 | grep "\.resolve()"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/document_api.gcl:78
+📍 src/api/document_api.gcl:78
 
 ⚠️ PERFORMANCE: N+1 query pattern
 
@@ -444,12 +444,12 @@ Find endpoints without error handling:
 
 ```bash
 # Find @expose functions without try-catch
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 30 | grep -L "try\|catch"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 30 | grep -L "try\|catch"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/data_api.gcl:56
+📍 src/api/data_api.gcl:56
 
 ⚠️ ERROR HANDLING: No try-catch block
 
@@ -494,12 +494,12 @@ Find endpoints with potential null dereference:
 
 ```bash
 # Find .resolve() calls without null checks
-grep -rn "\.resolve()\." backend/src/api/ --include="*.gcl"
+grep -rn "\.resolve()\." src/api/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/document_api.gcl:90
+📍 src/api/document_api.gcl:90
 
 ⚠️ ERROR HANDLING: Potential null pointer dereference
 
@@ -549,7 +549,7 @@ Check for helpful error messages:
 
 **Example Output**:
 ```
-📍 backend/src/api/user_api.gcl:45
+📍 src/api/user_api.gcl:45
 
 ⚠️ ERROR HANDLING: Unhelpful error message
 
@@ -594,14 +594,14 @@ Find response types missing @volatile:
 
 ```bash
 # Extract return types from @expose functions
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//' | sort -u
+grep -rn "@expose" src/api/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//' | sort -u
 ```
 
 For each type, check if it has @volatile decorator:
 
 **Example Output**:
 ```
-📍 backend/src/api/api_types.gcl:45
+📍 src/api/api_types.gcl:45
 
 ⚠️ TYPE SAFETY: Missing @volatile on API response type
 
@@ -613,7 +613,7 @@ Type:
   }
 
 Used in:
-  - backend/src/api/search_api.gcl:23 (return type)
+  - src/api/search_api.gcl:23 (return type)
 
 Problem:
   - API response type not marked as @volatile
@@ -638,12 +638,12 @@ Find endpoints with overly broad types:
 
 ```bash
 # Find endpoints using Object, any, or dynamic types
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 10 | grep -E ": Object|: any"
+grep -rn "@expose" src/api/ --include="*.gcl" -A 10 | grep -E ": Object|: any"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/generic_api.gcl:34
+📍 src/api/generic_api.gcl:34
 
 ⚠️ TYPE SAFETY: Overly broad parameter type
 
@@ -692,7 +692,7 @@ Check endpoint naming conventions:
 
 ```bash
 # Extract all function names from @expose
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -A 1 | grep "fn " | sed 's/.*fn //' | sed 's/(.*//'
+grep -rn "@expose" src/api/ --include="*.gcl" -A 1 | grep "fn " | sed 's/.*fn //' | sed 's/(.*//'
 ```
 
 Verify:
@@ -727,12 +727,12 @@ Find endpoints without comments:
 
 ```bash
 # Find @expose functions without preceding comment
-grep -rn "@expose" backend/src/api/ --include="*.gcl" -B 3 | grep -v "//.*"
+grep -rn "@expose" src/api/ --include="*.gcl" -B 3 | grep -v "//.*"
 ```
 
 **Example Output**:
 ```
-📍 backend/src/api/search_api.gcl:67
+📍 src/api/search_api.gcl:67
 
 ⚠️ DOCUMENTATION: Missing function documentation
 
@@ -773,7 +773,7 @@ Find endpoints with too much logic:
 
 ```bash
 # Find @expose functions with many lines
-for file in $(find backend/src/api -name "*.gcl"); do
+for file in $(find src/api -name "*.gcl"); do
     grep -n "@expose" "$file" -A 100 | awk '/^[0-9]+-fn /,/^[0-9]+-}/' | wc -l
 done
 ```
@@ -782,7 +782,7 @@ Functions > 50 lines should be reviewed.
 
 **Example Output**:
 ```
-📍 backend/src/api/complex_api.gcl:23
+📍 src/api/complex_api.gcl:23
 
 ⚠️ COMPLEXITY: Endpoint too complex
 
@@ -798,7 +798,7 @@ Problem:
 Recommendation:
   Move logic to service:
 
-  // In backend/src/service/workflow_service.gcl
+  // In src/service/workflow_service.gcl
   abstract type WorkflowService {
       static fn processComplexWorkflow(input: Input): Result {
           // ... 147 lines of logic here

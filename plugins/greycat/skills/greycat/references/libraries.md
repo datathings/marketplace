@@ -8,7 +8,7 @@ Available libraries and their `@library()` declarations. Use the LSP (hover, com
 
 ```gcl
 @library("std", "<version>");        // Required — core types, collections, I/O, runtime, util
-@library("explorer", "<version>");   // Graph UI served at /explorer
+@library("explorer", "<version>");   // Graph UI and Administration tool served at /explorer
 
 // AI/ML
 @library("ai", "<version>");        // LLM inference (llama.cpp): Model, ChatMessage, embeddings, LoRA
@@ -17,7 +17,6 @@ Available libraries and their `@library()` declarations. Use the LSP (hover, com
 // Integrations
 @library("kafka", "<version>");     // Kafka: KafkaReader, KafkaWriter, KafkaConf
 @library("sql", "<version>");       // PostgreSQL: Postgres, transactions, COPY
-@library("s3", "<version>");        // S3/MinIO: S3, S3Object, S3Bucket (also built into std)
 @library("opcua", "<version>");     // OPC UA: OpcuaClient, read/write/subscribe
 @library("ftp", "<version>");       // FTP/FTPS: Ftp, FtpEntry
 @library("ssh", "<version>");       // SSH/SFTP: Sftp, SshAuth, SftpFile

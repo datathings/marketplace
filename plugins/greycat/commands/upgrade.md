@@ -61,12 +61,6 @@ echo "Core libraries:"
 STD_VERSION=$(curl -s "https://get.greycat.io/files/core/dev/latest" | cut -d'/' -f2)
 EXPLORER_VERSION=$(curl -s "https://get.greycat.io/files/explorer/dev/latest" | cut -d'/' -f2)
 
-# If std version is empty, use explorer version as fallback
-if [ -z "$STD_VERSION" ]; then
-  STD_VERSION="$EXPLORER_VERSION"
-  echo "  Note: std version endpoint returned empty, using explorer version as fallback"
-fi
-
 echo "  std:      $STD_VERSION"
 echo "  explorer: $EXPLORER_VERSION"
 echo ""
@@ -75,11 +69,11 @@ echo ""
 echo "Pro libraries (all share same version):"
 PRO_VERSION=$(curl -s "https://get.greycat.io/files/algebra/dev/latest" | cut -d'/' -f2)
 echo "  Version: $PRO_VERSION"
-echo "  Libraries: ai, algebra, kafka, sql, s3, finance, powerflow, opcua, useragent"
+echo "  Libraries: ai, algebra, kafka, sql, finance, powerflow, opcua, useragent"
 echo ""
 ```
 
-**Note**: All pro libraries (ai, algebra, kafka, sql, s3, finance, powerflow, opcua, useragent) share the same version. We only need to fetch one endpoint.
+**Note**: All pro libraries (ai, algebra, kafka, sql, finance, powerflow, opcua, useragent) share the same version. We only need to fetch one endpoint.
 
 ---
 
@@ -400,7 +394,7 @@ ls -la lib/ | grep kafka
 greycat-lang lint
 
 # Test the library
-greycat serve
+greycat run
 ```
 
 ---
@@ -565,10 +559,10 @@ fn process(data: String): Result {
 
 ```bash
 # Find all usages of deprecated function
-grep -r "DataService::parse" backend/ --include="*.gcl"
+grep -r "DataService::parse" src/ --include="*.gcl"
 
 # Replace across all files
-find backend/ -name "*.gcl" -exec sed -i 's/DataService::parse/DataService::parseString/g' {} \;
+find src/ -name "*.gcl" -exec sed -i 's/DataService::parse/DataService::parseString/g' {} \;
 
 # Verify
 greycat-lang lint

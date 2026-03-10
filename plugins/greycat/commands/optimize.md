@@ -37,7 +37,7 @@ echo "==========================================================================
 echo ""
 
 # Find all GCL files
-GCL_FILES=$(find backend/src -name "*.gcl" -type f | sort)
+GCL_FILES=$(find src -name "*.gcl" -type f | sort)
 FILE_COUNT=$(echo "$GCL_FILES" | wc -l)
 
 echo "Found $FILE_COUNT files to analyze"
@@ -69,7 +69,7 @@ echo ""
 
 # Find local variables with node types
 echo "Checking local variables..."
-grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" backend/src --include="*.gcl" | \
+grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" src --include="*.gcl" | \
     grep -v "^[[:space:]]*var [a-z_][a-zA-Z0-9_]*:" | \  # Exclude module-level (no indentation)
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line"
@@ -79,7 +79,7 @@ grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" backend/sr
 # Find function parameters with node types
 echo ""
 echo "Checking function parameters..."
-grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" backend/src --include="*.gcl" | \
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" src --include="*.gcl" | \
     while IFS=: read -r file line content; do
         # Skip if it's a service method expecting persisted nodes
         if ! grep -q "Service" <<< "$file"; then
@@ -91,7 +91,7 @@ grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" backend/src 
 # Find function returns with nodeList/nodeIndex
 echo ""
 echo "Checking function return types..."
-grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" backend/src --include="*.gcl" | \
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gcl" | \
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line"
         echo "     $content"
@@ -107,15 +107,15 @@ PHASE 1: UNNECESSARY PERSISTENCE
 
 🔴 CRITICAL (3 issues):
 
-  backend/src/api/device_api.gcl:45
+  src/api/device_api.gcl:45
     fn get_devices(): nodeList<node<Device>>
     → Should return: Array<DeviceView> (API best practice)
 
-  backend/src/service/processor.gcl:120
+  src/service/processor.gcl:120
     var results = nodeList<node<Item>> {};
     → Should use: Array<Item> {} (local variable, not persisted)
 
-  backend/src/api/user_api.gcl:78
+  src/api/user_api.gcl:78
     fn process_users(users: nodeList<node<User>>)
     → Should accept: Array<User> (function parameter)
 
@@ -200,7 +200,7 @@ echo ""
 
 # Look for sorting implementations
 echo "Checking for custom sort implementations..."
-grep -rn "fn [a-z_]*sort" backend/src --include="*.gcl" -A 20 | \
+grep -rn "fn [a-z_]*sort" src --include="*.gcl" -A 20 | \
     grep -B 1 -A 15 "for.*for" | \  # Nested loops suggest bubble/selection sort
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Possible custom sort (use .sort_by())"
@@ -209,7 +209,7 @@ grep -rn "fn [a-z_]*sort" backend/src --include="*.gcl" -A 20 | \
 # Look for min/max implementations
 echo ""
 echo "Checking for custom min/max..."
-grep -rn "fn find_\(max\|min\|maximum\|minimum\)" backend/src --include="*.gcl" | \
+grep -rn "fn find_\(max\|min\|maximum\|minimum\)" src --include="*.gcl" | \
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Custom min/max (use Math:: or Tensor)"
     done
@@ -217,7 +217,7 @@ grep -rn "fn find_\(max\|min\|maximum\|minimum\)" backend/src --include="*.gcl" 
 # Look for string join implementations
 echo ""
 echo "Checking for custom string operations..."
-grep -rn "fn [a-z_]*join" backend/src --include="*.gcl" -A 10 | \
+grep -rn "fn [a-z_]*join" src --include="*.gcl" -A 10 | \
     grep -B 1 "for.*in.*{" | \
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Custom join (use .join())"
@@ -233,15 +233,15 @@ PHASE 2: REIMPLEMENTED NATIVE FUNCTIONS
 
 🟡 MEDIUM (3 issues):
 
-  backend/src/util/array_utils.gcl:23
+  src/util/array_utils.gcl:23
     fn sort_by_priority(items: Array<Item>)
     → Use native: items.sort_by(Item::priority, SortOrder::asc)
 
-  backend/src/util/math_utils.gcl:45
+  src/util/math_utils.gcl:45
     fn find_maximum(values: Array<float>)
     → Use Math:: module or Tensor operations
 
-  backend/src/util/string_utils.gcl:67
+  src/util/string_utils.gcl:67
     fn join_with_comma(strings: Array<String>)
     → Use native: strings.join(", ")
 
@@ -301,12 +301,12 @@ PHASE 3: USELESS FUNCTION WRAPPERS
 
 🟡 MEDIUM (5 issues):
 
-  backend/src/api/user_api.gcl:67
+  src/api/user_api.gcl:67
     fn get_user(id: int): node<User>?
     → Single-line wrapper for UserService::find_by_id()
     → Consider calling UserService directly
 
-  backend/src/service/device_helper.gcl:34
+  src/service/device_helper.gcl:34
     fn find_device(id: int): node<Device>?
     → Wraps DeviceService::find_by_id()
 
@@ -349,7 +349,7 @@ echo ""
 
 # Find nested loops
 echo "Checking for nested loops..."
-grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 5 | \
+grep -rn "for.*in.*{" src --include="*.gcl" -A 5 | \
     grep "for.*in.*{" | \
     while IFS=: read -r file line content; do
         # Check if inner loop has conditional matching
@@ -363,7 +363,7 @@ grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 5 | \
 # Find linear searches where index exists
 echo ""
 echo "Checking for linear searches..."
-grep -rn "for.*in.*{" backend/src --include="*.gcl" -A 3 | \
+grep -rn "for.*in.*{" src --include="*.gcl" -A 3 | \
     grep -B 1 "if.*->id ==" | \
     while IFS=: read -r file line content; do
         echo "  ⚠ $file:$line - Linear search by ID"
@@ -380,12 +380,12 @@ PHASE 4: ALGORITHMIC COMPLEXITY
 
 🔴 CRITICAL (2 issues):
 
-  backend/src/processor/matcher.gcl:89
+  src/processor/matcher.gcl:89
     Nested loop: for (user in users) { for (order in orders) { if (order->user_id == user->id) ... } }
     → O(n²) complexity
     → Solution: Create orders_by_user_id: nodeIndex<int, node<Order>>
 
-  backend/src/service/lookup.gcl:134
+  src/service/lookup.gcl:134
     Linear search: for (item in items) { if (item->id == target_id) ... }
     → O(n) when O(1) possible
     → Solution: Use items_by_id nodeIndex
@@ -440,19 +440,19 @@ echo "Phase 5: Detecting code duplication..."
 echo ""
 
 # Find duplicate function signatures (same name, different files)
-grep -rn "^fn [a-z_][a-zA-Z0-9_]*(" backend/src --include="*.gcl" | \
+grep -rn "^fn [a-z_][a-zA-Z0-9_]*(" src --include="*.gcl" | \
     awk -F: '{print $3}' | \
     sort | \
     uniq -d | \
     while read func; do
         echo "  ⚠ Duplicate function signature: $func"
-        grep -rn "$func" backend/src --include="*.gcl"
+        grep -rn "$func" src --include="*.gcl"
     done
 
 # Find repeated patterns (e.g., same error message strings)
 echo ""
 echo "Checking for repeated error messages..."
-grep -rn "throw \"" backend/src --include="*.gcl" | \
+grep -rn "throw \"" src --include="*.gcl" | \
     awk -F'"' '{print $2}' | \
     sort | \
     uniq -c | \
@@ -480,9 +480,9 @@ PHASE 5: CODE DUPLICATION
     → Consider creating error constant or helper function
 
   Similar validation logic in 3 files:
-    - backend/src/service/user_service.gcl:45
-    - backend/src/service/admin_service.gcl:78
-    - backend/src/api/auth_api.gcl:23
+    - src/service/user_service.gcl:45
+    - src/service/admin_service.gcl:78
+    - src/api/auth_api.gcl:23
     → Extract to shared validation function
 
 ===============================================================================
@@ -499,16 +499,16 @@ PHASE 5: CODE DUPLICATION
 PERFORMANCE OPTIMIZATION REPORT
 ===============================================================================
 
-Analyzed: 47 files (backend/src)
+Analyzed: 47 files (src)
 
 Found 17 issues:
 
 🔴 CRITICAL (5):
-  1. backend/src/api/device_api.gcl:45 - API returning nodeList instead of Array<View>
-  2. backend/src/service/processor.gcl:120 - Local var using nodeList instead of Array
-  3. backend/src/processor/matcher.gcl:89 - O(n²) nested loop, needs nodeIndex
-  4. backend/src/api/user_api.gcl:78 - Function parameter using nodeList
-  5. backend/src/service/lookup.gcl:134 - Linear search, needs nodeIndex
+  1. src/api/device_api.gcl:45 - API returning nodeList instead of Array<View>
+  2. src/service/processor.gcl:120 - Local var using nodeList instead of Array
+  3. src/processor/matcher.gcl:89 - O(n²) nested loop, needs nodeIndex
+  4. src/api/user_api.gcl:78 - Function parameter using nodeList
+  5. src/service/lookup.gcl:134 - Linear search, needs nodeIndex
 
 🟡 MEDIUM (8):
   6-10. Reimplemented native functions (sort, max, join, etc.)
@@ -570,11 +570,11 @@ echo "==========================================================================
 echo ""
 
 # Fix 1: API returning nodeList
-echo "Fixing: backend/src/api/device_api.gcl:45"
+echo "Fixing: src/api/device_api.gcl:45"
 # Use Edit tool to change return type from nodeList<node<Device>> to Array<DeviceView>
 
 # Fix 2: Local var using nodeList
-echo "Fixing: backend/src/service/processor.gcl:120"
+echo "Fixing: src/service/processor.gcl:120"
 # Use Edit tool to change "var results = nodeList<node<Item>> {};" to "var results = Array<Item> {};"
 
 # ... apply other fixes
@@ -616,8 +616,8 @@ Fixed 12 issues:
   ✓ 7 medium (native functions, wrappers)
 
 Remaining 5 issues require manual review:
-  ! backend/src/service/complex.gcl:234 - Complex duplication, needs refactoring
-  ! backend/src/processor/advanced.gcl:567 - Algorithmic improvement needs design
+  ! src/service/complex.gcl:234 - Complex duplication, needs refactoring
+  ! src/processor/advanced.gcl:567 - Algorithmic improvement needs design
 
 Lint: ✓ Passes
 
