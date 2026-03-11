@@ -331,6 +331,16 @@ More → [references/testing.md](references/testing.md)
 | `date.to_time("UTC")` | `date.to_time(TimeZone::UTC)` (enum) |
 | `date.toTime(tz)` | `date.to_time(tz)` (snake_case) |
 | `City { name: "X" }` (missing nodeIndex) | `City { name: "X", streets: nodeIndex<..> {} }` |
+| `str.toLowerCase()` | `str.lowercase()` (also `uppercase()`) |
+| `str.split(";")` | `str.split(';')` (takes `char`, not `String`) |
+| `str[i]` for char access | Not supported — no character indexing on strings |
+| `DurationUnit::us` | `DurationUnit::microseconds` |
+| `Assert::notNull(x)` | `Assert::isNotNull(x)` or `Assert::isTrue(x != null)` |
+| `Math::random()` | `Random{}.uniform(min, max)` |
+| Tuple return `(A, B)` | Not supported — use separate helper functions |
+| `fn foo(): void` | `fn foo()` — no void keyword |
+| `CsvFormat { separator: "," }` | `CsvFormat { separator: ',' }` (`char`, not `String`) |
+| Type named `User`, `Job`, `Task` | Conflicts with `runtime::` built-ins — rename (e.g. `Profile`) |
 
 **Native (primitive) types** (`geo`, `time`, `duration`, etc.) have no fields — use methods for access, never field syntax. Construction varies by type: `geo` uses positional `geo{lat, lng}`, `time` uses literals (`5_time`) or static methods (`time::now()`, `time::new(epoch, unit)`, `time::parse(str, fmt)`), `duration` uses literals (`1_us`, `500_ms`) or static methods (`duration::new(v, unit)`).
 

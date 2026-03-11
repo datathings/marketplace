@@ -35,19 +35,19 @@ echo "Analyzing project structure..."
 
 # Check for frontend
 HAS_FRONTEND=false
-if [ -d "frontend" ]; then
-    HAS_app=true
+if [ -d "app" ]; then
+    HAS_FRONTEND=true
 fi
 
 # Check for tests
 HAS_TESTS=false
-if [ -d "src/test" ]; then
+if [ -d "test" ]; then
     HAS_TESTS=true
 fi
 
 # Count files and data
 src_FILES=$(find src -name "*.gcl" | wc -l)
-TEST_FILES=$(find src/test -name "*_test.gcl" 2>/dev/null | wc -l)
+TEST_FILES=$(find test -name "*_test.gcl" 2>/dev/null | wc -l)
 ```
 
 ### Step 1.2: Extract Project Information
@@ -66,13 +66,13 @@ grep "@permission\|@role" project.gcl
 **B. From src**:
 ```bash
 # Find all types (data model)
-grep -rn "^type [A-Z]" src/model/ --include="*.gcl"
+grep -rn "^type [A-Z]" src/ --include="*.gcl"
 
 # Find all services
-grep -rn "^abstract type.*Service" src/service/ --include="*.gcl"
+grep -rn "^abstract type.*Service" src/ --include="*.gcl"
 
 # Find all API endpoints
-grep -rn "@expose" src/api/ --include="*.gcl"
+grep -rn "@expose" src/ --include="*_api.gcl"
 ```
 
 **C. From Frontend** (if exists):
@@ -177,7 +177,7 @@ greycat run importVector
 ### Data Model
 
 **Core Node Types**:
-[Auto-extracted from src/model/]
+[Auto-extracted from src/]
 
 \`\`\`
 [Generate simple ASCII art or list of types with relationships]
@@ -209,14 +209,16 @@ See [API Documentation](#api-documentation) for full details.
 .
 ├── project.gcl                 # Entry point, libraries, permissions
 ├── src/
-│   ├── src/
-│   │   ├── model/              # Data types and global indices
-│   │   ├── service/            # Business logic services
-│   │   ├── api/                # REST API endpoints (@expose)
-│   │   └── edi/                # Import/export logic
-│   └── test/                   # Test files (*_test.gcl)
+│   ├── <feature>/
+│   │   ├── <feature>.gcl       # Data models + global indices + service logic
+│   │   ├── <feature>_api.gcl   # @expose functions + @volatile types
+│   │   ├── <feature>_reader.gcl # Readers (optional)
+│   │   └── <feature>_writer.gcl # Writers (optional)
+│   └── <feature>.gcl           # Small features (single file)
+├── test/                       # Test files (*_test.gcl)
+│   └── <feature>_test.gcl
 [If has_frontend]
-├── frontend/
+├── app/
 │   ├── src/
 │   │   ├── pages/              # Pages
 │   │   ├── components/         # Components
@@ -271,7 +273,7 @@ greycat codegen ts
 **src Tests**:
 \`\`\`bash
 greycat test                    # Run all tests
-greycat test src/test/specific_test.gcl  # Run specific test
+greycat test test/specific_test.gcl  # Run specific test
 \`\`\`
 
 Current test coverage: [X test files, Y test functions]
@@ -434,7 +436,7 @@ Generate comprehensive API documentation from @expose endpoints.
 
 ```bash
 # Find all API endpoints
-grep -rn "@expose" src/api/ --include="*.gcl" -A 20
+grep -rn "@expose" src/ --include="*_api.gcl" -A 20
 ```
 
 For each endpoint, extract:

@@ -52,7 +52,7 @@ grep -r "TypeName" src/ --include="*.gcl" | grep -v "^type TypeName"
 
 **Output Format**:
 ```
-📍 src/model/old_model.gcl:42
+📍 src/old_model/old_model.gcl:42
 
 ❌ UNUSED TYPE: OldDataStructure
    References: 0
@@ -67,13 +67,13 @@ grep -r "TypeName" src/ --include="*.gcl" | grep -v "^type TypeName"
 **A. Find All Functions**:
 ```bash
 # Find static functions (services)
-grep -rn "static fn [a-z_]" src/service/ --include="*.gcl"
+grep -rn "static fn [a-z_]" src/ --include="*.gcl"
 
 # Find type methods
-grep -rn "^\s*fn [a-z_]" src/model/ --include="*.gcl"
+grep -rn "^\s*fn [a-z_]" src/ --include="*.gcl"
 
 # Find API endpoints
-grep -rn "@expose" src/api/ --include="*.gcl" -A 1
+grep -rn "@expose" src/ --include="*_api.gcl" -A 1
 ```
 
 **B. Check Usage**:
@@ -90,7 +90,7 @@ grep -r "FunctionName(" src/ --include="*.gcl"
 
 **Output Format**:
 ```
-📍 src/service/data/helper_service.gcl:156
+📍 src/data/data.gcl:156
 
 ❌ UNUSED FUNCTION: processOldFormat
    References: 0 call sites
@@ -108,7 +108,7 @@ grep -r "FunctionName(" src/ --include="*.gcl"
 **A. Find Global Variables**:
 ```bash
 # Find module-level variables
-grep -rn "^var [a-z_]" src/model/ --include="*.gcl"
+grep -rn "^var [a-z_]" src/ --include="*.gcl"
 ```
 
 **B. Check Usage**:
@@ -123,7 +123,7 @@ grep -r "variableName" src/ --include="*.gcl"
 
 **Output Format**:
 ```
-📍 src/model/cache.gcl:12
+📍 src/cache/cache.gcl:12
 
 ⚠️ UNUSED VARIABLE: temp_cache
    Type: nodeIndex<String, String>
@@ -155,7 +155,7 @@ grep -rn "^//.*fn \|^//.*type \|^//.*var " src/ --include="*.gcl"
 
 **Output Format**:
 ```
-📍 src/service/old_service.gcl:45-78
+📍 src/old_service/old_service.gcl:45-78
 
 ⚠️ COMMENTED CODE: 33 lines
    Content: Old implementation of processData function
@@ -185,9 +185,9 @@ grep -rn "if.*\.size\(\) == 0.*return" src/ --include="*.gcl"
 📍 DUPLICATION: Null checks (8 occurrences)
 
 Locations:
-  - src/service/user_service.gcl:23
-  - src/service/document_service.gcl:45
-  - src/service/search_service.gcl:67
+  - src/user/user.gcl:23
+  - src/document/document.gcl:45
+  - src/search/search.gcl:67
   ... (5 more)
 
 Pattern:
@@ -229,7 +229,7 @@ Compare types with similar field structures:
 
 ```bash
 # Extract all type definitions
-grep -rn "^type [A-Z]" src/model/ --include="*.gcl" -A 10
+grep -rn "^type [A-Z]" src/ --include="*.gcl" -not -name "*_api.gcl" -A 10
 ```
 
 Analyze for:
@@ -241,13 +241,13 @@ Analyze for:
 ```
 📍 SIMILAR TYPES: DocumentView and DocumentDetailView
 
-DocumentView (src/api/api_types.gcl:45):
+DocumentView (src/document/document_api.gcl:45):
   - id: String
   - title: String
   - date: time?
   - type: String
 
-DocumentDetailView (src/api/api_types.gcl:89):
+DocumentDetailView (src/document/document_api.gcl:89):
   - id: String
   - title: String
   - date: time?
@@ -275,9 +275,9 @@ Use heuristics to detect copy-pasted code:
 📍 DUPLICATED BLOCK: Error handling (identical in 3 locations)
 
 Locations:
-  - src/api/user_api.gcl:67-74
-  - src/api/document_api.gcl:123-130
-  - src/api/search_api.gcl:45-52
+  - src/user/user_api.gcl:67-74
+  - src/document/document_api.gcl:123-130
+  - src/search/search_api.gcl:45-52
 
 Code (8 lines):
   try {
@@ -324,7 +324,7 @@ grep -rn "var.*= nodeList\|var.*= nodeIndex" src/ --include="*.gcl" -B 2 -A 2
 
 **Example Output**:
 ```
-📍 src/service/builder_service.gcl:34
+📍 src/builder/builder.gcl:34
 
 ⚠️ ANTI-PATTERN: Local variable using nodeList
 
@@ -354,14 +354,14 @@ Priority: HIGH
 
 ```bash
 # Find @expose functions
-grep -rn "@expose" src/api/ --include="*.gcl" -A 5
+grep -rn "@expose" src/ --include="*_api.gcl" -A 5
 
 # For each, check return type has @volatile
 ```
 
 **Example Output**:
 ```
-📍 src/api/search_api.gcl:23
+📍 src/search/search_api.gcl:23
 
 ⚠️ ANTI-PATTERN: Missing @volatile on API response type
 
@@ -371,7 +371,7 @@ Function:
       ...
   }
 
-Type Definition (src/api/api_types.gcl:45):
+Type Definition (src/search/search_api.gcl:45):
   type SearchResults {  ← Missing @volatile decorator
       items: Array<ResultView>;
       total: int;
@@ -403,7 +403,7 @@ grep -rn "nodeIndex<.*,\s*[^n].*>" src/ --include="*.gcl"
 
 **Example Output**:
 ```
-📍 src/model/data.gcl:12
+📍 src/data/data.gcl:12
 
 ⚠️ ANTI-PATTERN: Storing objects directly in nodeList
 
@@ -429,14 +429,14 @@ Priority: HIGH (breaks persistence model)
 
 ```bash
 # Find type fields with collections
-grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/model/ --include="*.gcl"
+grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/ --include="*.gcl"
 ```
 
 Check if initialization happens in object creation.
 
 **Example Output**:
 ```
-📍 src/model/document.gcl:8
+📍 src/document/document.gcl:8
 
 ⚠️ ANTI-PATTERN: Non-nullable collection not initialized
 
@@ -446,7 +446,7 @@ Type:
       chunks: nodeList<node<Chunk>>;  ← Non-nullable, must initialize
   }
 
-Usage (src/service/import_service.gcl:45):
+Usage (src/document/document.gcl:45):
   var doc = node<Document>{ Document {
       id: "123",
       // chunks not initialized ← WILL FAIL at runtime
@@ -479,7 +479,7 @@ grep -rn "\.resolve()\..*\..*\|->.*->.*" src/ --include="*.gcl"
 
 **Example Output**:
 ```
-📍 src/service/data_service.gcl:67
+📍 src/data/data.gcl:67
 
 ⚠️ ANTI-PATTERN: Potential null pointer dereference
 
@@ -512,7 +512,7 @@ grep -rn "for.*in.*{" src/ --include="*.gcl" -A 10 | grep -E "\.resolve\(\)|\.ge
 
 **Example Output**:
 ```
-📍 src/service/query_service.gcl:89
+📍 src/query/query.gcl:89
 
 ⚠️ OPTIMIZATION: Repeated node resolution in loop
 
@@ -549,7 +549,7 @@ grep -rn "for.*in.*if.*==.*return" src/ --include="*.gcl"
 
 **Example Output**:
 ```
-📍 src/service/user_service.gcl:34
+📍 src/user/user.gcl:34
 
 ⚠️ OPTIMIZATION: Linear search could use index
 
@@ -591,7 +591,7 @@ grep -rn "for (.*=.*;.*<.*\.size().*;.*++)" src/ --include="*.gcl"
 
 **Example Output**:
 ```
-📍 src/service/processor.gcl:56
+📍 src/processor/processor.gcl:56
 
 ⚠️ OPTIMIZATION: C-style loop could use for-in
 
@@ -618,14 +618,14 @@ Priority: LOW (readability improvement)
 
 ```bash
 # Find @expose functions returning full objects
-grep -rn "@expose" src/api/ --include="*.gcl" -A 10
+grep -rn "@expose" src/ --include="*_api.gcl" -A 10
 ```
 
 Check if response includes unnecessary fields.
 
 **Example Output**:
 ```
-📍 src/api/document_api.gcl:45
+📍 src/document/document_api.gcl:45
 
 ⚠️ OPTIMIZATION: API returning too much data
 
@@ -680,7 +680,7 @@ grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gc
 
 **Example Output**:
 ```
-📍 src/service/processor.gcl:120
+📍 src/processor/processor.gcl:120
 
 🔴 CRITICAL: Unnecessary node allocation
 
@@ -788,7 +788,7 @@ done
 
 **Example Output**:
 ```
-📍 src/api/user_api.gcl:67
+📍 src/user/user_api.gcl:67
 
 🟡 MEDIUM: Useless function wrapper
 
@@ -828,7 +828,7 @@ grep -rn "for.*in.*{" src --include="*.gcl" -A 5 | \
 
 **Example Output**:
 ```
-📍 src/processor/matcher.gcl:89
+📍 src/matcher/matcher.gcl:89
 
 🔴 CRITICAL: O(n²) algorithmic complexity
 
@@ -879,7 +879,7 @@ Check for proper service abstraction:
 
 ```bash
 # Find abstract types (services)
-grep -rn "^abstract type.*Service" src/service/ --include="*.gcl"
+grep -rn "^abstract type.*Service" src/ --include="*.gcl"
 ```
 
 Verify:
@@ -892,9 +892,9 @@ Verify:
 ✓ GOOD: Proper service organization
 
 Services found:
-  - UserService (src/service/auth/user_service.gcl)
-  - DocumentService (src/service/data/document_service.gcl)
-  - SearchService (src/service/search/search_service.gcl)
+  - UserService (src/user/user.gcl)
+  - DocumentService (src/document/document.gcl)
+  - SearchService (src/search/search.gcl)
 
 Pattern compliance:
   ✓ All use abstract type
@@ -907,15 +907,15 @@ Pattern compliance:
 Global indices must be defined before types that use them:
 
 ```bash
-# Check definition order in model files
-grep -rn "^var\|^type" src/model/ --include="*.gcl"
+# Check definition order in feature files
+grep -rn "^var\|^type" src/ --include="*.gcl"
 ```
 
 **Example Output**:
 ```
 ⚠️ WARNING: Index defined after type that uses it
 
-File: src/model/data.gcl
+File: src/data/data.gcl
 
 Line 10: type Document {
 Line 15:     // references documents_by_id
@@ -938,14 +938,14 @@ Verify all @expose functions have @permission decorator:
 
 ```bash
 # Find @expose without @permission
-grep -rn "@expose" src/api/ --include="*.gcl" -A 1 | grep -v "@permission"
+grep -rn "@expose" src/ --include="*_api.gcl" -A 1 | grep -v "@permission"
 ```
 
 **Example Output**:
 ```
 ⚠️ WARNING: @expose function missing @permission
 
-Function: src/api/admin_api.gcl:34
+Function: src/admin/admin_api.gcl:34
   @expose
   fn deleteUser(userId: String): bool {  ← Missing @permission
       ...
@@ -971,7 +971,7 @@ Check for proper error handling in API functions:
 
 ```bash
 # Find @expose functions without try-catch
-grep -rn "@expose" src/api/ --include="*.gcl" -A 20 | grep -v "try\|catch"
+grep -rn "@expose" src/ --include="*_api.gcl" -A 20 | grep -v "try\|catch"
 ```
 
 ---
@@ -1032,7 +1032,7 @@ git status
 ```bash
 # For each unused function, use Edit tool to remove
 # Example:
-# Edit file: src/service/helper.gcl
+# Edit file: src/helper/helper.gcl
 # Remove lines 45-67 (unused function processOldFormat)
 ```
 
@@ -1127,19 +1127,19 @@ HIGH PRIORITY ISSUES
 ===============================================================================
 
 1. SECURITY: Missing @permission on admin function
-   📍 src/api/admin_api.gcl:34
+   📍 src/admin/admin_api.gcl:34
    Priority: HIGH
    Effort: 5 minutes
    [Details above]
 
 2. ANTI-PATTERN: Local variable using nodeList
-   📍 src/service/builder.gcl:67
+   📍 src/builder/builder.gcl:67
    Priority: HIGH
    Effort: 2 minutes
    [Details above]
 
 3. PERFORMANCE: Missing index on frequent query
-   📍 src/service/user_service.gcl:34
+   📍 src/user/user.gcl:34
    Priority: HIGH
    Effort: 15 minutes
    [Details above]

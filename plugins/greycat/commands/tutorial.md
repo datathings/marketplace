@@ -412,11 +412,11 @@ Best practices for data modeling:
 1. Store node<T> refs for relationships (not embedded objects)
 2. Create global indices for all primary lookups
 3. Initialize collection attributes in constructors
-4. Keep model files separate from services
+4. Organize by feature: model + service in feature file, API in separate _api.gcl file
 
 File structure:
-  src/model/user.gcl       - type User + indices
-  src/service/user_service.gcl - business logic
+  src/user/user.gcl         - type User + indices + UserService
+  src/user/user_api.gcl     - @volatile types + @expose functions
 ```
 
 **Example** - City/Country hierarchy with complete model.
@@ -435,8 +435,12 @@ File structure:
 
 ```
 Services encapsulate business logic using abstract types with static functions.
+Services live in the same feature file as the model: src/<feature>/<feature>.gcl
 
-Pattern:
+Pattern (in src/<feature>/<feature>.gcl):
+  type Xxx { ... }
+  var xxx_by_id: nodeIndex<int, node<Xxx>>;
+
   abstract type XxxService {
       static fn create(...): node<Xxx> { }
       static fn find(...): node<Xxx>? { }
@@ -445,9 +449,9 @@ Pattern:
   }
 
 Benefits:
-  - Centralized business logic
+  - Centralized business logic co-located with model
   - Validation in one place
-  - Reusable from APIs
+  - Reusable from APIs in <feature>_api.gcl
 ```
 
 **Example** with full CRUD service.
@@ -472,8 +476,9 @@ API Layer best practices:
 3. Always return Array<XxxView>
 4. Use @expose to make function available via HTTP
 5. Use @permission for access control
+6. API files go in src/<feature>/<feature>_api.gcl
 
-Pattern:
+Pattern (in src/user/user_api.gcl):
   @volatile type UserView { ... }
 
   @expose

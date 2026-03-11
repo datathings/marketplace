@@ -107,15 +107,15 @@ PHASE 1: UNNECESSARY PERSISTENCE
 
 🔴 CRITICAL (3 issues):
 
-  src/api/device_api.gcl:45
+  src/device/device_api.gcl:45
     fn get_devices(): nodeList<node<Device>>
     → Should return: Array<DeviceView> (API best practice)
 
-  src/service/processor.gcl:120
+  src/processor/processor.gcl:120
     var results = nodeList<node<Item>> {};
     → Should use: Array<Item> {} (local variable, not persisted)
 
-  src/api/user_api.gcl:78
+  src/user/user_api.gcl:78
     fn process_users(users: nodeList<node<User>>)
     → Should accept: Array<User> (function parameter)
 
@@ -233,15 +233,15 @@ PHASE 2: REIMPLEMENTED NATIVE FUNCTIONS
 
 🟡 MEDIUM (3 issues):
 
-  src/util/array_utils.gcl:23
+  src/array_utils/array_utils.gcl:23
     fn sort_by_priority(items: Array<Item>)
     → Use native: items.sort_by(Item::priority, SortOrder::asc)
 
-  src/util/math_utils.gcl:45
+  src/math_utils/math_utils.gcl:45
     fn find_maximum(values: Array<float>)
     → Use Math:: module or Tensor operations
 
-  src/util/string_utils.gcl:67
+  src/string_utils/string_utils.gcl:67
     fn join_with_comma(strings: Array<String>)
     → Use native: strings.join(", ")
 
@@ -301,12 +301,12 @@ PHASE 3: USELESS FUNCTION WRAPPERS
 
 🟡 MEDIUM (5 issues):
 
-  src/api/user_api.gcl:67
+  src/user/user_api.gcl:67
     fn get_user(id: int): node<User>?
     → Single-line wrapper for UserService::find_by_id()
     → Consider calling UserService directly
 
-  src/service/device_helper.gcl:34
+  src/device/device.gcl:34
     fn find_device(id: int): node<Device>?
     → Wraps DeviceService::find_by_id()
 
@@ -380,12 +380,12 @@ PHASE 4: ALGORITHMIC COMPLEXITY
 
 🔴 CRITICAL (2 issues):
 
-  src/processor/matcher.gcl:89
+  src/matcher/matcher.gcl:89
     Nested loop: for (user in users) { for (order in orders) { if (order->user_id == user->id) ... } }
     → O(n²) complexity
     → Solution: Create orders_by_user_id: nodeIndex<int, node<Order>>
 
-  src/service/lookup.gcl:134
+  src/lookup/lookup.gcl:134
     Linear search: for (item in items) { if (item->id == target_id) ... }
     → O(n) when O(1) possible
     → Solution: Use items_by_id nodeIndex
@@ -480,9 +480,9 @@ PHASE 5: CODE DUPLICATION
     → Consider creating error constant or helper function
 
   Similar validation logic in 3 files:
-    - src/service/user_service.gcl:45
-    - src/service/admin_service.gcl:78
-    - src/api/auth_api.gcl:23
+    - src/user/user.gcl:45
+    - src/admin/admin.gcl:78
+    - src/auth/auth_api.gcl:23
     → Extract to shared validation function
 
 ===============================================================================
@@ -504,11 +504,11 @@ Analyzed: 47 files (src)
 Found 17 issues:
 
 🔴 CRITICAL (5):
-  1. src/api/device_api.gcl:45 - API returning nodeList instead of Array<View>
-  2. src/service/processor.gcl:120 - Local var using nodeList instead of Array
-  3. src/processor/matcher.gcl:89 - O(n²) nested loop, needs nodeIndex
-  4. src/api/user_api.gcl:78 - Function parameter using nodeList
-  5. src/service/lookup.gcl:134 - Linear search, needs nodeIndex
+  1. src/device/device_api.gcl:45 - API returning nodeList instead of Array<View>
+  2. src/processor/processor.gcl:120 - Local var using nodeList instead of Array
+  3. src/matcher/matcher.gcl:89 - O(n²) nested loop, needs nodeIndex
+  4. src/user/user_api.gcl:78 - Function parameter using nodeList
+  5. src/lookup/lookup.gcl:134 - Linear search, needs nodeIndex
 
 🟡 MEDIUM (8):
   6-10. Reimplemented native functions (sort, max, join, etc.)
@@ -570,11 +570,11 @@ echo "==========================================================================
 echo ""
 
 # Fix 1: API returning nodeList
-echo "Fixing: src/api/device_api.gcl:45"
+echo "Fixing: src/device/device_api.gcl:45"
 # Use Edit tool to change return type from nodeList<node<Device>> to Array<DeviceView>
 
 # Fix 2: Local var using nodeList
-echo "Fixing: src/service/processor.gcl:120"
+echo "Fixing: src/processor/processor.gcl:120"
 # Use Edit tool to change "var results = nodeList<node<Item>> {};" to "var results = Array<Item> {};"
 
 # ... apply other fixes
@@ -616,8 +616,8 @@ Fixed 12 issues:
   ✓ 7 medium (native functions, wrappers)
 
 Remaining 5 issues require manual review:
-  ! src/service/complex.gcl:234 - Complex duplication, needs refactoring
-  ! src/processor/advanced.gcl:567 - Algorithmic improvement needs design
+  ! src/complex/complex.gcl:234 - Complex duplication, needs refactoring
+  ! src/advanced/advanced.gcl:567 - Algorithmic improvement needs design
 
 Lint: ✓ Passes
 

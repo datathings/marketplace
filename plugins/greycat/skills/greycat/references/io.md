@@ -27,6 +27,19 @@ while (reader.can_read()) {
 }
 ```
 
+### CsvFormat
+
+`CsvFormat` fields are `char?`, not `String?` — use single quotes:
+
+```gcl
+// Wrong — String literals
+var fmt = CsvFormat { separator: ",", string_delimiter: "\"" };
+// Right — char literals
+var fmt = CsvFormat { separator: ',', string_delimiter: '"' };
+
+var reader = CsvReader { path: "./data.csv", format: fmt };
+```
+
 ### CSV features
 
 ```gcl
@@ -34,11 +47,13 @@ type Record {
     position: geo;           // Consumes 2 cols: lat, lng
     skip: null;              // Skip column
     @format("%d/%m/%y %H:%M")
-    date: time;              // Parse with format
+    date: time;              // Parse with format — required for non-default time formats
     @format(DurationUnit::hours)
     elapsed: duration;       // Parse as hours
 }
 ```
+
+**`@format` on time fields** — without it, time parsing silently fails or throws. Always annotate `time` fields with the expected format.
 
 ### CsvWriter
 

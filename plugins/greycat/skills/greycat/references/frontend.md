@@ -256,6 +256,16 @@ gc.sdk.token !== null; // check auth
 gc.sdk.logout();
 ```
 
+## Codegen Behavior
+
+`greycat codegen ts` generates TypeScript declarations for all `@expose` functions. **All parameters become required** — even nullable GCL params (`from: time?`) generate as required TS params. Callers must pass explicit `null`:
+
+```typescript
+// GCL: fn listItems(offset: int, max: int, category: Category?, from: time?, to: time?)
+// Generated TS requires all 5 args — pass null for optionals
+await gc.module.listItems(0, 20, null, null, null);
+```
+
 ## Common Pitfalls
 
 | Wrong | Correct |

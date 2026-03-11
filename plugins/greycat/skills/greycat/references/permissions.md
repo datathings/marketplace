@@ -52,6 +52,44 @@ fn test() {}
 fn hello(name: String): String { return "Hello ${name}"; }
 ```
 
+**`@role("public", "api")`** adds the `api` permission to the `public` role. Since `@expose` implies `@permission("api")` by default, this lets unauthenticated users call all `@expose` endpoints and read the ABI (required for the web SDK to work without login). Use this intentionally — it makes the ABI and all default-permission endpoints publicly accessible.
+
+## User Management
+
+### Creating Users
+
+```gcl
+fn main() {
+    if (User::getByName("alice") == null) {
+        SecurityEntity::set(User {
+            id: -1,              // -1 = auto-assign
+            name: "alice",
+            activated: true,
+            full_name: "Alice",
+            email: null,
+            role: "user",        // must match a @role name
+            groups: null,
+            groups_flags: null,
+            external: false,
+        });
+        User::setPassword("alice", Crypto::sha256hex("password"));
+    }
+}
+```
+
+- `User::getByName(name)` — returns the User object or null (check before creating)
+- `User::setPassword(name, hash)` — password must be `Crypto::sha256hex(plaintext)`
+
+### Login Flow (Frontend / Backend)
+
+The frontend SDK sends `base64(username:sha256hex(password))`. The backend must store `Crypto::sha256hex(password)` so the stored value matches.
+
+1. Frontend calls `gc.sdk.login({ username, password, use_cookie: true })`
+2. Backend exposes a `@permission("public")` endpoint to return profile data after login
+3. Backend uses `User::me()` to get the current user in `@permission("api")` endpoints
+
+`User::login()` requires HTTP context — it cannot be called from backend GCL code or tests.
+
 ## Runtime Check
 
 ```gcl

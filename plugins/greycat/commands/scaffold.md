@@ -16,11 +16,9 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 
 This command scaffolds complete GreyCat features with:
 
-1. **Model** - Type definition with proper fields and initialization
-2. **Global Indices** - nodeIndex/nodeList/nodeTime/nodeGeo for lookups
-3. **Service** - CRUD operations with validation
-4. **API Layer** - @expose endpoints with @volatile response types
-5. **Tests** - Comprehensive test suite
+1. **Feature File** - Type definition, global indices, and service logic in `src/<feature>/<feature>.gcl`
+2. **API Layer** - @expose endpoints with @volatile response types in `src/<feature>/<feature>_api.gcl`
+3. **Tests** - Comprehensive test suite in `test/<feature>_test.gcl`
 
 **Templates**:
 - **CRUD Service** - Full create/read/update/delete
@@ -76,20 +74,12 @@ if [ ! -f "project.gcl" ]; then
 fi
 
 # Check standard directories exist
-if [ ! -d "src/model" ]; then
-    mkdir -p src/model
+if [ ! -d "src" ]; then
+    mkdir -p src
 fi
 
-if [ ! -d "src/service" ]; then
-    mkdir -p src/service
-fi
-
-if [ ! -d "src/api" ]; then
-    mkdir -p src/api
-fi
-
-if [ ! -d "src/test" ]; then
-    mkdir -p src/test
+if [ ! -d "test" ]; then
+    mkdir -p test
 fi
 ```
 
@@ -170,14 +160,14 @@ AskUserQuestion({
 **Read existing files to detect naming conventions**:
 
 ```bash
-# Check for existing services
-EXISTING_SERVICES=$(find src/service -name "*_service.gcl" 2>/dev/null | head -3)
+# Check for existing feature files (models + services)
+EXISTING_FEATURES=$(find src -name "*.gcl" -not -name "*_api.gcl" -not -name "*_reader.gcl" -not -name "*_writer.gcl" 2>/dev/null | head -3)
 
 # Check for existing models
-EXISTING_MODELS=$(find src/model -name "*.gcl" 2>/dev/null | head -3)
+EXISTING_MODELS=$(find src -name "*.gcl" 2>/dev/null | head -3)
 
 # Check for existing APIs
-EXISTING_APIS=$(find src/api -name "*_api.gcl" 2>/dev/null | head -3)
+EXISTING_APIS=$(find src -name "*_api.gcl" 2>/dev/null | head -3)
 ```
 
 **Detect patterns** using Read tool:
@@ -190,14 +180,16 @@ EXISTING_APIS=$(find src/api -name "*_api.gcl" 2>/dev/null | head -3)
 
 ## Step 5: Generate Files
 
-### A. Generate Model File
+### A. Generate Feature File (Model + Service)
 
-**File**: `src/model/{entity_name_snake}.gcl`
+**File**: `src/{entity_name_snake}/{entity_name_snake}.gcl`
+
+Models, global indices, and service logic all live together in the feature file.
 
 **Template for CRUD**:
 
 ```gcl
-// {EntityName} model and global indices
+// {EntityName} data model, global indices, and service logic
 type {EntityName} {
     {field1}: {Type1};
     {field2}: {Type2};
@@ -210,37 +202,7 @@ var {entity_plural}_by_id: nodeIndex<int, node<{EntityName}>>;
 
 // ID counter for auto-increment
 var {entity}_id_counter: node<int?>;
-```
 
-**Example output** for `Device`:
-
-```gcl
-// Device model and global indices
-type Device {
-    id: int;
-    name: String;
-    location: geo;
-    status: String?;
-    created_at: time;
-}
-
-// Global indices
-var devices_by_id: nodeIndex<int, node<Device>>;
-var devices_by_name: nodeIndex<String, node<Device>>;
-
-// ID counter
-var device_id_counter: node<int?>;
-```
-
-**Use Write tool** to create the file.
-
-### B. Generate Service File
-
-**File**: `src/service/{entity_name_snake}_service.gcl`
-
-**Template**:
-
-```gcl
 // {EntityName} service - business logic and CRUD operations
 abstract type {EntityName}Service {
 
@@ -295,9 +257,25 @@ abstract type {EntityName}Service {
 }
 ```
 
-**Example for Device**:
+**Example output** for `Device`:
 
 ```gcl
+// Device data model, global indices, and service logic
+type Device {
+    id: int;
+    name: String;
+    location: geo;
+    status: String?;
+    created_at: time;
+}
+
+// Global indices
+var devices_by_id: nodeIndex<int, node<Device>>;
+var devices_by_name: nodeIndex<String, node<Device>>;
+
+// ID counter
+var device_id_counter: node<int?>;
+
 // Device service - business logic and CRUD operations
 abstract type DeviceService {
 
@@ -367,9 +345,9 @@ abstract type DeviceService {
 
 **Use Write tool** to create the file.
 
-### C. Generate API File
+### B. Generate API File
 
-**File**: `src/api/{entity_name_snake}_api.gcl`
+**File**: `src/{entity_name_snake}/{entity_name_snake}_api.gcl`
 
 **Template**:
 
@@ -577,9 +555,9 @@ fn delete_device(id: int) {
 
 **Use Write tool** to create the file.
 
-### D. Generate Test File
+### C. Generate Test File
 
-**File**: `src/test/{entity_name_snake}_test.gcl`
+**File**: `test/{entity_name_snake}_test.gcl`
 
 **Template**:
 
@@ -787,17 +765,15 @@ SCAFFOLD COMPLETE
 
 Generated files for entity: Device
 
-✓ src/model/device.gcl (32 lines)
+✓ src/device/device.gcl
   - Device type with 5 fields
   - 2 global indices (by_id, by_name)
   - ID counter
+  - DeviceService with CRUD operations:
+    create, find_by_id, find_by_name, list_all,
+    update_name, update_status, delete
 
-✓ src/service/device_service.gcl (87 lines)
-  - create, find_by_id, find_by_name, list_all
-  - update_name, update_status
-  - delete with validation
-
-✓ src/api/device_api.gcl (98 lines)
+✓ src/device/device_api.gcl
   - 3 volatile types (DeviceView, DeviceCreate, DeviceUpdate)
   - 5 API endpoints (@expose):
     - GET get_devices() [@permission("public")]
@@ -806,7 +782,7 @@ Generated files for entity: Device
     - PUT update_device(id, data) [@permission("admin")]
     - DELETE delete_device(id) [@permission("admin")]
 
-✓ src/test/device_test.gcl (112 lines)
+✓ test/device_test.gcl
   - 8 test cases covering CRUD and validation
 
 ===============================================================================
@@ -815,7 +791,7 @@ Lint: ✓ All files passed
 
 Next steps:
   1. Review generated code and customize as needed
-  2. Run tests: greycat test src/test/device_test.gcl
+  2. Run tests: greycat test test/device_test.gcl
   3. Start server: greycat serve
   4. Test endpoints:
      curl http://localhost:8080/create_device -d '{"name":"Test","lat":48.8,"lng":2.3,"status":"active"}'

@@ -66,8 +66,8 @@ type MyHelper<T> { fn process(v: T): T { return v; } }
 \`\`\`bash
 # Backend
 greycat-lang lint          # Lint (after EVERY change!)
-greycat-lang fmt -p project.gcl -w  # Format all .gcl files
-greycat-lang fmt <file> -w          # Format specific file
+greycat-lang fmt -p project.gcl     # Format all .gcl files
+greycat-lang fmt <file>             # Format specific file
 greycat build/test/serve   # Build/test/start server (port 8080)
 greycat run [function]     # Run function (default: main)
 greycat codegen ts         # Generate project.d.ts
@@ -76,7 +76,7 @@ greycat install            # Install libraries
 # Frontend (if exists) - run from root, package.json in root
 pnpm install               # First time setup
 pnpm dev                   # Dev server (proxies to backend)
-pnpm build                 # Build frontend/ → webroot/
+pnpm build                 # Build app/ → webroot/
 pnpm lint                  # Lint TypeScript
 pnpm test                  # Run tests
 \`\`\`
@@ -90,7 +90,7 @@ pnpm test                  # Run tests
 **Libraries**: \`@library("std", "[version]")\`, \`@library("explorer", "[version]")\`
 **Testing**: Vitest (backend: @test annotation)
 
-**Frontend Setup**: Config files in root (package.json, vite.config.ts, tsconfig.json), source in frontend/, builds to webroot/
+**Frontend Setup**: Config files in root (package.json, vite.config.ts, tsconfig.json), source in app/, builds to webroot/
 **Frontend Dependencies**: Use exact versions (e.g., \`"5.6.9"\` instead of \`"^5.6.9"\`)
 
 ---
@@ -100,32 +100,36 @@ pnpm test                  # Run tests
 \`\`\`
 .
 ├── project.gcl                 # Entry point, libraries, permissions
-├── backend/
-│   ├── src/
-│   │   ├── model/              # Data types and global indices
-│   │   ├── service/            # Business logic services
-│   │   ├── api/                # REST API endpoints (@expose)
-│   │   └── edi/                # Import/export logic (optional)
-│   └── test/                   # Test files (*_test.gcl)
-├── frontend/                   # Frontend source (if exists)
-│   ├── src/
-│   │   ├── pages/              # Page components
-│   │   ├── components/         # Reusable components
-│   │   ├── services/           # API clients
-│   │   ├── hooks/              # Custom hooks
-│   │   └── utils/              # Utilities
-│   └── index.html              # HTML entry point
+├── src/
+│   ├── <feature>/
+│   │   ├── <feature>.gcl       # Data models + global indices
+│   │   ├── <feature>_api.gcl   # @expose endpoints + @volatile types
+│   │   ├── <feature>_reader.gcl # CSV/JSON/Parquet readers (optional)
+│   │   └── <feature>_writer.gcl # Writers (optional)
+│   └── <feature>.gcl           # Small features (single file)
+├── test/
+│   └── <feature>_test.gcl      # Tests
+├── app/                        # Frontend source (if exists)
+│   ├── vite-env.d.ts
+│   ├── index.html
+│   ├── index.tsx
+│   ├── <page>/
+│   │   ├── index.html
+│   │   └── index.tsx
+│   └── components/<comp>/
+│       ├── <comp>.tsx
+│       └── <comp>.css
 ├── package.json                # Frontend deps (root level)
-├── vite.config.ts              # Vite config (root, builds to webroot/)
+├── vite.config.ts              # Vite config (root level)
 ├── tsconfig.json               # TypeScript config (root level)
-├── .gitignore                  # Git ignore rules (GreyCat essentials)
-├── webroot/                    # Built frontend (gitignored, served by GreyCat)
+├── .gitignore
+├── webroot/                    # Built frontend (gitignored)
 ├── lib/                        # Installed GreyCat libraries (gitignored)
 ├── gcdata/                     # Database storage (gitignored)
-└── CLAUDE.md                   # This file
+└── CLAUDE.md
 \`\`\`
 
-**Frontend Build**: Vite builds frontend/ → webroot/, GreyCat serves webroot/ on \`GREYCAT_WEBROOT=webroot\`
+**Frontend Build**: Vite builds app/ → webroot/, GreyCat serves webroot/ on \`GREYCAT_WEBROOT=webroot\`
 
 ---
 
@@ -308,10 +312,9 @@ n.resolve();     // method
 ### Indexed Collections
 | Persisted | Key | In-Memory |
 |-----------|-----|-----------|
-| \`node<T>\` | — | \`Array<T>\`, \`Map<K,V>\` |
-| \`nodeList<node<T>>\` | int | \`Stack<T>\`, \`Queue<T>\` |
-| \`nodeIndex<K, node<V>>\` | hash | \`Set<T>\`, \`Tuple<A,B>\` |
-| \`nodeTime<node<T>>\` | time | \`Buffer\`, \`Table\`, \`Tensor\` |
+| \`nodeList<node<T>>\` | int | \`Array<T>\` |
+| \`nodeIndex<K, node<V>>\` | K | \`Map<K,V>\` |
+| \`nodeTime<node<T>>\` | time | — |
 | \`nodeGeo<node<T>>\` | geo | — |
 
 **⚠️ CRITICAL**: Initialize collection attributes on creation
@@ -350,17 +353,14 @@ n.resolve();     // method
 GREYCAT_PORT=8080
 GREYCAT_WEBROOT=webroot      # Serve built frontend from webroot/
 GREYCAT_CACHE=30000
-
-# Frontend (.env) - if exists
-VITE_GREYCAT_URL=http://localhost:8080
 \`\`\`
 
 **Vite Config** (vite.config.ts in root):
 \`\`\`ts
 export default defineConfig({
-  root: 'frontend',           // Source files in frontend/
+  root: 'app',
   build: {
-    outDir: '../webroot',     // Build to webroot/ for GreyCat
+    outDir: '../webroot',
     emptyOutDir: true
   }
 })
@@ -370,12 +370,11 @@ export default defineConfig({
 \`\`\`json
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["app/*"]
+      "~/*": ["app/*"]
     }
   },
-  "include": ["app"]
+  "include": ["app", "project.d.ts"]
 }
 \`\`\`
 
@@ -399,7 +398,7 @@ export default defineConfig({
 
 1. Use \`/greycat\` skill for backend work
 2. \`greycat-lang lint\` after EVERY change (0 errors required)
-3. \`greycat-lang fmt -p project.gcl -w\` to format all files
+3. \`greycat-lang fmt -p project.gcl\` to format all files
 4. \`Grep\` before deleting (verify no usages)
 5. \`greycat codegen ts\` after backend type changes
 6. Test: \`greycat test\` (backend), \`pnpm test\` (frontend)
@@ -410,7 +409,7 @@ export default defineConfig({
 
 **Before commit**:
 - [ ] \`greycat-lang lint\` shows 0 errors
-- [ ] \`greycat-lang fmt -p project.gcl -w\` applied
+- [ ] \`greycat-lang fmt -p project.gcl\` applied
 - [ ] All @expose functions have try/catch with error() logging
 - [ ] All functions/types have /// documentation
 - [ ] Transient types marked @volatile
@@ -451,9 +450,9 @@ fi
 ### Step 2: Detect Project Features
 
 ```bash
-# Check for frontend (frontend/ directory or package.json with @greycat/web)
+# Check for frontend (app/ directory or package.json with @greycat/web)
 HAS_FRONTEND=false
-if [ -d "frontend" ] || ([ -f "package.json" ] && grep -q "@greycat/web" package.json); then
+if [ -d "app" ] || ([ -f "package.json" ] && grep -q "@greycat/web" package.json); then
     HAS_FRONTEND=true
 fi
 
@@ -534,7 +533,7 @@ Next steps:
 ✓ **.gitignore created/updated** with GreyCat essentials (gcdata, lib, webroot, project.d.ts, project.gcp)
 ✓ **Generic rules included** (linting, gotchas, workflows)
 ✓ **pnpm commands** (not npm)
-✓ **Root-level configs** (package.json, vite.config.ts, tsconfig.json), source in frontend/
+✓ **Root-level configs** (package.json, vite.config.ts, tsconfig.json), source in app/
 ✓ **Vite builds to webroot/** (GreyCat-compatible)
 ✓ **Exact version note** for frontend deps
 ✓ **Customized for frontend presence**
@@ -546,6 +545,6 @@ Next steps:
 - **Compressed format**: ~300 lines vs 600 in old template
 - **Generic template**: No project-specific details
 - **GreyCat essentials**: Creates/updates .gitignore with gcdata/, lib/, webroot/, project.d.ts, project.gcp
-- **Frontend structure**: All config in root (package.json, vite.config.ts, tsconfig.json), source in frontend/, builds to webroot/
+- **Frontend structure**: All config in root (package.json, vite.config.ts, tsconfig.json), source in app/, builds to webroot/
 - **Frontend preferences**: pnpm, exact versions (no ^ or ~), webroot/ for GreyCat compatibility
 - **Can be regenerated**: Safe to run multiple times (with backup option)

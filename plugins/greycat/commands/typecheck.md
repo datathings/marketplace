@@ -33,7 +33,7 @@ Ensure all API response types are marked @volatile.
 
 ```bash
 # Extract all @expose functions and their return types
-grep -rn "@expose" src/api/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//'
+grep -rn "@expose" src/ --include="*_api.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//'
 ```
 
 ### Step 1.2: Check Each Return Type
@@ -46,7 +46,7 @@ For each return type found:
 ### Example Output
 
 ```
-📍 src/api/search_api.gcl:63
+📍 src/search/search_api.gcl:63
 
 ⚠️ MISSING @volatile: API response type not marked as volatile
 
@@ -54,7 +54,7 @@ Function:
   @expose
   fn semanticSearch(...): PaginatedResult<SearchResultView> {
 
-Type Definition (src/api/api_types.gcl:45):
+Type Definition (src/search/search_api.gcl:45):
   type PaginatedResult<T> {  ← Missing @volatile
       items: Array<T>;
       total: int;
@@ -95,7 +95,7 @@ For each occurrence, determine context:
 
 **✅ LEGITIMATE (Global variable)**:
 ```gcl
-// In src/model/data.gcl (module-level)
+// In src/data/data.gcl (module-level)
 var documents: nodeList<node<Document>>;
 ```
 
@@ -123,7 +123,7 @@ fn process(items: nodeList<T>) {  ← Should be Array
 ### Example Output
 
 ```
-📍 src/service/builder.gcl:34
+📍 src/builder/builder.gcl:34
 
 ⚠️ TYPE SAFETY: Local variable using persistent collection
 
@@ -175,7 +175,7 @@ Check if null checking exists before dereference:
 ### Example Output
 
 ```
-📍 src/service/document_service.gcl:67
+📍 src/document/document.gcl:67
 
 ⚠️ NULL SAFETY: Potential null pointer dereference
 
@@ -225,7 +225,7 @@ Find non-nullable collections that might not be initialized:
 
 ```bash
 # Find type fields with collections
-grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/model/ --include="*.gcl"
+grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/ --include="*.gcl"
 ```
 
 Check if they're nullable or always initialized.
@@ -233,7 +233,7 @@ Check if they're nullable or always initialized.
 ### Example Output
 
 ```
-📍 src/model/document.gcl:12
+📍 src/document/document.gcl:12
 
 ⚠️ TYPE SAFETY: Non-nullable collection not always initialized
 
@@ -243,7 +243,7 @@ Type:
       chunks: nodeList<node<Chunk>>;  ← Non-nullable
   }
 
-Usage (src/service/import.gcl:45):
+Usage (src/import/import.gcl:45):
   var doc = Document {
       id: "123"
       // chunks not initialized ← RUNTIME ERROR
@@ -279,7 +279,7 @@ grep -rn "nodeIndex<.*,\s*[^n]" src/ --include="*.gcl"
 ### Example Output
 
 ```
-📍 src/model/data.gcl:8
+📍 src/data/data.gcl:8
 
 ⚠️ TYPE SAFETY: Storing objects directly in persistent collection
 
@@ -317,7 +317,7 @@ grep -rn "static fn.*<.*>.*(" src/ --include="*.gcl"
 ### Example Output
 
 ```
-📍 src/service/utils.gcl:12
+📍 src/utils/utils.gcl:12
 
 ❌ TYPE ERROR: Generic type parameter on static function
 
@@ -402,11 +402,11 @@ CRITICAL ISSUES (Fix Immediately)
 ===============================================================================
 
 1. COMPILATION ERROR: Generic static function
-   📍 src/service/utils.gcl:12
+   📍 src/utils/utils.gcl:12
    [Details above]
 
 2. COMPILATION ERROR: Generic static function
-   📍 src/service/helper.gcl:34
+   📍 src/helper/helper.gcl:34
    [Details above]
 
 ===============================================================================
@@ -414,7 +414,7 @@ HIGH PRIORITY ISSUES
 ===============================================================================
 
 1. RUNTIME ERROR: Uninitialized collection
-   📍 src/model/document.gcl:12
+   📍 src/document/document.gcl:12
    [Details above]
 
 ...

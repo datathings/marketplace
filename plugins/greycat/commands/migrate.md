@@ -70,7 +70,7 @@ echo "==========================================================================
 echo ""
 
 # Find all model files
-MODEL_FILES=$(find src/model -name "*.gcl" -type f)
+MODEL_FILES=$(find src -name "*.gcl" -not -name "*_api.gcl" -not -name "*_reader.gcl" -not -name "*_writer.gcl" -type f)
 
 echo "Model files found:"
 echo "$MODEL_FILES" | sed 's/^/  /'
