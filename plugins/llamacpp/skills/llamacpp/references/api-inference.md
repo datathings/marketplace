@@ -208,7 +208,7 @@ Get embeddings for a sequence ID. Returns NULL if `pooling_type` is `LLAMA_POOLI
 ```c
 enum llama_vocab_type llama_vocab_type(const struct llama_vocab * vocab);
 ```
-Get the vocabulary type (SPM, BPE, WPM, UGM, RWKV, PLAMO2).
+Get the vocabulary type (NONE, SPM, BPE, WPM, UGM, RWKV, PLAMO2).
 
 ### llama_vocab_n_tokens
 ```c

@@ -36,6 +36,7 @@ This is the core API reference covering initialization, parameters, and model lo
 **Model & Context:**
 - `llama_backend_init()` - Initialize backend
 - `llama_model_load_from_file()` - Load GGUF model
+- `llama_model_init_from_user()` - Create model from custom tensor data
 - `llama_init_from_model()` - Create inference context
 - `llama_model_free()`, `llama_free()` - Cleanup
 
@@ -155,6 +156,24 @@ Get default quantization parameters.
 ---
 
 ## Model Loading & Management
+
+### llama_model_init_from_user
+```c
+typedef void (*llama_model_set_tensor_data_t)(struct ggml_tensor * tensor, void * userdata);
+
+struct llama_model * llama_model_init_from_user(
+    struct gguf_context * metadata,
+    llama_model_set_tensor_data_t set_tensor_data,
+    void * set_tensor_data_ud,
+    struct llama_model_params params);
+```
+Create a new model from GGUF metadata and a custom function to set the tensor data. Tensors are created as `GGML_TYPE_F32` by default; override by adding a tensor with the same name but a different type to the context.
+
+**Parameters:**
+- `metadata`: GGUF context containing model metadata
+- `set_tensor_data`: Callback function to initialize tensor data
+- `set_tensor_data_ud`: Userdata passed to the callback
+- `params`: Model loading parameters
 
 ### llama_model_load_from_file
 ```c

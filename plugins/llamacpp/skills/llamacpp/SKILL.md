@@ -65,20 +65,20 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (229 lines) - Initialization, parameters, model loading
+- **[api-core.md](references/api-core.md)** (248 lines) - Initialization, parameters, model loading
 - **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (397 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (402 lines) - LoRA adapters, performance, training, constants
 
-**Total:** ~195 active functions (b8191) across 6 organized files
+**Total:** ~197 active functions (b8305) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all ~195 function signatures.
+See **[references/api.md](references/api.md)** for all ~197 function signatures.
 
 ## Common Workflows
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,178 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,202 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,24 +157,26 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8191
+## What's New in b8305
 
-**Deprecations:**
-- `defrag_thold` in `llama_context_params` is now **deprecated** - KV cache defragmentation threshold is no longer used
-- `llama_vocab_cls()` is now **deprecated** - use `llama_vocab_bos()` instead (CLS is equivalent to BOS)
-- `llama_sampler_init_grammar_lazy()` is now **deprecated** - use `llama_sampler_init_grammar_lazy_patterns()` instead
+**New Functions:**
+- `llama_model_init_from_user()` - Create models from GGUF metadata with custom tensor data callbacks
 
-**Model Metadata:**
-- New `llama_model_meta_key` enum with well-known sampling metadata keys (top_k, top_p, min_p, temp, XTC, mirostat, penalties, etc.)
-- Models can now embed recommended sampling parameters in GGUF metadata
+**New Model Params:**
+- `use_direct_io` (bool) - Use direct I/O, takes precedence over use_mmap when supported
+- `no_alloc` (bool) - Only load metadata and simulate memory allocations
 
-**Context Params:**
-- `kv_unified` (bool) - Use a unified buffer across input sequences for attention computation
-- `swa_full` (bool) - Allocate full-size SWA cache for models with Sliding Window Attention
+**New Enum Values:**
+- `LLAMA_VOCAB_TYPE_PLAMO2 = 6` - PLaMo-2 tokenizer based on Aho-Corasick with dynamic programming
+- `LLAMA_FTYPE_MOSTLY_MXFP4_MOE = 38` - MXFP4 quantization for MoE models
+- `LLAMA_FTYPE_MOSTLY_NVFP4 = 39` - NVFP4 quantization
 
-**State Management:**
-- `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` replaces `LLAMA_STATE_SEQ_FLAGS_SWA_ONLY` (backwards-compat alias kept)
-- Extended state sequence functions (`_ext` variants) for partial state management
+**Previous (b8191) additions still current:**
+- `llama_model_meta_key` enum for sampling metadata keys
+- `kv_unified`, `swa_full` context params
+- `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` and `_ext` state functions
+- Backend sampling API [EXPERIMENTAL]
+- Adaptive-P sampler
 
 ## Key Differences from Deprecated API
 

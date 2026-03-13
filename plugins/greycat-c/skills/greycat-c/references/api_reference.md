@@ -22,6 +22,7 @@ Complete reference documentation for the GreyCat C SDK header files. This SDK en
 - [gc/table.h — 2D Tables](#gctable-h)
 - [gc/tensor.h — Multi-dimensional Tensors](#gctensor-h)
 - [gc/block.h — Storage Blocks](#gcblock-h)
+- [gc/node.h — Node Resolution](#gcnode-h)
 - [gc/abi.h — ABI (Application Binary Interface)](#gcabi-h)
 - [gc/io.h — File I/O](#gcio-h)
 - [gc/crypto.h — Cryptography](#gccrypto-h)
@@ -86,6 +87,12 @@ typedef struct {
 | `gc_c64__addto` | `void gc_c64__addto(c64_t *a, c64_t b)` | In-place add: `a += b` |
 | `gc_c64__arg` | `f64_t gc_c64__arg(c64_t z)` | Argument (angle) of complex number |
 | `gc_c64__abs` | `f64_t gc_c64__abs(c64_t z)` | Absolute value (modulus) |
+
+### Node Parsing
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_node__parse` | `bool gc_node__parse(const char *str, u32_t str_len, gc_slot_t *value, gc_type_t *value_type)` | Parse a node reference from a string representation. Returns `true` on success; writes the parsed value and its type tag. |
 
 ### gc_type_t — GreyCat Type Enum
 
@@ -1105,6 +1112,9 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | Function | Description |
 |----------|-------------|
 | `gc_program__create_object(program, type_code)` | Create a new object by type code |
+| `gc_program__create_module(program, mod_name_offset, result_offset)` | Create a new module in the program. Writes the module offset to `*result_offset`. Returns `true` on success. |
+| `gc_program__create_from_abi(abi)` | Create a new program from an ABI definition. Returns the allocated `gc_program_t *`. |
+| `gc_program__finalize(program)` | Finalize and free all memory associated with a program |
 | `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks |
 | `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks |
 | `gc_lib_std__link(prg, lib)` | Link the standard library to a program |
@@ -1519,6 +1529,19 @@ struct gc_block {
 
 ---
 
+<a id="gcnode-h"></a>
+## gc/node.h — Node Resolution
+
+Provides resolution of node references (graph database entries) from their 64-bit encoded reference to the actual slot value.
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to its current value. Writes the result type to `*result_type`. |
+
+---
+
 <a id="gcabi-h"></a>
 ## gc/abi.h — ABI (Application Binary Interface)
 
@@ -1890,6 +1913,8 @@ typedef struct {
 | `gc_core_time__parse_iso` | `bool gc_core_time__parse_iso(const char *c, size_t len, gc_tm_t *tm, gc_core_time_parse_tz_t *tz)` | Parse an ISO 8601 date/time string |
 | `gc__print_iso` | `void gc__print_iso(gc_buffer_t *buffer, const gc_tm_t *cal, i64_t epoch_us, i64_t localized_epoch_s)` | Format a time as ISO 8601 string |
 | `gc_strftime_safe` | `size_t gc_strftime_safe(char *s, size_t maxsize, const char *format, const gc_tm_t *t, i32_t utc_offset)` | Format a time with a `strftime`-style format string |
+| `gc_dtz_time__print` | `u32_t gc_dtz_time__print(i64_t epoch_us, u32_t tz, const char *format_c_str, char *out, u32_t out_cap)` | Format a timestamp with timezone using a format string. Returns the number of characters written. |
+| `gc_dtz_time__parse` | `bool gc_dtz_time__parse(const char *str, u32_t len, u32_t tz, i64_t *out_epoch_us)` | Parse a time string with timezone to a UTC epoch in microseconds. Returns `true` on success. |
 
 ### Helper Macros
 

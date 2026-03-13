@@ -360,11 +360,16 @@ Input data for `llama_encode`/`llama_decode`:
 ### llama_model_params
 Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
-- `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
+- `tensor_buft_overrides`: NULL-terminated list of buffer types for tensors matching a pattern
+- `n_gpu_layers`: Number of layers to store in VRAM (negative = all layers)
 - `split_mode`: How to split the model across GPUs
+- `main_gpu`: GPU used for the entire model when split_mode is NONE
+- `tensor_split`: Proportion of model to offload to each GPU
+- `progress_callback`: Called with progress 0.0-1.0, return false to abort
+- `kv_overrides`: Override key-value pairs of model metadata
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
-- `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
+- `use_direct_io`: Use direct I/O, takes precedence over use_mmap when supported
 - `use_mlock`: Force system to keep model in RAM
 - `check_tensors`: Validate model tensor data
 - `use_extra_bufts`: Use extra buffer types (for weight repacking)

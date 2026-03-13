@@ -147,6 +147,24 @@ Get default quantization parameters.
 
 ## Model Loading & Management
 
+### llama_model_init_from_user
+```c
+typedef void (*llama_model_set_tensor_data_t)(struct ggml_tensor * tensor, void * userdata);
+
+struct llama_model * llama_model_init_from_user(
+    struct gguf_context * metadata,
+    llama_model_set_tensor_data_t set_tensor_data,
+    void * set_tensor_data_ud,
+    struct llama_model_params params);
+```
+Create a new model from GGUF metadata and a custom function to set the tensor data. Tensors are created as `GGML_TYPE_F32` by default; override by adding a tensor with the same name but a different type to the context.
+
+**Parameters:**
+- `metadata`: GGUF context containing model metadata
+- `set_tensor_data`: Callback function to initialize tensor data
+- `set_tensor_data_ud`: Userdata passed to the callback
+- `params`: Model loading parameters
+
 ### llama_model_load_from_file
 ```c
 struct llama_model * llama_model_load_from_file(
@@ -998,7 +1016,7 @@ Get embeddings for a sequence ID. Returns NULL if `pooling_type` is `LLAMA_POOLI
 ```c
 enum llama_vocab_type llama_vocab_type(const struct llama_vocab * vocab);
 ```
-Get the vocabulary type (SPM, BPE, WPM, UGM, RWKV, PLAMO2).
+Get the vocabulary type (NONE, SPM, BPE, WPM, UGM, RWKV, PLAMO2).
 
 ### llama_vocab_n_tokens
 ```c
@@ -1922,11 +1940,16 @@ Input data for `llama_encode`/`llama_decode`:
 ### llama_model_params
 Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
-- `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
+- `tensor_buft_overrides`: NULL-terminated list of buffer types for tensors matching a pattern
+- `n_gpu_layers`: Number of layers to store in VRAM (negative = all layers)
 - `split_mode`: How to split the model across GPUs
+- `main_gpu`: GPU used for the entire model when split_mode is NONE
+- `tensor_split`: Proportion of model to offload to each GPU
+- `progress_callback`: Called with progress 0.0-1.0, return false to abort
+- `kv_overrides`: Override key-value pairs of model metadata
 - `vocab_only`: Only load vocabulary, no weights
 - `use_mmap`: Use mmap if possible
-- `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
+- `use_direct_io`: Use direct I/O, takes precedence over use_mmap when supported
 - `use_mlock`: Force system to keep model in RAM
 - `check_tensors`: Validate model tensor data
 - `use_extra_bufts`: Use extra buffer types (for weight repacking)

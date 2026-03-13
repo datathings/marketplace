@@ -160,7 +160,7 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 - Block storage (attach/detach objects)
 - Utility (Morton codes, parsing, sorting, licensing)
 
-**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic), machine.h (parameters, results, errors, object creation, function calls), object.h (field access, GC marks, serialization), tensor.h (creation, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (text append, binary read/write, varint), table.h, alloc.h, program.h (linking, type configuration, introspection), abi.h (schema, serialization), host.h (task spawning), io.h, crypto.h, geo.h, time.h, math.h, block.h, util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
+**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic, node parsing), machine.h (parameters, results, errors, object creation, function calls), object.h (field access, GC marks, serialization), tensor.h (creation, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (text append, binary read/write, varint), table.h, alloc.h, program.h (linking, type configuration, introspection, program creation/finalize), abi.h (schema, serialization), host.h (task spawning), io.h, crypto.h, geo.h, time.h (timezone-aware formatting/parsing), math.h, block.h, node.h (node resolution), util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
 
 ---
 
