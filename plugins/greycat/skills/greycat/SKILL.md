@@ -354,7 +354,7 @@ type Foo { name: String; new_field: int?; }  // nullable = safe ABI update
 
 ## Full-Stack Development
 
-**[references/frontend.md](references/frontend.md)** — @greycat/web SDK, JSX, web components, codegen, auth.
+**[references/frontend.md](references/frontend.md)** — @greycat/web development guide: project setup, JSX runtime, Web Components, gui-* components, events, and common pitfalls.
 
 ## Local LLM Integration
 

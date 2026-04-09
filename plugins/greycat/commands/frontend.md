@@ -1,253 +1,56 @@
 ---
 name: frontend
-description: Review frontend codebase for code quality, performance, and best practices
+description: Review frontend codebase for code quality, performance, and best practices using @greycat/web patterns
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-# Frontend Review & Analysis
+# Frontend Review
 
-**Purpose**: Comprehensive analysis of TypeScript frontend for code quality, performance, and best practices
+**Purpose**: Review `@greycat/web` frontend code for correctness, best practices, and common pitfalls.
 
-**Run After**: Each sprint, before releases, when adding features
-
----
-
-## Overview
-
-This command performs multi-category frontend analysis:
-
-1. **Code Quality** - TypeScript practices, error handling
-2. **Performance** - Bundle size, computations
-3. **Architecture** - Component structure, routing
-4. **Security** - XSS, API patterns, data exposure
-5. **Dead Code** - Unused exports, files, dependencies
+Read [references/frontend.md](../skills/greycat/references/frontend.md) first to understand the @greycat/web patterns.
 
 ---
 
-## Phase 0: Coding Standards Reference
+## Checklist
 
-Before reviewing, understand the required patterns. These are the standards to check against:
+Scan all `.ts` and `.tsx` files under `app/` for these issues:
 
-### Service Pattern
+### 1. Initialization Order
+- `import '@greycat/web'` must appear before any `gui-*` or `gc.*` usage
+- `gc.sdk.init()` must complete before creating `gui-*` elements or calling `gc.project.*`
+- CSS import (`@greycat/web/greycat.css` or `greycat-full.css`) must be present
 
-```typescript
-// Named export object with withRetry wrapper
-export const DocumentService = {
-  getDocument: (id: string): Promise<gc.api_types.Document> =>
-    withRetry(() => gc.document(id)),
+### 2. TypeScript Quality
+- Search for `any` type usage — replace with proper GreyCat types from `gc.core.*` or `gc.project.*`
+- Verify `project.d.ts` is not manually edited
+- Check that custom components declare both `HTMLElementTagNameMap` and `GreyCat.JSX.IntrinsicElements`
 
-  search: (query: string): Promise<gc.api_types.SearchResults> =>
-    withRetry(() => gc.search(query)),
-}
-```
+### 3. Component Patterns
+- Components extending `GuiElement` should use `static override styles` with `css()` + `?inline` imports
+- Components extending `GuiValueElement` should call `this._internalUpdate()` in value setters
+- Event dispatching should use `GuiChangeEvent` / `GuiInputEvent` (bubble + composed)
+- Cleanup should use `addDisposable()` or `abortSignal()`, not manual `removeEventListener`
 
----
+### 4. Common Pitfalls
+- `className` in JSX: each token must be a single class name (no spaces in strings)
+- `GreyCat.JSX.IntrinsicElements` (not global `JSX.IntrinsicElements`)
+- No `dangerouslySetInnerHTML` or `innerHTML` — use DOM API or JSX children
+- Fragments (`<>...</>`) empty on append — don't store for reuse
+- MPA: no client-side routing — verify navigation uses `<a href>` or `window.location`
 
-## Phase 1: Code Quality & Best Practices
-
-### Objective
-Ensure TypeScript best practices are followed.
-
-### Step 1.1: TypeScript Type Safety
-
-**Find `any` usage**:
-```bash
-# Search for 'any' type usage
-grep -rn ": any\|<any>" app/ --include="*.ts" --include="*.tsx"
-```
-
-**Example Output**:
-```
-app/components/DataTable.tsx:45
-
-CODE QUALITY: Using 'any' type
-
-Code:
-  45: const handleData = (data: any) => {
-
-Problem:
-  - Using 'any' bypasses TypeScript type checking
-  - Loses type safety benefits
-
-Fix:
-  interface DataType {
-      id: string;
-      value: number;
-  }
-
-  const handleData = (data: DataType) => {
-      processData(data);
-  }
-
-Priority: MEDIUM
-Impact: Type safety, maintainability
-```
-
-### Step 1.2: Services Without Retry
-
-```bash
-# Find service calls not using withRetry
-grep -rn "gc\.\w\+(" app/services/ --include="*.ts" | grep -v "withRetry"
-```
-
-**Example Output**:
-```
-app/services/documentService.ts:12
-
-CODE QUALITY: Service call without retry wrapper
-
-Code:
-  12: getDocument: (id: string) => gc.document(id),
-
-Fix:
-  getDocument: (id: string): Promise<gc.api_types.Document> =>
-    withRetry(() => gc.document(id)),
-
-Priority: MEDIUM
-Impact: Reliability, error handling
-```
+### 5. Performance
+- Look for components re-creating DOM trees on every update instead of updating properties
+- Check for missing `setAttrs()` batching when setting multiple properties imperatively
+- Verify large data sets use `gui-table` (virtualized) rather than manual DOM loops
 
 ---
 
-## Phase 2: Performance Analysis
+## Output
 
-### Step 2.1: Bundle Size Analysis
+Report issues grouped by severity:
 
-```bash
-# Run bundle analyzer (if available)
-cd app && npm run analyze 2>/dev/null || echo "No bundle analyzer configured"
-```
-
-Look for:
-- Large dependencies (>100KB)
-- Duplicate dependencies
-- Tree-shaking opportunities
-
-### Step 2.2: Lazy Loading Opportunities
-
-```bash
-# Find large pages without lazy loading
-grep -rn "import.*from.*pages" app/ --include="*.ts" --include="*.tsx" | grep -v "lazy\|dynamic"
-```
-
----
-
-## Phase 3: Architecture & Organization
-
-### Step 3.1: Code Duplication
-
-```bash
-# Find similar patterns
-find app -name "*.ts" -o -name "*.tsx" | xargs wc -l | sort -rn | head -20
-```
-
-Manually review large files for duplication.
-
----
-
-## Phase 4: Security
-
-### Step 4.1: XSS Vulnerabilities
-
-```bash
-# Find dangerouslySetInnerHTML or innerHTML usage
-grep -rn "dangerouslySetInnerHTML\|innerHTML" app/ --include="*.ts" --include="*.tsx"
-```
-
-### Step 4.2: Sensitive Data in Client
-
-```bash
-# Find potential secrets in code
-grep -rn "api.*key\|secret\|password" app/ --include="*.ts" --include="*.tsx" -i
-```
-
----
-
-## Phase 5: Dead Code Analysis
-
-### Step 5.1: Run Dead Code Detector
-
-**Detect package manager**:
-```bash
-if [ -f "app/package-lock.json" ]; then
-    PKG_MGR="npm"
-elif [ -f "app/pnpm-lock.yaml" ]; then
-    PKG_MGR="pnpm"
-elif [ -f "app/yarn.lock" ]; then
-    PKG_MGR="yarn"
-else
-    PKG_MGR="npm"
-fi
-```
-
-**Run analyzer**:
-```bash
-cd app
-
-# Check if knip is configured
-if grep -q "knip" package.json; then
-    echo "Running dead code analysis..."
-    $PKG_MGR run dead-code 2>&1 || echo "No dead-code script found"
-else
-    echo "No dead code analyzer (knip) configured"
-    echo "To add: npm install -D knip"
-fi
-```
-
----
-
-## Output Format
-
-### Executive Summary
-
-```
-===============================================================================
-FRONTEND REVIEW REPORT
-===============================================================================
-
-Files Analyzed: [N] (.ts/.tsx files)
-
-ISSUES FOUND:
-
-CRITICAL (Security/Breaking):
-  [ ] XSS vulnerabilities
-  [ ] Hardcoded secrets
-
-HIGH (Performance):
-  [ ] Routes without lazy loading
-  [ ] Large dependencies
-
-MEDIUM (Code Quality/Maintainability):
-  [ ] Uses of 'any' type
-  [ ] Service calls without retry
-  [ ] Duplicated code blocks
-
-LOW (Nice to Have):
-  [ ] Unused exports
-  [ ] Unused dependencies
-
-===============================================================================
-```
-
----
-
-## Success Criteria
-
-- **All frontend files scanned** (.ts/.tsx in app/)
-- **TypeScript quality checked** (any usage, type safety)
-- **Performance analyzed** (bundle, lazy loading)
-- **Architecture reviewed** (duplication, organization)
-- **Security checked** (XSS, secrets)
-- **Dead code detected** (if knip configured)
-- **Report generated** with prioritized issues
-
----
-
-## Notes
-
-- **Works with any TypeScript frontend**: Framework-agnostic patterns
-- **Package manager agnostic**: Detects npm/pnpm/yarn
-- **Dead code requires knip**: Install if not present
-- **Fix CRITICAL first**: Security issues are urgent
-- **Test after changes**: Run tests after applying fixes
-- **GreyCat projects**: Services should use withRetry wrapper for gc.* calls
+- **CRITICAL**: Missing `gc.sdk.init()`, missing CSS imports, security issues
+- **HIGH**: Incorrect component registration, broken event typing
+- **MEDIUM**: `any` usage, missing cleanup, unbatched updates
+- **LOW**: Style inconsistencies, missing type casts
