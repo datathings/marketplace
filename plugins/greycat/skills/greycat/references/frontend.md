@@ -18,13 +18,13 @@
 Scaffold a new project with VitePlus+:
 
 ```bash
-vp create --from github:datathings/greycat-web-template my-project
-cd my-project
-pnpm setup
+vp create github:datathings/greycat-web-template
+cd your-app-name
+pnpm run setup
 pnpm install
 ```
 
-`pnpm setup` fetches the latest GreyCat core and `@greycat/web` versions, updating `project.gcl` and `package.json` automatically.
+`pnpm run setup` fetches the latest GreyCat core and `@greycat/web` versions, updating `project.gcl` and `package.json` automatically.
 
 ### What the Template Provides
 
