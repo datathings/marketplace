@@ -15,11 +15,9 @@ This command upgrades the GreyCat skill by syncing with the latest library versi
 2. Compare with current versions in `project.gcl` (exit early if all up-to-date)
 3. Update `project.gcl` with the latest versions
 4. Install the latest GreyCat libraries from updated `project.gcl`
-5. Delete all old GCL files from the skill to ensure a clean state
-6. Replace all GCL files in the skill with the newly installed versions
-7. Update all `@library` declarations in skill markdown files
-8. Analyze function signatures and update skill documentation
-9. Re-package the skill
+5. Update all `@library` declarations in skill markdown files
+6. Analyze function signatures and update skill documentation
+7. Re-package the skill
 
 ## Step 1: Fetch Latest Library Versions
 
@@ -52,7 +50,7 @@ echo "  pro libraries: $PRO_VERSION"
 echo "  web SDK: $WEB_SDK_VERSION"
 ```
 
-**Note:** All pro libraries (ai, algebra, kafka, sql, s3, finance, powerflow, opcua, useragent) share the same version, so we only need to fetch one version.
+**Note:** All pro libraries (ai, algebra, kafka, sql, finance, powerflow, opcua, useragent) share the same version, so we only need to fetch one version.
 
 ## Step 2: Compare with Current Versions
 
@@ -103,7 +101,7 @@ sed -i "s/@library(\"std\", \"[^\"]*\")/@library(\"std\", \"$STD_VERSION\")/" pr
 sed -i "s/@library(\"explorer\", \"[^\"]*\")/@library(\"explorer\", \"$EXPLORER_VERSION\")/" project.gcl
 
 # Update all pro libraries with the same version
-for lib in ai algebra kafka sql s3 finance powerflow opcua useragent; do
+for lib in ai algebra kafka sql finance powerflow opcua useragent; do
   sed -i "s/@library(\"$lib\", \"[^\"]*\")/@library(\"$lib\", \"$PRO_VERSION\")/" project.gcl
 done
 
@@ -119,40 +117,7 @@ Run `greycat install` to download the latest versions specified in `project.gcl`
 greycat install
 ```
 
-## Step 5: Clean Old GCL Files
-
-**IMPORTANT**: First, delete all existing `.gcl` files from the skill folder to remove any stale files:
-
-```bash
-find ./skills/greycat/references -type f -name "*.gcl" -delete
-```
-
-This ensures:
-- No old/renamed files remain
-- Clean state before copying new files
-- Removed libraries don't leave behind files
-
-## Step 6: Sync GCL Files from lib/ to skill
-
-Copy all `.gcl` files from `./lib/*/` to `skills/greycat/references/*/`:
-
-For each library directory in `./lib`:
-- Copy all `.gcl` files to the corresponding `skills/greycat/references/` subdirectory
-- Preserve the file structure
-
-Libraries to sync:
-- std (core.gcl, runtime.gcl, util.gcl, io.gcl)
-- ai (all llm_*.gcl files)
-- algebra (ml.gcl, compute.gcl, nn.gcl, patterns.gcl, transforms.gcl, etc.)
-- kafka (kafka.gcl)
-- sql (postgres.gcl)
-- s3 (s3.gcl)
-- finance (finance.gcl)
-- powerflow (powerflow.gcl)
-- opcua (opcua.gcl)
-- useragent (useragent.gcl)
-
-## Step 7: Update All @library Declarations in Skill Files
+## Step 5: Update All @library Declarations in Skill Files
 
 Update all `@library` declarations in the skill markdown files to match the versions in `project.gcl`:
 
@@ -166,7 +131,7 @@ find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"std\", \"[
 find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"explorer\", \"[^\"]*\")/@library(\"explorer\", \"$EXPLORER_VERSION\")/g" {} \;
 
 # Update all pro libraries with the same version
-for lib in ai algebra kafka sql s3 finance powerflow opcua useragent; do
+for lib in ai algebra kafka sql finance powerflow opcua useragent; do
   find ./skills/greycat -type f -name "*.md" -exec sed -i "s/@library(\"$lib\", \"[^\"]*\")/@library(\"$lib\", \"$PRO_VERSION\")/g" {} \;
 done
 
@@ -177,7 +142,6 @@ echo "Updated all @library declarations in skill files"
 - `skills/greycat/SKILL.md`
 - `skills/greycat/references/kafka/kafka.md`
 - `skills/greycat/references/sql/postgres.md`
-- `skills/greycat/references/s3/s3.md`
 - `skills/greycat/references/finance/finance.md`
 - `skills/greycat/references/powerflow/powerflow.md`
 - `skills/greycat/references/opcua/opcua.md`
@@ -235,14 +199,14 @@ curl -s "https://get.greycat.io/files/sdk/web/"
 
 **Suggest to the user** what version to use based on what's available, matching the major.minor version of the libraries in `project.gcl`.
 
-## Step 8: Analyze Function Signatures (subagent)
+## Step 6: Analyze Function Signatures (subagent)
 
 **Dispatch a `general-purpose` subagent** via the `Task` tool for the GCL analysis and
 documentation rewrite. This keeps the large GCL file content out of the main context.
 
 Provide the subagent with:
-- Path to updated GCL files: `plugins/greycat/skills/greycat/references/` (just synced)
-- Path to existing markdown docs in the same directory
+- Path to installed GCL files: `lib/` (downloaded by `greycat install`)
+- Path to existing markdown docs: `plugins/greycat/skills/greycat/references/`
 - Old versions and new versions (from Steps 1–2 output)
 
 The subagent should, for each updated `.gcl` file:
@@ -268,7 +232,7 @@ earn its place. API details belong in the per-library reference files, not in SK
 removed, signatures changed, and any breaking changes — so the main context can report
 the outcome.
 
-## Step 9: Re-package the Skill
+## Step 7: Re-package the Skill
 
 Run the main packaging script from the repository root to create the updated `.skill` file:
 
@@ -296,13 +260,12 @@ The upgrade is complete when:
 1. Latest versions are successfully fetched from get.greycat.io
 2. Current versions are compared with latest versions (or early exit if already up-to-date)
 3. `project.gcl` is updated with the latest versions
-4. All old GCL files are deleted from skills/greycat/references/
-5. All GCL files are copied from lib/ to skills/greycat/references/
-6. All `@library` declarations in skill markdown files are updated to match the latest versions
-7. Web SDK version is verified and updated in frontend.md
-8. All function signatures are documented and accurate
-9. The skill is successfully re-packaged
-10. No errors occur during the process
+4. Libraries are installed via `greycat install`
+5. All `@library` declarations in skill markdown files are updated to match the latest versions
+6. Web SDK version is verified and updated in frontend.md
+7. All function signatures are documented and accurate
+8. The skill is successfully re-packaged
+9. No errors occur during the process
 
 **Verification commands:**
 ```bash

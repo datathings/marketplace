@@ -65,20 +65,20 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (229 lines) - Initialization, parameters, model loading
+- **[api-core.md](references/api-core.md)** (304 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (397 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (399 lines) - LoRA adapters, performance, training, constants
 
-**Total:** ~195 active functions (b8191) across 6 organized files
+**Total:** ~199 active functions (b8809) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all ~195 function signatures.
+See **[references/api.md](references/api.md)** for all ~199 function signatures.
 
 ## Common Workflows
 
@@ -148,8 +148,8 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,178 lines total) - Complete API reference split by category for targeted loading:
-  - [api-core.md](references/api-core.md) - Initialization, parameters, model loading
+- **API Reference** (6 files, 2,255 lines total) - Complete API reference split by category for targeted loading:
+  - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
@@ -157,24 +157,28 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8191
+## What's New in b8809
 
-**Deprecations:**
-- `defrag_thold` in `llama_context_params` is now **deprecated** - KV cache defragmentation threshold is no longer used
-- `llama_vocab_cls()` is now **deprecated** - use `llama_vocab_bos()` instead (CLS is equivalent to BOS)
-- `llama_sampler_init_grammar_lazy()` is now **deprecated** - use `llama_sampler_init_grammar_lazy_patterns()` instead
+**New Model Loading Functions:**
+- `llama_model_load_from_file_ptr()` - Load a model from an open `FILE` pointer
+- `llama_model_init_from_user()` - Create a model from GGUF metadata + callback for tensor data
 
-**Model Metadata:**
-- New `llama_model_meta_key` enum with well-known sampling metadata keys (top_k, top_p, min_p, temp, XTC, mirostat, penalties, etc.)
-- Models can now embed recommended sampling parameters in GGUF metadata
+**New Quantization Types:**
+- `LLAMA_FTYPE_MOSTLY_NVFP4` (39) - NVFP4 quantization
+- `LLAMA_FTYPE_MOSTLY_Q1_0` (40) - Q1_0 quantization
 
-**Context Params:**
-- `kv_unified` (bool) - Use a unified buffer across input sequences for attention computation
-- `swa_full` (bool) - Allocate full-size SWA cache for models with Sliding Window Attention
+**New Split Mode:**
+- `LLAMA_SPLIT_MODE_TENSOR` (3) - Backend-agnostic tensor parallelism
 
-**State Management:**
-- `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` replaces `LLAMA_STATE_SEQ_FLAGS_SWA_ONLY` (backwards-compat alias kept)
-- Extended state sequence functions (`_ext` variants) for partial state management
+**Quantization Struct Changes (Breaking):**
+- `llama_model_quantize_params` fields now use properly typed pointers instead of `void *`
+- `tensor_types` field renamed to `tt_overrides` (type: `const struct llama_model_tensor_override *`)
+- New structs: `llama_model_tensor_override`, `llama_model_imatrix_data`
+
+**LoRA Adapter Changes:**
+- `llama_adapter_lora_free()` is **no longer deprecated** - can be used to manually free adapters
+- Adapters can now be loaded **after** context creation (restriction removed)
+- C++ `llama_adapter_lora_deleter` now calls `llama_adapter_lora_free()` (was a no-op)
 
 ## Key Differences from Deprecated API
 

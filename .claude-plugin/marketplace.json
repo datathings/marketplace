@@ -22,7 +22,7 @@
       "name": "greycat-c",
       "source": "./plugins/greycat-c",
       "description": "GreyCat C API & Standard Library skill - Native C SDK documentation for GreyCat",
-      "version": "2.5.1"
+      "version": "2.5.2"
     },
     {
       "name": "blas_lapack",

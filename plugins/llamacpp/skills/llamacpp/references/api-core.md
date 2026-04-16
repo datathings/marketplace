@@ -40,9 +40,9 @@ This is the core API reference covering initialization, parameters, and model lo
 - `llama_model_free()`, `llama_free()` - Cleanup
 
 **Tokenization:**
-- `llama_tokenize()` - Text → tokens
-- `llama_detokenize()` - Tokens → text
-- `llama_token_to_piece()` - Single token → text
+- `llama_tokenize()` - Text -> tokens
+- `llama_detokenize()` - Tokens -> text
+- `llama_token_to_piece()` - Single token -> text
 
 **Inference:**
 - `llama_decode()` - Process token batch
@@ -178,6 +178,18 @@ if (!model) {
 }
 ```
 
+### llama_model_load_from_file_ptr
+```c
+struct llama_model * llama_model_load_from_file_ptr(
+    FILE * file,
+    struct llama_model_params params);
+```
+Load a model from an open `FILE` pointer. Returns NULL on failure.
+
+**Parameters:**
+- `file`: Open FILE pointer to the GGUF model
+- `params`: Model loading parameters (get from `llama_model_default_params()`)
+
 ### llama_model_load_from_splits
 ```c
 struct llama_model * llama_model_load_from_splits(
@@ -190,6 +202,24 @@ Load a model from multiple split files (supports custom naming schemes). The pat
 **Parameters:**
 - `paths`: Array of paths to split files
 - `n_paths`: Number of split files
+- `params`: Model loading parameters
+
+### llama_model_init_from_user
+```c
+typedef void (*llama_model_set_tensor_data_t)(struct ggml_tensor * tensor, void * userdata);
+
+struct llama_model * llama_model_init_from_user(
+    struct gguf_context * metadata,
+    llama_model_set_tensor_data_t set_tensor_data,
+    void * set_tensor_data_ud,
+    struct llama_model_params params);
+```
+Create a new model from GGUF metadata and a callback function that sets tensor data. Tensors are created as `GGML_TYPE_F32` by default.
+
+**Parameters:**
+- `metadata`: GGUF context containing model metadata
+- `set_tensor_data`: Callback to initialize tensor data
+- `set_tensor_data_ud`: Userdata passed to the callback
 - `params`: Model loading parameters
 
 ### llama_model_save_to_file
@@ -225,5 +255,49 @@ Quantize a model. Returns 0 on success.
 - `fname_out`: Output model file path
 - `params`: Quantization parameters
 
----
+### Quantization Structures
 
+```c
+struct llama_model_tensor_override {
+    const char * pattern;
+    enum ggml_type type;
+};
+
+struct llama_model_imatrix_data {
+    const char * name;
+    const float * data;
+    size_t size;
+};
+
+typedef struct llama_model_quantize_params {
+    int32_t nthread;                                            // number of threads (<=0 = auto)
+    enum llama_ftype ftype;                                     // quantize to this llama_ftype
+    enum ggml_type output_tensor_type;                          // output tensor type
+    enum ggml_type token_embedding_type;                        // token embeddings tensor type
+    bool allow_requantize;                                      // allow quantizing non-f32/f16 tensors
+    bool quantize_output_tensor;                                // quantize output.weight
+    bool only_copy;                                             // only copy tensors
+    bool pure;                                                  // quantize all tensors to the default type
+    bool keep_split;                                            // quantize to the same number of shards
+    bool dry_run;                                               // calculate final size without quantizing
+    const struct llama_model_imatrix_data * imatrix;            // importance matrix data
+    const struct llama_model_kv_override * kv_overrides;        // kv overrides
+    const struct llama_model_tensor_override * tt_overrides;    // tensor type overrides
+    const int32_t * prune_layers;                               // layer indices to prune
+} llama_model_quantize_params;
+```
+
+**Note (b8809):** The quantization params struct now uses properly typed pointers instead of `void *`. The `tensor_types` field was renamed to `tt_overrides`.
+
+### New Enum Values (b8809)
+
+```c
+// New quantization types
+LLAMA_FTYPE_MOSTLY_NVFP4 = 39  // NVFP4 quantization (except 1d tensors)
+LLAMA_FTYPE_MOSTLY_Q1_0  = 40  // Q1_0 quantization (except 1d tensors)
+
+// New split mode
+LLAMA_SPLIT_MODE_TENSOR = 3    // Backend-agnostic tensor parallelism
+```
+
+---

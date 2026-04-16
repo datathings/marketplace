@@ -21,11 +21,13 @@ struct llama_adapter_lora * llama_adapter_lora_init(
     struct llama_model * model,
     const char * path_lora);
 ```
-Load a LoRA adapter from file.
+Load a LoRA adapter from file. The adapter is valid as long as the associated model is not freed. Can be loaded before or after context creation.
 
-**Important:**
-- Adapters are automatically freed when the model is freed (since b8115, `llama_adapter_lora_free()` is deprecated)
-- All adapters must be loaded before context creation
+### llama_adapter_lora_free
+```c
+void llama_adapter_lora_free(struct llama_adapter_lora * adapter);
+```
+Manually free a LoRA adapter. Loaded adapters that are not manually freed will be freed when the associated model is deleted.
 
 ### llama_adapter_meta_val_str
 ```c

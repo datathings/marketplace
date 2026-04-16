@@ -26,7 +26,9 @@ This document provides a comprehensive reference for all non-deprecated function
 
 **Model & Context:**
 - `llama_backend_init()` - Initialize backend
-- `llama_model_load_from_file()` - Load GGUF model
+- `llama_model_load_from_file()` - Load GGUF model from path
+- `llama_model_load_from_file_ptr()` - Load GGUF model from FILE pointer
+- `llama_model_init_from_user()` - Create model from GGUF metadata + callback
 - `llama_init_from_model()` - Create inference context
 - `llama_model_free()`, `llama_free()` - Cleanup
 
@@ -169,6 +171,14 @@ if (!model) {
 }
 ```
 
+### llama_model_load_from_file_ptr
+```c
+struct llama_model * llama_model_load_from_file_ptr(
+    FILE * file,
+    struct llama_model_params params);
+```
+Load a model from an open `FILE` pointer. Returns NULL on failure.
+
 ### llama_model_load_from_splits
 ```c
 struct llama_model * llama_model_load_from_splits(
@@ -182,6 +192,18 @@ Load a model from multiple split files (supports custom naming schemes). The pat
 - `paths`: Array of paths to split files
 - `n_paths`: Number of split files
 - `params`: Model loading parameters
+
+### llama_model_init_from_user
+```c
+typedef void (*llama_model_set_tensor_data_t)(struct ggml_tensor * tensor, void * userdata);
+
+struct llama_model * llama_model_init_from_user(
+    struct gguf_context * metadata,
+    llama_model_set_tensor_data_t set_tensor_data,
+    void * set_tensor_data_ud,
+    struct llama_model_params params);
+```
+Create a new model from GGUF metadata and a callback that sets tensor data.
 
 ### llama_model_save_to_file
 ```c
@@ -1606,7 +1628,13 @@ struct llama_adapter_lora * llama_adapter_lora_init(
     struct llama_model * model,
     const char * path_lora);
 ```
-Load a LoRA adapter from file. Adapters are automatically freed when the model is freed (since b8115, `llama_adapter_lora_free()` is deprecated).
+Load a LoRA adapter from file. The adapter is valid as long as the associated model is not freed. Can be loaded before or after context creation.
+
+### llama_adapter_lora_free
+```c
+void llama_adapter_lora_free(struct llama_adapter_lora * adapter);
+```
+Manually free a LoRA adapter. Loaded adapters that are not manually freed will be freed when the associated model is deleted.
 
 ### llama_adapter_meta_val_str
 ```c

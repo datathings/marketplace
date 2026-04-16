@@ -28,6 +28,7 @@ Complete reference documentation for the GreyCat C SDK header files. This SDK en
 - [gc/geo.h — Geospatial Operations](#gcgeo-h)
 - [gc/time.h — Date & Time](#gctime-h)
 - [gc/math.h — Math Functions (WASM)](#gcmath-h)
+- [gc/node.h — Node Resolution](#gcnode-h)
 - [gc/util.h — Utility Functions](#gcutil-h)
 
 ---
@@ -87,6 +88,12 @@ typedef struct {
 | `gc_c64__arg` | `f64_t gc_c64__arg(c64_t z)` | Argument (angle) of complex number |
 | `gc_c64__abs` | `f64_t gc_c64__abs(c64_t z)` | Absolute value (modulus) |
 
+### Node Reference Parsing
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_node__parse` | `bool gc_node__parse(const char *str, u32_t str_len, gc_slot_t *value, gc_type_t *value_type)` | Parse a node reference from a string representation. Returns `true` on success. |
+
 ### gc_type_t — GreyCat Type Enum
 
 Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serialization, etc.).
@@ -109,21 +116,14 @@ Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serializat
 | 13 | `gc_type_cubic` | Cubic interpolation value |
 | 14 | `gc_type_static_field` | Static field / enum value (stored as `gc_slot_tuple_u32_t`) |
 | 15 | `gc_type_object` | Heap-allocated object pointer |
-| 16 | `gc_type_t2` | Tuple of 2 ints |
-| 17 | `gc_type_t3` | Tuple of 3 ints |
-| 18 | `gc_type_t4` | Tuple of 4 ints |
-| 19 | `gc_type_str` | Inline short string (encoded in 8 bytes) |
-| 20 | `gc_type_t2f` | Tuple of 2 floats |
-| 21 | `gc_type_t3f` | Tuple of 3 floats |
-| 22 | `gc_type_t4f` | Tuple of 4 floats |
-| 23 | `gc_type_block_ref` | Storage block reference |
-| 24 | `gc_type_block_inline` | Inline storage block |
-| 25 | `gc_type_function` | Function reference |
-| 26 | `gc_type_undefined` | Undefined / unknown type |
-| 27 | `gc_type_type` | Type reference |
-| 28 | `gc_type_field` | Field reference |
-| 29 | `gc_type_stringlit` | String literal (serialization only) |
-| 30 | `gc_type_error` | Error (C internal only) |
+| 16 | `gc_type_block_ref` | Storage block reference |
+| 17 | `gc_type_block_inline` | Inline storage block |
+| 18 | `gc_type_function` | Function reference |
+| 19 | `gc_type_undefined` | Undefined / unknown type |
+| 20 | `gc_type_type` | Type reference |
+| 21 | `gc_type_field` | Field reference |
+| 22 | `gc_type_stringlit` | String literal (serialization only) |
+| 23 | `gc_type_error` | Error (C internal only) |
 
 ### gc_object_t — Object Header
 
@@ -213,7 +213,7 @@ These globals are resolved at program startup and identify built-in GreyCat type
 <a id="gcalloc-h"></a>
 ## gc/alloc.h — Memory Allocation
 
-Provides multiple allocation strategies. On WASM targets, also declares standard C memory functions (`memset`, `memcpy`, `memcmp`, `strcmp`, `memmove`, `strlen`).
+Provides multiple allocation strategies. On WASM targets, also declares standard C memory functions (`memset`, `memcpy`, `memcmp`, `strcmp`, `strncmp`, `memmove`, `strlen`).
 
 ### Per-Worker Allocators (Thread-Local)
 
@@ -341,6 +341,7 @@ typedef struct {
 | `gc_buffer__add_byte_size_si(self, value)` | Append byte size in SI units (KB, MB...) |
 | `gc_buffer__add_symbol(self, symb_id, prog)` | Append a symbol name by its ID |
 | `gc_buffer__add_protected_symbol(buf, symb_off, prog)` | Append symbol with non-alphanumeric replaced by `_` |
+| `gc_buffer__add_escaped_symbol(buf, symb_off, prog)` | Append symbol with `"` escaped to `\"` |
 | `gc_buffer__add_function(self, fn_off, prog)` | Append a function's qualified name |
 | `gc_buffer__add_type_name(self, value, type, prog)` | Append the type name of a slot |
 | `gc_buffer__add_type_name_by_id(self, type_id, prog)` | Append a type name by its type ID |
@@ -646,7 +647,6 @@ typedef enum gc_log_level {
 | `gc_machine__call_function` | `bool gc_machine__call_function(gc_machine_t *ctx, gc_program_function_body_t *body, gc_slot_t self, gc_type_t self_type, const gc_slot_t *params, const gc_type_t *params_type, u32_t nb_params, gc_slot_t *marked_res, gc_type_t *marked_res_type)` | Call a GCL function from C. The result is marked (caller must unmark). |
 | `gc_machine__push_function` | `void gc_machine__push_function(gc_machine_t *ctx, const gc_program_function_t *fn, gc_slot_t self, gc_type_t self_type, const gc_task_t *task)` | Push a function frame onto the execution stack |
 | `gc_machine__load` | `gc_type_t gc_machine__load(gc_machine_t *ctx, char *data, u32_t len, gc_slot_t *value)` | Deserialize a slot from raw binary data |
-| `gc_machine__init_tensor` | `gc_core_tensor_t *gc_machine__init_tensor(gc_core_tensor_descriptor_t desc, gc_object_t *proxy, char *data, const gc_machine_t *ctx)` | Create a tensor with a pre-built descriptor and data pointer |
 | `gc_machine__lru_add` | `void gc_machine__lru_add(gc_machine_t *ctx, gc_block_t *page)` | Add a block to the LRU cache |
 
 ---
@@ -969,7 +969,7 @@ typedef struct gc_program_op {
 The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 
 <details>
-<summary>Full opcode list (84 opcodes)</summary>
+<summary>Full opcode list (85 opcodes, 0-84)</summary>
 
 | Value | Name | Description |
 |-------|------|-------------|
@@ -1003,21 +1003,22 @@ The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 | 27-30 | `inc_load_lvar` / `load_inc_lvar` / `dec_load_lvar` / `load_dec_lvar` | Pre/post increment/decrement local vars |
 | 31-32 | `def_time` / `undef_time` | Define/undefine time scope |
 | 33-36 | `load_str` / `store_str` / `store_frag` / `push_str` | String building operations |
-| 37-46 | `push_arr` / `push_map` / `push_table` / `push_obj` / `push_tuple` / `push_node` / `push_node_time` / `push_node_list` / `push_node_index` / `push_node_geo` | Literal construction |
-| 47 | `push_const_def` | Push constant definition |
-| 48-50 | `call_fn` / `call_met` / `call_end` | Function/method calls |
-| 51 | `ret` | Return from function |
-| 52 | `not` | Logical NOT |
-| 53 | `noop` | No operation |
-| 54-58 | `try` / `untry` / `throw` / `catch_a` / `catch_p` | Exception handling |
-| 59-64 | `eq` / `ne` / `lt` / `le` / `gt` / `ge` | Comparison operators |
-| 65-66 | `uminus` / `unref` | Unary minus / dereference |
-| 67-74 | `add` / `sub` / `mul` / `div` / `mod` / `pow` / `and` / `or` | Arithmetic & logical |
-| 75-76 | `for_st` / `for_do` | For-loop start/body |
-| 77 | `breakpoint` | Debugger breakpoint |
-| 78-81 | `break` / `break_for_in` / `continue` / `continue_for_in` | Loop control flow |
-| 82 | `volatile_mod` | Volatile module access |
-| 83 | `jol` | Jump on log level greater than machine log level |
+| 37-42 | `push_arr` / `push_map` / `push_table` / `push_obj` / `push_tuple` / `push_geo` | Literal construction |
+| 43-47 | `push_node` / `push_node_time` / `push_node_list` / `push_node_index` / `push_node_geo` | Node literal construction |
+| 48 | `push_const_def` | Push constant definition |
+| 49-51 | `call_fn` / `call_met` / `call_end` | Function/method calls |
+| 52 | `ret` | Return from function |
+| 53 | `not` | Logical NOT |
+| 54 | `noop` | No operation |
+| 55-59 | `try` / `untry` / `throw` / `catch_a` / `catch_p` | Exception handling |
+| 60-65 | `eq` / `ne` / `lt` / `le` / `gt` / `ge` | Comparison operators |
+| 66-67 | `uminus` / `unref` | Unary minus / dereference |
+| 68-75 | `add` / `sub` / `mul` / `div` / `mod` / `pow` / `and` / `or` | Arithmetic & logical |
+| 76-77 | `for_st` / `for_do` | For-loop start/body |
+| 78 | `breakpoint` | Debugger breakpoint |
+| 79-82 | `break` / `break_for_in` / `continue` / `continue_for_in` | Loop control flow |
+| 83 | `volatile_mod` | Volatile module access |
+| 84 | `jol` | Jump on log level greater than machine log level |
 
 </details>
 
@@ -1031,12 +1032,10 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 |-------|------|-------------|
 | 0 | `from` | Start key (inclusive) |
 | 1 | `to` | End key (inclusive) |
-| 2 | `skip` | Number of entries to skip |
-| 3 | `limit` | Maximum entries to return |
-| 4 | `sampling` | Sampling rate |
-| 5 | `nullable` | Include nullable entries |
-| 6 | `from_excl` | Start key (exclusive) |
-| 7 | `to_excl` | End key (exclusive) |
+| 2 | `limit` | Maximum entries to return |
+| 3 | `nullable` | Include nullable entries |
+| 4 | `from_excl` | Start key (exclusive) |
+| 5 | `to_excl` | End key (exclusive) |
 
 ### Program Functions
 
@@ -1100,11 +1099,21 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_type_desc__to_type_id(type_d)` | Extract the type ID from a type descriptor |
 | `gc_type_desc__to_type_desc(type_id, is_nullable)` | Build a type descriptor from a type ID and nullable flag |
 
-#### Object & Library
+#### Format Pragma Extraction
+
+| Function | Description |
+|----------|-------------|
+| `gc_program_type__extract_format_pragma_arg(type, field_name, pragma_name, arg_index, buf, prog, slot, slot_type)` | Extract a specific argument from a type field's pragma. Returns `true` if found. |
+| `gc_program_type__extract_field_format(type, field, default_tz, buf, prog, out)` | Extract the full field format (format string, DurationUnit, TimeZone) from a field's `@format` pragma. Writes result to `out`. |
+
+#### Object, Module & Library
 
 | Function | Description |
 |----------|-------------|
 | `gc_program__create_object(program, type_code)` | Create a new object by type code |
+| `gc_program__create_module(program, mod_name_offset, result_offset)` | Create a new module in the program. Returns `true` on success, writes offset to `*result_offset`. |
+| `gc_program__create_from_abi(abi)` | Create a new program from an ABI definition. Returns `gc_program_t *`. |
+| `gc_program__finalize(program)` | Finalize and free a program created with `gc_program__create_from_abi`. |
 | `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks |
 | `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks |
 | `gc_lib_std__link(prg, lib)` | Link the standard library to a program |
@@ -1118,6 +1127,29 @@ These are used internally for program symbol/type/function resolution:
 | `gc_program_map__put(self, hash, offset, key)` | Insert an entry into a program map |
 | `gc_program_map__hash_off(offset)` | Compute a hash for an offset |
 | `gc_program_map__get_key(self, key, hash, offset)` | Look up an entry by key and hash |
+
+### DurationUnit Constants
+
+Predefined ordinals for the `DurationUnit` enum, used with the field format pragma system:
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `gc_core_DurationUnit_microseconds` | 0 | Microseconds |
+| `gc_core_DurationUnit_milliseconds` | 1 | Milliseconds |
+| `gc_core_DurationUnit_seconds` | 2 | Seconds |
+| `gc_core_DurationUnit_minutes` | 3 | Minutes |
+| `gc_core_DurationUnit_hours` | 4 | Hours |
+| `gc_core_DurationUnit_days` | 5 | Days |
+
+### Field Format (from `@format` pragma)
+
+```c
+typedef struct gc_program_type_field_format {
+    gc_string_t *format;  // Custom format string (NULL if none)
+    u32_t unit;           // DurationUnit ordinal
+    u32_t tz;             // TimeZone ordinal
+} gc_program_type_field_format_t;
+```
 
 ### Constants
 
@@ -1890,6 +1922,8 @@ typedef struct {
 | `gc_core_time__parse_iso` | `bool gc_core_time__parse_iso(const char *c, size_t len, gc_tm_t *tm, gc_core_time_parse_tz_t *tz)` | Parse an ISO 8601 date/time string |
 | `gc__print_iso` | `void gc__print_iso(gc_buffer_t *buffer, const gc_tm_t *cal, i64_t epoch_us, i64_t localized_epoch_s)` | Format a time as ISO 8601 string |
 | `gc_strftime_safe` | `size_t gc_strftime_safe(char *s, size_t maxsize, const char *format, const gc_tm_t *t, i32_t utc_offset)` | Format a time with a `strftime`-style format string |
+| `gc_dtz_time__print` | `u32_t gc_dtz_time__print(i64_t epoch_us, u32_t tz, const char *format_c_str, char *out, u32_t out_cap)` | Format a timestamp with timezone into a char buffer. Returns bytes written. |
+| `gc_dtz_time__parse` | `bool gc_dtz_time__parse(const char *str, u32_t len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string with timezone context into a UTC epoch (microseconds). Returns `true` on success. |
 
 ### Helper Macros
 
@@ -1923,6 +1957,19 @@ On WASM targets, provides standalone implementations of standard math functions 
 ### Functions (WASM only)
 
 Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `cos`, `tan`, `atan`, `atan2`, `sqrtf`, `sqrt`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `div`, `llabs`, `labs`.
+
+---
+
+<a id="gcnode-h"></a>
+## gc/node.h — Node Resolution
+
+Functions for resolving node references from their compact `u64_t` representation into full slot values.
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to a slot value. Writes the resolved type to `*result_type`. |
 
 ---
 

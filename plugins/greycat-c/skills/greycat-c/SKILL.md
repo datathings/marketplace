@@ -23,7 +23,7 @@ Comprehensive reference for GreyCat native development (C API), the GCL Standard
 
 **gc_slot_t** - Universal value container (tagged union) holding any GreyCat value: integers, floats, bools, objects, enums, tuples, etc.
 
-**gc_type_t** - Type system enum (8-bit) defining all GreyCat types: null, bool, char, int, float, str, object, static_field, time, duration, geo, node, function, etc.
+**gc_type_t** - Type system enum (8-bit, 24 values) defining all GreyCat types: null, bool, char, int, float, node variants, geo, time, duration, cubic, static_field, object, block_ref, block_inline, function, undefined, type, field, stringlit, error.
 
 **gc_object_t** - Generic handle for heap-allocated objects. Packed to 128 bits. Every collection type (Array, Map, Table, Tensor, String, Buffer) starts with this as its first member.
 
@@ -151,7 +151,8 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 - Map, Array, Table operations
 - Buffer building, binary read/write (varint, zig-zag encoding)
 - String operations (heap strings, inline short strings)
-- Geospatial (geohashing, Haversine distance), Time/Date/Timezone
+- Node resolution (gc_node__resolve, gc_node__parse)
+- Geospatial (geohashing, Haversine distance), Time/Date/Timezone (formatting with gc_dtz_time__print/parse)
 - Cryptography (SHA-256, HMAC-SHA-256, Base64, Base64URL)
 - I/O operations (file open/sync)
 - Memory allocation (per-worker, global, aligned)
@@ -160,7 +161,7 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 - Block storage (attach/detach objects)
 - Utility (Morton codes, parsing, sorting, licensing)
 
-**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic), machine.h (parameters, results, errors, object creation, function calls), object.h (field access, GC marks, serialization), tensor.h (creation, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (text append, binary read/write, varint), table.h, alloc.h, program.h (linking, type configuration, introspection), abi.h (schema, serialization), host.h (task spawning), io.h, crypto.h, geo.h, time.h, math.h, block.h, util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
+**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic, node parsing), machine.h (parameters, results, errors, object creation, function calls), object.h (field access, GC marks, serialization), tensor.h (creation, init_tensor, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (text append, escaped symbol, binary read/write, varint), table.h, alloc.h, program.h (linking, type configuration, introspection, DurationUnit constants, field format pragma, module/program creation), abi.h (schema, serialization), host.h (task spawning), node.h (node resolution), io.h, crypto.h, geo.h, time.h (timezone-aware print/parse), math.h, block.h, util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
 
 ---
 
