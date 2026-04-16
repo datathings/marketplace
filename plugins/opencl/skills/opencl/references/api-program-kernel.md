@@ -76,8 +76,27 @@ if (err == CL_BUILD_PROGRAM_FAILURE) {
 }
 ```
 
-### `clCompileProgram` / `clLinkProgram`
-Separate compile and link steps (OpenCL 1.2+). Enables library re-use and embedded headers.
+### `clCompileProgram(program, num_devices, device_list, options, num_input_headers, input_headers, header_include_names, pfn_notify, user_data) -> cl_int`
+Compile a program's source (OpenCL 1.2+). Does not link.
+- `num_input_headers` / `input_headers` — programs to use as embedded headers
+- `header_include_names` — names by which headers are included in source
+
+### `clLinkProgram(context, num_devices, device_list, options, num_input_programs, input_programs, pfn_notify, user_data, errcode_ret) -> cl_program`
+Link compiled programs and/or libraries into an executable (OpenCL 1.2+). Returns a new `cl_program`.
+
+**Link options:**
+| Option | Effect |
+|---|---|
+| `-cl-denorms-are-zero` | Denormalized numbers may be flushed to zero |
+| `-cl-no-signed-zeros` | Allow optimizations ignoring sign of zero |
+| `-create-library` | Create a library (not an executable) |
+| `-enable-link-options` | Allow link options for next link step |
+
+### `clUnloadPlatformCompiler(platform) -> cl_int`
+Free compiler resources for a platform (OpenCL 1.2+). The compiler is reloaded on next build/compile.
+
+### `clSetProgramSpecializationConstant(program, spec_id, spec_size, spec_value) -> cl_int`
+Set a SPIR-V specialization constant value before building (OpenCL 2.2+).
 
 ### `clGetProgramBuildInfo(program, device, param_name, ...) -> cl_int`
 
@@ -86,6 +105,8 @@ Separate compile and link steps (OpenCL 1.2+). Enables library re-use and embedd
 | `CL_PROGRAM_BUILD_STATUS` | `cl_build_status` | `CL_BUILD_SUCCESS`, `CL_BUILD_ERROR`, etc. |
 | `CL_PROGRAM_BUILD_LOG` | `char[]` | Compiler output / error messages |
 | `CL_PROGRAM_BUILD_OPTIONS` | `char[]` | Options used in last build |
+| `CL_PROGRAM_BINARY_TYPE` | `cl_program_binary_type` | `CL_PROGRAM_BINARY_TYPE_NONE`, `COMPILED_OBJECT`, `LIBRARY`, `EXECUTABLE` (1.2+) |
+| `CL_PROGRAM_BUILD_GLOBAL_VARIABLE_TOTAL_SIZE` | `size_t` | Total global variable size (2.0+) |
 
 ---
 
@@ -101,6 +122,8 @@ Separate compile and link steps (OpenCL 1.2+). Enables library re-use and embedd
 | `CL_PROGRAM_BINARIES` | `unsigned char*[]` | Per-device compiled binaries |
 | `CL_PROGRAM_NUM_KERNELS` | `size_t` | Number of kernels in program |
 | `CL_PROGRAM_KERNEL_NAMES` | `char[]` | Semicolon-separated kernel names |
+| `CL_PROGRAM_SOURCE` | `char[]` | Original source string |
+| `CL_PROGRAM_IL` | `unsigned char[]` | IL (SPIR-V) content (2.1+) |
 
 ### `clCreateProgramWithBinary(context, num_devices, device_list, lengths, binaries, binary_status, errcode_ret) -> cl_program`
 Restore a previously compiled program from cached binaries. Avoids recompilation overhead.
@@ -130,6 +153,9 @@ cl_kernel k = clCreateKernel(prog, "saxpy", &err);
 
 ### `clCreateKernelsInProgram(program, num_kernels, kernels, num_kernels_ret) -> cl_int`
 Extract all kernels at once.
+
+### `clCloneKernel(source_kernel, errcode_ret) -> cl_kernel`
+Clone a kernel object, copying all argument values and state (OpenCL 2.1+). Useful for safe concurrent argument setting from multiple threads.
 
 ### `clSetKernelArg(kernel, arg_index, arg_size, arg_value) -> cl_int`
 **Description:** Set a kernel argument by index. Must be called for every argument before enqueuing.
@@ -169,6 +195,7 @@ Provide hints: `CL_KERNEL_EXEC_INFO_SVM_PTRS`, `CL_KERNEL_EXEC_INFO_SVM_FINE_GRA
 | `CL_KERNEL_REFERENCE_COUNT` | `cl_uint` | Reference count |
 | `CL_KERNEL_CONTEXT` | `cl_context` | Associated context |
 | `CL_KERNEL_PROGRAM` | `cl_program` | Associated program |
+| `CL_KERNEL_ATTRIBUTES` | `char[]` | Kernel attributes string (1.2+) |
 
 ### `clGetKernelWorkGroupInfo(kernel, device, param_name, ...) -> cl_int`
 
@@ -179,6 +206,18 @@ Provide hints: `CL_KERNEL_EXEC_INFO_SVM_PTRS`, `CL_KERNEL_EXEC_INFO_SVM_FINE_GRA
 | `CL_KERNEL_LOCAL_MEM_SIZE` | `cl_ulong` | Local memory used by kernel |
 | `CL_KERNEL_PRIVATE_MEM_SIZE` | `cl_ulong` | Private memory used per work-item |
 | `CL_KERNEL_COMPILE_WORK_GROUP_SIZE` | `size_t[3]` | From `__attribute__((reqd_work_group_size(...)))` |
+| `CL_KERNEL_GLOBAL_WORK_SIZE` | `size_t[3]` | Required global work-size for built-in kernels (1.2+) |
+
+### `clGetKernelSubGroupInfo(kernel, device, param_name, input_value_size, input_value, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Query sub-group information for a kernel (OpenCL 2.1+).
+
+| Constant | Input | Output Type | Description |
+|---|---|---|---|
+| `CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE` | `size_t[]` (local work size) | `size_t` | Max sub-group size for given local size |
+| `CL_KERNEL_SUB_GROUP_COUNT_FOR_NDRANGE` | `size_t[]` (local work size) | `size_t` | Number of sub-groups for given local size |
+| `CL_KERNEL_LOCAL_SIZE_FOR_SUB_GROUP_COUNT` | `size_t` (sub-group count) | `size_t[]` | Suggested local size for requested count |
+| `CL_KERNEL_MAX_NUM_SUB_GROUPS` | None | `size_t` | Max sub-groups across all local sizes |
+| `CL_KERNEL_COMPILE_NUM_SUB_GROUPS` | None | `size_t` | Compile-time sub-group count (0 if unspecified) |
 
 ### `clGetKernelArgInfo(kernel, arg_index, param_name, ...) -> cl_int`
 Query argument names, types, access qualifiers (OpenCL 1.2+, requires `-cl-kernel-arg-info` build option).

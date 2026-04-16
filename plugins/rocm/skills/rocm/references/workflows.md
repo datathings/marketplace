@@ -7,11 +7,12 @@
 4. [rocBLAS GEMM Workflow](#rocblas-gemm-workflow)
 5. [rocFFT 1D Complex Transform](#rocfft-1d-complex-transform)
 6. [rocRAND Random Number Generation](#rocrand-random-number-generation)
-7. [Multi-GPU Data Parallel Workflow](#multi-gpu-data-parallel-workflow)
-8. [Streaming Overlap (Compute + Transfer)](#streaming-overlap-compute--transfer)
-9. [Build System Setup](#build-system-setup)
-10. [CUDA to HIP Porting](#cuda-to-hip-porting)
-11. [Common Pitfalls](#common-pitfalls)
+7. [HIP Graphs Workflow](#hip-graphs-workflow)
+8. [Multi-GPU Data Parallel Workflow](#multi-gpu-data-parallel-workflow)
+9. [Streaming Overlap (Compute + Transfer)](#streaming-overlap-compute--transfer)
+10. [Build System Setup](#build-system-setup)
+11. [CUDA to HIP Porting](#cuda-to-hip-porting)
+12. [Common Pitfalls](#common-pitfalls)
 
 ---
 
@@ -412,6 +413,89 @@ hipcc -o rocrand_example rocrand_example.cpp -lrocrand
 
 ---
 
+## HIP Graphs Workflow
+
+Capture a stream of operations into a graph for low-overhead repeated execution.
+
+```cpp
+// hip_graph_capture.hip
+#include <hip/hip_runtime.h>
+#include <vector>
+
+#define HIP_CHECK(expr) do { \
+    hipError_t err = (expr); \
+    if (err != hipSuccess) { \
+        fprintf(stderr, "HIP error %s at %s:%d\n", hipGetErrorString(err), __FILE__, __LINE__); \
+        exit(EXIT_FAILURE); \
+    } \
+} while(0)
+
+__global__ void scale_kernel(float* data, float factor, unsigned int n) {
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) data[i] *= factor;
+}
+
+int main() {
+    constexpr size_t N = 1 << 20;
+    constexpr unsigned int BLOCK = 256;
+    constexpr unsigned int GRID = (N + BLOCK - 1) / BLOCK;
+
+    // Pinned host memory for async transfers
+    float* h_data;
+    HIP_CHECK(hipHostMalloc(&h_data, N * sizeof(float)));
+    for (size_t i = 0; i < N; i++) h_data[i] = 1.0f;
+
+    float* d_data;
+    HIP_CHECK(hipMalloc(&d_data, N * sizeof(float)));
+
+    hipStream_t stream;
+    HIP_CHECK(hipStreamCreate(&stream));
+
+    // --- Stream capture: record operations into a graph ---
+    HIP_CHECK(hipStreamBeginCapture(stream, hipStreamCaptureModeGlobal));
+
+    HIP_CHECK(hipMemcpyAsync(d_data, h_data, N * sizeof(float),
+                              hipMemcpyHostToDevice, stream));
+    scale_kernel<<<dim3(GRID), dim3(BLOCK), 0, stream>>>(d_data, 2.0f, N);
+    HIP_CHECK(hipMemcpyAsync(h_data, d_data, N * sizeof(float),
+                              hipMemcpyDeviceToHost, stream));
+
+    hipGraph_t graph;
+    HIP_CHECK(hipStreamEndCapture(stream, &graph));
+
+    // Instantiate once, launch many times
+    hipGraphExec_t exec;
+    HIP_CHECK(hipGraphInstantiate(&exec, graph, nullptr, nullptr, 0));
+
+    for (int iter = 0; iter < 100; ++iter) {
+        HIP_CHECK(hipGraphLaunch(exec, stream));
+    }
+    HIP_CHECK(hipStreamSynchronize(stream));
+
+    printf("h_data[0] = %f (expected 2^100 overflow → inf)\n", h_data[0]);
+
+    // Cleanup
+    HIP_CHECK(hipGraphExecDestroy(exec));
+    HIP_CHECK(hipGraphDestroy(graph));
+    HIP_CHECK(hipStreamDestroy(stream));
+    HIP_CHECK(hipFree(d_data));
+    HIP_CHECK(hipHostFree(h_data));
+    return 0;
+}
+```
+
+**Build:**
+```bash
+hipcc -o hip_graph_capture hip_graph_capture.hip
+```
+
+**Key points:**
+- Use stream capture for convenience; explicit graph construction for complex DAGs with dependencies.
+- `hipGraphLaunch` has lower overhead than individual API calls for repeated execution.
+- Graph nodes support: kernel, memcpy, memset, host function, memory alloc/free, event, child graph.
+
+---
+
 ## Multi-GPU Data Parallel Workflow
 
 Distribute work across all available GPUs.
@@ -553,7 +637,8 @@ int main() {
 
 ### Makefile
 ```makefile
-HIPCC   = hipcc
+# ROCm 7.2+: hipcc is deprecated, prefer amdclang++ directly
+HIPCC   = hipcc     # still works (wraps amdclang++)
 CXXFLAGS = -O2 -std=c++17
 LIBS    = -lrocblas -lrocfft -lrocrand -lrocsolver
 
@@ -562,9 +647,8 @@ all: my_app
 my_app: main.hip
 	$(HIPCC) $(CXXFLAGS) -o $@ $< $(LIBS)
 
-# For GPU_RUNTIME=CUDA portability:
-# HIPCC = hipcc
-# (same command — HIP selects backend automatically)
+# Alternative with amdclang++ directly:
+# amdclang++ $(CXXFLAGS) -x hip -o $@ $< $(LIBS)
 
 clean:
 	rm -f my_app

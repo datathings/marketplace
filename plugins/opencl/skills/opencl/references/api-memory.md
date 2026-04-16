@@ -7,7 +7,8 @@
 4. [Image Transfer Commands](#image-transfer-commands)
 5. [Mapped Memory](#mapped-memory)
 6. [SVM (Shared Virtual Memory)](#svm-shared-virtual-memory)
-7. [Memory Object Lifecycle](#memory-object-lifecycle)
+7. [Samplers](#samplers)
+8. [Memory Object Lifecycle](#memory-object-lifecycle)
 
 ---
 
@@ -42,7 +43,15 @@ cl_mem buf = clCreateBuffer(ctx,
 ```
 
 ### `clCreateSubBuffer(buffer, flags, buffer_create_type, buffer_create_info, errcode_ret) -> cl_mem`
-Create a sub-region view of an existing buffer. `buffer_create_type` is always `CL_BUFFER_CREATE_TYPE_REGION`; `buffer_create_info` points to a `cl_buffer_region { size_t origin; size_t size; }`.
+Create a sub-region view of an existing buffer (OpenCL 1.1+). `buffer_create_type` is always `CL_BUFFER_CREATE_TYPE_REGION`; `buffer_create_info` points to a `cl_buffer_region { size_t origin; size_t size; }`.
+
+### `clCreateBufferWithProperties(context, properties, flags, size, host_ptr, errcode_ret) -> cl_mem`
+Create a buffer with explicit memory properties (OpenCL 3.0+).
+- `properties` — NULL-terminated `cl_mem_properties` array or NULL
+
+### `clCreateImageWithProperties(context, properties, flags, image_format, image_desc, host_ptr, errcode_ret) -> cl_mem`
+Create an image with explicit memory properties (OpenCL 3.0+).
+- `properties` — NULL-terminated `cl_mem_properties` array or NULL
 
 ---
 
@@ -83,6 +92,34 @@ cl_mem img = clCreateImage(ctx, CL_MEM_READ_WRITE, &fmt, &desc, NULL, &err);
 ### `clGetSupportedImageFormats(context, flags, image_type, num_entries, image_formats, num_image_formats) -> cl_int`
 Query which `cl_image_format` combinations are supported. Always call this before creating images to validate format support.
 
+### `clGetImageInfo(image, param_name, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Query image properties.
+
+| Constant | Type | Description |
+|---|---|---|
+| `CL_IMAGE_FORMAT` | `cl_image_format` | Channel order and type |
+| `CL_IMAGE_ELEMENT_SIZE` | `size_t` | Element size in bytes |
+| `CL_IMAGE_ROW_PITCH` | `size_t` | Row pitch in bytes |
+| `CL_IMAGE_SLICE_PITCH` | `size_t` | Slice pitch in bytes |
+| `CL_IMAGE_WIDTH` | `size_t` | Image width |
+| `CL_IMAGE_HEIGHT` | `size_t` | Image height |
+| `CL_IMAGE_DEPTH` | `size_t` | Image depth (3D only) |
+| `CL_IMAGE_ARRAY_SIZE` | `size_t` | Number of images in array (1.2+) |
+| `CL_IMAGE_NUM_MIP_LEVELS` | `cl_uint` | Mip levels (1.2+) |
+| `CL_IMAGE_NUM_SAMPLES` | `cl_uint` | Samples (1.2+) |
+
+### Pipes (OpenCL 2.0+)
+
+### `clCreatePipe(context, flags, pipe_packet_size, pipe_max_packets, properties, errcode_ret) -> cl_mem`
+Create a pipe object.
+- `flags` — `CL_MEM_READ_WRITE` (required) | `CL_MEM_HOST_NO_ACCESS`
+- `pipe_packet_size` — size of each packet in bytes
+- `pipe_max_packets` — max number of packets the pipe can hold
+- `properties` — NULL-terminated `cl_pipe_properties` array or NULL
+
+### `clGetPipeInfo(pipe, param_name, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Query pipe properties: `CL_PIPE_PACKET_SIZE` (`cl_uint`), `CL_PIPE_MAX_PACKETS` (`cl_uint`), `CL_PIPE_PROPERTIES` (3.0+).
+
 ---
 
 ## Buffer Transfer Commands
@@ -115,8 +152,18 @@ cl_float zero = 0.f;
 clEnqueueFillBuffer(queue, buf, &zero, sizeof(zero), 0, total_bytes, 0, NULL, NULL);
 ```
 
-### `clEnqueueReadBufferRect` / `clEnqueueWriteBufferRect` / `clEnqueueCopyBufferRect`
-Rectangular (2D/3D) sub-region transfers. Take `buffer_origin`, `host_origin`, `region`, `buffer_row_pitch`, `buffer_slice_pitch`, `host_row_pitch`, `host_slice_pitch` parameters.
+### `clEnqueueReadBufferRect(queue, buffer, blocking, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, ...) -> cl_int`
+Rectangular (2D/3D) sub-region read from buffer to host (OpenCL 1.1+). Origin and region are 3-element `size_t` arrays.
+
+### `clEnqueueWriteBufferRect(queue, buffer, blocking, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, ...) -> cl_int`
+Rectangular sub-region write from host to buffer (OpenCL 1.1+).
+
+### `clEnqueueCopyBufferRect(queue, src_buffer, dst_buffer, src_origin, dst_origin, region, src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch, ...) -> cl_int`
+Rectangular device-to-device buffer copy (OpenCL 1.1+).
+
+### `clEnqueueMigrateMemObjects(queue, num_mem_objects, mem_objects, flags, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Migrate memory objects to the device associated with the queue (OpenCL 1.2+).
+- `flags` — `CL_MIGRATE_MEM_OBJECT_HOST` (migrate to host), `CL_MIGRATE_MEM_OBJECT_CONTENT_UNDEFINED` (skip data transfer)
 
 ---
 
@@ -169,11 +216,58 @@ Allocate SVM memory. `flags`: `CL_MEM_READ_WRITE`, `CL_MEM_SVM_FINE_GRAIN_BUFFER
 ### `clSVMFree(context, svm_pointer)`
 Free SVM memory. Not enqueued; synchronize before calling.
 
-### `clEnqueueSVMMemcpy` / `clEnqueueSVMMemFill` / `clEnqueueSVMMap` / `clEnqueueSVMUnmap`
-Enqueue SVM operations similar to buffer operations.
+### `clEnqueueSVMFree(queue, num_svm_pointers, svm_pointers[], pfn_free_func, user_data, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Enqueue freeing of SVM allocations. `pfn_free_func` is an optional callback `void(cl_command_queue, cl_uint, void*[], void*)` invoked to perform the actual free; pass NULL to use default `clSVMFree`.
+
+### `clEnqueueSVMMemcpy(queue, blocking_copy, dst_ptr, src_ptr, size, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Enqueue a memcpy between SVM pointers (or SVM and host).
+
+### `clEnqueueSVMMemFill(queue, svm_ptr, pattern, pattern_size, size, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Fill an SVM region with a repeated pattern.
+
+### `clEnqueueSVMMap(queue, blocking_map, flags, svm_ptr, size, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Map an SVM allocation for host access. `flags` is `cl_map_flags` (`CL_MAP_READ`, `CL_MAP_WRITE`, etc.).
+
+### `clEnqueueSVMUnmap(queue, svm_ptr, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Unmap a previously mapped SVM pointer.
+
+### `clEnqueueSVMMigrateMem(queue, num_svm_pointers, svm_pointers, sizes, flags, num_events_in_wait_list, event_wait_list, event) -> cl_int`
+Migrate SVM allocations to a device or host (OpenCL 2.1+).
+- `svm_pointers` — `const void**` array of SVM pointers
+- `sizes` — `const size_t*` array of sizes (0 means entire allocation)
+- `flags` — `cl_mem_migration_flags`
 
 ### `clSetKernelArgSVMPointer(kernel, arg_index, arg_value) -> cl_int`
 Pass SVM pointer as kernel argument.
+
+---
+
+## Samplers
+
+### `clCreateSamplerWithProperties(context, sampler_properties, errcode_ret) -> cl_sampler`
+Create a sampler with explicit properties (OpenCL 2.0+). `sampler_properties` is a NULL-terminated `cl_sampler_properties` array.
+
+| Property | Type | Description |
+|---|---|---|
+| `CL_SAMPLER_NORMALIZED_COORDS` | `cl_bool` | Use [0,1] coords if true, pixel coords if false |
+| `CL_SAMPLER_ADDRESSING_MODE` | `cl_addressing_mode` | `CL_ADDRESS_CLAMP`, `CL_ADDRESS_REPEAT`, etc. |
+| `CL_SAMPLER_FILTER_MODE` | `cl_filter_mode` | `CL_FILTER_NEAREST` or `CL_FILTER_LINEAR` |
+
+```c
+cl_sampler_properties props[] = {
+    CL_SAMPLER_NORMALIZED_COORDS, CL_TRUE,
+    CL_SAMPLER_ADDRESSING_MODE, CL_ADDRESS_CLAMP_TO_EDGE,
+    CL_SAMPLER_FILTER_MODE, CL_FILTER_LINEAR,
+    0
+};
+cl_sampler sampler = clCreateSamplerWithProperties(ctx, props, &err);
+```
+
+### `clGetSamplerInfo(sampler, param_name, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Query sampler properties: `CL_SAMPLER_REFERENCE_COUNT`, `CL_SAMPLER_CONTEXT`, `CL_SAMPLER_NORMALIZED_COORDS`, `CL_SAMPLER_ADDRESSING_MODE`, `CL_SAMPLER_FILTER_MODE`, `CL_SAMPLER_PROPERTIES` (3.0+).
+
+### `clRetainSampler(sampler) -> cl_int` / `clReleaseSampler(sampler) -> cl_int`
+Reference count. Pair every `clCreateSampler*` with `clReleaseSampler`.
 
 ---
 

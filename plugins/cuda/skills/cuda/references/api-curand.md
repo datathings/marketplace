@@ -168,6 +168,7 @@ __global__ void generate_kernel(curandState *state, float *out, int n) {
 | `CURAND_RNG_QUASI_SOBOL32` | Sobol' 32-bit | Low-discrepancy quasi-random |
 | `CURAND_RNG_QUASI_SCRAMBLED_SOBOL32` | Scrambled Sobol' | Better uniformity |
 | `CURAND_RNG_QUASI_SOBOL64` | Sobol' 64-bit | Higher precision quasi-random |
+| `CURAND_RNG_QUASI_SCRAMBLED_SOBOL64` | Scrambled Sobol' 64-bit | High-precision low-discrepancy |
 
 ---
 

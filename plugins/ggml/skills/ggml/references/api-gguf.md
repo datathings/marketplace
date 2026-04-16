@@ -57,6 +57,9 @@ struct gguf_context * gguf_init_empty(void);
 // Set params.no_alloc = true for metadata-only; params.ctx for tensor data loading
 struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_params params);
 
+// Load from an already-opened FILE pointer
+struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_params params);
+
 // Free the GGUF context
 void gguf_free(struct gguf_context * ctx);
 
@@ -232,6 +235,9 @@ void gguf_set_tensor_data(struct gguf_context * ctx, const char * name, const vo
 // Write GGUF file
 // only_meta = true: write header + KV + tensor metadata only (no tensor data)
 bool gguf_write_to_file(const struct gguf_context * ctx, const char * fname, bool only_meta);
+
+// Write to an already-opened FILE pointer
+bool gguf_write_to_file_ptr(const struct gguf_context * ctx, FILE * file, bool only_meta);
 
 // Get the size of the metadata section (for in-memory serialization)
 size_t gguf_get_meta_size(const struct gguf_context * ctx);

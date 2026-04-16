@@ -3,14 +3,17 @@
 ## Table of Contents
 1. [Initialization and Device Management](#initialization-and-device-management)
 2. [Memory Management](#memory-management)
-3. [Kernel Launch](#kernel-launch)
-4. [Streams](#streams)
-5. [Events and Timing](#events-and-timing)
-6. [Error Handling](#error-handling)
-7. [Peer Access (Multi-GPU)](#peer-access-multi-gpu)
-8. [Unified Memory](#unified-memory)
-9. [Occupancy API](#occupancy-api)
-10. [Function Qualifiers and Built-ins](#function-qualifiers-and-built-ins)
+3. [Stream-Ordered Memory Allocation](#stream-ordered-memory-allocation)
+4. [Kernel Launch](#kernel-launch)
+5. [Streams](#streams)
+6. [Events and Timing](#events-and-timing)
+7. [Error Handling](#error-handling)
+8. [HIP Graphs](#hip-graphs)
+9. [Peer Access (Multi-GPU)](#peer-access-multi-gpu)
+10. [Unified Memory](#unified-memory)
+11. [Occupancy API](#occupancy-api)
+12. [Library API](#library-api)
+13. [Function Qualifiers and Built-ins](#function-qualifiers-and-built-ins)
 
 ---
 
@@ -117,6 +120,58 @@ hipError_t hipMallocManaged(void** ptr, size_t size,
 // Prefetch managed memory to a device (-1 = CPU)
 hipError_t hipMemPrefetchAsync(const void* ptr, size_t count,
                                 int dst_device, hipStream_t stream);
+```
+
+---
+
+## Stream-Ordered Memory Allocation
+
+Stream-ordered memory (SOMA) ties allocation lifetime to stream execution order, enabling efficient memory reuse without explicit synchronization.
+
+```cpp
+// Allocate device memory on a stream (freed when stream reaches hipFreeAsync)
+hipError_t hipMallocAsync(void** ptr, size_t size, hipStream_t stream);
+
+// Free stream-ordered allocation
+hipError_t hipFreeAsync(void* ptr, hipStream_t stream);
+```
+
+### Memory Pools
+```cpp
+// Get/set the default memory pool for a device
+hipError_t hipDeviceGetDefaultMemPool(hipMemPool_t* pool, int device);
+hipError_t hipDeviceSetMemPool(int device, hipMemPool_t pool);
+
+// Create a custom memory pool
+hipMemPoolProps props = {};
+props.allocType = hipMemAllocationTypePinned;
+props.location.type = hipMemLocationTypeDevice;
+props.location.id = device_id;
+hipMemPool_t pool;
+hipMemPoolCreate(&pool, &props);
+
+// Set pool release threshold (0 = return memory to OS immediately)
+uint64_t threshold = 0;
+hipMemPoolSetAttribute(pool, hipMemPoolAttrReleaseThreshold, &threshold);
+
+hipMemPoolDestroy(pool);
+```
+
+### Pattern
+```cpp
+hipStream_t stream;
+hipStreamCreate(&stream);
+
+int* d_data;
+hipMallocAsync(&d_data, N * sizeof(int), stream);
+
+my_kernel<<<grid, block, 0, stream>>>(d_data, N);
+
+// Copy results while still on stream
+hipMemcpyAsync(h_data, d_data, N * sizeof(int), hipMemcpyDeviceToHost, stream);
+
+hipFreeAsync(d_data, stream);  // freed when stream reaches this point
+hipStreamSynchronize(stream);
 ```
 
 ---
@@ -281,6 +336,87 @@ HIP_CHECK(hipDeviceSynchronize());
 
 ---
 
+## HIP Graphs
+
+HIP Graphs capture a sequence of operations (kernels, memcpy, memset) into a reusable DAG, reducing launch overhead for repeated execution.
+
+### Graph Creation (Explicit API)
+```cpp
+hipGraph_t graph;
+hipGraphCreate(&graph, 0);
+
+// Add memory allocation node
+hipMemAllocNodeParams alloc_params = {};
+alloc_params.poolProps.allocType = hipMemAllocationTypePinned;
+alloc_params.poolProps.location.type = hipMemLocationTypeDevice;
+alloc_params.poolProps.location.id = 0;
+alloc_params.bytesize = N * sizeof(float);
+
+hipGraphNode_t alloc_node;
+hipGraphAddMemAllocNode(&alloc_node, graph, nullptr, 0, &alloc_params);
+float* d_ptr = (float*)alloc_params.dptr;
+
+// Add kernel node (depends on alloc_node)
+hipKernelNodeParams kern_params = {};
+kern_params.func = (void*)my_kernel;
+kern_params.gridDim = dim3(grid);
+kern_params.blockDim = dim3(block);
+void* args[] = {&d_ptr, &N};
+kern_params.kernelParams = args;
+
+hipGraphNode_t kern_node;
+hipGraphAddKernelNode(&kern_node, graph, &alloc_node, 1, &kern_params);
+
+// Add memcpy, memset, host function nodes similarly:
+// hipGraphAddMemcpyNode1D, hipGraphAddMemsetNode, hipGraphAddHostNode
+
+// Add free node
+hipGraphNode_t free_node;
+hipGraphAddMemFreeNode(&free_node, graph, &kern_node, 1, d_ptr);
+
+// Instantiate and launch
+hipGraphExec_t exec;
+hipGraphInstantiate(&exec, graph, nullptr, nullptr, 0);
+hipGraphLaunch(exec, stream);
+hipStreamSynchronize(stream);
+
+hipGraphExecDestroy(exec);
+hipGraphDestroy(graph);
+```
+
+### Stream Capture (Automatic Graph Construction)
+```cpp
+hipStream_t stream;
+hipStreamCreate(&stream);
+
+// Capture operations into a graph
+hipStreamBeginCapture(stream, hipStreamCaptureModeGlobal);
+
+hipMallocAsync(&d_ptr, N * sizeof(float), stream);
+hipMemcpyAsync(d_ptr, h_ptr, N * sizeof(float), hipMemcpyHostToDevice, stream);
+my_kernel<<<grid, block, 0, stream>>>(d_ptr, N);
+hipMemcpyAsync(h_ptr, d_ptr, N * sizeof(float), hipMemcpyDeviceToHost, stream);
+hipFreeAsync(d_ptr, stream);
+
+hipGraph_t graph;
+hipStreamEndCapture(stream, &graph);
+
+// Instantiate and reuse
+hipGraphExec_t exec;
+hipGraphInstantiate(&exec, graph, nullptr, nullptr, 0);
+
+for (int iter = 0; iter < 100; ++iter)
+    hipGraphLaunch(exec, stream);
+
+hipStreamSynchronize(stream);
+hipGraphExecDestroy(exec);
+hipGraphDestroy(graph);
+```
+
+**When to use graphs:** Repeated execution of the same operation sequence (e.g., inference loops). Graph launch overhead is much lower than individual API calls.
+
+---
+
 ## Peer Access (Multi-GPU)
 
 ```cpp
@@ -344,6 +480,44 @@ hipDeviceProp_t props;
 hipGetDeviceProperties(&props, 0);
 double occupancy = (double)num_blocks * block_size / props.maxThreadsPerMultiProcessor;
 printf("Occupancy: %.1f%%\n", occupancy * 100);
+
+// Query available dynamic shared memory per block (ROCm 7.2+)
+size_t dyn_smem;
+hipOccupancyAvailableDynamicSMemPerBlock(&dyn_smem, my_kernel, num_blocks, block_size);
+```
+
+---
+
+## Library API
+
+ROCm 7.2 added APIs for loading and querying GPU code objects at runtime (alternative to `hipModuleLoad`):
+
+```cpp
+// Load a code object from file or memory
+hipLibrary_t lib;
+hipLibraryLoadFromFile(&lib, "my_kernels.co");
+// or: hipLibraryLoadData(&lib, code_ptr);
+
+// Query kernel count and enumerate
+int count;
+hipLibraryGetKernelCount(&count, lib);
+
+hipKernel_t* kernels = new hipKernel_t[count];
+hipLibraryEnumerateKernels(kernels, count, lib);
+
+// Get a specific kernel by name
+hipKernel_t kernel;
+hipLibraryGetKernel(&kernel, lib, "my_kernel");
+
+// Query kernel properties
+const char* name;
+hipKernelGetName(&name, kernel);
+
+hipLibrary_t parent;
+hipKernelGetLibrary(&parent, kernel);
+
+// Unload
+hipLibraryUnload(lib);
 ```
 
 ---

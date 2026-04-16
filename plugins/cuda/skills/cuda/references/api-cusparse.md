@@ -4,9 +4,9 @@
 1. [Handle Management](#handle-management)
 2. [Sparse Matrix Descriptors](#sparse-matrix-descriptors)
 3. [Dense Matrix/Vector Descriptors](#dense-matrixvector-descriptors)
-4. [SpMM — Sparse × Dense Matrix Multiply](#spmm--sparse--dense-matrix-multiply)
-5. [SpMV — Sparse Matrix × Dense Vector](#spmv--sparse-matrix--dense-vector)
-6. [SpGEMM — Sparse × Sparse](#spgemm--sparse--sparse)
+4. [SpMM — Sparse x Dense Matrix Multiply](#spmm--sparse-x-dense-matrix-multiply)
+5. [SpMV — Sparse Matrix x Dense Vector](#spmv--sparse-matrix-x-dense-vector)
+6. [SpGEMM — Sparse x Sparse](#spgemm--sparse-x-sparse)
 7. [Format Conversion](#format-conversion)
 8. [Error Handling](#error-handling)
 
@@ -94,12 +94,12 @@ CHECK_CUSPARSE(cusparseCreateCsr(&matA,
 
 ---
 
-## SpMM — Sparse × Dense Matrix Multiply
+## SpMM — Sparse x Dense Matrix Multiply
 
-### Workflow: Buffer Size → Preprocess → Execute
+### Three-Step Pattern: Buffer Size -> Preprocess -> Execute
 
 ```c
-// y = alpha * A * x + beta * y
+// C = alpha * A * B + beta * C
 // A: sparse CSR, B: dense matrix, C: dense matrix
 
 void *dBuffer = NULL;
@@ -116,7 +116,7 @@ CHECK_CUSPARSE(cusparseSpMM_bufferSize(
     &bufferSize));
 CHECK_CUDA(cudaMalloc(&dBuffer, bufferSize));
 
-// 2. Optional preprocess (builds internal data structures)
+// 2. Preprocess (builds internal data structures)
 CHECK_CUSPARSE(cusparseSpMM_preprocess(
     handle,
     CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -144,19 +144,27 @@ CHECK_CUDA(cudaFree(dBuffer));
 
 ---
 
-## SpMV — Sparse Matrix × Dense Vector
+## SpMV — Sparse Matrix x Dense Vector
 
-### `cusparseSpMV_bufferSize`, `cusparseSpMV`
-**Description:** Computes `y = alpha * A * x + beta * y` for sparse A and dense vectors x, y.
-**Example:**
+### Three-Step Pattern: `_bufferSize` -> `_preprocess` -> execute
+
 ```c
+// y = alpha * A * x + beta * y
 size_t bufSize;
 CHECK_CUSPARSE(cusparseSpMV_bufferSize(
     handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
     &alpha, matA, vecX, &beta, vecY,
     CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, &bufSize));
-void *buf; cudaMalloc(&buf, bufSize);
+void *buf;
+cudaMalloc(&buf, bufSize);
 
+// Preprocess (optional but recommended for repeated calls)
+CHECK_CUSPARSE(cusparseSpMV_preprocess(
+    handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+    &alpha, matA, vecX, &beta, vecY,
+    CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, buf));
+
+// Execute
 CHECK_CUSPARSE(cusparseSpMV(
     handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
     &alpha, matA, vecX, &beta, vecY,
@@ -165,12 +173,17 @@ CHECK_CUSPARSE(cusparseSpMV(
 
 ---
 
-## SpGEMM — Sparse × Sparse
+## SpGEMM — Sparse x Sparse
 
 ### `cusparseSpGEMM_*` API (multi-step)
 **Description:** Sparse matrix product `C = A * B` where all matrices are sparse.
-**Steps:** `cusparseSpGEMM_createDescr` → `cusparseSpGEMM_workEstimation` → `cusparseSpGEMM_compute` → `cusparseSpGEMM_copy` → `cusparseSpGEMM_destroyDescr`.
+**Steps:** `cusparseSpGEMM_createDescr` -> `cusparseSpGEMM_workEstimation` -> `cusparseSpGEMM_compute` -> `cusparseSpGEMM_copy` -> `cusparseSpGEMM_destroyDescr`.
 See sample: `CUDALibrarySamples/cuSPARSE/spgemm/`.
+
+### `cusparseSpGEMMreuse_*` API (structure reuse)
+**Description:** Optimized variant for repeated SpGEMM with the same sparsity pattern. Reuses the non-zero structure across calls.
+**Steps:** `cusparseSpGEMM_createDescr` -> `cusparseSpGEMMreuse_workEstimation` -> `cusparseSpGEMMreuse_nnz` -> `cusparseSpGEMMreuse_copy` -> `cusparseSpGEMMreuse_compute` -> `cusparseSpGEMM_destroyDescr`.
+See sample: `CUDALibrarySamples/cuSPARSE/spgemm_reuse/`.
 
 ---
 
@@ -181,7 +194,7 @@ See sample: `CUDALibrarySamples/cuSPARSE/spgemm/`.
 
 ### `cusparseCreateCsr` with `cusparseSpConvert`
 **Description:** Convert between COO, CSR, BSR formats.
-**Common pattern for COO → CSR:**
+**Common pattern for COO -> CSR:**
 ```c
 // Sort COO by row, then use cusparseXcoo2csr
 cusparseXcoosort_bufferSizeExt(handle, m, n, nnz, dCooRows, dCooCols, &bufSize);

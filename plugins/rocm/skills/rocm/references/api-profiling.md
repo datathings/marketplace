@@ -131,6 +131,48 @@ rocprofiler_configure_buffered_dispatch_profile_counting_service(
     ctx, buf, profile_cfg);
 ```
 
+### PC Sampling (Instruction-Level Profiling)
+```cpp
+// PC sampling collects program counter samples at regular intervals
+// to identify hot instructions without instrumenting the code.
+
+// In tool_init — find agents that support PC sampling:
+rocprofiler_query_pc_sampling_agent_configurations(
+    agent_id, config_callback, max_configs, user_data);
+
+// Configure and enable PC sampling on an agent:
+rocprofiler_configure_pc_sampling_service(
+    ctx, agent_id,
+    ROCPROFILER_PC_SAMPLING_METHOD_STOCHASTIC,  // or HOST_TRAP
+    ROCPROFILER_PC_SAMPLING_UNIT_CYCLES,
+    interval,  // e.g., 1048576 cycles for stochastic
+    buf);
+
+// Samples arrive in buffer as rocprofiler_pc_sampling_record_t:
+//   .pc              — program counter address
+//   .exec_mask       — active lanes bitmask
+//   .dispatch_id     — identifies the kernel dispatch
+//   .correlation_id  — links to API tracing records
+```
+
+### Thread Trace (Wavefront-Level Instruction Tracing)
+```cpp
+// Thread trace captures per-instruction execution data including latency.
+// Uses experimental API: <rocprofiler-sdk/experimental/thread_trace.h>
+
+rocprofiler_configure_thread_trace_service(
+    ctx, agent_id,
+    TARGET_CU,     // CU (gfx9) or WGP (gfx10+) to trace
+    SHADER_MASK,   // shader engine mask
+    BUFFER_SIZE,   // trace buffer size (e.g., 256MB)
+    buf);
+
+// Decode results with:
+//   rocprofiler_thread_trace_decoder_pc_t  — PC + instruction info
+//   Latency tables mapping address → cycle count
+//   Wave lifetime statistics
+```
+
 ### Running with the Client Library
 ```bash
 # Build client as a shared library
@@ -191,6 +233,19 @@ cat results.csv
 rocprof --sys-trace ./my_app
 # Open results.json in chrome://tracing or Perfetto
 ```
+
+### ROCm Compute Profiler (ROCm 7.2+)
+```bash
+# List available IP blocks for an architecture
+rocprof --list-blocks gfx942
+
+# Block aliases for shorter counter specs
+rocprof -b SQ ./my_app   # -b/--block accepts block aliases
+
+# CU Utilization metric (percentage of CUs used during execution)
+# Available in analysis report alongside per-kernel metrics
+```
+**Note:** The `database` mode (Grafana/MongoDB) has been removed in ROCm 7.2. Use the analysis DB-based visualizer or Textual UI instead.
 
 ---
 
@@ -286,7 +341,6 @@ rocgdb ./my_app
 ### Environment Setup
 ```bash
 # Enable GPU debugging (must be set before launching application)
-export ROC_ENABLE_PRE_VEGA=1  # for pre-Vega GPUs
 export HSA_TOOLS_LIB=librocm-debug-agent.so  # optional debug agent
 ```
 
@@ -320,30 +374,37 @@ hipcc -fsanitize=address -g -O1 my_app.cpp -o my_app
 
 ## Compilation Flags for Profiling
 
+**Note:** As of ROCm 7.2, `hipcc` is deprecated and now invokes AMD Clang. It is recommended to invoke `amdclang++` directly. Both compilers accept the same flags.
+
 ```bash
 # Profile build (optimize but keep debug info for profiler)
+amdclang++ -O2 -g -fno-omit-frame-pointer -x hip my_app.cpp -o my_app
+# OR (still works but deprecated):
 hipcc -O2 -g -fno-omit-frame-pointer my_app.cpp -o my_app
 
 # Specify target GPU architecture (important for performance)
-hipcc --offload-arch=gfx1100 my_app.cpp     # RX 7900 / Navi31
-hipcc --offload-arch=gfx90a  my_app.cpp     # MI200 series
-hipcc --offload-arch=gfx942  my_app.cpp     # MI300 series
-hipcc --offload-arch=gfx1030 my_app.cpp     # RX 6800 / Navi21
+amdclang++ --offload-arch=gfx1100 -x hip my_app.cpp  # RX 7900 / Navi31
+amdclang++ --offload-arch=gfx90a  -x hip my_app.cpp  # MI200 series
+amdclang++ --offload-arch=gfx942  -x hip my_app.cpp  # MI300 series
+amdclang++ --offload-arch=gfx1030 -x hip my_app.cpp  # RX 6800 / Navi21
 
 # Multiple targets (FAT binary)
-hipcc --offload-arch=gfx90a,gfx942 my_app.cpp
+amdclang++ --offload-arch=gfx90a --offload-arch=gfx942 -x hip my_app.cpp
 
 # Check available targets
 /opt/rocm/bin/rocm_agent_enumerator
 
 # Enable verbose compilation
-hipcc -v my_app.cpp
+amdclang++ -v -x hip my_app.cpp
 
 # Dump assembly (GCN ISA)
-hipcc --save-temps my_app.cpp   # saves .s files with ISA
+amdclang++ --save-temps -x hip my_app.cpp   # saves .s files with ISA
 
 # Enable fast math (relaxed IEEE, may affect precision)
-hipcc -ffast-math my_app.cpp
+amdclang++ -ffast-math -x hip my_app.cpp
+
+# Enable ThinLTO for link-time optimization (ROCm 7.2+)
+amdclang++ -foffload-lto=thin -x hip my_app.cpp
 ```
 
 ### CMake Integration

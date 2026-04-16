@@ -56,6 +56,11 @@ cl_context ctx = clCreateContextFromType(props, CL_DEVICE_TYPE_GPU,
 ### `clRetainContext(context) -> cl_int` / `clReleaseContext(context) -> cl_int`
 Reference-count the context. Release once for every `clCreateContext*` call.
 
+### `clSetContextDestructorCallback(context, pfn_notify, user_data) -> cl_int`
+Register a callback invoked when the context is destroyed (OpenCL 3.0+).
+- `pfn_notify` — `void(cl_context context, void* user_data)`
+- Multiple callbacks may be registered; they are called in reverse order of registration.
+
 ---
 
 ## Command Queue Creation
@@ -110,8 +115,18 @@ clFinish(queue);  // CPU blocks here until GPU done
 ### `clRetainCommandQueue(queue) -> cl_int` / `clReleaseCommandQueue(queue) -> cl_int`
 Reference count. Every `clCreateCommandQueue*` must be paired with one `clReleaseCommandQueue`.
 
-### `clGetCommandQueueInfo(queue, param_name, ...) -> cl_int`
-Query queue properties, context, device, or reference count.
+### `clGetCommandQueueInfo(queue, param_name, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Query queue properties.
+
+| Constant | Type | Description |
+|---|---|---|
+| `CL_QUEUE_CONTEXT` | `cl_context` | Associated context |
+| `CL_QUEUE_DEVICE` | `cl_device_id` | Associated device |
+| `CL_QUEUE_REFERENCE_COUNT` | `cl_uint` | Reference count |
+| `CL_QUEUE_PROPERTIES` | `cl_command_queue_properties` | Property bitmask |
+| `CL_QUEUE_SIZE` | `cl_uint` | On-device queue size (2.0+) |
+| `CL_QUEUE_DEVICE_DEFAULT` | `cl_command_queue` | Default device queue (2.1+) |
+| `CL_QUEUE_PROPERTIES_ARRAY` | `cl_queue_properties[]` | Properties array (3.0+) |
 
 ---
 

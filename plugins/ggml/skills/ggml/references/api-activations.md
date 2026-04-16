@@ -252,6 +252,12 @@ struct ggml_tensor * ggml_ssm_scan(struct ggml_context * ctx, struct ggml_tensor
 struct ggml_tensor * ggml_gated_linear_attn(struct ggml_context * ctx, struct ggml_tensor * k, struct ggml_tensor * v,
                                             struct ggml_tensor * q, struct ggml_tensor * g, struct ggml_tensor * state, float scale);
 
+// Gated delta net (DeltaNet with gating)
+struct ggml_tensor * ggml_gated_delta_net(struct ggml_context * ctx,
+                                          struct ggml_tensor * q, struct ggml_tensor * k,
+                                          struct ggml_tensor * v, struct ggml_tensor * g,
+                                          struct ggml_tensor * beta, struct ggml_tensor * state);
+
 // Diffusion timestep embedding
 struct ggml_tensor * ggml_timestep_embedding(struct ggml_context * ctx, struct ggml_tensor * timesteps, int dim, int max_period);
 ```

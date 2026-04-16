@@ -9,7 +9,8 @@
 6. [Prefix Scans](#prefix-scans)
 7. [Searching and Set Operations](#searching-and-set-operations)
 8. [Fancy Iterators](#fancy-iterators)
-9. [Interoperability with Raw CUDA Pointers](#interoperability-with-raw-cuda-pointers)
+9. [Tuple Types (cuda::std)](#tuple-types-cudastd)
+10. [Interoperability with Raw CUDA Pointers](#interoperability-with-raw-cuda-pointers)
 
 ---
 
@@ -163,7 +164,7 @@ thrust::generate(h_vec.begin(), h_vec.end(), [&]() { return dist(rng); });
 **Example:**
 ```cpp
 #include <thrust/scan.h>
-// [1, 2, 3, 4] → [1, 3, 6, 10]
+// [1, 2, 3, 4] -> [1, 3, 6, 10]
 thrust::inclusive_scan(d_in.begin(), d_in.end(), d_out.begin(), thrust::plus<int>());
 ```
 
@@ -171,7 +172,7 @@ thrust::inclusive_scan(d_in.begin(), d_in.end(), d_out.begin(), thrust::plus<int
 **Description:** Exclusive scan (result[i] does NOT include input[i]).
 **Example:**
 ```cpp
-// [1, 2, 3, 4] with init=0 → [0, 1, 3, 6]
+// [1, 2, 3, 4] with init=0 -> [0, 1, 3, 6]
 thrust::exclusive_scan(d_in.begin(), d_in.end(), d_out.begin(), 0);
 ```
 
@@ -219,8 +220,54 @@ auto squared = thrust::make_transform_iterator(d_vec.begin(),
 float sum_of_squares = thrust::reduce(squared, squared + N, 0.0f);
 
 // zip_iterator: iterate multiple ranges in lock-step (like Python zip)
-auto begin = thrust::make_zip_iterator(thrust::make_tuple(d_keys.begin(), d_vals.begin()));
-auto end   = thrust::make_zip_iterator(thrust::make_tuple(d_keys.end(),   d_vals.end()));
+// CUDA 13.2: use variadic arguments directly (no make_tuple needed)
+auto begin = thrust::make_zip_iterator(d_keys.begin(), d_vals.begin());
+auto end   = thrust::make_zip_iterator(d_keys.end(),   d_vals.end());
+```
+
+---
+
+## Tuple Types (cuda::std)
+
+As of CUDA 13.2, `thrust::tuple`, `thrust::make_tuple`, and `thrust::get` are replaced by their `cuda::std` equivalents. The `thrust::make_zip_iterator` now accepts variadic arguments directly instead of requiring `make_tuple`.
+
+**Updated usage:**
+```cpp
+#include <cuda/std/tuple>
+
+// Creating tuples
+cuda::std::tuple<float, float> t = cuda::std::make_tuple(1.0f, 2.0f);
+
+// Accessing elements
+float x = cuda::std::get<0>(t);
+float y = cuda::std::get<1>(t);
+
+// Return tuples from device functions
+__host__ __device__ __forceinline__ cuda::std::tuple<float, float> compute() {
+    return cuda::std::make_tuple(3.14f, 2.71f);
+}
+
+// zip_iterator with variadic arguments (no make_tuple wrapper needed)
+thrust::for_each(
+    thrust::make_zip_iterator(d_pos, d_vel),
+    thrust::make_zip_iterator(d_pos + N, d_vel + N),
+    my_functor());
+
+// Accessing zip_iterator elements in device code
+struct my_functor {
+    template <typename Tuple>
+    __device__ void operator()(Tuple t) {
+        float4 pos = cuda::std::get<0>(t);
+        float4 vel = cuda::std::get<1>(t);
+        // ...
+        cuda::std::get<0>(t) = make_float4(new_pos, 0.0f);
+    }
+};
+
+// Use with thrust algorithms (e.g., minimum over tuples)
+thrust::reduce(thrust::make_zip_iterator(d_weights, d_edges),
+               thrust::make_zip_iterator(d_weights + N, d_edges + N),
+               thrust::minimum<cuda::std::tuple<float, uint>>());
 ```
 
 ---

@@ -7,7 +7,8 @@
 4. [Stream Management](#stream-management)
 5. [Event Management](#event-management)
 6. [Kernel Launch](#kernel-launch)
-7. [Error Handling](#error-handling)
+7. [Driver API Resource Cleanup](#driver-api-resource-cleanup)
+8. [Error Handling](#error-handling)
 
 ---
 
@@ -37,7 +38,16 @@ printf("Device: %s, SMs: %d, Mem: %zu MB\n",
 ```
 
 ### `cudaDeviceGetAttribute(int *value, cudaDeviceAttr attr, int device) -> cudaError_t`
-**Description:** Query a single device attribute (e.g., `cudaDevAttrMaxThreadsPerBlock`).
+**Description:** Query a single device attribute (e.g., `cudaDevAttrMaxThreadsPerBlock`, `cudaDevAttrManagedMemory`).
+**Example (Unified Memory support check):**
+```c
+int managedMemSupported;
+cudaDeviceGetAttribute(&managedMemSupported, cudaDevAttrManagedMemory, dev);
+if (!managedMemSupported) {
+    fprintf(stderr, "Unified Memory not supported on this device\n");
+    exit(EXIT_WAIVED);
+}
+```
 
 ### `cudaDeviceSynchronize() -> cudaError_t`
 **Description:** Blocks host until all GPU work on current device completes.
@@ -95,6 +105,7 @@ cudaMemset(d_C, 0, N * sizeof(float));
 
 ### `cudaMallocManaged(void **devPtr, size_t size, unsigned int flags=cudaMemAttachGlobal) -> cudaError_t`
 **Description:** Allocates managed memory accessible by both CPU and GPU. Data migrates automatically.
+**Important:** Check `device_prop.managedMemory` (or `cudaDevAttrManagedMemory`) before use.
 **Example:**
 ```c
 float *data;
@@ -107,6 +118,17 @@ cudaDeviceSynchronize();
 // Read on host
 printf("%f\n", data[0]);
 cudaFree(data);
+```
+
+### Unified Memory Support Check
+Always verify the device supports managed memory before using `cudaMallocManaged`:
+```c
+cudaDeviceProp device_prop;
+cudaGetDeviceProperties(&device_prop, dev_id);
+if (!device_prop.managedMemory) {
+    fprintf(stderr, "Unified Memory not supported on this device\n");
+    exit(EXIT_WAIVED);
+}
 ```
 
 ### `cudaMemAdvise(const void *devPtr, size_t count, cudaMemoryAdvise advice, int device) -> cudaError_t`
@@ -190,7 +212,7 @@ matMulKernel<<<grid, block, 0, stream>>>(d_A, d_B, d_C, N);
 
 ### `cudaOccupancyMaxPotentialBlockSize(int *minGridSize, int *blockSize, T func, size_t dynamicSMemSize=0, int blockSizeLimit=0) -> cudaError_t`
 **Description:** Suggests (gridSize, blockSize) that maximizes occupancy.
-**Example:**
+**Example (using uint32_t to avoid overflow):**
 ```c
 int blockSize, minGridSize;
 cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, myKernel, 0, 0);
@@ -198,8 +220,38 @@ int gridSize = (N + blockSize - 1) / blockSize;
 myKernel<<<gridSize, blockSize>>>(d_data, N);
 ```
 
+### `cudaOccupancyMaxActiveBlocksPerMultiprocessor(int *numBlocks, T func, int blockSize, size_t dynamicSMemSize) -> cudaError_t`
+**Description:** Returns the number of active blocks per SM for a given kernel and block size. Useful for computing occupancy percentage.
+**Example:**
+```c
+int numBlocks;
+cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocks, myKernel, blockSize, dynamicSMem);
+int activeWarps = numBlocks * blockSize / prop.warpSize;
+int maxWarps    = prop.maxThreadsPerMultiProcessor / prop.warpSize;
+double occupancy = (double)activeWarps / maxWarps;
+```
+
 ### `cudaFuncSetAttribute(const void *func, cudaFuncAttribute attr, int value) -> cudaError_t`
 **Description:** Sets kernel attributes, e.g., `cudaFuncAttributeMaxDynamicSharedMemorySize` to request more than 48 KB shared memory (Volta+).
+
+---
+
+## Driver API Resource Cleanup
+
+When using the CUDA Driver API (`cuModuleLoadData`, `cuLaunchKernel`, etc.), always unload modules before destroying the context:
+
+```c
+// Proper cleanup sequence for Driver API
+checkCudaErrors(cuMemFree(d_A));
+checkCudaErrors(cuMemFree(d_B));
+checkCudaErrors(cuMemFree(d_C));
+checkCudaErrors(cuModuleUnload(cuModule));   // unload module BEFORE destroying context
+checkCudaErrors(cuCtxDestroy(cuContext));
+```
+
+**Key functions:**
+- `cuModuleUnload(CUmodule hmod) -> CUresult` — unloads a module and frees associated resources (kernels, global variables)
+- `cuCtxDestroy(CUcontext ctx) -> CUresult` — destroys a CUDA context
 
 ---
 

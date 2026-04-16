@@ -74,12 +74,12 @@ saxpy(cl::EnqueueArgs{queue, cl::NDRange{N}}, a, buf_x, buf_y);
 
 | Domain | Reference File | Key Functions / Types |
 |---|---|---|
-| Platform & Device | `references/api-platform-device.md` | `clGetPlatformIDs`, `clGetDeviceIDs`, `clGetDeviceInfo`, `cl_util_get_device` |
-| Context & Queue | `references/api-context-queue.md` | `clCreateContext`, `clCreateCommandQueueWithProperties`, `clFlush`, `clFinish` |
-| Memory Objects | `references/api-memory.md` | `clCreateBuffer`, `clCreateImage`, `clEnqueueRead/WriteBuffer`, `clEnqueueMapBuffer`, SVM |
-| Programs & Kernels | `references/api-program-kernel.md` | `clCreateProgramWithSource`, `clBuildProgram`, `clCreateKernel`, `clSetKernelArg` |
-| Execution & Events | `references/api-execution.md` | `clEnqueueNDRangeKernel`, `clWaitForEvents`, `clSetEventCallback`, profiling |
-| C++ Wrapper | `references/api-cpp-wrapper.md` | `cl::Context`, `cl::Buffer`, `cl::KernelFunctor`, `cl::EnqueueArgs`, exceptions |
+| Platform & Device | `references/api-platform-device.md` | `clGetPlatformIDs`, `clGetDeviceIDs`, `clGetDeviceInfo`, `clCreateSubDevices`, timer APIs |
+| Context & Queue | `references/api-context-queue.md` | `clCreateContext`, `clCreateCommandQueueWithProperties`, `clFlush`, `clFinish`, destructor callbacks |
+| Memory Objects | `references/api-memory.md` | `clCreateBuffer`, `clCreateImage`, enqueue read/write/copy/fill, map/unmap, pipes, samplers, SVM |
+| Programs & Kernels | `references/api-program-kernel.md` | `clCreateProgramWithSource`, `clBuildProgram`, `clCompileProgram`, `clLinkProgram`, `clCreateKernel`, sub-group queries |
+| Execution & Events | `references/api-execution.md` | `clEnqueueNDRangeKernel`, `clWaitForEvents`, `clSetEventCallback`, profiling, extension access |
+| C++ Wrapper | `references/api-cpp-wrapper.md` | `cl::Context`, `cl::Buffer`, `cl::Pipe`, `cl::Sampler`, `cl::KernelFunctor`, `cl::SVMAllocator`, exceptions |
 | Workflows | `references/workflows.md` | Quick-start, vector add, image blur, async events, binary caching, error handling |
 
 ## Common Workflows

@@ -9,7 +9,7 @@ description: "Python library for steady-state distribution power system analysis
 
 `power-grid-model` is a high-performance C++ library with a Python interface for steady-state distribution power system analysis. It operates on numpy structured arrays via a dictionary-based data model and supports symmetric (single-phase equivalent) and asymmetric (full three-phase) calculations.
 
-**Version:** v1.13.10
+**Version:** v1.13.54
 **Language:** Python (C++ core)
 **License:** Mozilla Public License 2.0 (MPL-2.0)
 **Repo:** https://github.com/PowerGridModel/power-grid-model
@@ -56,7 +56,7 @@ result = model.calculate_power_flow()
 | Domain | File | Description |
 |--------|------|-------------|
 | Core API | [api-core.md](references/api-core.md) | `PowerGridModel`, `calculate_power_flow`, `calculate_state_estimation`, `calculate_short_circuit`, `initialize_array`, serialization |
-| Components | [api-components.md](references/api-components.md) | All 22 component types, attributes, numpy dtypes, enumerations |
+| Components | [api-components.md](references/api-components.md) | All component types (22 types including voltage_regulator), attributes, numpy dtypes, enumerations |
 | Validation | [api-validation.md](references/api-validation.md) | `validate_input_data`, `validate_batch_data`, `ValidationError`, `ValidationException` |
 | Batch | [api-batch.md](references/api-batch.md) | Dense/sparse batch format, Cartesian product, threading, error handling, output structure |
 | Workflows | [workflows.md](references/workflows.md) | Complete working examples for all calculation types |
@@ -80,3 +80,5 @@ result = model.calculate_power_flow()
 - **Tap changer note:** `generic_branch.k` is the off-nominal ratio, not the voltage ratio — must be set explicitly for tap changers; the library does not compute it from node voltages.
 - **Performance:** For batch time-series, use dense (independent) batches; for N-1 analysis, use sparse (dependent) batches. Enable `threading=0` for large batches to use all hardware cores.
 - **Asymmetric calculations** require zero-sequence parameters (`r0`, `x0`, `c0`, etc.) for lines and appropriate winding configurations for transformers. `generic_branch` does not support asymmetric mode.
+- **Source `sk`, `rx_ratio`, `z01_ratio` are now updatable** in batch calculations (since v1.13.54). This enables batch sweeps over source impedance parameters.
+- **Voltage regulators** regulate voltage at a node by adjusting the reactive power dispatch of connected load/gen appliances. They cannot coexist with transformer tap regulators in the same model.

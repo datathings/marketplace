@@ -10,9 +10,13 @@
 7. [rocSOLVER — Dense Linear Algebra Solvers](#rocsolver--dense-linear-algebra-solvers)
 8. [hipSOLVER — Portable Solver Wrapper](#hipsolver--portable-solver-wrapper)
 9. [rocSPARSE — Sparse Linear Algebra](#rocsparse--sparse-linear-algebra)
-10. [rocWMMA — Wavefront Matrix Multiply-Accumulate](#rocwmma--wavefront-matrix-multiply-accumulate)
-11. [rocPRIM / hipCUB / rocThrust](#rocprim--hipcub--rocthrust)
-12. [Library Selection Guide](#library-selection-guide)
+10. [hipSPARSE — Portable Sparse Wrapper](#hipsparse--portable-sparse-wrapper)
+11. [hipSPARSELt — Structured Sparsity for DL](#hipsparselt--structured-sparsity-for-dl)
+12. [hipTensor — Tensor Contractions](#hiptensor--tensor-contractions)
+13. [rocALUTION — Iterative Sparse Solvers](#rocalution--iterative-sparse-solvers)
+14. [rocWMMA — Wavefront Matrix Multiply-Accumulate](#rocwmma--wavefront-matrix-multiply-accumulate)
+15. [rocPRIM / hipCUB / rocThrust](#rocprim--hipcub--rocthrust)
+16. [Library Selection Guide](#library-selection-guide)
 
 ---
 
@@ -97,6 +101,13 @@ rocblas_sgemm_strided_batched(handle,
     &beta,
     d_C, ldc, stride_C,
     batch_count);
+
+// Extended symmetric rank-k update (ROCm 7.2+)
+// C = alpha * A * A^T + beta * C (C is symmetric)
+rocblas_syrk_ex(handle, rocblas_fill_lower, rocblas_operation_none,
+    n, k, &alpha, d_A, rocblas_datatype_f32_r, lda,
+    &beta, d_C, rocblas_datatype_f32_r, ldc,
+    rocblas_datatype_f32_r);  // compute type
 ```
 
 ### Types
@@ -179,7 +190,16 @@ hipblasLtDestroy(lt_handle);
 ```
 
 **Supported data types:** F32, F16, BF16, F8 (MI300+), I8
-**Key epilogues:** `RELU`, `GELU`, `BIAS`, `RELU_BIAS`, `GELU_BIAS`, `BGRADB` (grad bias)
+**Key epilogues:** `RELU`, `GELU`, `SIGMOID`, `SWISH`, `BIAS`, `RELU_BIAS`, `GELU_BIAS`, `BGRADB` (grad bias)
+
+### Extended Operations (hipBLASLt Ext API, ROCm 7.2+)
+```cpp
+// Amax: compute max absolute value alongside GEMM
+// Layernorm: fused layer normalization epilogue
+// Grouped GEMM: batch multiple independent GEMMs with different sizes
+// See hipBLASLt examples: ext_op_amax, ext_op_layernorm, groupedgemm_ext
+```
+Ext operations supported on gfx11XX and gfx12XX architectures.
 
 ---
 
@@ -273,6 +293,12 @@ hipfftExecR2C(plan, (hipfftReal*)d_in, (hipfftComplex*)d_out);
 hipfftDestroy(plan);
 
 // Types: HIPFFT_R2C, HIPFFT_C2R, HIPFFT_C2C, HIPFFT_D2Z, HIPFFT_Z2D, HIPFFT_Z2Z
+
+// hipFFTW execution with different buffers (ROCm 7.2+)
+// Execute with input/output buffers different from plan creation:
+// fftw_execute_dft, fftwf_execute_dft
+// fftw_execute_dft_r2c, fftwf_execute_dft_r2c
+// fftw_execute_dft_c2r, fftwf_execute_dft_c2r
 ```
 
 ---
@@ -435,8 +461,229 @@ rocsparse_destroy_mat_descr(descr);
 rocsparse_destroy_handle(handle);
 ```
 
-**Supported formats:** CSR, CSC, COO, ELL, HYB, BSR
-**Operations:** SpMV, SpMM, SpSV (triangular solve), SpGEMM, ILU, IC, conversion
+**Supported formats:** CSR, CSC, COO, ELL, Sliced ELL, HYB, BSR
+**Operations:** SpMV, SpMM, SpSV, SpTrSV, SpTrSM, SpGEMM, SDDMM, ILU, IC, conversion
+
+### ROCm 7.2 Additions
+```cpp
+// Sliced ELL format support in SpMV
+// NNZ-split SpMV algorithm (avoids analysis cost of adaptive algorithm):
+rocsparse_spmv(handle, rocsparse_operation_none,
+    &alpha, mat_A, vec_x, &beta, vec_y,
+    rocsparse_datatype_f32_r,
+    rocsparse_spmv_alg_csr_nnzsplit,  // new algorithm
+    &buffer_size, d_buffer);
+
+// Triangular solve routines
+rocsparse_sptrsv(handle, ...);  // sparse triangular solve
+rocsparse_sptrsm(handle, ...);  // sparse triangular matrix solve
+```
+
+---
+
+## hipSPARSE — Portable Sparse Wrapper
+
+**Header:** `#include <hipsparse/hipsparse.h>`
+**Link:** `-lhipsparse`
+
+hipSPARSE wraps rocSPARSE (AMD) or cuSPARSE (NVIDIA) for portability.
+
+```cpp
+hipsparseHandle_t handle;
+hipsparseCreate(&handle);
+
+// CSR SpMV: y = alpha * A * x + beta * y
+hipsparseMatDescr_t descr;
+hipsparseCreateMatDescr(&descr);
+
+hipsparseDcsrmv(handle, HIPSPARSE_OPERATION_NON_TRANSPOSE,
+    m, n, nnz, &alpha, descr,
+    d_csr_val, d_csr_row_ptr, d_csr_col_ind,
+    d_x, &beta, d_y);
+
+// HYB format SpMV (auto-selects ELL+COO split)
+hipsparseHybMat_t hyb;
+hipsparseCreateHybMat(&hyb);
+hipsparseDcsr2hyb(handle, m, n, descr,
+    d_csr_val, d_csr_row_ptr, d_csr_col_ind, hyb, 0,
+    HIPSPARSE_HYB_PARTITION_AUTO);
+hipsparseDhybmv(handle, HIPSPARSE_OPERATION_NON_TRANSPOSE,
+    &alpha, descr, hyb, d_x, &beta, d_y);
+
+// Sparse axpyi: y = alpha * x_sparse + y
+hipsparseDaxpyi(handle, nnz, &alpha, d_xval, d_xind, d_y,
+    HIPSPARSE_INDEX_BASE_ZERO);
+
+hipsparseDestroyMatDescr(descr);
+hipsparseDestroy(handle);
+```
+
+---
+
+## hipSPARSELt — Structured Sparsity for DL
+
+**Header:** `#include <hipsparselt/hipsparselt.h>`
+**Link:** `-lhipsparselt`
+
+hipSPARSELt provides structured (2:4) sparse matrix multiplication for deep learning inference. A 2:4 sparse matrix has at most 2 non-zero values per group of 4 consecutive elements.
+
+```cpp
+hipsparseLtHandle_t handle;
+hipsparseLtInit(&handle);
+
+// Define structured sparse matrix A (m x p) and dense B (p x n)
+hipsparseLtMatDescriptor_t matA, matB, matC;
+hipsparseLtStructuredDescriptorInit(&handle, &matA,
+    m, p, ld_A, 16, HIP_R_16F,
+    HIPSPARSE_ORDER_ROW, HIPSPARSELT_SPARSITY_50_PERCENT);
+hipsparseLtDenseDescriptorInit(&handle, &matB,
+    p, n, ld_B, 16, HIP_R_16F, HIPSPARSE_ORDER_ROW);
+hipsparseLtDenseDescriptorInit(&handle, &matC,
+    m, n, ld_C, 16, HIP_R_16F, HIPSPARSE_ORDER_ROW);
+
+// Create matmul descriptor and plan
+hipsparseLtMatmulDescriptor_t matmul;
+hipsparseLtMatmulDescriptorInit(&handle, &matmul,
+    HIPSPARSE_OPERATION_NON_TRANSPOSE,
+    HIPSPARSE_OPERATION_NON_TRANSPOSE,
+    &matA, &matB, &matC, &matC, compute_precision);
+
+hipsparseLtMatmulAlgSelection_t alg_sel;
+hipsparseLtMatmulAlgSelectionInit(&handle, &alg_sel, &matmul,
+    HIPSPARSELT_MATMUL_ALG_DEFAULT);
+
+hipsparseLtMatmulPlan_t plan;
+hipsparseLtMatmulPlanInit(&handle, &plan, &matmul, &alg_sel);
+
+// Prune dense A to 2:4 sparsity and compress
+hipsparseLtSpMMAPrune(&handle, &matmul, d_A, d_A_pruned,
+    HIPSPARSELT_PRUNE_SPMMA_STRIP, stream);
+hipsparseLtSpMMACompress(&handle, &plan, d_A_pruned, d_A_compressed,
+    d_compress_buffer, stream);
+
+// Execute sparse matmul: C = alpha * A_sparse * B + beta * C
+hipsparseLtMatmul(&handle, &plan, &alpha, d_A_compressed,
+    d_B, &beta, d_C, d_C, nullptr, nullptr, 0, stream);
+
+hipsparseLtMatmulPlanDestroy(&plan);
+hipsparseLtDestroy(&handle);
+```
+
+**Supported types:** FP16, BF16, FP8 (E4M3), INT8
+**Architecture:** MI200+ (CDNA2+), select RDNA architectures
+
+---
+
+## hipTensor — Tensor Contractions
+
+**Header:** `#include <hiptensor/hiptensor.h>`
+**Link:** `-lhiptensor`
+
+hipTensor provides GPU-accelerated tensor contraction, reduction, and elementwise operations.
+
+```cpp
+hiptensorHandle_t handle;
+hiptensorCreate(&handle);
+
+// Define tensor descriptors
+int64_t extentA[] = {M, K};
+int64_t extentB[] = {K, N};
+int64_t extentC[] = {M, N};
+
+hiptensorTensorDescriptor_t descA, descB, descC;
+hiptensorCreateTensorDescriptor(handle, &descA,
+    2, extentA, nullptr, HIPTENSOR_R_32F, HIPTENSOR_OP_IDENTITY);
+hiptensorCreateTensorDescriptor(handle, &descB,
+    2, extentB, nullptr, HIPTENSOR_R_32F, HIPTENSOR_OP_IDENTITY);
+hiptensorCreateTensorDescriptor(handle, &descC,
+    2, extentC, nullptr, HIPTENSOR_R_32F, HIPTENSOR_OP_IDENTITY);
+
+// Contraction: C = alpha * A * B + beta * C
+int32_t modesA[] = {'m', 'k'};
+int32_t modesB[] = {'k', 'n'};
+int32_t modesC[] = {'m', 'n'};
+
+hiptensorContractionDescriptor_t desc;
+hiptensorCreateContraction(handle, &desc,
+    descA, modesA, HIPTENSOR_OP_IDENTITY,
+    descB, modesB, HIPTENSOR_OP_IDENTITY,
+    descC, modesC, HIPTENSOR_OP_IDENTITY,
+    descC, modesC, HIPTENSOR_COMPUTE_DESC_32F);
+
+// Find algorithm and execute
+hiptensorContractionFind_t find;
+hiptensorCreateContractionFind(handle, &find, HIPTENSOR_ALGO_DEFAULT);
+
+size_t ws_size;
+hiptensorContractionGetWorkspaceSize(handle, desc, find,
+    HIPTENSOR_WORKSPACE_RECOMMENDED, &ws_size);
+void* d_ws;
+hipMalloc(&d_ws, ws_size);
+
+hiptensorContractionPlan_t plan;
+hiptensorCreateContractionPlan(handle, &plan, desc, find, ws_size);
+
+hiptensorContraction(handle, plan, &alpha, d_A, d_B, &beta, d_C, d_C,
+    d_ws, ws_size, stream);
+
+// Plan cache (ROCm 7.2+): save/load tuned plans
+hiptensorHandleWritePlanCacheToFile(handle, "cache.bin");
+hiptensorHandleReadPlanCacheFromFile(handle, "cache.bin");
+
+hiptensorDestroy(handle);
+```
+
+**Operations:** contraction (scale, bilinear), reduction, elementwise (permute, binary, trinary)
+**Supported types:** F16, BF16, F32, F64, CF32
+
+---
+
+## rocALUTION — Iterative Sparse Solvers
+
+**Header:** `#include <rocalution/rocalution.hpp>`
+**Link:** `-lrocalution`
+
+rocALUTION provides iterative Krylov solvers and preconditioners with automatic GPU acceleration.
+
+```cpp
+#include <rocalution/rocalution.hpp>
+using namespace rocalution;
+
+init_rocalution();
+info_rocalution();
+
+// Read sparse matrix from Matrix Market file
+LocalMatrix<double> mat;
+mat.ReadFileMTX("system.mtx");
+
+// Move data to GPU
+mat.MoveToAccelerator();
+
+LocalVector<double> rhs, x;
+rhs.Allocate("rhs", mat.GetM());
+x.Allocate("x", mat.GetN());
+rhs.MoveToAccelerator();
+x.MoveToAccelerator();
+
+// Set up solution vector and RHS
+rhs.Ones();
+x.Zeros();
+
+// Conjugate Gradient with ILU preconditioner
+CG<LocalMatrix<double>, LocalVector<double>, double> solver;
+ILU<LocalMatrix<double>, LocalVector<double>, double> precond;
+
+solver.SetOperator(mat);
+solver.SetPreconditioner(precond);
+solver.Build();
+solver.Solve(rhs, &x);
+
+stop_rocalution();
+```
+
+**Solvers:** CG, BiCGStab, GMRES, FGMRES, FCG, IDR, Fixed-point
+**Preconditioners:** ILU, IC, Jacobi, AMG (SA-AMG, RS-AMG, UA-AMG), block preconditioners
+**Formats:** CSR, COO, ELL, HYB, DIA, BSR (automatic format selection)
 
 ---
 
@@ -469,6 +716,7 @@ store_matrix_sync(d_C + offset, frag_c, ldc, mem_row_major);
 // Supported tile sizes (M, N, K):
 // FP16: 16×16×16, 32×32×8, 64×64×4, ...
 // BF16, INT8, FP8: architecture-dependent
+// gfx1150 support added in ROCm 7.2
 ```
 
 ---
@@ -538,6 +786,10 @@ thrust::transform(d_vec.begin(), d_vec.end(), d_vec.begin(),
 
 // Sort
 thrust::sort(d_vec.begin(), d_vec.end());
+
+// Smart pointer for device memory (ROCm 7.2+)
+thrust::unique_ptr<float, thrust::device_delete<float>> d_ptr(
+    thrust::device_new<float>(N));
 ```
 
 ---
@@ -548,12 +800,16 @@ thrust::sort(d_vec.begin(), d_vec.end());
 |------|---------|-------|
 | Dense matmul (single GPU) | rocBLAS | Highest performance on AMD |
 | Dense matmul (portable) | hipBLAS | Thin wrapper, near-zero overhead |
-| GEMM + activation/bias (DL) | hipBLASLt | Use for training kernels |
+| GEMM + activation/bias (DL) | hipBLASLt | Use for training/inference kernels |
+| 2:4 structured sparsity (DL) | hipSPARSELt | Pruned inference on MI200+ |
 | Small matrix cores (tile-level) | rocWMMA | Direct WMMA intrinsics |
 | FFT | rocFFT or hipFFT | hipFFT for portability |
 | Random numbers (GPU) | rocRAND | Supports quasi-random too |
 | Eigenvalues/LU/QR (dense) | rocSOLVER / hipSOLVER | hipSOLVER for portability |
-| Sparse matmul / solve | rocSPARSE | Full sparse format support |
+| Sparse matmul / solve (low-level) | rocSPARSE | Full sparse format support |
+| Sparse operations (portable) | hipSPARSE | Wraps rocSPARSE or cuSPARSE |
+| Iterative sparse solvers (CG/GMRES) | rocALUTION | High-level, auto GPU offload |
+| Tensor contractions | hipTensor | Einsum-style contractions |
 | Parallel scan/sort/reduce | rocPRIM | Lowest-level, fastest |
 | Portable scan/sort/reduce | hipCUB | Wraps rocPRIM or CUB |
 | High-level parallel STL | rocThrust | Thrust-compatible API |

@@ -118,6 +118,7 @@ Enable profiling by creating the queue with `CL_QUEUE_PROFILING_ENABLE`. Then qu
 | `CL_PROFILING_COMMAND_SUBMIT` | `cl_ulong` | Time submitted to device |
 | `CL_PROFILING_COMMAND_START` | `cl_ulong` | Time execution started |
 | `CL_PROFILING_COMMAND_END` | `cl_ulong` | Time execution ended |
+| `CL_PROFILING_COMMAND_COMPLETE` | `cl_ulong` | Time command fully completed, including cleanup (2.0+) |
 
 **Example:**
 ```c
@@ -154,6 +155,22 @@ Execute a native C function on the host as a command in the queue. Rarely used; 
 
 ### `clEnqueueTask(queue, kernel, ...) -> cl_int` (deprecated OpenCL 2.0)
 Equivalent to `clEnqueueNDRangeKernel` with `work_dim=1`, `global_work_size={1}`, `local_work_size={1}`.
+
+---
+
+## Extension Function Access
+
+### `clGetExtensionFunctionAddressForPlatform(platform, func_name) -> void*`
+Returns the address of an extension function for the given platform (OpenCL 1.2+). Returns NULL if not found. The client must check the result before calling.
+
+```c
+typedef cl_int (*clMyExtFunc_fn)(cl_context, cl_uint);
+clMyExtFunc_fn myFunc = (clMyExtFunc_fn)
+    clGetExtensionFunctionAddressForPlatform(platform, "clMyExtFunc");
+if (myFunc) {
+    myFunc(ctx, 42);
+}
+```
 
 ---
 

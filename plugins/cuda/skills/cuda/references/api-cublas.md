@@ -6,9 +6,10 @@
 3. [Level-2: Matrix-Vector Operations](#level-2-matrix-vector-operations)
 4. [Level-3: Matrix-Matrix Operations (GEMM)](#level-3-matrix-matrix-operations-gemm)
 5. [Batched and Strided GEMM](#batched-and-strided-gemm)
-6. [Triangular Solvers (TRSM)](#triangular-solvers-trsm)
-7. [cuBLASLt (Lightweight / Tensor Core)](#cublaslt-lightweight--tensor-core)
-8. [Error Handling](#error-handling)
+6. [Grouped Batched GEMM](#grouped-batched-gemm)
+7. [Triangular Solvers (TRSM)](#triangular-solvers-trsm)
+8. [cuBLASLt (Lightweight / Tensor Core)](#cublaslt-lightweight--tensor-core)
+9. [Error Handling](#error-handling)
 
 ---
 
@@ -62,10 +63,10 @@ cublasSaxpy(handle, N, &alpha, d_x, 1, d_y, 1);  // y = 2*x + y
 ```
 
 ### `cublas<t>dot(handle, n, x, incx, y, incy, result) -> cublasStatus_t`
-**Description:** Dot product `result = x · y` (host or device pointer).
+**Description:** Dot product `result = x . y` (host or device pointer).
 
 ### `cublas<t>nrm2(handle, n, x, incx, result) -> cublasStatus_t`
-**Description:** Euclidean norm `||x||₂`.
+**Description:** Euclidean norm `||x||_2`.
 
 ### `cublas<t>scal(handle, n, alpha, x, incx) -> cublasStatus_t`
 **Description:** `x = alpha * x`.
@@ -90,14 +91,14 @@ cublasDgemv(handle, CUBLAS_OP_N, m, n, &alpha, d_A, lda, d_x, 1, &beta, d_y, 1);
 
 ### `cublas<t>gemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc) -> cublasStatus_t`
 **Description:** `C = alpha * op(A) * op(B) + beta * C`.
-- `m, n, k` — dimensions: C is m×n, A is m×k, B is k×n (after transpose).
-- `lda, ldb, ldc` — leading dimensions (column-major, so ≥ number of rows).
+- `m, n, k` — dimensions: C is m x n, A is m x k, B is k x n (after transpose).
+- `lda, ldb, ldc` — leading dimensions (column-major, so >= number of rows).
 - Precision variants: `S`=float, `D`=double, `H`=half, `C`=complex float, `Z`=complex double.
 
 **Example (double precision):**
 ```cpp
 const double alpha = 1.0, beta = 0.0;
-// C = A * B  (2x2 matrices, column-major)
+// C = A * B  (column-major layout)
 cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
             m, n, k,
             &alpha, d_A, lda,
@@ -138,6 +139,29 @@ cublasDgemmStridedBatched(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                                   d_B, ldb, strideB,
                           &beta,  d_C, ldc, strideC,
                           batchCount);
+```
+
+---
+
+## Grouped Batched GEMM
+
+### `cublas<t>gemmGroupedBatched(handle, transa_array, transb_array, m_array, n_array, k_array, alpha_array, d_Aarray, lda_array, d_Barray, ldb_array, beta_array, d_Carray, ldc_array, group_count, group_size) -> cublasStatus_t`
+**Description:** Executes multiple groups of batched GEMMs where each group can have different dimensions (m, n, k), leading dimensions, transpose operations, and alpha/beta scalars. Matrices within the same group share the same parameters.
+**Parameters:**
+- `transa_array/transb_array` — array of `group_count` transpose operations
+- `m_array/n_array/k_array` — array of `group_count` dimension sets
+- `alpha_array/beta_array` — array of `group_count` scalar values
+- `d_Aarray/d_Barray/d_Carray` — device arrays of pointers (total length = sum of group_size[])
+- `lda_array/ldb_array/ldc_array` — array of `group_count` leading dimensions
+- `group_count` — number of groups
+- `group_size` — array of batch sizes per group
+
+**Example:**
+```cpp
+CUBLAS_CHECK(cublasDgemmGroupedBatched(
+    cublasH, transa_array, transb_array, m_array, n_array, k_array,
+    alpha_array, d_A_array, lda_array, d_B_array, ldb_array, beta_array,
+    d_C_array, ldc_array, group_count, group_size));
 ```
 
 ---

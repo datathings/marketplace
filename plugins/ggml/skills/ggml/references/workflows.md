@@ -293,6 +293,8 @@ size_t quantize_tensor(const float * f32_data, void * q_data,
 // size_t q_size = ggml_row_size(GGML_TYPE_Q4_0, n_per_row) * n_rows;
 // void * q_buf = malloc(q_size);
 // quantize_tensor(my_floats, q_buf, n_rows, n_per_row, GGML_TYPE_Q4_0);
+//
+// Supported types include Q4_0, Q8_0, Q5_K, and NVFP4 (GGML_TYPE_NVFP4).
 ```
 
 ---
@@ -355,4 +357,29 @@ static void my_op(struct ggml_tensor * dst,
 
 // Usage in graph construction:
 // struct ggml_tensor * result = ggml_map_custom1(ctx, input, my_op, GGML_N_TASKS_MAX, NULL);
+```
+
+---
+
+## Load GGUF from FILE Pointer
+
+Use `gguf_init_from_file_ptr` / `gguf_write_to_file_ptr` when you need control over the file handle (e.g., reading from an already-opened stream or writing to a temporary file):
+
+```c
+#include "gguf.h"
+#include <stdio.h>
+
+void load_from_fp(FILE * fp) {
+    struct gguf_init_params params = { .no_alloc = true, .ctx = NULL };
+    struct gguf_context * gguf = gguf_init_from_file_ptr(fp, params);
+    if (!gguf) { fprintf(stderr, "Failed to parse GGUF from file pointer\n"); return; }
+
+    printf("Tensors: %ld\n", gguf_get_n_tensors(gguf));
+    gguf_free(gguf);
+}
+
+void write_to_fp(const struct gguf_context * gguf, FILE * fp) {
+    bool ok = gguf_write_to_file_ptr(gguf, fp, false);
+    if (!ok) { fprintf(stderr, "Write failed\n"); }
+}
 ```

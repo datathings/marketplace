@@ -64,6 +64,15 @@ clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, nd, devs, NULL);
 ### `clRetainDevice(device) -> cl_int` / `clReleaseDevice(device) -> cl_int`
 Increment / decrement reference count. Sub-devices must be released; root devices need not be.
 
+### `clSetDefaultDeviceCommandQueue(context, device, command_queue) -> cl_int`
+Set the default on-device command queue for a device (OpenCL 2.1+). Replaces the current default device queue.
+
+### `clGetDeviceAndHostTimer(device, device_timestamp, host_timestamp) -> cl_int`
+Query synchronized device and host timestamps (OpenCL 2.1+). Both pointers are `cl_ulong*`.
+
+### `clGetHostTimer(device, host_timestamp) -> cl_int`
+Query the host timer (OpenCL 2.1+). `host_timestamp` is `cl_ulong*`.
+
 ---
 
 ## Platform Info Queries
@@ -79,6 +88,9 @@ Increment / decrement reference count. Sub-devices must be released; root device
 | `CL_PLATFORM_VERSION` | `char[]` | OpenCL version string |
 | `CL_PLATFORM_PROFILE` | `char[]` | `FULL_PROFILE` or `EMBEDDED_PROFILE` |
 | `CL_PLATFORM_EXTENSIONS` | `char[]` | Space-separated extension list |
+| `CL_PLATFORM_HOST_TIMER_RESOLUTION` | `cl_ulong` | Host timer resolution in nanoseconds (2.1+) |
+| `CL_PLATFORM_NUMERIC_VERSION` | `cl_version` | Numeric platform version (3.0+) |
+| `CL_PLATFORM_EXTENSIONS_WITH_VERSION` | `cl_name_version[]` | Extensions with version info (3.0+) |
 
 **Pattern (two-call idiom):**
 ```c
@@ -115,6 +127,21 @@ free(name);
 | `CL_DEVICE_PLATFORM` | `cl_platform_id` | Parent platform |
 | `CL_DEVICE_IMAGE_SUPPORT` | `cl_bool` | Whether images are supported |
 | `CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT` | `cl_uint` | Preferred float vector width |
+| `CL_DEVICE_MAX_CLOCK_FREQUENCY` | `cl_uint` | Max clock frequency in MHz |
+| `CL_DEVICE_ADDRESS_BITS` | `cl_uint` | Address space size (32 or 64) |
+| `CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS` | `cl_uint` | Max NDRange dimensions (at least 3) |
+| `CL_DEVICE_DOUBLE_FP_CONFIG` | `cl_device_fp_config` | Double-precision capability flags (1.2+) |
+| `CL_DEVICE_SVM_CAPABILITIES` | `cl_device_svm_capabilities` | SVM capability flags (2.0+) |
+| `CL_DEVICE_NUMERIC_VERSION` | `cl_version` | Numeric device version (3.0+) |
+| `CL_DEVICE_EXTENSIONS_WITH_VERSION` | `cl_name_version[]` | Extensions with version info (3.0+) |
+| `CL_DEVICE_OPENCL_C_ALL_VERSIONS` | `cl_name_version[]` | Supported OpenCL C versions (3.0+) |
+| `CL_DEVICE_OPENCL_C_FEATURES` | `cl_name_version[]` | Supported OpenCL C features (3.0+) |
+| `CL_DEVICE_ATOMIC_MEMORY_CAPABILITIES` | `cl_device_atomic_capabilities` | Atomic memory capabilities (3.0+) |
+| `CL_DEVICE_ATOMIC_FENCE_CAPABILITIES` | `cl_device_atomic_capabilities` | Atomic fence capabilities (3.0+) |
+| `CL_DEVICE_PIPE_SUPPORT` | `cl_bool` | Whether pipes are supported (3.0+) |
+| `CL_DEVICE_NON_UNIFORM_WORK_GROUP_SUPPORT` | `cl_bool` | Non-uniform work-groups (3.0+) |
+| `CL_DEVICE_IL_VERSION` | `char[]` | Supported IL version string (2.1+) |
+| `CL_DEVICE_MAX_NUM_SUB_GROUPS` | `cl_uint` | Max sub-groups per work-group (2.1+) |
 
 **Example:**
 ```c

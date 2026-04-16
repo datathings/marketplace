@@ -18,7 +18,7 @@ Complete working examples for common llama.cpp tasks. This document combines wor
 9. [Encoder-Decoder Models](#9-encoder-decoder-models)
 10. [Memory Management Patterns](#10-memory-management-patterns)
 
-### Advanced Workflows - b7572 Features (11-13)
+### Advanced Workflows (11-13)
 11. [Advanced Sampling: XTC + DRY](#11-advanced-sampling-xtc--dry)
 12. [Per-Sequence State Management](#12-per-sequence-state-management)
 13. [Model Architecture Detection](#13-model-architecture-detection)
@@ -914,7 +914,7 @@ int main() {
 
 ## 11. Advanced Sampling: XTC + DRY
 
-**NEW in b7572** - Demonstrates new XTC and DRY samplers for reducing repetition and increasing diversity.
+Demonstrates XTC and DRY samplers for reducing repetition and increasing diversity.
 
 ```c
 #include "llama.h"
@@ -931,7 +931,7 @@ int main() {
     ctx_params.n_ctx = 2048;
     struct llama_context * ctx = llama_init_from_model(model, ctx_params);
 
-    struct llama_vocab * vocab = llama_model_get_vocab(model);
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
 
     // Create advanced sampler chain with XTC + DRY
     struct llama_sampler * sampler = llama_sampler_chain_init(
@@ -1014,7 +1014,7 @@ int main() {
 
 ## 12. Per-Sequence State Management
 
-**NEW in b7572** - Save and load state for individual sequences.
+Save and load state for individual sequences.
 
 ```c
 #include "llama.h"
@@ -1032,7 +1032,7 @@ int main() {
     ctx_params.n_ctx = 4096;
     struct llama_context * ctx = llama_init_from_model(model, ctx_params);
 
-    struct llama_vocab * vocab = llama_model_get_vocab(model);
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
 
     // Simulate conversation with Alice (sequence 0)
     const char * alice_msg = "Hi, I'm Alice. Tell me about quantum physics.";
@@ -1059,7 +1059,7 @@ int main() {
     printf("Saved %zu bytes\n", saved_bytes);
 
     // Clear memory and work with Bob
-    llama_memory_clear(llama_get_memory(ctx));
+    llama_memory_clear(llama_get_memory(ctx), true);
 
     // Later: restore Alice's conversation
     printf("\nRestoring Alice's conversation...\n");
@@ -1088,7 +1088,7 @@ int main() {
 
 ## 13. Model Architecture Detection
 
-**NEW in b7572** - Detect and handle different model architectures dynamically.
+Detect and handle different model architectures dynamically.
 
 ```c
 #include "llama.h"

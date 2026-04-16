@@ -134,7 +134,7 @@ CUDA_CHECK(cudaStreamSynchronize(stream));
 
 ## SVD (gesvd)
 
-Computes `A = U * diag(S) * V^T`. A is m×n.
+Computes `A = U * diag(S) * V^T`. A is m x n.
 
 ### `cusolverDn<t>gesvd_bufferSize(handle, m, n, lwork) -> cusolverStatus_t`
 
@@ -166,7 +166,7 @@ CUDA_CHECK(cudaStreamSynchronize(stream));
 
 ## cusolverDn Generic API (Xgetrf etc.)
 
-For mixed-precision and 64-bit index support, use the generic `X` prefix API (CUDA 11+):
+For mixed-precision and 64-bit index support, use the generic `X` prefix API:
 `cusolverDnXgetrf`, `cusolverDnXgesvd`, `cusolverDnXsyevd`, etc.
 
 **Key difference:** Uses `cusolverDnParams_t` for configuration and supports `CUDA_R_16F`, `CUDA_R_32F`, `CUDA_R_64F` type parameters.

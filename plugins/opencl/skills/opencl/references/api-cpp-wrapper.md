@@ -54,7 +54,7 @@ platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
 cl::Device device = devices[0];
 std::string devName = device.getInfo<CL_DEVICE_NAME>();
 cl_ulong mem  = device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
-size_t   wgs  = device.getInfo<CL_MAX_WORK_GROUP_SIZE>();
+size_t   wgs  = device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
 cl_uint  cus  = device.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>();
 
 // Check extension support
@@ -101,6 +101,14 @@ queue.flush();
 queue.finish();
 ```
 
+**DeviceCommandQueue (OpenCL 2.0+):**
+```cpp
+cl::DeviceCommandQueue devQueue{ctx, device,
+    cl::DeviceQueueProperties::None};
+// Set as default device queue
+clSetDefaultDeviceCommandQueue(ctx(), device(), devQueue());
+```
+
 ---
 
 ## Buffer & Memory
@@ -142,9 +150,44 @@ cl::copy(queue, buf, host_data.begin(), host_data.end());
 cl::ImageFormat fmt{CL_RGBA, CL_UNORM_INT8};
 cl::Image2D img{ctx, CL_MEM_READ_WRITE, fmt, width, height};
 
+// Other image types
+cl::Image1D     img1d{ctx, CL_MEM_READ_WRITE, fmt, width};
+cl::Image1DArray img1da{ctx, CL_MEM_READ_WRITE, fmt, width, array_size};
+cl::Image2DArray img2da{ctx, CL_MEM_READ_WRITE, fmt, width, height, array_size};
+cl::Image3D     img3d{ctx, CL_MEM_READ_WRITE, fmt, width, height, depth};
+cl::Image1DBuffer img1db{ctx, CL_MEM_READ_WRITE, fmt, width, buffer};
+
 // Enqueue image read
-std::vector<size_t> origin{0,0,0}, region{width,height,1};
+std::array<size_t, 3> origin{0,0,0}, region{width,height,1};
 queue.enqueueReadImage(img, CL_TRUE, origin, region, 0, 0, host_pixels.data());
+```
+
+**Pipe (OpenCL 2.0+):**
+```cpp
+cl::Pipe pipe{ctx, packet_size, max_packets};
+// Pass to kernel as cl_mem argument
+kernel.setArg(0, pipe);
+```
+
+**Sampler:**
+```cpp
+cl::Sampler sampler{ctx, CL_TRUE, CL_ADDRESS_CLAMP, CL_FILTER_LINEAR};
+kernel.setArg(1, sampler);
+```
+
+**SVM (OpenCL 2.0+):**
+```cpp
+// Coarse-grain SVM
+float* svm_ptr = (float*)clSVMAlloc(ctx(), CL_MEM_READ_WRITE,
+    N * sizeof(float), 0);
+queue.enqueueMapSVM(svm_ptr, CL_TRUE, CL_MAP_WRITE, N * sizeof(float));
+// ... write to svm_ptr ...
+queue.enqueueUnmapSVM(svm_ptr);
+kernel.setArg(0, sizeof(float*), &svm_ptr);
+
+// SVMAllocator for STL containers (fine-grain)
+cl::SVMAllocator<float, cl::SVMTraitFine<>> alloc{ctx};
+std::vector<float, cl::SVMAllocator<float, cl::SVMTraitFine<>>> vec(N, 0.f, alloc);
 ```
 
 ---
@@ -161,6 +204,9 @@ try {
         std::cerr << log << "\n";
 }
 
+// Build from SPIR-V (OpenCL 2.1+)
+cl::Program program{ctx, il_data, il_length};
+
 // With compiler options
 program.build("-cl-fast-relaxed-math -DCL_VERSION=2");
 
@@ -174,6 +220,9 @@ cl::Kernel kernel{program, "saxpy"};
 kernel.setArg(0, a_float);
 kernel.setArg(1, buf_x);
 kernel.setArg(2, buf_y);
+
+// Clone kernel (OpenCL 2.1+) - safe for concurrent arg setting
+cl::Kernel kernel2 = kernel.clone();
 
 // KernelFunctor: type-safe call site (sets args + enqueues atomically)
 auto saxpy = cl::KernelFunctor<cl_float, cl::Buffer, cl::Buffer>(program, "saxpy");

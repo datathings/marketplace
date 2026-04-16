@@ -102,6 +102,7 @@ bool ggml_is_scalar(const struct ggml_tensor * tensor);
 bool ggml_is_vector(const struct ggml_tensor * tensor);
 bool ggml_is_matrix(const struct ggml_tensor * tensor);
 bool ggml_is_3d(const struct ggml_tensor * tensor);
+bool ggml_is_view(const struct ggml_tensor * tensor);
 int  ggml_n_dims(const struct ggml_tensor * tensor);
 
 // Contiguity tests
@@ -259,6 +260,7 @@ void    ggml_set_f32_nd(const struct ggml_tensor * tensor, int i0, int i1, int i
 - `GGML_TYPE_Q4_0` / `GGML_TYPE_Q4_1` — 4-bit quantized
 - `GGML_TYPE_Q8_0` — 8-bit quantized
 - `GGML_TYPE_I8`, `GGML_TYPE_I16`, `GGML_TYPE_I32`, `GGML_TYPE_I64` — integers
+- `GGML_TYPE_NVFP4` (= 40) — NVIDIA FP4 (4 blocks, E4M3 scale)
 
 **ggml_status:**
 - `GGML_STATUS_SUCCESS` = 0

@@ -87,6 +87,7 @@ cufftSetStream(plan, stream);
 **Description:** Executes complex-to-complex FFT.
 **Parameters:** `direction` — `CUFFT_FORWARD` (-1) or `CUFFT_INVERSE` (+1).
 **Note:** `idata == odata` is valid for in-place transforms.
+**Important:** cuFFT does NOT normalize inverse transforms. Divide output by N manually.
 **Example:**
 ```cpp
 // Forward then inverse (round-trip)

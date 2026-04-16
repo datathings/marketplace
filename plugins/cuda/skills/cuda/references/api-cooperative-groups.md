@@ -81,10 +81,10 @@ __device__ int reduction(thread_group g, int *smem, int val) {
 
 ## Tiled Partitions
 
-Divide a group into equal-size sub-groups. Tile size must be a power of 2 and ≤ 32 (warp size) for warp-level intrinsics.
+Divide a group into equal-size sub-groups. Tile size must be a power of 2 and <= 32 (warp size) for warp-level intrinsics.
 
 ### `tiled_partition<N>(parent_group) -> thread_block_tile<N>`
-**Description:** Compile-time tile size. Enables warp shuffle primitives when N ≤ 32.
+**Description:** Compile-time tile size. Enables warp shuffle primitives when N <= 32.
 
 ```cpp
 thread_block tb = this_thread_block();
@@ -99,7 +99,7 @@ int val  = warp.shfl(data, 0);  // broadcast from lane 0 within warp
 ### `tiled_partition(parent_group, N) -> thread_group`
 **Description:** Runtime tile size (not eligible for warp-level ops when N > warp size).
 
-**Available warp-level operations on `thread_block_tile<N>` (N ≤ 32):**
+**Available warp-level operations on `thread_block_tile<N>` (N <= 32):**
 - `.shfl(val, src_lane)` — broadcast a value from `src_lane`
 - `.shfl_up(val, delta)` — shift up within the tile
 - `.shfl_down(val, delta)` — shift down within the tile
@@ -144,7 +144,7 @@ Requires cooperative kernel launch; allows synchronization across the entire gri
 - `.size()` — total threads in the grid
 - `.thread_rank()` — unique linear index across all blocks
 
-**Launch:**
+**Launch (requires `cudaLaunchCooperativeKernel`):**
 ```cpp
 void *args[] = {(void *)&d_data, (void *)&N};
 cudaLaunchCooperativeKernel((void *)myKernel, gridDim, blockDim, args, sharedMem, stream);
@@ -166,6 +166,13 @@ __global__ void myKernel(float *data, int N) {
     // Phase 2: use results from phase 1
     if (grid.thread_rank() == 0) printf("Grid sync complete\n");
 }
+```
+
+**Occupancy for cooperative launch:** Use `cudaOccupancyMaxActiveBlocksPerMultiprocessor` to determine the max grid size that can synchronize:
+```cpp
+int numBlocksPerSm;
+cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, myKernel, numThreads, sMemSize);
+int maxBlocks = numBlocksPerSm * prop.multiProcessorCount;
 ```
 
 ---

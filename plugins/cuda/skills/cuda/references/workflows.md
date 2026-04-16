@@ -7,16 +7,18 @@
 4. [Unified Memory](#unified-memory)
 5. [Error-Checked CUDA Boilerplate](#error-checked-boilerplate)
 6. [Thrust Sort and Reduce](#thrust-sort-and-reduce)
+7. [Driver API with Module Cleanup](#driver-api-with-module-cleanup)
 
 ---
 
 ## Custom Kernel
 
-Element-wise vector addition with proper launch configuration and error checking.
+Element-wise vector addition with proper launch configuration and error checking. Uses `uint32_t` for array indexing to avoid integer overflow.
 
 ```c
 // compile: nvcc -o vecadd vecadd.cu
 #include <stdio.h>
+#include <cstdint>
 #include <cuda_runtime.h>
 
 #define CUDA_CHECK(err) do {                                             \
@@ -126,7 +128,7 @@ int main() {
     CUDA_CHECK(cudaMemcpyAsync(C.data(), d_C, m*n*sizeof(double), cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
 
-    printf("C[0,0] = %f (expected %f)\n", C[0], 4*1.0+4*2.0+4*3.0+4*4.0-30.0); // sanity
+    printf("C[0,0] = %f\n", C[0]);
 
     CUDA_CHECK(cudaFree(d_A)); CUDA_CHECK(cudaFree(d_B)); CUDA_CHECK(cudaFree(d_C));
     CUBLAS_CHECK(cublasDestroy(handle));
@@ -208,7 +210,7 @@ int main() {
 
 ## Unified Memory
 
-Demonstrates `cudaMallocManaged` with prefetching and advice for optimal performance.
+Demonstrates `cudaMallocManaged` with Unified Memory support check, prefetching, and advice for optimal performance.
 
 ```cpp
 // compile: nvcc -o umem umem.cu
@@ -226,6 +228,14 @@ __global__ void init_and_double(float *data, int n) {
 int main() {
     int device;
     CUDA_CHECK(cudaGetDevice(&device));
+
+    // Check Unified Memory support before using cudaMallocManaged
+    cudaDeviceProp device_prop;
+    CUDA_CHECK(cudaGetDeviceProperties(&device_prop, device));
+    if (!device_prop.managedMemory) {
+        fprintf(stderr, "Unified Memory not supported on this device\n");
+        return 1;
+    }
 
     const int N = 1 << 20;
     float *data;
@@ -324,7 +334,7 @@ Copy-paste header for new CUDA files with all error check macros.
 
 ## Thrust Sort and Reduce
 
-Sorting and reduction using Thrust with raw CUDA pointer interop.
+Sorting and reduction using Thrust with raw CUDA pointer interop. Uses `cuda::std::tuple` for zip iterators (CUDA 13.2+).
 
 ```cpp
 // compile: nvcc -o thrust_demo thrust_demo.cu
@@ -367,6 +377,54 @@ int main() {
     float *raw = thrust::raw_pointer_cast(d.data());
     // myKernel<<<grid, block>>>(raw, N);
 
+    return 0;
+}
+```
+
+---
+
+## Driver API with Module Cleanup
+
+Demonstrates proper CUDA Driver API usage with `cuModuleUnload` for resource cleanup.
+
+```cpp
+// compile: nvcc -o drv_vecadd drv_vecadd.cpp -lcuda
+#include <cuda.h>
+#include <cstdio>
+#include <cstdlib>
+
+#define CHECK_DRV(err) do {                                                \
+    CUresult _r = (err);                                                   \
+    if (_r != CUDA_SUCCESS) {                                              \
+        const char *msg;                                                   \
+        cuGetErrorString(_r, &msg);                                        \
+        fprintf(stderr, "CUDA Driver error at %s:%d: %s\n",               \
+                __FILE__, __LINE__, msg);                                  \
+        exit(EXIT_FAILURE);                                                \
+    }                                                                      \
+} while(0)
+
+int main() {
+    // Initialize and create context
+    CHECK_DRV(cuInit(0));
+    CUdevice dev;
+    CHECK_DRV(cuDeviceGet(&dev, 0));
+    CUcontext ctx;
+    CUctxCreateParams ctxParams = {};
+    CHECK_DRV(cuCtxCreate(&ctx, &ctxParams, 0, dev));
+
+    // Load module from fatbin
+    CUmodule module;
+    CHECK_DRV(cuModuleLoad(&module, "kernel.fatbin"));
+
+    CUfunction kernel;
+    CHECK_DRV(cuModuleGetFunction(&kernel, module, "myKernel"));
+
+    // ... allocate memory, launch kernel, copy results ...
+
+    // Cleanup: unload module BEFORE destroying context
+    CHECK_DRV(cuModuleUnload(module));
+    CHECK_DRV(cuCtxDestroy(ctx));
     return 0;
 }
 ```

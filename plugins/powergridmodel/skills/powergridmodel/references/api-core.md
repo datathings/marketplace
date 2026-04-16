@@ -11,7 +11,8 @@
 8. [power_grid_meta_data](#power_grid_meta_data)
 9. [attribute_dtype / attribute_empty_value](#attribute_dtype--attribute_empty_value)
 10. [Serialization utilities](#serialization-utilities)
-11. [self_test](#self_test)
+11. [Stream serialization](#stream-serialization)
+12. [self_test](#self_test)
 
 ---
 

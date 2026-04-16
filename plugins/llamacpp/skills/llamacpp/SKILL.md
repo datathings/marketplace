@@ -164,6 +164,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 - `llama_model_init_from_user()` - Create a model from GGUF metadata + callback for tensor data
 
 **New Quantization Types:**
+- `LLAMA_FTYPE_MOSTLY_MXFP4_MOE` (38) - MXFP4 MOE quantization
 - `LLAMA_FTYPE_MOSTLY_NVFP4` (39) - NVFP4 quantization
 - `LLAMA_FTYPE_MOSTLY_Q1_0` (40) - Q1_0 quantization
 

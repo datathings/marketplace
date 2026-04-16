@@ -10,12 +10,12 @@ description: "C tensor computation library for ML inference and training. Use wh
 ggml is a minimalistic C tensor computation library powering llama.cpp and many other ML inference engines. It provides:
 - A define-and-run computation graph model (similar to TensorFlow 1.x)
 - CPU, CUDA, Metal, Vulkan, and other hardware backends
-- 40+ quantization formats (Q4_0, Q8_0, Q5_K, etc.)
+- 41+ quantization formats (Q4_0, Q8_0, Q5_K, NVFP4, etc.)
 - GGUF binary file format for model weights and metadata
 - Automatic differentiation and AdamW/SGD optimizers
 - Zero runtime allocations — all memory is pre-reserved
 
-**Version:** v0.9.7
+**Version:** v0.9.11
 **Language:** C (C++ optional)
 **License:** MIT
 **Repo:** https://github.com/ggml-org/ggml
@@ -86,6 +86,7 @@ Quick reference:
 - **Quantize weights** → workflows.md#quantize-model-weights
 - **Write GGUF file** → workflows.md#write-a-gguf-file
 - **Custom operator** → workflows.md#custom-operator
+- **Load GGUF from FILE pointer** → workflows.md#load-gguf-from-file-pointer
 
 ## Key Considerations
 
