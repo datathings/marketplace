@@ -72,13 +72,13 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (399 lines) - LoRA adapters, performance, training, constants
 
-**Total:** ~199 active functions (b8809) across 6 organized files
+**Total:** 198 active functions (b8809) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api.md](references/api.md)** for all ~199 function signatures.
+See **[references/api-core.md](references/api-core.md)** for the full API index linking to all 198 function signatures.
 
 ## Common Workflows
 
@@ -127,7 +127,7 @@ End-of-generation check (`llama_vocab_is_eog()`), logits retrieval (`llama_get_l
 - Increase `n_threads` for CPU
 - Set `n_gpu_layers` for GPU offloading
 - Use larger `n_batch` for prompts
-- See [Performance & Utilities](references/api.md#performance--utilities)
+- See [Performance & Utilities](references/api-advanced.md#performance--utilities)
 
 **Sliding Window Attention (SWA) issues:**
 - If using Mistral-style models with SWA, set `ctx_params.swa_full = true` to access beyond attention window
