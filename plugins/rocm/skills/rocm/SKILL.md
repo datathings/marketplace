@@ -1,18 +1,18 @@
 ---
 name: rocm
-description: "AMD ROCm GPU computing stack for HIP kernel development and GPU-accelerated library usage. Use when: writing HIP kernels (.hip files), using rocBLAS/rocFFT/rocRAND/rocSOLVER/rocSPARSE/hipBLAS/hipBLASLt compute libraries, profiling with rocProfiler or rocprof, porting CUDA code to HIP, building CMake/Makefile projects targeting AMD GPUs, or debugging GPU code with rocGDB."
+description: "AMD ROCm GPU computing stack for HIP kernel development and GPU-accelerated library usage. Use when: writing HIP kernels (.hip files), using rocBLAS/rocFFT/rocRAND/rocSOLVER/rocSPARSE/hipBLAS/hipBLASLt/hipTensor/hipSPARSELt/rocALUTION compute libraries, profiling with rocProfiler or rocprof, porting CUDA code to HIP, building CMake/Makefile projects targeting AMD GPUs, using HIP Graphs for low-overhead kernel replay, or debugging GPU code with rocGDB."
 ---
 
 # ROCm GPU Development
 
-**Version:** rocm-7.2.0
+**Version:** rocm-7.2.2
 **Language:** C/C++ with HIP (`.hip` or `.cpp` files)
 **License:** MIT (examples and most libraries); some components Apache-2.0
 **Docs:** https://rocm.docs.amd.com
 
 ## Overview
 
-ROCm is AMD's open-source GPU computing stack. HIP (Heterogeneous-compute Interface for Portability) is the primary programming API — it is syntactically close to CUDA and compiles on both AMD and NVIDIA GPUs. ROCm includes a full suite of optimized compute libraries (BLAS, FFT, RNG, solvers, sparse) plus profiling and debugging tools.
+ROCm is AMD's open-source GPU computing stack. HIP (Heterogeneous-compute Interface for Portability) is the primary programming API — it is syntactically close to CUDA and compiles on both AMD and NVIDIA GPUs. ROCm includes optimized compute libraries (BLAS, FFT, RNG, solvers, sparse, tensor contractions, structured sparsity), HIP Graphs for low-overhead kernel replay, and profiling/debugging tools. As of ROCm 7.2, `hipcc` is deprecated in favor of `amdclang++` (same flags, direct invocation recommended).
 
 ## Quick Start
 
@@ -33,8 +33,9 @@ int main() {
 ```
 
 ```bash
-# Compile and run
+# Compile and run (hipcc still works but is deprecated in 7.2+)
 hipcc -O2 -o hello minimal.hip && ./hello
+# Preferred: amdclang++ -O2 -x hip -o hello minimal.hip && ./hello
 
 # CMake (preferred for larger projects)
 # cmake -S . -B build && cmake --build build
@@ -121,32 +122,34 @@ atomicAdd(&shared_counter, 1);     // atomic operations
 
 ```bash
 # Default install path
-/opt/rocm/              # ROCm root
-/opt/rocm/bin/hipcc     # HIP compiler
-/opt/rocm/bin/rocm-smi  # GPU monitor
-/opt/rocm/bin/rocgdb    # GPU debugger
+/opt/rocm/                         # ROCm root
+/opt/rocm/lib/llvm/bin/amdclang++  # AMD Clang (preferred compiler)
+/opt/rocm/bin/hipcc                # HIP compiler (deprecated, wraps amdclang++)
+/opt/rocm/bin/rocm-smi             # GPU monitor
+/opt/rocm/bin/rocgdb               # GPU debugger
 
 # Verify installation
-hipcc --version
-rocm-smi                # show GPU status
+amdclang++ --version               # preferred
+hipcc --version                    # still works
+rocm-smi                           # show GPU status
 /opt/rocm/bin/rocm_agent_enumerator  # list GPU targets (e.g. gfx1100, gfx90a)
 
 # Target architecture flags
-hipcc --offload-arch=gfx1100 ...   # RX 7900 (Navi31/RDNA3)
-hipcc --offload-arch=gfx90a  ...   # MI200 (CDNA2)
-hipcc --offload-arch=gfx942  ...   # MI300 (CDNA3)
-hipcc --offload-arch=gfx1030 ...   # RX 6800 (Navi21/RDNA2)
+amdclang++ --offload-arch=gfx1100 -x hip ...  # RX 7900 (Navi31/RDNA3)
+amdclang++ --offload-arch=gfx90a  -x hip ...  # MI200 (CDNA2)
+amdclang++ --offload-arch=gfx942  -x hip ...  # MI300 (CDNA3)
+amdclang++ --offload-arch=gfx1030 -x hip ...  # RX 6800 (Navi21/RDNA2)
 ```
 
 ## API Reference
 
 | Domain | Reference File | Key APIs / Purpose |
 |--------|---------------|-------------------|
-| HIP Runtime | `references/api-hip-core.md` | `hipMalloc`, `hipMemcpy`, `hipMemcpyAsync`, `hipStream_t`, `hipEvent_t`, occupancy API, warp intrinsics, atomics |
+| HIP Runtime | `references/api-hip-core.md` | `hipMalloc`, `hipMemcpy`, `hipMemcpyAsync`, streams, events, HIP Graphs, stream-ordered memory (`hipMallocAsync`/`hipFreeAsync`), occupancy, library API, warp intrinsics, atomics |
 | HIP Math | `references/api-hip-math.md` | `sinf/cosf/expf/rsqrtf`, half-precision `__half`, complex math, bit manipulation |
-| Compute Libraries | `references/api-libraries.md` | rocBLAS, hipBLAS, hipBLASLt, rocFFT, hipFFT, rocRAND, rocSOLVER, rocSPARSE, rocWMMA, rocPRIM, hipCUB |
-| Profiling & Debug | `references/api-profiling.md` | HIP events, rocProfiler-SDK, `rocprof` CLI, `rocm-smi`, `rocgdb`, ASAN |
-| Workflows | `references/workflows.md` | Complete examples: SAXPY, tiled matmul, rocBLAS GEMM, rocFFT, rocRAND, multi-GPU, streaming overlap, CUDA→HIP porting, pitfalls |
+| Compute Libraries | `references/api-libraries.md` | rocBLAS, hipBLAS, hipBLASLt, rocFFT, hipFFT, rocRAND, rocSOLVER, rocSPARSE, hipSPARSE, hipSPARSELt, hipTensor, rocALUTION, rocWMMA, rocPRIM, hipCUB, rocThrust |
+| Profiling & Debug | `references/api-profiling.md` | HIP events, rocProfiler-SDK (API tracing, PC sampling, thread trace), `rocprof` CLI, `rocm-smi`, `rocgdb`, ASAN |
+| Workflows | `references/workflows.md` | Complete examples: SAXPY, tiled matmul, rocBLAS GEMM, rocFFT, rocRAND, HIP Graphs, multi-GPU, streaming overlap, CUDA→HIP porting, pitfalls |
 
 ## Common Workflows
 
@@ -231,12 +234,16 @@ hipify-perl -inplace *.cu *.cuh
 | CUDA | HIP equivalent |
 |------|---------------|
 | `cudaMalloc / cudaFree` | `hipMalloc / hipFree` |
+| `cudaMallocAsync / cudaFreeAsync` | `hipMallocAsync / hipFreeAsync` |
 | `cudaMemcpy` | `hipMemcpy` |
 | `cudaDeviceSynchronize` | `hipDeviceSynchronize` |
 | `cudaStreamCreate` | `hipStreamCreate` |
+| `cudaGraphCreate` | `hipGraphCreate` |
+| `cudaStreamBeginCapture` | `hipStreamBeginCapture` |
 | `cublasCreate` | `rocblas_create_handle` |
 | `cufftPlan1d` | `hipfftPlan1d` |
 | `curandCreateGenerator` | `rocrand_create_generator` |
+| `cusparseCreate` | `hipsparseCreate` |
 | `__shfl_sync(mask, val, lane)` | `__shfl(val, lane)` (AMD) |
 
 ## Key Considerations
@@ -248,4 +255,8 @@ hipify-perl -inplace *.cu *.cuh
 - **rocFFT inverse transforms do not normalize**: divide output by N after IFFT.
 - **Shared memory limit**: 64 KB per block on CDNA (MI), 32 KB on RDNA (RX). Exceeding it silently reduces occupancy.
 - **Managed memory** (`hipMallocManaged`) is convenient but typically slower than explicit transfers on discrete GPUs.
-- **Library selection**: prefer rocBLAS for AMD GEMM performance; use hipBLAS/hipFFT for portability; hipBLASLt for DL epilogues.
+- **Library selection**: prefer rocBLAS for AMD GEMM performance; use hipBLAS/hipFFT for portability; hipBLASLt for DL epilogues; hipSPARSELt for 2:4 structured sparsity; hipTensor for tensor contractions; rocALUTION for iterative sparse solvers.
+- **hipcc is deprecated** (ROCm 7.2+): use `amdclang++ -x hip` directly. Same flags, same behavior.
+- **AMD_DIRECT_DISPATCH deprecated**: the HIP runtime now manages dispatch mode internally.
+- **HIP Graphs**: for repeated kernel sequences (inference loops), capture into a graph to reduce per-launch overhead.
+- **ThinLTO**: enable with `-foffload-lto=thin` for link-time optimization on device code (ROCm 7.2+).

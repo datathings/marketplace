@@ -33,6 +33,10 @@
 | `CL_MEM_COPY_HOST_PTR` | Copy `host_ptr` data to device at creation |
 | `CL_MEM_USE_HOST_PTR` | Device uses host memory directly (pinned) |
 | `CL_MEM_ALLOC_HOST_PTR` | Allocate pinned host-accessible memory |
+| `CL_MEM_HOST_WRITE_ONLY` | Host writes only (1.2+) |
+| `CL_MEM_HOST_READ_ONLY` | Host reads only (1.2+) |
+| `CL_MEM_HOST_NO_ACCESS` | Host cannot access (1.2+) |
+| `CL_MEM_KERNEL_READ_AND_WRITE` | Kernel can read and write (2.0+) |
 
 **Example:**
 ```c
@@ -276,8 +280,8 @@ Reference count. Pair every `clCreateSampler*` with `clReleaseSampler`.
 ### `clRetainMemObject(memobj) -> cl_int` / `clReleaseMemObject(memobj) -> cl_int`
 Every `clCreateBuffer` / `clCreateImage` must be balanced with `clReleaseMemObject`.
 
-### `clGetMemObjectInfo(memobj, param_name, ...) -> cl_int`
-Key params: `CL_MEM_TYPE`, `CL_MEM_FLAGS`, `CL_MEM_SIZE`, `CL_MEM_HOST_PTR`, `CL_MEM_REFERENCE_COUNT`.
+### `clGetMemObjectInfo(memobj, param_name, param_value_size, param_value, param_value_size_ret) -> cl_int`
+Key params: `CL_MEM_TYPE`, `CL_MEM_FLAGS`, `CL_MEM_SIZE`, `CL_MEM_HOST_PTR`, `CL_MEM_MAP_COUNT`, `CL_MEM_REFERENCE_COUNT`, `CL_MEM_CONTEXT`, `CL_MEM_ASSOCIATED_MEMOBJECT` (1.1+), `CL_MEM_OFFSET` (1.1+), `CL_MEM_USES_SVM_POINTER` (2.0+), `CL_MEM_PROPERTIES` (3.0+).
 
 ### `clSetMemObjectDestructorCallback(memobj, pfn_notify, user_data) -> cl_int`
 Register a callback invoked when the object's reference count reaches zero.

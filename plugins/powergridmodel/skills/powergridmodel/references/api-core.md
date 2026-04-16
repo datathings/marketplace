@@ -29,13 +29,18 @@ from power_grid_model import PowerGridModel
 - `system_frequency`: Power system frequency in Hz (default `50.0`).
 
 **Properties:**
-- `all_component_count: dict[ComponentType, int]` — count of each component type in the model.
+- `all_component_count: dict[ComponentType, int]` — count of each component type in the model (only types with count > 0).
 - `batch_error: PowerGridBatchError | None` — batch error object after a batch run with `continue_on_batch_error=True`.
+
+**Methods:**
+- `copy() -> PowerGridModel` — deep copy of the model. Also supports `copy.copy()` and `copy.deepcopy()`.
+- `__repr__()` — string showing total component count and per-type breakdown.
 
 **Example:**
 ```python
 model = PowerGridModel(input_data, system_frequency=50.0)
 print(model)  # shows component counts
+model_copy = model.copy()  # independent deep copy
 ```
 
 ---
@@ -106,7 +111,7 @@ print(pd.DataFrame(result['node']))
 | `calculation_method` | `CalculationMethod\|str` | `iterative_linear` | `iterative_linear` (fast) or `newton_raphson` (accurate) |
 | `error_tolerance` | `float` | `1e-8` | Convergence tolerance |
 | `max_iterations` | `int` | `20` | Max iterations |
-| `update_data` | `BatchDataset\|None` | `None` | Batch scenarios |
+| `update_data` | `BatchDataset\|list[BatchDataset]\|None` | `None` | Batch scenarios; `list` triggers Cartesian product |
 | `threading` | `int` | `-1` | Thread count |
 
 **State estimation algorithms:**
@@ -138,7 +143,7 @@ result = model.calculate_state_estimation(
 |-----------|------|---------|-------------|
 | `calculation_method` | `CalculationMethod\|str` | `iec60909` | Currently only `iec60909` |
 | `short_circuit_voltage_scaling` | `ShortCircuitVoltageScaling\|str` | `maximum` | `minimum` or `maximum` short circuit currents |
-| `update_data` | `BatchDataset\|None` | `None` | Batch fault scenarios |
+| `update_data` | `BatchDataset\|list[BatchDataset]\|None` | `None` | Batch fault scenarios; `list` triggers Cartesian product |
 | `threading` | `int` | `-1` | Thread count |
 
 **Voltage scaling factor `c` (IEC 60909):**
@@ -261,17 +266,46 @@ from power_grid_model.utils import (
     msgpack_serialize_to_file,
     get_dataset_scenario,
     get_dataset_batch_size,
+    get_component_batch_size,
 )
 ```
 
 | Function | Description |
 |----------|-------------|
 | `json_deserialize_from_file(path, data_filter)` | Load JSON → `Dataset` |
-| `json_serialize_to_file(path, data, dataset_type, indent)` | Save `Dataset` → JSON |
+| `json_serialize_to_file(path, data, dataset_type, use_compact_list, indent)` | Save `Dataset` → JSON |
 | `msgpack_deserialize_from_file(path, data_filter)` | Load msgpack → `Dataset` |
-| `msgpack_serialize_to_file(path, data, dataset_type)` | Save `Dataset` → msgpack |
+| `msgpack_serialize_to_file(path, data, dataset_type, use_compact_list)` | Save `Dataset` → msgpack |
 | `get_dataset_scenario(dataset, scenario)` | Extract single-scenario slice from batch |
 | `get_dataset_batch_size(dataset)` | Return number of scenarios in a batch |
+| `get_component_batch_size(data_array)` | Return number of scenarios for a single component's batch data |
+
+---
+
+## Stream serialization
+
+```python
+from power_grid_model.utils import (
+    msgpack_deserialize_from_stream,
+    msgpack_serialize_to_stream,
+)
+```
+
+| Function | Description |
+|----------|-------------|
+| `msgpack_deserialize_from_stream(stream, data_filter)` | Load msgpack from binary IO stream → `Dataset` |
+| `msgpack_serialize_to_stream(stream, data, dataset_type, use_compact_list)` | Save `Dataset` → binary IO stream (msgpack) |
+
+**Example:**
+```python
+import io
+from power_grid_model.utils import msgpack_serialize_to_stream, msgpack_deserialize_from_stream
+
+buf = io.BytesIO()
+msgpack_serialize_to_stream(buf, input_data, dataset_type=DatasetType.input)
+buf.seek(0)
+loaded = msgpack_deserialize_from_stream(buf)
+```
 
 ---
 

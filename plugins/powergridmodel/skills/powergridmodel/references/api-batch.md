@@ -50,6 +50,15 @@ result = model.calculate_power_flow(update_data=update_data, threading=0)
 
 **Note:** IDs can be omitted (or set to NaN) for a dense update where every component of the type is updated. This is called a **uniform** update.
 
+**Updatable attributes by component type:**
+- `sym_load` / `asym_load` / `sym_gen` / `asym_gen`: `status`, `p_specified`, `q_specified`
+- `source`: `status`, `u_ref`, `u_ref_angle`, `sk`, `rx_ratio`, `z01_ratio`
+- `line` / `link` / `transformer` / `three_winding_transformer`: `from_status`, `to_status` (or `status_1/2/3`), `tap_pos`
+- `shunt`: `status`, `g1`, `b1`, `g0`, `b0`
+- `fault`: `status`, `fault_object`, `fault_type`, `fault_phase`, `r_f`, `x_f`
+- Sensors: `measured_object`, measurement values, sigma values
+- Regulators: `status`, `u_set`, `u_band`, etc.
+
 ---
 
 ## Sparse batch update
@@ -213,5 +222,16 @@ scenario_3 = get_dataset_scenario(result, scenario=3)
    from power_grid_model import ComponentAttributeFilterOptions
    result = model.calculate_power_flow(
        output_component_types=ComponentAttributeFilterOptions.relevant
+   )
+   ```
+
+7. **Source impedance sweeps**: Since v1.13.54, `sk`, `rx_ratio`, and `z01_ratio` are updatable. Use Cartesian product to sweep source strength alongside load profiles:
+   ```python
+   source_update = initialize_array('update', 'source', (3, 1))
+   source_update['id'] = [[5]]
+   source_update['sk'] = [[1e9], [5e9], [1e10]]
+   
+   result = model.calculate_power_flow(
+       update_data=[{'sym_load': load_update}, {'source': source_update}]
    )
    ```

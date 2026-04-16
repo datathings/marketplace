@@ -742,6 +742,12 @@ hipify-clang cuda_code.cu -- -x cuda --cuda-path=/usr/local/cuda
 | `cublasCreate` | `rocblas_create_handle` / `hipblasCreate` |
 | `cufftPlan1d` | `hipfftPlan1d` |
 | `curandCreateGenerator` | `rocrand_create_generator` |
+| `cudaMallocAsync` | `hipMallocAsync` |
+| `cudaFreeAsync` | `hipFreeAsync` |
+| `cudaGraphCreate` | `hipGraphCreate` |
+| `cudaStreamBeginCapture` | `hipStreamBeginCapture` |
+| `cudaGraphLaunch` | `hipGraphLaunch` |
+| `cusparseCreate` | `hipsparseCreate` |
 
 ### Platform Detection
 ```cpp
@@ -823,3 +829,9 @@ hipFuncSetAttribute(my_kernel,
     hipFuncAttributeMaxDynamicSharedMemorySize,
     max_shared);
 ```
+
+### 9. hipcc is deprecated (ROCm 7.2+)
+`hipcc` now just invokes `amdclang++`. Use `amdclang++ -x hip` directly for new projects. The `-x hip` flag tells the compiler to treat the input as HIP source. `hipcc` will become a symbolic link in a future release.
+
+### 10. AMD_DIRECT_DISPATCH deprecated
+The `AMD_DIRECT_DISPATCH` environment variable is deprecated in ROCm 7.2. The HIP runtime now manages dispatch mode internally.

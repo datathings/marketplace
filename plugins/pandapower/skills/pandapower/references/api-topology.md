@@ -10,17 +10,20 @@
 
 ## Graph Creation
 
-### `pp.topology.create_nxgraph(net, respect_switches=True, include_lines=True, include_trafos=True, include_impedances=True, include_dclines=True, include_trafo3ws=True, multi=True, calc_branch_impedances=False, branch_impedance_unit="ohm", library="networkx", include_out_of_service=False) -> nx.MultiGraph`
+### `pp.topology.create_nxgraph(net, respect_switches=True, include_lines=True, include_impedances=True, include_dclines=True, include_trafos=True, include_trafo3ws=True, include_tcsc=True, include_vsc=True, include_line_dc=True, nogobuses=None, notravbuses=None, multi=True, calc_branch_impedances=False, branch_impedance_unit="ohm", library="networkx", include_out_of_service=False, include_switches=True, trafo_length_km=None, switch_length_km=None) -> nx.MultiGraph`
 **Description:** Converts a pandapower network into a NetworkX graph. Buses become nodes, branches (lines, trafos) become edges.
 **Parameters:**
 - `respect_switches`: If True, open switches create disconnected edges
-- `include_lines`, `include_trafos`, etc.: Which element types to include as edges
+- `include_lines`, `include_trafos`, `include_impedances`, `include_dclines`, `include_trafo3ws`: Which element types to include
+- `include_tcsc`, `include_vsc`, `include_line_dc`: Include FACTS/HVDC/DC line elements
+- `include_switches`: Include bus-bus switches as edges
 - `multi`: If True, returns `MultiGraph` (allows parallel edges). If False, `Graph`
 - `calc_branch_impedances`: Add impedance as edge weight
 - `branch_impedance_unit`: `"ohm"` or `"pu"`
 - `nogobuses`: Buses to exclude entirely
 - `notravbuses`: Buses whose connected lines are ignored (terminal nodes)
 - `library`: `"networkx"` or `"graph_tool"`
+- `trafo_length_km`, `switch_length_km`: Optional edge weights for trafos/switches
 **Returns:** `networkx.MultiGraph`
 **Example:**
 ```python
@@ -72,7 +75,11 @@ for i, comp in enumerate(components):
 
 ### Detect unsupplied buses
 ```python
-# Find buses not connected to any external grid
+# Using the built-in function (recommended)
+unsupplied = top.unsupplied_buses(net, respect_switches=True)
+print(f"Unsupplied buses: {unsupplied}")
+
+# Or manually via connected_component
 mg = top.create_nxgraph(net)
 ext_grid_buses = set(net.ext_grid.bus.values)
 all_buses = set(net.bus.index)
@@ -81,8 +88,8 @@ supplied = set()
 for eg_bus in ext_grid_buses:
     supplied |= set(top.connected_component(mg, eg_bus))
 
-unsupplied = all_buses - supplied
-print(f"Unsupplied buses: {unsupplied}")
+unsupplied_manual = all_buses - supplied
+print(f"Unsupplied buses: {unsupplied_manual}")
 ```
 
 ---
@@ -104,20 +111,29 @@ distances = top.calc_distance_to_bus(net, bus=0, weight="weight")
 print(distances.sort_values())
 ```
 
-### `pp.topology.find_basic_open_loop_path(net, from_bus, to_bus, respect_switches=True) -> list`
-**Description:** Finds the path between two buses in a radial network (assumes tree topology).
-**Returns:** List of bus indices along the path.
-
-### `pp.topology.get_end_buses(net, respect_switches=True) -> set`
-**Description:** Returns all end buses (leaves) in the network - buses with only one connected branch.
-
-### `pp.topology.get_feeders(net, respect_switches=True, notravbuses=None) -> generator`
-**Description:** Yields feeders (subtrees fed from external grids) as sets of bus indices.
+### `pp.topology.unsupplied_buses(net, mg=None, slacks=None, respect_switches=True) -> set`
+**Description:** Finds buses not connected to any slack bus (ext_grid, slack gen, or slack VSC).
+**Parameters:**
+- `mg`: Pre-computed graph (optional)
+- `slacks`: Set of slack bus indices (default: auto-detect from ext_grid, gen.slack, vsc)
+**Returns:** Set of unsupplied bus indices.
 **Example:**
 ```python
-for feeder_buses in top.get_feeders(net):
-    print(f"Feeder with {len(feeder_buses)} buses")
+unsupplied = top.unsupplied_buses(net)
+print(f"Unsupplied buses: {unsupplied}")
 ```
+
+### `pp.topology.determine_stubs(net, roots=None, mg=None, respect_switches=False) -> set`
+**Description:** Finds stub buses/lines. Writes `net.bus["on_stub"]` and `net.line["is_stub"]` columns.
+**Parameters:**
+- `roots`: Bus indices to exclude as roots (default: ext_grid buses)
+**Returns:** Set of stub bus indices.
+
+### `pp.topology.lines_on_path(mg, path) -> list`
+**Description:** Finds all line indices connecting a given path of buses.
+
+### `pp.topology.elements_on_path(mg, path, element="line") -> list`
+**Description:** Finds all element indices of given type connecting a path of buses.
 
 ---
 

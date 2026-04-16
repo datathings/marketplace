@@ -15,7 +15,7 @@
 
 ## AC Power Flow
 
-### `runpp(net, algorithm="nr", calculate_voltage_angles=True, init="auto", max_iteration="auto", tolerance_mva=1e-8, trafo_model="t", trafo_loading="current", enforce_p_lims=False, enforce_q_lims=False, check_connectivity=True, voltage_depend_loads=True, consider_line_temperature=False, run_control=False, distributed_slack=False, tdpf=False, **kwargs) -> None`
+### `runpp(net, algorithm="nr", calculate_voltage_angles=True, init="auto", max_iteration="auto", tolerance_mva=1e-8, trafo_model="t", trafo_loading="current", enforce_p_lims=False, enforce_q_lims=False, check_connectivity=True, voltage_depend_loads=True, consider_line_temperature=False, run_control=False, distributed_slack=False, tdpf=False, tdpf_delay_s=None, **kwargs) -> None`
 **Description:** Runs a balanced AC power flow (load flow). Results are written to `net.res_*` tables.
 **Parameters:**
 - `algorithm`: Solver algorithm:
@@ -32,6 +32,7 @@
 - `numba` (kwarg): Use numba JIT for speedup (default True)
 - `lightsim2grid` (kwarg): Use lightsim2grid C++ backend (`"auto"`)
 - `tdpf`: Temperature-dependent power flow
+- `tdpf_delay_s`: TDPF delay in seconds for thermal inertia consideration
 **Returns:** None (in-place update of `net.res_*` tables).
 **Example:**
 ```python
@@ -57,10 +58,14 @@ print(net.res_bus)   # Only va_degree, no vm_pu
 print(net.res_line)  # Only p_from_mw, no reactive
 ```
 
-### `runpp_pgm(net, algorithm="nr", symmetric=True, ...) -> None`
-**Description:** Runs power flow using the PowerGridModel C++ backend (faster for large networks).
+### `runpp_pgm(net, algorithm="nr", max_iterations=20, error_tolerance_vm_pu=1e-8, symmetric=True, validate_input=False) -> None`
+**Description:** Runs power flow using the PowerGridModel C++ backend (faster for large networks). Requires `pip install pandapower[pgm]`.
 **Parameters:**
+- `algorithm`: `"nr"` (Newton-Raphson), `"bfsw"` (iterative current), `"lc"` (linear current), `"lin"` (linear)
 - `symmetric`: True for balanced 3-phase, False for unbalanced
+- `max_iterations`: Maximum iterations (no effect on linear algorithms)
+- `error_tolerance_vm_pu`: Voltage error tolerance in p.u.
+- `validate_input`: Validate input data before calculation
 
 ### `set_user_pf_options(net, overwrite=False, **kwargs) -> None`
 **Description:** Sets persistent power flow options on the network object that override defaults for all subsequent `runpp()` calls.
@@ -74,7 +79,7 @@ pp.runpp(net)  # uses bfsw algorithm
 
 ## Optimal Power Flow
 
-### `runopp(net, verbose=False, calculate_voltage_angles=True, check_connectivity=True, suppress_warnings=True, init="flat", delta=1e-10, consider_line_temperature=False, **kwargs) -> None`
+### `runopp(net, verbose=False, calculate_voltage_angles=True, check_connectivity=True, suppress_warnings=True, switch_rx_ratio=2, delta=1e-10, init="flat", numba=True, trafo3w_losses="hv", consider_line_temperature=False, **kwargs) -> None`
 **Description:** Runs AC Optimal Power Flow. Minimizes cost functions subject to network and element constraints.
 
 **Prerequisites:**
@@ -117,19 +122,19 @@ print(net.res_gen)   # Optimal dispatch
 print(net.res_cost)  # Total cost
 ```
 
-### `rundcopp(net, verbose=False, check_connectivity=True, suppress_warnings=True, ...) -> None`
+### `rundcopp(net, verbose=False, check_connectivity=True, suppress_warnings=True, switch_rx_ratio=0.5, delta=1e-10, trafo3w_losses="hv", **kwargs) -> None`
 **Description:** Runs DC Optimal Power Flow (linearized, no voltage magnitudes). Faster than AC OPF.
 
 ---
 
 ## Three-Phase Power Flow
 
-### `runpp_3ph(net, calculate_voltage_angles=True, init="auto", max_iteration="auto", tolerance_mva=1e-8, ...) -> None`
-**Description:** Runs unbalanced three-phase AC power flow. Requires asymmetric load/sgen data.
+### `runpp_3ph(net, calculate_voltage_angles=True, init="auto", max_iteration="auto", tolerance_mva=1e-8, trafo_model="t", trafo_loading="current", enforce_q_lims=False, numba=True, check_connectivity=True, switch_rx_ratio=2.0, **kwargs) -> None`
+**Description:** Runs unbalanced three-phase AC power flow. Requires asymmetric load/sgen data. Available at top level (`pp.runpp_3ph(net)`).
 **Example:**
 ```python
-from pandapower.pf.runpp_3ph import runpp_3ph
-runpp_3ph(net)
+import pandapower as pp
+pp.runpp_3ph(net)
 print(net.res_bus_3ph)   # Per-phase voltages (vm_a_pu, vm_b_pu, vm_c_pu)
 print(net.res_line_3ph)  # Per-phase line currents
 ```
@@ -138,16 +143,21 @@ print(net.res_line_3ph)  # Per-phase line currents
 
 ## Short Circuit Calculation
 
-### `pp.shortcircuit.calc_sc(net, bus=None, fault="3ph", case="max", lv_tol_percent=10, topology="auto", ip=False, ith=False, tk_s=1., branch_results=False, ...) -> None`
+### `pp.shortcircuit.calc_sc(net, bus=None, fault="3ph", case="max", lv_tol_percent=10, topology="auto", ip=False, ith=False, tk_s=1., kappa_method="C", r_fault_ohm=0., x_fault_ohm=0., branch_results=False, check_connectivity=True, return_all_currents=False, inverse_y=True, use_pre_fault_voltage=False) -> None`
 **Description:** Calculates short-circuit currents according to IEC 60909. Results in `net.res_bus_sc`.
 **Parameters:**
+- `bus`: Bus index, list, or None (all buses)
 - `fault`: `"3ph"` (three-phase), `"2ph"` (phase-to-phase), `"1ph"` (single-phase ground)
 - `case`: `"max"` or `"min"` short-circuit current
 - `lv_tol_percent`: LV voltage tolerance (6 or 10%)
 - `ip`: Calculate aperiodic (peak) short-circuit current
 - `ith`: Calculate thermal equivalent current
-- `topology`: `"auto"`, `"meshed"`, or `"radial"`
+- `tk_s`: Failure clearing time in seconds (for ith)
+- `topology`: `"auto"`, `"meshed"`, or `"radial"` (for ip/ith)
+- `r_fault_ohm`, `x_fault_ohm`: Fault impedance in ohm
 - `branch_results`: Also calculate branch short-circuit currents
+- `return_all_currents`: Return all (branch, bus) currents (requires `branch_results=True`)
+- `use_pre_fault_voltage`: Use pre-fault voltage (superposition method, "Type C")
 **Example:**
 ```python
 import pandapower.shortcircuit as sc
@@ -161,15 +171,16 @@ print(net.res_bus_sc)   # ikss_ka: initial short-circuit current per bus
 
 ## State Estimation
 
-### `pp.estimation.estimate(net, algorithm="wls", init="flat", tolerance=1e-6, maximum_iterations=50, zero_injection="aux_bus", ...) -> bool`
+### `pp.estimation.estimate(net, algorithm="wls", init="flat", tolerance=1e-6, maximum_iterations=50, zero_injection="aux_bus", fuse_buses_with_bb_switch="all", debug_mode=False, **opt_vars) -> bool`
 **Description:** Runs Weighted Least Squares (WLS) state estimation from measurements.
 
 **Requires measurements** created with `create_measurement()`.
 
 **Parameters:**
 - `algorithm`: `"wls"`, `"wls_with_zero_constraint"`, `"irwls"`, `"lp"`, `"opt"`, `"af-wls"`
-- `init`: `"flat"` or `"results"`
-- `zero_injection`: How to handle zero-injection buses
+- `init`: `"flat"`, `"results"`, or `"slack"`
+- `zero_injection`: How to handle zero-injection buses: `None`, `"aux_bus"`, `"no_inj_bus"`, `"zero_pwr_bus"`, or iterable of bus indices
+- `fuse_buses_with_bb_switch`: `"all"`, `None`, or iterable of bus indices
 
 **Returns:** `True` if converged, `False` otherwise.
 
@@ -225,21 +236,24 @@ violating = net.res_bus[(net.res_bus.vm_pu > 1.05) | (net.res_bus.vm_pu < 0.95)]
 
 ## Cost Functions for OPF
 
-### `create_poly_cost(net, element, et, cp0_eur=0, cp1_eur_per_mw=0, cp2_eur_per_mw2=0, cq0_eur=0, cq1_eur_per_mvar=0, cq2_eur_per_mvar2=0) -> int`
+### `create_poly_cost(net, element, et, cp1_eur_per_mw, cp0_eur=0, cq1_eur_per_mvar=0, cq0_eur=0, cp2_eur_per_mw2=0, cq2_eur_per_mvar2=0, index=None, check=True, **kwargs) -> int`
 **Description:** Creates a polynomial cost function: `cost = cp0 + cp1*P + cp2*P^2`.
 **Parameters:**
 - `element`: Element index
 - `et`: Element type: `"gen"`, `"sgen"`, `"load"`, `"ext_grid"`, `"storage"`, `"dcline"`
+- `cp1_eur_per_mw`: Linear cost coefficient (required, first positional arg after et)
 **Example:**
 ```python
 pp.create_poly_cost(net, element=0, et="gen", cp1_eur_per_mw=50., cp2_eur_per_mw2=0.1)
 ```
 
-### `create_pwl_cost(net, element, et, points, power_type="p") -> int`
+### `create_pwl_cost(net, element, et, points, power_type="p", index=None, check=True, **kwargs) -> int`
 **Description:** Creates a piecewise linear cost function.
 **Parameters:**
-- `points`: List of `(p_mw, cost_eur)` breakpoints
+- `points`: List of `[p1, p2, cost_per_mw]` segments: `[[p1, p2, c1], [p2, p3, c2], ...]` where `c(n)` is the slope between `p(n)` and `p(n+1)`. Intervals must be continuous.
+- `power_type`: `"p"` for active power, `"q"` for reactive power
 **Example:**
 ```python
-pp.create_pwl_cost(net, element=0, et="gen", points=[(0, 0), (50, 2500), (100, 7500)])
+# 1 EUR/MW from 0-20 MW, 2 EUR/MW from 20-30 MW
+pp.create_pwl_cost(net, element=0, et="gen", points=[[0, 20, 1], [20, 30, 2]])
 ```

@@ -35,8 +35,8 @@ Always validate before constructing `PowerGridModel` in production code — many
 
 ## validate_input_data
 
-### `validate_input_data(input_data, calculation_type=None, symmetric=True) -> list[ValidationError]`
-**Description:** Validates a single dataset. Returns a list of `ValidationError` objects; empty list means valid.
+### `validate_input_data(input_data, calculation_type=None, symmetric=True) -> list[ValidationError] | None`
+**Description:** Validates a single dataset. Returns `None` if valid, or a list of `ValidationError` objects.
 
 **Parameters:**
 - `input_data: SingleDataset` — dict of numpy structured arrays
@@ -49,7 +49,7 @@ from power_grid_model import CalculationType
 from power_grid_model.validation import validate_input_data
 
 errors = validate_input_data(input_data, calculation_type=CalculationType.power_flow, symmetric=True)
-if errors:
+if errors is not None:
     for e in errors:
         print(e)  # human-readable description
 else:
@@ -60,8 +60,8 @@ else:
 
 ## validate_batch_data
 
-### `validate_batch_data(input_data, update_data, calculation_type=None, symmetric=True) -> dict[int, list[ValidationError]]`
-**Description:** Validates input_data combined with each scenario in update_data. Returns `{scenario_index: [errors]}`.
+### `validate_batch_data(input_data, update_data, calculation_type=None, symmetric=True) -> dict[int, list[ValidationError]] | None`
+**Description:** Validates input_data combined with each scenario in update_data. Returns `None` if valid, or `{scenario_index: [errors]}`.
 
 **Note:** `input_data` alone may be invalid if missing values are always overridden in all batch scenarios.
 
@@ -76,8 +76,9 @@ else:
 from power_grid_model.validation import validate_batch_data
 
 batch_errors = validate_batch_data(input_data, update_data, symmetric=True)
-for scenario_idx, errors in batch_errors.items():
-    print(f"Scenario {scenario_idx}: {errors}")
+if batch_errors is not None:
+    for scenario_idx, errors in batch_errors.items():
+        print(f"Scenario {scenario_idx}: {errors}")
 ```
 
 ---
@@ -135,12 +136,17 @@ assert_valid_data_structure(input_data, DatasetType.input)
 
 ```python
 class ValidationError:
-    component: str | list[str]              # e.g. "node" or ["node", "line"]
-    field: str | list[str] | list[tuple]   # e.g. "id" or ["r1", "x1"]
-    ids: list[int] | list[tuple[str, int]] # IDs of affected components
+    component: ComponentType | list[ComponentType] | None
+    field: AttributeType | list[AttributeType] | list[tuple[ComponentType, AttributeType]] | None
+    ids: list[int] | list[tuple[ComponentType, int]] | None
 ```
 
-`str(error)` produces a concise human-readable message.
+Subclass hierarchy:
+- `SingleFieldValidationError` -- one component, one field (e.g. `MissingValueError`, `NotGreaterThanError`)
+- `MultiFieldValidationError` -- one component, multiple fields (e.g. `TransformerClockError`, `FaultPhaseError`)
+- `MultiComponentValidationError` -- multiple components (e.g. `MultiComponentNotUniqueError`)
+
+`str(error)` produces a concise human-readable message. `error.get_context(id_lookup)` returns a dict with details.
 
 **Example:**
 ```python
@@ -155,9 +161,9 @@ for err in errors:
 ## ValidationException
 
 ```python
-class ValidationException(Exception):
+class ValidationException(ValueError):
     errors: list[ValidationError] | dict[int, list[ValidationError]]
-    name: str  # "input data" or "batch data"
+    name: str  # "input_data" or "update_data"
 ```
 
 Raised by `assert_valid_*` functions. `str(exception)` gives a multi-line summary.
@@ -166,13 +172,14 @@ Raised by `assert_valid_*` functions. `str(exception)` gives a multi-line summar
 
 ## errors_to_string
 
-### `errors_to_string(errors, name="data", details=True) -> str`
+### `errors_to_string(errors, name="the data", details=False, id_lookup=None) -> str`
 **Description:** Converts a list or dict of errors to a formatted multi-line string.
 
 **Parameters:**
-- `errors`: `list[ValidationError]` or `dict[int, list[ValidationError]]`
-- `name`: Label used in the output string
-- `details`: If `True`, include per-error detail lines
+- `errors`: `list[ValidationError]` or `dict[int, list[ValidationError]]` or `None`
+- `name`: Label used in the output string (default `"the data"`)
+- `details`: If `True`, include per-error detail lines with object IDs
+- `id_lookup`: `list[str]` or `dict[int, str]` to map integer IDs to human-readable names
 
 **Example:**
 ```python
@@ -188,12 +195,40 @@ print(errors_to_string(errors, name="my grid", details=True))
 
 | Error type | Typical cause |
 |-----------|---------------|
-| `IdNotUniqueError` | Two components share the same `id` |
+| `NotUniqueError` | Two components of the same type share the same `id` |
+| `MultiComponentNotUniqueError` | Two components of different types share the same `id` |
 | `InvalidEnumValueError` | Enum attribute has an out-of-range integer value |
+| `InvalidAssociatedEnumValueError` | Enum value invalid for the given associated component (e.g. Branch3Side for a transformer) |
 | `MissingValueError` | Required attribute is NaN/null |
-| `NotGreaterThanZeroError` | Field requires `> 0` but is zero or negative |
+| `NotGreaterThanError` | Field requires `> ref` but is not |
+| `NotGreaterOrEqualError` | Field requires `>= ref` but is not |
+| `NotLessThanError` | Field requires `< ref` but is not |
+| `NotBetweenError` | Field value not in valid range (exclusive) |
+| `NotBetweenOrAtError` | Field value not in valid range (inclusive) |
 | `NotBooleanError` | `status`, `from_status`, `to_status` not 0 or 1 |
-| `InvalidIdError` | `from_node`, `to_node`, etc. refer to non-existent node |
-| `MultiFieldValidationError` | Multiple inter-dependent fields have invalid combination |
-| `NotObservableError` | (runtime) State estimation: insufficient sensors |
-| `SparseMatrixError` | (runtime) Singular matrix — grid topology issue |
+| `InvalidIdError` | `from_node`, `to_node`, etc. refer to non-existent or wrong-type component |
+| `IdNotInDatasetError` | Update data references an ID not present in input data |
+| `SameValueError` | Two fields have equal values where they should differ (e.g. `from_node == to_node`) |
+| `TwoValuesZeroError` | Two fields are both zero where at least one must be nonzero (e.g. `r1` and `x1`) |
+| `InfinityError` | A field contains infinite values |
+| `TransformerClockError` | Invalid clock number for given winding types |
+| `FaultPhaseError` | Fault phase does not match the fault type |
+| `PQSigmaPairError` | `p_sigma` and `q_sigma` must both be present or both absent |
+| `InvalidVoltageRegulationError` | Voltage regulators on the same node have different `u_ref` values |
+| `MixedCurrentAngleMeasurementTypeError` | Different angle measurement types on the same terminal |
+| `MixedPowerCurrentSensorError` | Power and current sensors on the same terminal |
+| `MissingVoltageAngleMeasurementError` | Global-angle current sensor without voltage angle measurement |
+| `UnsupportedMeasuredTerminalType` | `measured_terminal_type` not in the allowed set for current sensors |
+
+## Common runtime errors
+
+| Error type | Typical cause |
+|-----------|---------------|
+| `NotObservableError` | State estimation: insufficient sensors for observability |
+| `SparseMatrixError` | Singular matrix — grid topology or parameter issue |
+| `IterationDiverge` / `MaxIterationReached` | Iterative solver did not converge |
+| `AutomaticTapCalculationError` | Invalid tap regulator configuration for automatic tap changing |
+| `UnsupportedRegulatorCombinationError` | Voltage regulators and transformer tap regulators in the same model |
+| `UnsupportedVoltageRegulatorSourceCombinationError` | Source and voltage-regulated appliance on the same node |
+| `InvalidCalculationMethod` | Unsupported calculation method for the given calculation type |
+| `PowerGridBatchError` | One or more batch scenarios failed (access `.failed_scenarios`, `.errors`) |

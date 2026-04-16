@@ -44,12 +44,15 @@ lines = pp.get_connected_elements(net, "line", [0, 1])
 loads = pp.get_connected_elements(net, "load", feeder_buses)
 ```
 
-### `pp.pp_elements(bus=True, bus_elements=True, branch_elements=True, other_elements=True) -> list`
-**Description:** Returns list of all pandapower element table names.
+### `pp.pp_elements(bus=True, bus_elements=True, branch_elements=True, other_elements=True, cost_tables=False, res_elements=False) -> set`
+**Description:** Returns set of all pandapower element table names.
+**Parameters:**
+- `cost_tables`: Include `"poly_cost"`, `"pwl_cost"` tables
+- `res_elements`: Include result tables (`"res_bus"`, `"res_line"`, etc.)
 **Example:**
 ```python
 all_elements = pp.pp_elements()
-# ['bus', 'load', 'sgen', 'gen', 'ext_grid', 'line', 'trafo', ...]
+# {'bus', 'load', 'sgen', 'gen', 'ext_grid', 'line', 'trafo', ...}
 ```
 
 ### `pp.next_bus(net, bus, element, et="line") -> int`
@@ -59,7 +62,7 @@ all_elements = pp.pp_elements()
 
 ## Network Modification
 
-### `pp.select_subnet(net, buses, include_switch_buses=False, include_results=False) -> pandapowerNet`
+### `pp.select_subnet(net, buses, include_switch_buses=False, include_results=False, keep_everything_else=False) -> pandapowerNet`
 **Description:** Creates a subnet containing only selected buses and their connected elements.
 **Example:**
 ```python
@@ -68,15 +71,15 @@ feeder_buses = {0, 1, 2, 3, 5}
 subnet = pp.select_subnet(net, feeder_buses, include_results=True)
 ```
 
-### `pp.merge_nets(net1, net2, validate=True, ...) -> pandapowerNet`
-**Description:** Merges two pandapower networks into one. Reindexes elements to avoid conflicts.
+### `pp.merge_nets(net1, net2, validate=True, merge_results=True, tol=1e-9, **kwargs) -> pandapowerNet`
+**Description:** Merges two pandapower networks into one. Elements keep their indices unless both nets have the same indices (net2 gets reindexed).
 **Example:**
 ```python
 combined = pp.merge_nets(net1, net2)
 ```
 
-### `pp.drop_elements(net, element_type, idx) -> None`
-**Description:** Removes elements by index.
+### `pp.drop_elements(net, element_type, element_index, **kwargs) -> None`
+**Description:** Removes elements by index (also drops results, group entries, and associated elements like switches).
 **Example:**
 ```python
 pp.drop_elements(net, "line", [0, 3, 7])
@@ -86,8 +89,8 @@ pp.drop_elements(net, "load", [1])
 ### `pp.drop_buses(net, buses, drop_elements=True) -> None`
 **Description:** Removes buses and optionally all connected elements.
 
-### `pp.drop_inactive_elements(net) -> None`
-**Description:** Removes all elements with `in_service=False`.
+### `pp.drop_inactive_elements(net, respect_switches=True) -> None`
+**Description:** Removes all elements not in service AND elements connected to inactive buses.
 
 ### `pp.reindex_buses(net, bus_lookup) -> None`
 **Description:** Renames bus indices according to a lookup dict.
@@ -96,20 +99,20 @@ pp.drop_elements(net, "load", [1])
 pp.reindex_buses(net, {0: 100, 1: 101, 2: 102})
 ```
 
-### `pp.reindex_elements(net, element_type, new_indices, old_indices=None) -> None`
-**Description:** Renames element indices.
+### `pp.reindex_elements(net, element_type, new_indices=None, old_indices=None, lookup=None) -> None`
+**Description:** Renames element indices. Provide either `new_indices`/`old_indices` or a `lookup` dict.
 
-### `pp.create_continuous_bus_index(net, start=0) -> dict`
-**Description:** Renumbers all buses to a continuous range starting from `start`.
+### `pp.create_continuous_bus_index(net, start=0, store_old_index=False) -> dict`
+**Description:** Renumbers all buses to a continuous range starting from `start`. Returns old-to-new lookup dict.
 
-### `pp.replace_ext_grid_by_gen(net, ext_grids=None, gens=None) -> None`
+### `pp.replace_ext_grid_by_gen(net, ext_grids=None, gen_indices=None, slack=False, cols_to_keep=None, add_cols_to_keep=None) -> None`
 **Description:** Replaces external grid(s) with generator(s) (useful for islanding studies).
 
-### `pp.replace_gen_by_ext_grid(net, gens=None) -> None`
+### `pp.replace_gen_by_ext_grid(net, gens=None, ext_grid_indices=None, cols_to_keep=None, add_cols_to_keep=None) -> None`
 **Description:** Converts generators to external grids.
 
-### `pp.close_switch_at_line_with_two_open_switches(net) -> int`
-**Description:** Fixes topology by closing one switch where a line has two open switches.
+### `pp.close_switch_at_line_with_two_open_switches(net) -> set`
+**Description:** Finds lines with open switches at both ends and closes one. Returns set of closed switch indices.
 
 ---
 
@@ -166,8 +169,8 @@ net = from_cim("grid.xml")
 
 ## Network Comparison
 
-### `pp.nets_equal(net1, net2, check_only_results=False, exclude_elms=None, ...) -> bool`
-**Description:** Checks whether two networks are equal (compares all DataFrames).
+### `pp.nets_equal(net1, net2, check_only_results=False, check_without_results=False, exclude_elms=None, name_selection=None, **kwargs) -> bool`
+**Description:** Checks whether two networks are equal (compares all DataFrames). Keys starting with `"_"` and `"et"` (elapsed time) are ignored.
 **Example:**
 ```python
 net_orig = pp.networks.case14()
@@ -175,15 +178,15 @@ net_copy = net_orig.deepcopy()
 print(pp.nets_equal(net_orig, net_copy))  # True
 ```
 
-### `pp.dataframes_equal(df1, df2, atol=1e-14) -> bool`
-**Description:** Compares two DataFrames with floating point tolerance.
+### `pp.dataframes_equal(df1, df2, ignore_index_order=True, **kwargs) -> bool`
+**Description:** Compares two DataFrames with floating point tolerance. Use `atol` kwarg for tolerance.
 
 ---
 
 ## Power Factor Utilities
 
-### `pp.pf_res_plotly` / `pp.lf_info(net)`
-**Description:** Prints summary of max/min voltages, max line/trafo loading.
+### `pp.lf_info(net, numv=1, numi=2) -> None`
+**Description:** Prints summary of max/min voltages and max line/trafo loading to logger.
 
 ### `pp.toolbox.power_factor`
 ```python
@@ -205,10 +208,7 @@ cosphi, qmode = mvar_to_cosphi(p_mw=10.0, q_mvar=3.29)
 
 ## Result Inspection
 
-### `pp.lf_info(net, numv=1, numi=2) -> None`
-**Description:** Prints maximum/minimum voltages and maximum line/trafo loading to logger.
-
-### `pp.opf_task(net) -> dict`
+### `pp.opf_task(net, delta_pq=1e-3, keep=False, log=True) -> dict`
 **Description:** Prints and returns a summary of OPF flexibilities and constraints.
 
 ### Accessing result tables
@@ -233,7 +233,7 @@ losses = net.res_line.pl_mw.sum() + net.res_trafo.pl_mw.sum()
 
 ## Diagnostic
 
-### `pp.diagnostic(net, report_style="detailed", warnings_only=False, return_result_dict=True) -> dict`
+### `pp.diagnostic(net, report_style="detailed", warnings_only=False, return_result_dict=True, overload_scaling_factor=0.001, lines_min_length_km=0., lines_min_z_ohm=0., nom_voltage_tolerance=0.3, **kwargs) -> dict`
 **Description:** Runs a comprehensive sanity check on the network and reports potential issues.
 
 **Checks include:**
@@ -254,20 +254,24 @@ result = pp.diagnostic(net, report_style="detailed")
 
 ## Groups
 
-### `pp.create_group(net, element_types, elements, name=None) -> int`
+### `pp.create_group(net, element_types, element_indices, name="", reference_columns=None, index=None, **kwargs) -> int`
 **Description:** Creates a named group of elements (e.g., a feeder or substation).
+**Parameters:**
+- `element_types`: String or list of element type names (e.g., `["bus", "line", "load"]`)
+- `element_indices`: List of lists of indices for each element type
+- `reference_columns`: Optional column name(s) to reference instead of DataFrame index (e.g., `"name"`)
 **Example:**
 ```python
 group_idx = pp.create_group(
     net,
     element_types=["bus", "line", "load"],
-    elements=[[0, 1, 2], [0, 1], [0]],
+    element_indices=[[0, 1, 2], [0, 1], [0]],
     name="Feeder A"
 )
 ```
 
-### `pp.isin_group(net, element_type, element_index, group_index=None) -> bool`
-### `pp.element_associated_groups(net, element_type, element_index) -> set`
+### `pp.isin_group(net, element_type, element_index, index=None, drop_empty_lines=True) -> bool`
+### `pp.element_associated_groups(net, element_type, element_index, return_empties=True) -> set`
 
 ---
 

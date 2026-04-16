@@ -36,13 +36,14 @@ net = pp.create_empty_network(name="My Grid", f_hz=50.0, sn_mva=1)
 
 ## Buses
 
-### `create_bus(net, vn_kv, name=None, index=None, geodata=None, type="b", zone=None, in_service=True, max_vm_pu=nan, min_vm_pu=nan) -> int`
+### `create_bus(net, vn_kv, name=None, index=None, geodata=None, type="b", zone=None, in_service=True, max_vm_pu=nan, min_vm_pu=nan, **kwargs) -> int`
 **Description:** Adds one bus (node) to `net.bus`.
 **Parameters:**
 - `vn_kv`: Nominal voltage level in kV
 - `name`: Optional bus name
-- `geodata`: `(x, y)` tuple for plotting
+- `geodata`: `(x, y)` tuple for plotting (stored as GeoJSON Point)
 - `type`: `"b"` (busbar), `"n"` (node), or `"m"` (muff)
+- `zone`: Grid region identifier
 - `max_vm_pu`, `min_vm_pu`: Voltage bounds for OPF
 **Returns:** Integer index of created bus.
 **Example:**
@@ -62,7 +63,7 @@ buses = pp.create_buses(net, nr_buses=5, vn_kv=0.4, name=["Bus %d" % i for i in 
 
 ## Lines
 
-### `create_line(net, from_bus, to_bus, length_km, std_type, name=None, index=None, geodata=None, df=1.0, parallel=1, in_service=True, max_loading_percent=nan) -> int`
+### `create_line(net, from_bus, to_bus, length_km, std_type, name=None, index=None, geodata=None, df=1.0, parallel=1, in_service=True, max_loading_percent=nan, alpha=nan, temperature_degree_celsius=nan, **kwargs) -> int`
 **Description:** Creates a line element from standard type library.
 **Parameters:**
 - `from_bus`, `to_bus`: Bus indices at each end
@@ -71,6 +72,9 @@ buses = pp.create_buses(net, nr_buses=5, vn_kv=0.4, name=["Bus %d" % i for i in 
 - `df`: Derating factor (0 to 1)
 - `parallel`: Number of parallel circuits
 - `max_loading_percent`: Loading limit for OPF
+- `alpha`: Temperature coefficient of resistance for TDPF
+- `temperature_degree_celsius`: Line temperature for resistance adjustment
+- `**kwargs`: TDPF parameters (`tdpf`, `wind_speed_m_per_s`, `conductor_outer_diameter_m`, etc.)
 **Returns:** Integer index.
 **Example:**
 ```python
@@ -97,13 +101,17 @@ line = pp.create_line_from_parameters(
 
 ## Transformers
 
-### `create_transformer(net, hv_bus, lv_bus, std_type, name=None, tap_pos=nan, in_service=True, max_loading_percent=nan, parallel=1) -> int`
+### `create_transformer(net, hv_bus, lv_bus, std_type, name=None, tap_pos=nan, in_service=True, index=None, max_loading_percent=nan, parallel=1, df=1.0, tap_changer_type=None, tap_dependency_table=False, oltc=False, xn_ohm=nan, tap2_pos=nan, **kwargs) -> int`
 **Description:** Creates a two-winding transformer from standard type library.
 **Parameters:**
 - `hv_bus`: High-voltage side bus index
 - `lv_bus`: Low-voltage side bus index
 - `std_type`: Standard type name (e.g., `"25 MVA 110/20 kV"`)
 - `tap_pos`: Tap changer position (defaults to neutral)
+- `df`: Derating factor (0 to 1)
+- `tap_changer_type`: `"Ratio"`, `"Symmetrical"`, `"Ideal"`, `"Tabular"`, or `None`
+- `oltc`: On-load tap changer flag (short circuit only)
+- `xn_ohm`: Grounding reactor impedance for short circuit
 **Returns:** Integer index.
 **Example:**
 ```python
@@ -136,12 +144,15 @@ trafo = pp.create_transformer_from_parameters(
 
 ## Loads
 
-### `create_load(net, bus, p_mw, q_mvar=0, name=None, in_service=True, scaling=1.0, controllable=nan, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan) -> int`
+### `create_load(net, bus, p_mw, q_mvar=0, const_z_p_percent=0, const_i_p_percent=0, const_z_q_percent=0, const_i_q_percent=0, sn_mva=nan, name=None, scaling=1.0, index=None, in_service=True, type="wye", max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, controllable=nan, **kwargs) -> int`
 **Description:** Adds a load (consumer) to a bus. Uses consumer sign convention: positive p_mw = consumption.
 **Parameters:**
 - `p_mw`: Active power (positive = load, negative = generation)
 - `q_mvar`: Reactive power
+- `const_z_p_percent`, `const_i_p_percent`: ZIP model percentages for active power (constant impedance / current)
+- `const_z_q_percent`, `const_i_q_percent`: ZIP model percentages for reactive power
 - `scaling`: Multiplier applied to p_mw and q_mvar
+- `type`: `"wye"` or `"delta"` (relevant for 3-phase)
 - `controllable`: If True, load is a flexibility for OPF
 **Example:**
 ```python
@@ -159,23 +170,28 @@ pp.create_loads(net, buses=[0, 1, 2], p_mw=[1.0, 2.0, 3.0])
 
 ## Generators
 
-### `create_gen(net, bus, p_mw, vm_pu=1.0, sn_mva=nan, name=None, slack=False, controllable=nan, min_p_mw=nan, max_p_mw=nan, min_q_mvar=nan, max_q_mvar=nan) -> int`
+### `create_gen(net, bus, p_mw, vm_pu=1.0, sn_mva=nan, name=None, index=None, max_q_mvar=nan, min_q_mvar=nan, min_p_mw=nan, max_p_mw=nan, scaling=1.0, type=None, slack=False, controllable=nan, vn_kv=nan, xdss_pu=nan, rdss_ohm=nan, cos_phi=nan, in_service=True, slack_weight=0.0, **kwargs) -> int`
 **Description:** Adds a voltage-controlled generator (PV node). Active power and voltage setpoint are inputs.
 **Parameters:**
 - `p_mw`: Active power in MW (positive = generation)
 - `vm_pu`: Voltage setpoint in per unit
 - `slack`: If True, this generator is the slack bus (reference)
 - `controllable`: OPF controllability flag
+- `slack_weight`: Contribution factor for distributed slack power flow
+- `vn_kv`, `xdss_pu`, `rdss_ohm`, `cos_phi`: Short-circuit calculation parameters
 **Example:**
 ```python
 gen = pp.create_gen(net, bus=hv_bus, p_mw=50., vm_pu=1.02, name="Gas Turbine", slack=True)
 ```
 
-### `create_sgen(net, bus, p_mw, q_mvar=0, name=None, in_service=True, controllable=nan, ...) -> int`
+### `create_sgen(net, bus, p_mw, q_mvar=0, sn_mva=nan, name=None, index=None, scaling=1.0, type="wye", in_service=True, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, controllable=nan, k=nan, rx=nan, current_source=True, **kwargs) -> int`
 **Description:** Adds a static generator (PQ node) - models renewables, inverter-based resources.
 **Parameters:**
 - `p_mw`: Active power (positive = injection)
 - `q_mvar`: Reactive power
+- `type`: `"wye"` or `"delta"` (relevant for 3-phase)
+- `current_source`: Model as current source (True) or voltage source (False) for short circuit
+- `k`, `rx`: Short-circuit current contribution factor and R/X ratio
 **Example:**
 ```python
 sgen = pp.create_sgen(net, bus=lv_bus, p_mw=2.0, q_mvar=0., name="PV Plant")
@@ -185,11 +201,16 @@ sgen = pp.create_sgen(net, bus=lv_bus, p_mw=2.0, q_mvar=0., name="PV Plant")
 
 ## External Grids
 
-### `create_ext_grid(net, bus, vm_pu=1.0, va_degree=0.0, name=None, in_service=True, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan) -> int`
+### `create_ext_grid(net, bus, vm_pu=1.0, va_degree=0.0, name=None, in_service=True, s_sc_max_mva=nan, s_sc_min_mva=nan, rx_max=nan, rx_min=nan, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, index=None, r0x0_max=nan, x0x_max=nan, controllable=nan, slack_weight=1.0, **kwargs) -> int`
 **Description:** Creates an external grid connection (slack bus in power flow). Represents the infinite bus / grid equivalent.
 **Parameters:**
 - `vm_pu`: Voltage setpoint in per unit
 - `va_degree`: Voltage angle setpoint in degrees (usually 0 for reference)
+- `s_sc_max_mva`, `s_sc_min_mva`: Short-circuit apparent power for SC calculations
+- `rx_max`, `rx_min`: R/X ratios for SC calculations
+- `r0x0_max`, `x0x_max`: Zero-sequence impedance ratios for SC
+- `slack_weight`: Contribution factor for distributed slack (default 1.0)
+- `controllable`: If True, OPF enforces p/q/vm limits
 **Example:**
 ```python
 ext_grid = pp.create_ext_grid(net, bus=hv_bus, vm_pu=1.02, name="Grid Connection")
@@ -199,14 +220,16 @@ ext_grid = pp.create_ext_grid(net, bus=hv_bus, vm_pu=1.02, name="Grid Connection
 
 ## Switches
 
-### `create_switch(net, bus, element, et, closed=True, type="CB", name=None) -> int`
+### `create_switch(net, bus, element, et, closed=True, type=None, name=None, index=None, z_ohm=0, in_ka=nan, **kwargs) -> int`
 **Description:** Creates a switch to connect/disconnect buses or branches.
 **Parameters:**
 - `bus`: Bus to which switch is connected
 - `element`: Index of the connected element (bus or branch)
 - `et`: Element type: `"b"` (bus-bus), `"l"` (line), `"t"` (trafo), `"t3"` (trafo3w)
-- `closed`: Switch state
-- `type`: Switch type: `"CB"` (circuit breaker), `"LBS"` (load break), `"DS"` (disconnector)
+- `closed`: Switch state (True = closed, False = open)
+- `type`: Switch type: `"CB"` (circuit breaker), `"LBS"` (load break switch), `"DS"` (disconnecting switch), `"LS"` (load switch)
+- `z_ohm`: Switch resistance in ohm (only for bus-bus switches; 0 = ideal/fused)
+- `in_ka`: Maximum rated current in kA
 **Example:**
 ```python
 sw = pp.create_switch(net, bus=hv_bus, element=line, et="l", closed=True, type="CB")
@@ -216,34 +239,38 @@ sw = pp.create_switch(net, bus=hv_bus, element=line, et="l", closed=True, type="
 
 ## Shunts and Other Elements
 
-### `create_shunt(net, bus, q_mvar, p_mw=0., vn_kv=nan, name=None, in_service=True) -> int`
+### `create_shunt(net, bus, q_mvar, p_mw=0.0, vn_kv=None, step=1, max_step=1, name=None, in_service=True, index=None, **kwargs) -> int`
 **Description:** Creates a shunt element (capacitor bank / reactor).
 **Parameters:**
-- `q_mvar`: Reactive power at rated voltage (negative = capacitor, positive = reactor)
-- `vn_kv`: Rated voltage
+- `q_mvar`: Reactive power per step at v = 1.0 p.u. (negative = capacitor, positive = reactor)
+- `p_mw`: Active power per step at v = 1.0 p.u.
+- `vn_kv`: Rated voltage (defaults to connected bus voltage)
+- `step`: Current step (power multiplier)
+- `max_step`: Maximum allowed step
 
-### `create_impedance(net, from_bus, to_bus, rft_pu, xft_pu, sn_mva, rtf_pu=nan, xtf_pu=nan, ...) -> int`
-**Description:** Creates a series impedance element.
+### `create_impedance(net, from_bus, to_bus, rft_pu, xft_pu, sn_mva, rtf_pu=None, xtf_pu=None, name=None, in_service=True, index=None, **kwargs) -> int`
+**Description:** Creates a per-unit impedance element (asymmetric: forward/backward impedance can differ).
 
-### `create_storage(net, bus, p_mw, max_e_mwh, q_mvar=0, ...) -> int`
-**Description:** Creates a storage element with energy capacity and power limits.
+### `create_storage(net, bus, p_mw, max_e_mwh, q_mvar=0, sn_mva=nan, soc_percent=nan, min_e_mwh=0.0, name=None, index=None, scaling=1.0, in_service=True, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, controllable=nan, **kwargs) -> int`
+**Description:** Creates a storage element with energy capacity and power limits. Power can be positive (discharging) or negative (charging).
 
-### `create_motor(net, bus, pn_mech_mw, lrc_pu, vn_kv, efficiency_percent, cos_phi, ...) -> int`
-**Description:** Creates an induction motor element.
+### `create_motor(net, bus, pn_mech_mw, cos_phi, efficiency_percent=100.0, loading_percent=100.0, name=None, lrc_pu=nan, scaling=1.0, vn_kv=nan, rx=nan, index=None, in_service=True, **kwargs) -> int`
+**Description:** Creates an induction motor element for short-circuit and load flow.
 
-### `create_dcline(net, from_bus, to_bus, p_mw, loss_percent, loss_mw, vm_from_pu, vm_to_pu, ...) -> int`
-**Description:** Creates an HVDC line between two AC buses.
+### `create_dcline(net, from_bus, to_bus, p_mw, loss_percent, loss_mw, vm_from_pu, vm_to_pu, index=None, name=None, max_p_mw=nan, in_service=True, **kwargs) -> int`
+**Description:** Creates an HVDC line between two AC buses (modeled as two coupled generators).
 
-### `create_ward(net, bus, ps_mw, qs_mvar, pz_mw, qz_mvar, ...) -> int`
-**Description:** Creates a Ward equivalent (external network reduction).
+### `create_ward(net, bus, ps_mw, qs_mvar, pz_mw, qz_mvar, name=None, in_service=True, index=None, **kwargs) -> int`
+**Description:** Creates a Ward equivalent (combination of impedance load and PQ load for network reduction).
 
-### `create_measurement(net, meas_type, element_type, value, std_dev, element, side=None) -> int`
+### `create_measurement(net, meas_type, element_type, value, std_dev, element, side=None, check_existing=False, index=None, name=None, **kwargs) -> int`
 **Description:** Creates a measurement for state estimation.
 **Parameters:**
-- `meas_type`: `"v"` (voltage), `"p"` (active power), `"q"` (reactive power), `"i"` (current)
-- `element_type`: `"bus"`, `"line"`, `"trafo"`, etc.
-- `value`: Measured value
-- `std_dev`: Standard deviation (measurement accuracy)
+- `meas_type`: `"v"` (voltage), `"p"` (active power), `"q"` (reactive power), `"i"` (current), `"va"` (voltage angle), `"ia"` (current angle)
+- `element_type`: `"bus"`, `"line"`, `"trafo"`, `"trafo3w"`, `"load"`, `"gen"`, `"sgen"`, `"shunt"`, `"ward"`, `"xward"`, `"ext_grid"`
+- `value`: Measured value (MW for P, MVAr for Q, p.u. for V, kA for I)
+- `std_dev`: Standard deviation in same unit as value
+- `side`: Required for lines (`"from"`/`"to"`) and trafos (`"hv"`/`"mv"`/`"lv"`)
 
 ---
 

@@ -10,7 +10,8 @@
 7. [Automatic Tap Changing](#automatic-tap-changing)
 8. [Validation Before Calculation](#validation-before-calculation)
 9. [Serialization — Load and Save Datasets](#serialization--load-and-save-datasets)
-10. [Columnar Output Format](#columnar-output-format)
+10. [Source Impedance Sweep](#source-impedance-sweep)
+11. [Columnar Output Format](#columnar-output-format)
 
 ---
 
@@ -360,7 +361,7 @@ except ValidationException as exc:
 # Option B: collect errors manually
 from power_grid_model.validation import validate_input_data
 errors = validate_input_data(input_data, symmetric=True)
-if errors:
+if errors is not None:
     print(errors_to_string(errors, name="my_grid", details=True))
 else:
     model = PowerGridModel(input_data)
@@ -368,8 +369,9 @@ else:
 # Batch validation
 from power_grid_model.validation import validate_batch_data
 batch_errors = validate_batch_data(input_data, update_data, symmetric=True)
-for scenario, errs in batch_errors.items():
-    print(f"Scenario {scenario}: {errs}")
+if batch_errors is not None:
+    for scenario, errs in batch_errors.items():
+        print(f"Scenario {scenario}: {errs}")
 ```
 
 ---
@@ -411,6 +413,35 @@ filtered = json_deserialize_from_file(
     Path("grid_input.json"),
     data_filter={'node': None, 'line': ['r1', 'x1']}
 )
+```
+
+---
+
+## Source Impedance Sweep
+
+Batch sweep over source short-circuit power to study voltage sensitivity to grid strength.
+
+```python
+from power_grid_model import PowerGridModel, initialize_array
+import numpy as np
+
+# (Assume model from Quick Start)
+
+# Sweep sk from 100 MVA to 10 GVA in 20 steps
+n_steps = 20
+sk_values = np.logspace(8, 10, n_steps)
+
+source_update = initialize_array('update', 'source', (n_steps, 1))
+source_update['id'] = [[5]]  # source ID
+source_update['sk'] = sk_values[:, np.newaxis]
+
+result = model.calculate_power_flow(update_data={'source': source_update})
+# result['node']['u_pu'].shape == (20, 2)
+
+import matplotlib.pyplot as plt
+plt.semilogx(sk_values, result['node']['u_pu'][:, 1])
+plt.xlabel('Source Sk (VA)'); plt.ylabel('Node 2 Voltage (p.u.)')
+plt.show()
 ```
 
 ---

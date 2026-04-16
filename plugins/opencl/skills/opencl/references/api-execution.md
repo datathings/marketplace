@@ -6,7 +6,8 @@
 3. [Barriers & Markers](#barriers--markers)
 4. [Profiling](#profiling)
 5. [Native & Task Execution](#native--task-execution)
-6. [SDK Event Helpers](#sdk-event-helpers)
+6. [Extension Function Access](#extension-function-access)
+7. [SDK Event Helpers](#sdk-event-helpers)
 
 ---
 

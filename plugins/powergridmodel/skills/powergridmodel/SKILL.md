@@ -70,6 +70,7 @@ result = model.calculate_power_flow()
 - **Time-series batch simulation:** see [workflows.md](references/workflows.md#batch-time-series-power-flow)
 - **N-1 contingency analysis:** see [workflows.md](references/workflows.md#n-1-contingency-analysis)
 - **Automatic tap changing:** see [workflows.md](references/workflows.md#automatic-tap-changing)
+- **Source impedance sweep:** see [workflows.md](references/workflows.md#source-impedance-sweep)
 - **Validation best practices:** see [workflows.md](references/workflows.md#validation-before-calculation)
 
 ## Key Considerations

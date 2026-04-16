@@ -11,13 +11,15 @@
 
 ## Simple Plot
 
-### `pp.plotting.simple_plot(net, respect_switches=False, line_width=1.0, bus_size=1.0, ext_grid_size=1.0, trafo_size=1.0, plot_loads=False, plot_gens=False, plot_sgens=False, scale_size=True, bus_color="b", line_color="grey", trafo_color="k", ext_grid_color="y", library="igraph", show_plot=True, ax=None) -> matplotlib.axes.Axes`
+### `pp.plotting.simple_plot(net, respect_switches=False, line_width=1.0, bus_size=1.0, ext_grid_size=1.0, trafo_size=1.0, plot_loads=False, plot_gens=False, plot_sgens=False, load_size=1.0, gen_size=1.0, sgen_size=1.0, switch_size=2.0, switch_distance=1.0, plot_line_switches=False, scale_size=True, bus_color="b", line_color="grey", dcline_color="c", trafo_color="k", ext_grid_color="y", switch_color="k", library="igraph", show_plot=True, ax=None) -> matplotlib.axes.Axes`
 **Description:** Plots the network topology with minimal configuration. Generates artificial coordinates if none are stored.
 **Parameters:**
 - `respect_switches`: Show open switches as gaps
 - `bus_size`, `line_width`, `trafo_size`, `ext_grid_size`: Relative element sizes
 - `plot_loads`, `plot_gens`, `plot_sgens`: Whether to draw load/gen symbols
-- `bus_color`, `line_color`, `trafo_color`: Colors (matplotlib color strings)
+- `load_size`, `gen_size`, `sgen_size`: Relative sizes for load/gen/sgen symbols
+- `plot_line_switches`: Whether to draw line switch symbols
+- `bus_color`, `line_color`, `trafo_color`, `dcline_color`: Colors (matplotlib color strings)
 - `library`: Layout algorithm for auto-coordinates: `"igraph"` or `"networkx"`
 - `show_plot`: Call `plt.show()` at end
 - `ax`: Existing matplotlib axes to draw on
@@ -50,21 +52,21 @@ plt.show()
 
 Build complex plots by composing `PatchCollection` objects:
 
-### `create_bus_collection(net, buses=None, size=1.0, patch_type="circle", color="b", z=None, norm=None, infofunc=None, **kwargs) -> PatchCollection`
+### `create_bus_collection(net, buses=None, size=5., patch_type="circle", color=None, z=None, cmap=None, norm=None, infofunc=None, picker=False, **kwargs) -> PatchCollection`
 **Description:** Creates matplotlib patch collection for buses.
 
-### `create_line_collection(net, lines=None, line_width=1.0, color="grey", infofunc=None, use_bus_geodata=True, **kwargs) -> LineCollection`
+### `create_line_collection(net, lines=None, line_width=1.0, infofunc=None, cmap=None, norm=None, picker=False, **kwargs) -> LineCollection`
 **Description:** Creates matplotlib line collection for lines.
 
-### `create_trafo_collection(net, trafos=None, size=1.0, color="k", **kwargs) -> PatchCollection`
+### `create_trafo_collection(net, trafos=None, size=None, color="k", picker=False, infofunc=None, cmap=None, **kwargs) -> PatchCollection`
 **Description:** Creates patches for transformers (displayed as circles at midpoint).
 
-### `create_ext_grid_collection(net, size=1.0, color="y", **kwargs) -> PatchCollection`
+### `create_ext_grid_collection(net, ext_grids=None, size=1., color="y", infofunc=None, picker=False, **kwargs) -> PatchCollection`
 **Description:** Creates patches for external grid connections.
 
-### `create_load_collection(net, loads=None, size=1.0, color="b", **kwargs) -> PatchCollection`
+### `create_load_collection(net, loads=None, size=1., color="b", infofunc=None, picker=False, **kwargs) -> PatchCollection`
 
-### `create_sgen_collection(net, sgens=None, size=1.0, color="g", **kwargs) -> PatchCollection`
+### `create_sgen_collection(net, sgens=None, size=1., color="g", infofunc=None, picker=False, **kwargs) -> PatchCollection`
 
 ### `draw_collections(collections, figsize=(10, 8), ax=None, plot_colorbars=True, set_aspect=True, show_plot=True) -> matplotlib.axes.Axes`
 **Description:** Renders a list of collections onto a matplotlib axes.
@@ -102,7 +104,7 @@ plt.show()
 
 ## Plotly Interactive Plots
 
-### `pp.plotting.plotly.simple_plotly(net, respect_switches=False, line_width=1, bus_size=10, ext_grid_size=20, trafo_size=20, auto_open=True, filename="temp-plot.html") -> plotly.Figure`
+### `pp.plotting.plotly.simple_plotly(net, respect_switches=True, use_line_geo=None, on_map=False, map_style="basic", figsize=1.0, aspectratio="auto", line_width=1.0, bus_size=10.0, ext_grid_size=20.0, bus_color="blue", line_color="grey", trafo_color="green", ext_grid_color="yellow", filename="temp-plot.html", auto_open=True, showlegend=True) -> plotly.Figure`
 **Description:** Creates an interactive Plotly figure of the network. Opens in browser.
 **Example:**
 ```python
@@ -115,25 +117,33 @@ fig = pplotly.simple_plotly(net)
 ### `pp.plotting.plotly.vlevel_plotly(net, respect_switches=False, auto_open=True, ...) -> plotly.Figure`
 **Description:** Interactive plot with buses colored by voltage level.
 
-### `pp.plotting.plotly.pf_res_plotly(net, cmap_lines="RdYlGn_r", cmap_buses="RdYlGn_r", line_width=2, bus_size=10, auto_open=True) -> plotly.Figure`
+### `pp.plotting.plotly.pf_res_plotly(net, cmap="Jet", use_line_geo=None, on_map=False, projection=None, map_style="basic", figsize=1, aspectratio="auto", line_width=2, bus_size=10, climits_volt=(0.9, 1.1), climits_load=(0, 100), filename="temp-plot.html", auto_open=True) -> plotly.Figure`
 **Description:** Interactive plot showing power flow results (loading and voltages as color maps).
+**Parameters:**
+- `cmap`: Colormap name (single colormap used for both lines and buses)
+- `climits_volt`: Voltage color limits as `(min, max)` tuple in p.u.
+- `climits_load`: Loading color limits as `(min, max)` tuple in percent
 **Example:**
 ```python
 import pandapower.plotting.plotly as pplotly
 
 net = pp.networks.mv_oberrhein()
 pp.runpp(net)
-fig = pplotly.pf_res_plotly(net, cmap_lines="RdYlGn_r")
+fig = pplotly.pf_res_plotly(net, cmap="Jet")
 ```
 
 ---
 
 ## Geodata Handling
 
-### `pp.plotting.create_generic_coordinates(net, mg=None, library="igraph", respect_switches=True) -> None`
+### `pp.plotting.create_generic_coordinates(net, mg=None, library="igraph", respect_switches=False, geodata_table="bus", buses=None, overwrite=False, layout_engine="neato") -> None`
 **Description:** Automatically generates bus geodata using a graph layout algorithm when no real coordinates exist. Modifies `net.bus.geo` in place.
 **Parameters:**
 - `library`: `"igraph"` (better layout) or `"networkx"`
+- `respect_switches`: Respect switches when generating layout (default False)
+- `buses`: Subset of buses to generate coordinates for (default: all)
+- `overwrite`: Overwrite existing geodata (default False)
+- `layout_engine`: GraphViz layout engine (default `"neato"`)
 **Example:**
 ```python
 net = pp.create_empty_network()

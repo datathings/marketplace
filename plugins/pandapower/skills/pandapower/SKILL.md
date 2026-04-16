@@ -81,5 +81,5 @@ print(f"Converged: {net.converged}")
 - **Geodata format:** Networks created before v2.7 use legacy `bus_geodata`/`line_geodata` DataFrames; run `pp.plotting.geo.convert_geodata_to_geojson(net)` to upgrade.
 - **OPF requires cost functions:** `runopp()` will fail without at least one cost function (`create_poly_cost` or `create_pwl_cost`); all controlled elements need `min_p_mw`/`max_p_mw` limits.
 - **Solver backends:** Install `lightsim2grid` or `power-grid-model` for 10-100x speedup on large networks; pandapower uses them automatically when available (`pip install pandapower[pgm]`).
-- **Three-phase flow:** `runpp_3ph()` is imported from `pandapower.pf.runpp_3ph`, not the top-level namespace.
+- **Three-phase flow:** `runpp_3ph()` is available at the top level (`pp.runpp_3ph(net)`) since it is imported from `pandapower.pf.runpp_3ph` in `__init__.py`.
 - **Short circuit:** `calc_sc()` lives in `pandapower.shortcircuit`; single-phase faults require transformer zero-sequence parameters (`vk0_percent`, `vkr0_percent`).

@@ -379,21 +379,19 @@ print(f"Buses (nodes): {mg.number_of_nodes()}")
 print(f"Branches (edges): {mg.number_of_edges()}")
 print(f"Is connected: {nx.is_connected(nx.Graph(mg))}")
 
-# Find all end buses (leaf nodes)
-end_buses = top.get_end_buses(net)
-print(f"End buses: {end_buses}")
+# Find unsupplied buses
+unsupplied = top.unsupplied_buses(net, respect_switches=True)
+print(f"Unsupplied buses: {unsupplied}")
+
+# Find stub buses
+stubs = top.determine_stubs(net)
+print(f"Stub buses: {stubs}")
 
 # Calculate electrical distance from HV substation
 hv_bus = net.ext_grid.bus.iloc[0]
 distances = top.calc_distance_to_bus(net, bus=hv_bus)
 print(f"\nElectrical distances from bus {hv_bus} (km):")
 print(distances.sort_values().head(10))
-
-# Identify feeders
-feeders = list(top.get_feeders(net, respect_switches=True))
-print(f"\nNumber of feeders: {len(feeders)}")
-for i, feeder in enumerate(feeders):
-    print(f"  Feeder {i}: {len(feeder)} buses")
 
 # Open loop detection
 G = nx.Graph(mg)

@@ -98,7 +98,7 @@ Symmetric or asymmetric cable/overhead line. Both nodes must have equal `u_rated
 | `i_n` | A | no | Rated current (omit → `loading` = NaN) |
 
 ### Link (`link`)
-High-admittance connection between busbars inside a substation. No additional attributes. No sensors can be attached.
+High-admittance connection between busbars inside a substation. No additional attributes beyond the base branch fields. No sensors can be attached to links. Links are modeled as ideal connections in the Y-bus matrix.
 
 ### Transformer (`transformer`)
 Two-winding transformer, possibly with tap changer and different voltage levels.
@@ -180,6 +180,8 @@ Slack bus / voltage-controlled generator (external grid connection).
 | `sk` | VA | no | Short-circuit power (default: infinite) |
 | `rx_ratio` | - | no | R/X ratio of source impedance |
 | `z01_ratio` | - | no | Z0/Z1 ratio |
+
+**Updatable in batch:** `status`, `u_ref`, `u_ref_angle`, `sk`, `rx_ratio`, `z01_ratio`. Source impedance parameters (`sk`, `rx_ratio`, `z01_ratio`) are updatable since v1.13.54, enabling batch sweeps over source strength.
 
 ### Symmetric Load / Generator (`sym_load` / `sym_gen`)
 
@@ -295,16 +297,35 @@ Controls tap position of a `transformer` or `three_winding_transformer` to regul
 | `line_drop_compensation_r/x` | no | Line drop compensation impedance |
 
 **Tap-changing strategies** (pass to `calculate_power_flow`):
-| Strategy | Description |
-|----------|-------------|
-| `disabled` | No automatic tap changing (default) |
-| `any_valid_tap` | Any tap within `u_band` (linear search) |
-| `min_voltage_tap` | Lowest voltage within `u_band` (binary search) |
-| `max_voltage_tap` | Highest voltage within `u_band` (binary search) |
-| `fast_any_tap` | Any tap within `u_band` (binary search) |
+| Strategy | Value | Description |
+|----------|-------|-------------|
+| `disabled` | 0 | No automatic tap changing (default) |
+| `any_valid_tap` | 1 | Any tap within `u_band` (linear search) |
+| `min_voltage_tap` | 2 | Lowest voltage within `u_band` |
+| `max_voltage_tap` | 3 | Highest voltage within `u_band` |
+| `fast_any_tap` | 4 | Any tap within `u_band` (binary search, faster) |
+
+**Output exclusions:**
+- Transformer tap regulators are excluded from state estimation and short-circuit output.
+- Voltage regulators are excluded from state estimation and short-circuit output.
 
 ### Voltage Regulator (`voltage_regulator`)
-Regulates the voltage at a node by adjusting a source's reference voltage.
+Regulates the voltage at a node by adjusting the reactive power dispatch of a connected load/generator appliance. Each regulator controls exactly one appliance (sym_gen, asym_gen, sym_load, or asym_load).
+
+| Attribute | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `int32` | yes | Unique component ID |
+| `regulated_object` | `int32` | yes | ID of regulated appliance (sym_gen/asym_gen/sym_load/asym_load) |
+| `status` | `int8` | yes | 1 = active, 0 = disabled |
+| `u_ref` | `float64` (p.u.) | yes (power_flow) | Target voltage magnitude at the node |
+
+**Constraints:**
+- Each appliance can be regulated by at most one voltage regulator (`regulated_object` must be unique).
+- All voltage regulators connected to the same node must have the same `u_ref` value.
+- Voltage regulators and transformer tap regulators cannot coexist in the same model (raises `UnsupportedRegulatorCombinationError`).
+- Nodes with both a source and a voltage-regulated appliance are not supported when both are enabled (raises `UnsupportedVoltageRegulatorSourceCombinationError`).
+
+**Note:** Voltage regulators are excluded from state estimation and short-circuit output (irrelevant component for those calculation types).
 
 ---
 
@@ -357,58 +378,117 @@ DatasetType.sc_output   # "sc_output"    — short-circuit result arrays
 from power_grid_model import (
     LoadGenType, WindingType, BranchSide, Branch3Side,
     MeasuredTerminalType, FaultType, FaultPhase,
-    CalculationMethod, TapChangingStrategy,
+    CalculationMethod, CalculationType, TapChangingStrategy,
     ShortCircuitVoltageScaling, AngleMeasurementType,
+    ComponentAttributeFilterOptions,
 )
-
-# LoadGenType
-LoadGenType.const_power      # ZIP model: constant power (default)
-LoadGenType.const_impedance  # ZIP model: constant impedance
-LoadGenType.const_current    # ZIP model: constant current
-
-# WindingType
-WindingType.wye        # Y
-WindingType.wye_n      # YN (with neutral)
-WindingType.delta      # D
-WindingType.zigzag     # Z
-WindingType.zigzag_n   # ZN
-
-# BranchSide
-BranchSide.from_side
-BranchSide.to_side
-
-# Branch3Side
-Branch3Side.side_1 / side_2 / side_3
-
-# MeasuredTerminalType
-MeasuredTerminalType.branch_from / branch_to
-MeasuredTerminalType.source / shunt / load / generator
-MeasuredTerminalType.branch3_1 / branch3_2 / branch3_3
-MeasuredTerminalType.node   # total injection at node
-
-# FaultType
-FaultType.three_phase
-FaultType.single_phase_to_ground
-FaultType.two_phase
-FaultType.two_phase_to_ground
-
-# FaultPhase
-FaultPhase.abc / a / b / c / ab / ac / bc / default_value
-
-# CalculationMethod
-CalculationMethod.newton_raphson    # power flow (default) + state est
-CalculationMethod.iterative_current # power flow
-CalculationMethod.linear            # power flow (approx)
-CalculationMethod.linear_current    # power flow (approx)
-CalculationMethod.iterative_linear  # state estimation (default)
-CalculationMethod.iec60909          # short circuit (default)
-
-# TapChangingStrategy
-TapChangingStrategy.disabled / any_valid_tap / min_voltage_tap / max_voltage_tap / fast_any_tap
-
-# ShortCircuitVoltageScaling
-ShortCircuitVoltageScaling.minimum / maximum
-
-# AngleMeasurementType
-AngleMeasurementType.local_angle / global_angle
 ```
+
+### CalculationType (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `power_flow` | 0 | Steady-state power flow |
+| `state_estimation` | 1 | Weighted least-squares state estimation |
+| `short_circuit` | 2 | IEC 60909 short-circuit analysis |
+
+### CalculationMethod (IntEnum)
+| Name | Value | Used by |
+|------|-------|---------|
+| `linear` | 0 | Power flow (approx, single-step) |
+| `newton_raphson` | 1 | Power flow (default), state estimation |
+| `iterative_linear` | 2 | State estimation (default) |
+| `iterative_current` | 3 | Power flow (Jacobi-like) |
+| `linear_current` | 4 | Power flow (approx, single iteration) |
+| `iec60909` | 5 | Short circuit (default) |
+
+### LoadGenType (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `const_power` | 0 | Constant power (ZIP P) |
+| `const_impedance` | 1 | Constant impedance (ZIP Z) |
+| `const_current` | 2 | Constant current (ZIP I) |
+
+### WindingType (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `wye` | 0 | Y |
+| `wye_n` | 1 | YN (with neutral) |
+| `delta` | 2 | D |
+| `zigzag` | 3 | Z |
+| `zigzag_n` | 4 | ZN |
+
+### BranchSide (IntEnum)
+| Name | Value |
+|------|-------|
+| `from_side` | 0 |
+| `to_side` | 1 |
+
+### Branch3Side (IntEnum)
+| Name | Value |
+|------|-------|
+| `side_1` | 0 |
+| `side_2` | 1 |
+| `side_3` | 2 |
+
+### MeasuredTerminalType (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `branch_from` | 0 | From-terminal of a branch (except link) |
+| `branch_to` | 1 | To-terminal of a branch (except link) |
+| `source` | 2 | Source terminal |
+| `shunt` | 3 | Shunt terminal |
+| `load` | 4 | Load terminal |
+| `generator` | 5 | Generator terminal |
+| `branch3_1` | 6 | Branch3 terminal 1 |
+| `branch3_2` | 7 | Branch3 terminal 2 |
+| `branch3_3` | 8 | Branch3 terminal 3 |
+| `node` | 9 | Total power injection at node |
+
+### FaultType (IntEnum)
+| Name | Value |
+|------|-------|
+| `three_phase` | 0 |
+| `single_phase_to_ground` | 1 |
+| `two_phase` | 2 |
+| `two_phase_to_ground` | 3 |
+| `nan` | -128 |
+
+### FaultPhase (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `abc` | 0 | All phases (three-phase fault) |
+| `a` | 1 | Phase A |
+| `b` | 2 | Phase B |
+| `c` | 3 | Phase C |
+| `ab` | 4 | Phases A and B |
+| `ac` | 5 | Phases A and C |
+| `bc` | 6 | Phases B and C |
+| `default_value` | -1 | Use default for fault type |
+| `nan` | -128 | Unspecified |
+
+### TapChangingStrategy (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `disabled` | 0 | No automatic tap changing (default) |
+| `any_valid_tap` | 1 | Any value in voltage band (linear search) |
+| `min_voltage_tap` | 2 | Lower end of voltage band |
+| `max_voltage_tap` | 3 | Higher end of voltage band |
+| `fast_any_tap` | 4 | Any value in voltage band (binary search) |
+
+### ShortCircuitVoltageScaling (IntEnum)
+| Name | Value |
+|------|-------|
+| `minimum` | 0 |
+| `maximum` | 1 |
+
+### AngleMeasurementType (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `local_angle` | 0 | Angle relative to local voltage |
+| `global_angle` | 1 | Angle relative to global reference |
+
+### ComponentAttributeFilterOptions (IntEnum)
+| Name | Value | Description |
+|------|-------|-------------|
+| `everything` | 0 | Include all components/attributes |
+| `relevant` | 1 | Only non-empty, non-NaN components/attributes |
