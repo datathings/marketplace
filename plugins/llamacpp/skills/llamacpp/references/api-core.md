@@ -287,9 +287,9 @@ typedef struct llama_model_quantize_params {
 } llama_model_quantize_params;
 ```
 
-**Note (b8809):** The quantization params struct now uses properly typed pointers instead of `void *`. The `tensor_types` field was renamed to `tt_overrides`.
+**Note:** The quantization params struct uses properly typed pointers instead of `void *`. The `tensor_types` field was renamed to `tt_overrides`.
 
-### New Enum Values (b8809)
+### Enum Values
 
 ```c
 // New quantization types

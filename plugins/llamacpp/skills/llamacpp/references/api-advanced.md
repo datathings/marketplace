@@ -381,7 +381,9 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `n_seq_max`: Max number of sequences
 - `n_threads`: Threads for generation
 - `n_threads_batch`: Threads for batch processing
-- `embeddings`: Extract embeddings
+- `embeddings`: Extract embeddings (together with logits)
+- `offload_kqv`: Offload the KQV ops (including the KV cache) to GPU
+- `no_perf`: Whether to measure performance timings
 - `rope_scaling_type`: RoPE scaling type
 - `pooling_type`: Pooling type
 - `attention_type`: Attention type

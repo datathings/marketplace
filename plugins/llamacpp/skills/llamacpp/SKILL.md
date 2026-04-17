@@ -70,15 +70,15 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (399 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (401 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 198 active functions (b8809) across 6 organized files
+**Total:** 198 active functions (b8827) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
-See **[references/api-core.md](references/api-core.md)** for the full API index linking to all 198 function signatures.
+See **[references/api-core.md](references/api-core.md)** for the full API index linking to all function signatures.
 
 ## Common Workflows
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,255 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,257 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,29 +157,23 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8809
+## What's New in b8827
 
-**New Model Loading Functions:**
-- `llama_model_load_from_file_ptr()` - Load a model from an open `FILE` pointer
-- `llama_model_init_from_user()` - Create a model from GGUF metadata + callback for tensor data
+**b8827** is a maintenance release (from b8809) focused on OpenCL/Hexagon optimizations, model refactors, and internal improvements. No public C API changes -- all 198 active functions retain the same signatures.
 
-**New Quantization Types:**
-- `LLAMA_FTYPE_MOSTLY_MXFP4_MOE` (38) - MXFP4 MOE quantization
-- `LLAMA_FTYPE_MOSTLY_NVFP4` (39) - NVFP4 quantization
-- `LLAMA_FTYPE_MOSTLY_Q1_0` (40) - Q1_0 quantization
+**Internal Improvements (no API impact):**
+- OpenCL: refactored q8_0 set_tensor and mul_mat host side dispatch for Adreno
+- Hexagon: optimized HMX matmul operations
+- Model layer: unified single `llm_build` per architecture
+- CMake: switched to glob for src/models sources
+- CLI: use `get_media_marker` for media handling
 
-**New Split Mode:**
-- `LLAMA_SPLIT_MODE_TENSOR` (3) - Backend-agnostic tensor parallelism
-
-**Quantization Struct Changes (Breaking):**
-- `llama_model_quantize_params` fields now use properly typed pointers instead of `void *`
-- `tensor_types` field renamed to `tt_overrides` (type: `const struct llama_model_tensor_override *`)
-- New structs: `llama_model_tensor_override`, `llama_model_imatrix_data`
-
-**LoRA Adapter Changes:**
-- `llama_adapter_lora_free()` is **no longer deprecated** - can be used to manually free adapters
-- Adapters can now be loaded **after** context creation (restriction removed)
-- C++ `llama_adapter_lora_deleter` now calls `llama_adapter_lora_free()` (was a no-op)
+**Stable Since b8809:**
+- Model loading: `llama_model_load_from_file_ptr()`, `llama_model_init_from_user()`
+- Quantization types: MXFP4_MOE (38), NVFP4 (39), Q1_0 (40)
+- Split mode: `LLAMA_SPLIT_MODE_TENSOR` (3) for backend-agnostic tensor parallelism
+- Backend sampling API (EXPERIMENTAL): GPU-accelerated sampling via context params
+- Adaptive-P sampler: `llama_sampler_init_adaptive_p()`
 
 ## Key Differences from Deprecated API
 
