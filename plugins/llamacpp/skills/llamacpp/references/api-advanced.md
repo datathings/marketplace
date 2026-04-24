@@ -206,11 +206,6 @@ void llama_perf_sampler_reset(struct llama_sampler * chain);
 ```
 Reset performance counters for the sampler.
 
-```c
-void llama_memory_breakdown_print(const struct llama_context * ctx);
-```
-Print a breakdown of per-device memory use via `LLAMA_LOG`.
-
 ### Performance Data Structs
 
 ```c

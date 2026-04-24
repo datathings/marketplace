@@ -94,35 +94,6 @@ Free all allocated memory for a context. Always call this when done with a conte
 llama_free(ctx);
 ```
 
-### llama_params_fit
-```c
-enum llama_params_fit_status llama_params_fit(
-    const char * path_model,
-    struct llama_model_params * mparams,
-    struct llama_context_params * cparams,
-    float * tensor_split,
-    struct llama_model_tensor_buft_override * tensor_buft_overrides,
-    size_t * margins,
-    uint32_t n_ctx_min,
-    enum ggml_log_level log_level);
-```
-Fits model and context parameters to available device memory. Returns a status enum (SUCCESS, FAILURE, or ERROR). This function is NOT thread-safe. Only parameters matching defaults are modified, except context size which is always modified when set to 0.
-
-**Return Values:**
-- `LLAMA_PARAMS_FIT_STATUS_SUCCESS (0)`: Found allocations that are projected to fit
-- `LLAMA_PARAMS_FIT_STATUS_FAILURE (1)`: Could not find allocations that fit
-- `LLAMA_PARAMS_FIT_STATUS_ERROR (2)`: Hard error occurred (e.g., model not found)
-
-**Parameters:**
-- `path_model`: Path to model file
-- `mparams`: Writable model params (will be modified)
-- `cparams`: Writable context params (will be modified)
-- `tensor_split`: Writable buffer for tensor split (needs at least `llama_max_devices()` elements)
-- `tensor_buft_overrides`: Writable buffer for overrides (needs at least `llama_max_tensor_buft_overrides()` elements)
-- `margins`: Margins of memory to leave per device in bytes (array with `llama_max_devices()` elements)
-- `n_ctx_min`: Minimum context size to set when trying to reduce memory use
-- `log_level`: Minimum log level to print during fitting
-
 ### llama_get_model
 ```c
 const struct llama_model * llama_get_model(const struct llama_context * ctx);

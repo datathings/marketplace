@@ -67,12 +67,12 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 - **[api-core.md](references/api-core.md)** (304 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
-- **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
+- **[api-context.md](references/api-context.md)** (392 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (401 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (396 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 198 active functions (b8827) across 6 organized files
+**Total:** 196 active functions (b8920) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,257 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,223 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,16 +157,14 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8827
+## What's New in b8920
 
-**b8827** is a maintenance release (from b8809) focused on OpenCL/Hexagon optimizations, model refactors, and internal improvements. No public C API changes -- all 198 active functions retain the same signatures.
+**b8920** is a maintenance release (from b8827). The only public C API change is the removal of the `fit-params` helpers (`llama_params_fit`, `llama_params_fit_status` enum) and `llama_memory_breakdown_print` from `llama.h` -- these were refactored into libcommon and are no longer part of the public API.
 
-**Internal Improvements (no API impact):**
-- OpenCL: refactored q8_0 set_tensor and mul_mat host side dispatch for Adreno
-- Hexagon: optimized HMX matmul operations
-- Model layer: unified single `llm_build` per architecture
-- CMake: switched to glob for src/models sources
-- CLI: use `get_media_marker` for media handling
+**Removed from public API (moved to libcommon/internal):**
+- `enum llama_params_fit_status` and `LLAMA_PARAMS_FIT_STATUS_*` constants
+- `llama_params_fit()` - use the libcommon helper instead
+- `llama_memory_breakdown_print()` - use the libcommon helper instead
 
 **Stable Since b8809:**
 - Model loading: `llama_model_load_from_file_ptr()`, `llama_model_init_from_user()`
