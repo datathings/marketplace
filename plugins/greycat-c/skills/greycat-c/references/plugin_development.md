@@ -353,12 +353,16 @@ bool gc_lib_my_plugin__link_native(gc_program_t *prog, gc_program_library_t *lib
 ### Library Start/Stop (Global)
 
 ```c
+// Cached plugin-global allocator. Use this anywhere you'd have reached for
+// gc_global_gnu_malloc in earlier releases.
+static gc_allocator_t *g_alloc;
+
 static bool lib_start(gc_unused gc_program_library_t *lib,
                        gc_unused gc_program_t *prog,
                        gc_unused void **user_data) {
     // Initialize global state (called once on startup)
-    global_state = gc_global_gnu_malloc(sizeof(my_global_state_t));
-    memset(global_state, 0, sizeof(my_global_state_t));
+    g_alloc = gc_host__allocator(gc_host__get_global());
+    global_state = (my_global_state_t *)gc_alloc__calloc(g_alloc, sizeof(my_global_state_t));
     pthread_mutex_init(&global_state->lock, NULL);
 
     // Initialize third-party libraries
@@ -373,7 +377,7 @@ static bool lib_stop(gc_unused gc_program_library_t *lib,
     // Cleanup global state (called once on shutdown)
     some_library_cleanup();
     pthread_mutex_destroy(&global_state->lock);
-    gc_global_gnu_free(global_state);
+    gc_alloc__free(g_alloc, global_state, sizeof(my_global_state_t));
 
     return true;
 }
@@ -430,7 +434,9 @@ static void gc_mymod_Model__finalize(gc_object_t *self, gc_unused gc_machine_t *
         model->handle = NULL;
     }
     if (model->cached_name != NULL) {
-        gc_global_gnu_free((void *)model->cached_name);
+        // cached_name was allocated with g_alloc in lib_start/native paths,
+        // so free it with the matching allocator and size.
+        gc_alloc__free(g_alloc, (void *)model->cached_name, model->cached_name_len);
         model->cached_name = NULL;
     }
 }
@@ -473,7 +479,7 @@ void gc_mymod_Model__load(gc_machine_t *ctx) {
 
     if (idx < 0) {
         // Not found, create new entry...
-        // Grow array using gc_global_gnu_malloc + memcpy + gc_global_gnu_free
+        // Grow array using gc_alloc__realloc(g_alloc, ...), or malloc+memcpy+free against g_alloc.
     }
 
     // Return result...
@@ -483,16 +489,33 @@ void gc_mymod_Model__load(gc_machine_t *ctx) {
 
 ## Memory Management Patterns
 
-### Temporary Allocations (within a function)
+### Allocator Selection (required in 2.5.6)
+
+Every allocation must be routed to one of two allocators — pick the one whose lifetime matches the data:
+
+| Allocator | Lifecycle | When to use |
+|-----------|-----------|-------------|
+| `((gc_ctx_t *)ctx)->allocator` | Bound to the current native call | Scratch buffers, intermediate arrays, per-call strings. Default inside any native function. |
+| `gc_host__allocator(gc_host__get_global())` | Plugin-global, persists across threads and calls | Module-level state allocated in `lib_start`, freed in `lib_stop`. Requires your own mutex when multiple workers touch it. |
+
+Cache the global one in `lib_start`:
+
+```c
+static gc_allocator_t *g_alloc;    // plugin-global
+// in lib_start:  g_alloc = gc_host__allocator(gc_host__get_global());
+```
+
+### Temporary Allocations (within a native call)
 
 ```c
 void my_function(gc_machine_t *ctx) {
-    // Per-worker allocation (no mutex needed)
-    char *temp = gc_gnu_malloc(1024);
+    gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
+    size_t n = 1024;
+    char *temp = (char *)gc_alloc__malloc(a, n);
 
     // ... use temp ...
 
-    gc_gnu_free(temp);
+    gc_alloc__free(a, temp, n);
 }
 ```
 
@@ -501,12 +524,12 @@ void my_function(gc_machine_t *ctx) {
 ```c
 // In lib_start or native functions (use global allocator + mutex)
 pthread_mutex_lock(&global_store->lock);
-char *persistent = gc_global_gnu_malloc(size);
-// Store in global state...
+char *persistent = (char *)gc_alloc__malloc(g_alloc, size);
+// Store in global state, remember size for the eventual free...
 pthread_mutex_unlock(&global_store->lock);
 
 // In lib_stop (cleanup)
-gc_global_gnu_free(persistent);
+gc_alloc__free(g_alloc, persistent, size);
 ```
 
 ### Buffer Reuse Pattern
@@ -528,24 +551,20 @@ void my_function(gc_machine_t *ctx) {
 ### Dynamic Array Growth Pattern
 
 ```c
-// Grow a global array by 1 element
-my_store_entry_t *new_entries = gc_global_gnu_malloc(
-    (global_store->nb_entries + 1) * sizeof(my_store_entry_t));
+// Grow a global array by 1 element — use the plugin-global allocator cached in lib_start.
+size_t old_bytes = global_store->nb_entries * sizeof(my_store_entry_t);
+size_t new_bytes = (global_store->nb_entries + 1) * sizeof(my_store_entry_t);
 
-// Copy existing entries
-memcpy(new_entries, global_store->entries,
-       global_store->nb_entries * sizeof(my_store_entry_t));
+my_store_entry_t *new_entries = (my_store_entry_t *)gc_alloc__realloc(
+    g_alloc, global_store->entries, old_bytes, new_bytes);
 
-// Initialize new entry
+// Initialize the newly appended slot
 my_store_entry_t *new_entry = new_entries + global_store->nb_entries;
-new_entry->id = gc_global_gnu_malloc(id->size + 1);
+new_entry->id = (char *)gc_alloc__malloc(g_alloc, id->size + 1);
+new_entry->id_size = id->size + 1;   // remember size for the eventual free
 memcpy(new_entry->id, id->buffer, id->size);
 new_entry->id[id->size] = '\0';
 
-// Swap and free old array
-if (global_store->entries != NULL) {
-    gc_global_gnu_free(global_store->entries);
-}
 global_store->entries = new_entries;
 global_store->nb_entries += 1;
 ```
@@ -747,20 +766,22 @@ void my_function(gc_machine_t *ctx) {
     // Option 1: Use length-aware functions
     memcpy(dest, str->buffer, str->size);
 
-    // Option 2: Create null-terminated copy
-    char *cstr = gc_gnu_malloc(str->size + 1);
+    // Option 2: Create null-terminated copy on the per-call allocator
+    gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
+    size_t n = str->size + 1;
+    char *cstr = (char *)gc_alloc__malloc(a, n);
     memcpy(cstr, str->buffer, str->size);
     cstr[str->size] = '\0';
     // ... use cstr ...
-    gc_gnu_free(cstr);
+    gc_alloc__free(a, cstr, n);
 }
 ```
 
 ### Creating String Results
 
 ```c
-// From buffer with known length
-gc_string_t *result = gc_string__create_from(data, length);
+// From buffer with known length (the ctx tail argument is required in 2.5.6)
+gc_string_t *result = gc_string__create_from(data, length, ctx);
 gc_machine__set_result(ctx, (gc_slot_t){.object = (gc_object_t *)result}, gc_type_object);
 gc_object__un_mark((gc_object_t *)result, ctx);
 
@@ -769,7 +790,7 @@ gc_buffer_t *buf = gc_machine__get_buffer(ctx);
 gc_buffer__clear(buf);
 gc_buffer__add_cstr(buf, "Hello ");
 gc_buffer__add_u64(buf, 42);
-gc_string_t *result = gc_string__create_from(buf->data, buf->size);
+gc_string_t *result = gc_string__create_from(buf->data, buf->size, ctx);
 ```
 
 ## Working with Arrays
@@ -967,10 +988,10 @@ void use_model(gc_machine_t *ctx) {
 
 ### Rules
 
-1. **Per-worker allocators** (`gc_gnu_malloc`) are thread-local - no mutex needed
-2. **Global allocators** (`gc_global_gnu_malloc`) require your own mutex
-3. **GreyCat objects** created in a function are local to that call - no mutex needed
-4. **Global state** accessed from native functions needs protection
+1. **Per-call allocator** (`((gc_ctx_t *)ctx)->allocator`) is scoped to one native call — no mutex needed.
+2. **Plugin-global allocator** (`gc_host__allocator(gc_host__get_global())`) is shared; protect the data structures you keep there with your own mutex.
+3. **GreyCat objects** created in a function are local to that call — no mutex needed.
+4. **Global state** accessed from native functions needs protection.
 
 ### Mutex Pattern
 
@@ -1072,7 +1093,7 @@ void gc_mymod_Processor__process(gc_machine_t *ctx) {
     gc_object__set_at(result, gc_mymod_Result_score,
                        (gc_slot_t){.f64 = score}, gc_type_float, ctx);
 
-    gc_string_t *label_str = gc_string__create_from(label, strlen(label));
+    gc_string_t *label_str = gc_string__create_from(label, strlen(label), ctx);
     gc_object__set_at(result, gc_mymod_Result_label,
                        (gc_slot_t){.object = (gc_object_t *)label_str}, gc_type_object, ctx);
 

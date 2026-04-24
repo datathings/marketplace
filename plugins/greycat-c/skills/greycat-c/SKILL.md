@@ -5,7 +5,15 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns.
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **2.5.6**.
+
+## Key Considerations (2.5.6)
+
+- **Allocator API migration** — the major change. Every allocation now takes an explicit `gc_allocator_t *`. See the "Memory management" block below; the old `gc_gnu_*` / `gc_global_gnu_*` families are gone, and `gc_malloc` / `gc_free` / `gc_realloc` are deprecated back-compat stubs.
+- Many collection init / string create functions gained a trailing `const gc_machine_t *ctx` (so they can reach the per-call allocator). Notable: `gc_array__init`, `gc_map__init`, `gc_table__init`, `gc_table__init_cols`, `gc_string__create_from`, `gc_string__create_concat`, `gc_string__create_from_or_symbol`, `gc_core_tensor__clone_internal`, `gc_sort__piposort`.
+- `gc_buffer__create(gc_allocator_t *)` now requires an allocator. `gc_buffer_t` gained an `allocator` field and `gc_buffer_options_t` lost its `global` flag.
+- New in `gc/host.h`: `gc_host__allocator`, `gc_host__scheduler`, and a full periodic-task scheduler API (`gc_scheduler_t`, `gc_periodic_task_t`, `gc_periodicity_t`, weekly/monthly/yearly configs).
+- `gc_program__create(abi, allocator)` is new; `gc_program__create_from_abi` now takes an allocator; `gc_program__create_object` and `gc_object__create` are no longer public — use `gc_machine__create_object` instead.
 
 ## Contents
 
@@ -114,14 +122,30 @@ gc_string_t *s2 = gc_string__create_concat(buf1, len1, buf2, len2);
 // Note: gc_string_t.buffer is NOT null-terminated. Use .size for length.
 ```
 
-**Memory management:**
+**Memory management (2.5.6 — allocator-first API):**
+
+| Allocator | Lifecycle | When to use |
+|-----------|-----------|-------------|
+| `((gc_ctx_t *)ctx)->allocator` | Per-native-call; reclaimed when the call ends | Default for everything inside a native: scratch buffers, intermediate arrays, per-call result strings. |
+| `gc_host__allocator(gc_host__get_global())` | Plugin-global, persists across threads and calls | `lib_start` / `lib_stop` state, global caches, precomputed lookup tables. Protect with your own mutex if shared across workers. |
+
 ```c
-char *temp = (char *)gc_gnu_malloc(size);         // Per-worker (thread-local)
-gc_gnu_free(temp);
-double *shared = (double *)gc_global_gnu_malloc(size);  // Global (thread-safe)
-gc_global_gnu_free(shared);
-gc_buffer_t *buf = gc_machine__get_buffer(ctx);   // Reusable scratch buffer
+// Per-call scratch (default):
+gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
+char *temp = (char *)gc_alloc__malloc(a, size);
+// ... use temp ...
+gc_alloc__free(a, temp, size);
+
+// Plugin-global (cache once in lib_start):
+static gc_allocator_t *g_alloc;    // = gc_host__allocator(gc_host__get_global());
+double *shared = (double *)gc_alloc__malloc(g_alloc, size);
+gc_alloc__free(g_alloc, shared, size);
+
+// Reusable scratch buffer owned by the machine (no manual free):
+gc_buffer_t *buf = gc_machine__get_buffer(ctx);
 ```
+
+> Every allocation in 2.5.6 must pass an explicit `gc_allocator_t *`. The previous `gc_gnu_malloc` / `gc_global_gnu_malloc` families are gone. `gc_malloc` / `gc_free` / `gc_realloc` remain exported for back-compat only; do not use them.
 
 **Buffer building:**
 ```c
@@ -157,11 +181,11 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 - I/O operations (file open/sync)
 - Memory allocation (per-worker, global, aligned)
 - Program/Type System, ABI, symbol resolution
-- Host/Task management (spawn, cancel, status)
+- Host/Task management (spawn, cancel, status), periodic scheduler (gc_scheduler_t, gc_periodic_task_t), plugin-global allocator (gc_host__allocator)
 - Block storage (attach/detach objects)
 - Utility (Morton codes, parsing, sorting, licensing)
 
-**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic, node parsing), machine.h (parameters, results, errors, object creation, function calls), object.h (field access, GC marks, serialization), tensor.h (creation, init_tensor, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (text append, escaped symbol, binary read/write, varint), table.h, alloc.h, program.h (linking, type configuration, introspection, DurationUnit constants, field format pragma, module/program creation), abi.h (schema, serialization), host.h (task spawning), node.h (node resolution), io.h, crypto.h, geo.h, time.h (timezone-aware print/parse), math.h, block.h, util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
+**Contains:** Complete function signatures organized by header file: type.h (primitives, gc_type_t, gc_slot_t, gc_object_t, complex arithmetic, node parsing), machine.h (parameters, results, errors, object creation, function calls, gc_ctx_t with per-call allocator), object.h (field access, GC marks, serialization), tensor.h (creation, init_tensor, get/set/add for i32/i64/f32/f64/c64/c128, descriptor utilities, matmul/bias/sum validation), array.h, map.h, string.h, str.h, buffer.h (allocator-aware create, text append, escaped symbol, binary read/write, varint), table.h, alloc.h (gc_alloc__ family, allocator selection rules), program.h (linking, type configuration, introspection, DurationUnit constants, field format pragma, module/program creation with allocator), abi.h (schema, serialization, allocator-aware), host.h (task spawning, plugin-global allocator, periodic scheduler), node.h (node resolution), io.h, crypto.h, geo.h, time.h (timezone-aware print/parse), math.h, block.h, util.h (Morton codes, hex, parsing, deep equality, sorting, licensing).
 
 ---
 
