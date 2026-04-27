@@ -2,6 +2,8 @@
 
 All components are represented as numpy structured arrays. Use `initialize_array('input', '<type>', n)` to create them.
 
+> **Strict dtype matching:** PGM requires arrays to *exactly* match its internal dtypes. Always build them with `initialize_array` (or `attribute_dtype` for columnar data). Adding/removing fields, changing widths, or hand-rolling the dtype produces Undefined Behavior in the C++ core. For safe array operations (filter, join, custom attributes), use [`power-grid-model-ds`](https://github.com/PowerGridModel/power-grid-model-ds). See [api-core.md → Strict dtype matching](api-core.md#strict-dtype-matching-undefined-behavior-warning).
+
 ## Table of Contents
 1. [Component hierarchy](#component-hierarchy)
 2. [Node](#node)

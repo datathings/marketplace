@@ -10,9 +10,10 @@
 7. [initialize_array](#initialize_array)
 8. [power_grid_meta_data](#power_grid_meta_data)
 9. [attribute_dtype / attribute_empty_value](#attribute_dtype--attribute_empty_value)
-10. [Serialization utilities](#serialization-utilities)
-11. [Stream serialization](#stream-serialization)
-12. [self_test](#self_test)
+10. [Strict dtype matching (Undefined Behavior warning)](#strict-dtype-matching-undefined-behavior-warning)
+11. [Serialization utilities](#serialization-utilities)
+12. [Stream serialization](#stream-serialization)
+13. [self_test](#self_test)
 
 ---
 
@@ -252,6 +253,31 @@ Returns the NaN sentinel value for a specific attribute.
 ```python
 dtype = attribute_dtype('input', 'node', 'u_rated')   # dtype('<f8')
 nan   = attribute_empty_value('input', 'node', 'id')  # -2147483648
+```
+
+---
+
+## Strict dtype matching (Undefined Behavior warning)
+
+All component datasets passed to `PowerGridModel` (and to update / batch / serialization functions) **must strictly match** the numpy dtype reported by `power_grid_meta_data` (row-based data) or `attribute_dtype` (columnar data).
+
+**Any deviation triggers Undefined Behavior** in the C++ core. This includes:
+- Adding or removing custom attributes on the structured array.
+- Changing the dtype of a field (e.g., `int64` instead of `int32`, `float32` instead of `float64`).
+- Reordering fields or altering offsets.
+- Passing a plain `np.ndarray` whose dtype was constructed manually rather than via `initialize_array` / `power_grid_meta_data`.
+
+**Recommended practice:**
+- Build arrays with `initialize_array(data_type, component_type, shape)` — never construct the dtype yourself.
+- For columnar data, derive the dtype with `attribute_dtype(...)` for each attribute.
+- For arbitrary array operations (filtering, joining, custom attributes), use the companion package [`power-grid-model-ds`](https://github.com/PowerGridModel/power-grid-model-ds), which preserves PGM-compatible dtypes.
+
+```python
+# Correct — array dtype comes from PGM
+node = initialize_array('input', 'node', 3)
+
+# WRONG — manually built dtype is not guaranteed to match
+bad = np.zeros(3, dtype=[('id', 'i4'), ('u_rated', 'f8')])  # may corrupt the solver
 ```
 
 ---

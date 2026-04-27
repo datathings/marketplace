@@ -9,7 +9,7 @@ description: "Python library for steady-state distribution power system analysis
 
 `power-grid-model` is a high-performance C++ library with a Python interface for steady-state distribution power system analysis. It operates on numpy structured arrays via a dictionary-based data model and supports symmetric (single-phase equivalent) and asymmetric (full three-phase) calculations.
 
-**Version:** v1.13.54
+**Version:** v1.13.62
 **Language:** Python (C++ core)
 **License:** Mozilla Public License 2.0 (MPL-2.0)
 **Repo:** https://github.com/PowerGridModel/power-grid-model

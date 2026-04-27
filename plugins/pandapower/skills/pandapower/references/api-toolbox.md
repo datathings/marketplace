@@ -55,7 +55,7 @@ all_elements = pp.pp_elements()
 # {'bus', 'load', 'sgen', 'gen', 'ext_grid', 'line', 'trafo', ...}
 ```
 
-### `pp.next_bus(net, bus, element, et="line") -> int`
+### `pp.next_bus(net, bus, element_id, et="line") -> int`
 **Description:** Returns the bus at the other end of a branch element.
 
 ---
