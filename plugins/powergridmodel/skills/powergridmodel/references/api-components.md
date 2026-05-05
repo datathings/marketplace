@@ -232,7 +232,7 @@ Sensors attach to physical components for state estimation. All sensors: `measur
 
 | Type | Symmetric | Terminal types allowed |
 |------|-----------|----------------------|
-| `sym_power_sensor` | yes | branch_from/to, source, shunt, load, generator, branch3_1/2/3, node |
+| `sym_power_sensor` | yes | branch_from/to, source, shunt, load, generator, branch3_1/2/3, ~~node~~ (deprecated) |
 | `asym_power_sensor` | no | same |
 
 **Input:**
@@ -444,7 +444,7 @@ from power_grid_model import (
 | `branch3_1` | 6 | Branch3 terminal 1 |
 | `branch3_2` | 7 | Branch3 terminal 2 |
 | `branch3_3` | 8 | Branch3 terminal 3 |
-| `node` | 9 | Total power injection at node |
+| `node` | 9 | **[DEPRECATED v1.13.69]** Total power injection at node — emits `DeprecationWarning`; will be removed in a future release. Not a physical terminal; prefer appliance/branch terminal types. |
 
 ### FaultType (IntEnum)
 | Name | Value |

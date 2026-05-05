@@ -168,6 +168,8 @@ print(result['node'])  # estimated voltages
 
 **Observability requirement:** At least one voltage sensor; total `n_measurements >= 2*n_nodes - 1`.
 
+**Deprecation note (v1.13.69):** `MeasuredTerminalType.node` (node injection power measurement) is deprecated and emits a `DeprecationWarning`. It does not represent a real terminal and will be removed in a future release. Replace it with the appropriate appliance terminal type (`load`, `generator`, `source`, `shunt`) or with `branch_from`/`branch_to`/`branch3_*` measurements.
+
 ---
 
 ## Short Circuit Analysis

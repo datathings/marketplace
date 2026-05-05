@@ -9,7 +9,7 @@ description: "Python library for steady-state distribution power system analysis
 
 `power-grid-model` is a high-performance C++ library with a Python interface for steady-state distribution power system analysis. It operates on numpy structured arrays via a dictionary-based data model and supports symmetric (single-phase equivalent) and asymmetric (full three-phase) calculations.
 
-**Version:** v1.13.62
+**Version:** v1.13.69
 **Language:** Python (C++ core)
 **License:** Mozilla Public License 2.0 (MPL-2.0)
 **Repo:** https://github.com/PowerGridModel/power-grid-model
@@ -83,3 +83,4 @@ result = model.calculate_power_flow()
 - **Asymmetric calculations** require zero-sequence parameters (`r0`, `x0`, `c0`, etc.) for lines and appropriate winding configurations for transformers. `generic_branch` does not support asymmetric mode.
 - **Source `sk`, `rx_ratio`, `z01_ratio` are now updatable** in batch calculations (since v1.13.54). This enables batch sweeps over source impedance parameters.
 - **Voltage regulators** regulate voltage at a node by adjusting the reactive power dispatch of connected load/gen appliances. They cannot coexist with transformer tap regulators in the same model.
+- **Deprecated (v1.13.69):** `MeasuredTerminalType.node` (value `9`, "node injection" power-sensor terminal type) emits a `DeprecationWarning` and will be removed in a future release. It does not represent a physical terminal; use one of the appliance/branch terminal types instead.
