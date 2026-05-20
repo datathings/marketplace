@@ -67,12 +67,12 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 - **[api-core.md](references/api-core.md)** (304 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
-- **[api-context.md](references/api-context.md)** (392 lines) - Context, memory (KV cache), state management
+- **[api-context.md](references/api-context.md)** (415 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (396 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 196 active functions (b8920) across 6 organized files
+**Total:** 197 active functions (b9246) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,223 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,246 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,14 +157,21 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b8920
+## What's New in b9246
 
-**b8920** is a maintenance release (from b8827). The only public C API change is the removal of the `fit-params` helpers (`llama_params_fit`, `llama_params_fit_status` enum) and `llama_memory_breakdown_print` from `llama.h` -- these were refactored into libcommon and are no longer part of the public API.
+**b9246** is an additive release (from b8920) — no removals, no signature changes. New capabilities:
 
-**Removed from public API (moved to libcommon/internal):**
-- `enum llama_params_fit_status` and `LLAMA_PARAMS_FIT_STATUS_*` constants
-- `llama_params_fit()` - use the libcommon helper instead
-- `llama_memory_breakdown_print()` - use the libcommon helper instead
+**Multi-Token Prediction (MTP) [EXPERIMENTAL]:**
+- New `enum llama_context_type` with `LLAMA_CONTEXT_TYPE_DEFAULT` (0) and `LLAMA_CONTEXT_TYPE_MTP` (1)
+- New `llama_context_params.ctx_type` field — set to `LLAMA_CONTEXT_TYPE_MTP` to enable MTP-style speculative decoding
+
+**Recurrent-state rollback (Mamba/RWKV) [EXPERIMENTAL]:**
+- New `llama_context_params.n_rs_seq` field — number of recurrent-state snapshots per sequence for rollback (0 = disabled)
+- New `llama_n_rs_seq(ctx)` — query the configured rollback depth
+
+**Sequence-state flags:**
+- New `LLAMA_STATE_SEQ_FLAGS_NONE` (0) — explicit no-flags constant
+- New `LLAMA_STATE_SEQ_FLAGS_ON_DEVICE` (2) — keep tensor data on device buffers for faster save/load (not host-readable)
 
 **Stable Since b8809:**
 - Model loading: `llama_model_load_from_file_ptr()`, `llama_model_init_from_user()`

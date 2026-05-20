@@ -299,6 +299,12 @@ LLAMA_FTYPE_MOSTLY_Q1_0      = 40  // Q1_0 quantization (except 1d tensors)
 
 // New split mode
 LLAMA_SPLIT_MODE_TENSOR = 3    // Backend-agnostic tensor parallelism
+
+// Context type (b9246+) - selects inference mode
+enum llama_context_type {
+    LLAMA_CONTEXT_TYPE_DEFAULT = 0,   // standard inference
+    LLAMA_CONTEXT_TYPE_MTP     = 1,   // Multi-Token Prediction (speculative decoding, EXPERIMENTAL)
+};
 ```
 
 ---

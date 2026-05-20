@@ -48,6 +48,12 @@ if (!ctx) {
 
 - `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
 
+**Multi-Token Prediction (MTP) and Recurrent-State Rollback [b9246, EXPERIMENTAL]:**
+
+- `ctx_type` (`enum llama_context_type`) - Set the context type. Values: `LLAMA_CONTEXT_TYPE_DEFAULT` (0) for standard inference; `LLAMA_CONTEXT_TYPE_MTP` (1) to enable Multi-Token Prediction (e.g., for speculative decoding with MTP-trained models). Default: `LLAMA_CONTEXT_TYPE_DEFAULT`.
+
+- `n_rs_seq` (`uint32_t`) - Number of recurrent-state snapshots per sequence used for rollback in recurrent (Mamba/RWKV) or hybrid models. `0` disables rollback. Higher values allow more rollback steps at the cost of memory. Default: 0.
+
 **Example with Backend Sampling:**
 ```c
 // Create sampler chain for backend sampling
@@ -141,6 +147,12 @@ Get the physical maximum batch size.
 uint32_t llama_n_seq_max(const struct llama_context * ctx);
 ```
 Get the maximum number of sequences.
+
+### llama_n_rs_seq
+```c
+uint32_t llama_n_rs_seq(const struct llama_context * ctx);
+```
+Get the number of recurrent-state snapshots per sequence used for rollback (recurrent/hybrid models, EXPERIMENTAL). Returns 0 if rollback is disabled. Configured via `llama_context_params.n_rs_seq`. Added in b9246.
 
 ---
 
@@ -357,6 +369,17 @@ size_t llama_state_seq_load_file(
 ```
 Load sequence state from file.
 
+### llama_state_seq_flags
+
+Flags passed to the `_ext` sequence-state functions (`typedef uint32_t llama_state_seq_flags`). Combine with bitwise OR.
+
+```c
+#define LLAMA_STATE_SEQ_FLAGS_NONE         0  // no flags (b9246+)
+#define LLAMA_STATE_SEQ_FLAGS_SWA_ONLY     1  // legacy alias of PARTIAL_ONLY (backwards-compat)
+#define LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY 1  // operate on partial states only (SWA KV cache, recurrent Mamba/RWKV cache)
+#define LLAMA_STATE_SEQ_FLAGS_ON_DEVICE    2  // keep tensor data on device buffers (faster save/load, not host-readable) (b9246+)
+```
+
 ### llama_state_seq_get_size_ext
 ```c
 size_t llama_state_seq_get_size_ext(
@@ -364,7 +387,7 @@ size_t llama_state_seq_get_size_ext(
     llama_seq_id seq_id,
     llama_state_seq_flags flags);
 ```
-Get size of sequence state with flags (e.g., `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` for SWA/recurrent cache only).
+Get size of sequence state with flags (e.g., `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` for SWA/recurrent cache only, or `LLAMA_STATE_SEQ_FLAGS_ON_DEVICE` to keep data on the device buffer).
 
 ### llama_state_seq_get_data_ext
 ```c

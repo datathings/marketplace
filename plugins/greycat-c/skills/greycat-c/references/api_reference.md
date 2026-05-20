@@ -12,8 +12,8 @@ Complete reference documentation for the GreyCat C SDK header files. This SDK en
 - [gc/alloc.h — Memory Allocation](#gcalloc-h)
 - [gc/buffer.h — Buffer Operations](#gcbuffer-h)
 - [gc/string.h — String Objects](#gcstring-h)
-- [gc/str.h — Inline Short Strings](#gcstr-h)
 - [gc/object.h — Object Manipulation](#gcobject-h)
+- [gc/log.h — Logging](#gclog-h)
 - [gc/machine.h — Machine (Execution Context)](#gcmachine-h)
 - [gc/program.h — Program & Type System](#gcprogram-h)
 - [gc/host.h — Host, Tasks & Scheduler](#gchost-h)
@@ -196,9 +196,6 @@ These globals are resolved at program startup and identify built-in GreyCat type
 |----------|-------------|
 | `gc_core_any` | `any` (top type) |
 | `gc_core_geo` | `geo` |
-| `gc_core_t2` / `gc_core_t3` / `gc_core_t4` | `t2` / `t3` / `t4` (int tuples) |
-| `gc_core_t2f` / `gc_core_t3f` / `gc_core_t4f` | `t2f` / `t3f` / `t4f` (float tuples) |
-| `gc_core_str` | `str` (inline short string) |
 | `gc_core_String` | `String` (heap string object) |
 | `gc_core_Buffer` | `Buffer` |
 | `gc_core_Array` | `Array` |
@@ -213,7 +210,7 @@ These globals are resolved at program startup and identify built-in GreyCat type
 <a id="gcalloc-h"></a>
 ## gc/alloc.h — Memory Allocation
 
-All allocation in 2.5.6 goes through explicit `gc_allocator_t *` handles. The SDK provides the opaque allocator type and a `gc_alloc__*` family of functions. On WASM targets, `alloc.h` also declares standard C memory functions (`memset`, `memcpy`, `memcmp`, `strcmp`, `strncmp`, `memmove`, `strlen`).
+All non-trivial allocation goes through explicit `gc_allocator_t *` handles. The SDK provides the opaque allocator type and a `gc_alloc__*` family of functions. The shorter `gc_malloc` / `gc_free` / `gc_realloc` helpers route through the current thread-bound allocator. On WASM targets, `alloc.h` also declares standard C memory functions (`memset`, `memcpy`, `memcmp`, `strcmp`, `strncmp`, `memmove`, `strlen`).
 
 ### Opaque Type
 
@@ -225,9 +222,11 @@ typedef struct gc_allocator gc_allocator_t;
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_alloc__create` | `gc_allocator_t *gc_alloc__create(void)` | Create a new allocator. |
+| `gc_alloc__create` | `gc_allocator_t *gc_alloc__create(bool shared)` | Create a new allocator. Pass `true` if it will be touched by multiple threads (jemalloc shared arena), `false` for a thread-private arena. |
 | `gc_alloc__destroy` | `void gc_alloc__destroy(gc_allocator_t *allocator)` | Destroy an allocator created with `gc_alloc__create`. |
 | `gc_alloc__bind` | `void gc_alloc__bind(gc_allocator_t *allocator)` | Bind the allocator to the current thread (thread-local binding for internal use). |
+| `gc_alloc__allocated` | `u64_t gc_alloc__allocated(const gc_allocator_t *allocator)` | Return the number of bytes currently live in `allocator`'s accounting counter. |
+| `gc_alloc__stats` | `void gc_alloc__stats(gc_allocator_t *allocator, const char *tag)` | Dump live allocation stats for `allocator` to stderr (jemalloc per-arena breakdown on jemalloc builds, otherwise just the gc_allocator_t counter). |
 
 ### Allocation Functions
 
@@ -240,22 +239,32 @@ typedef struct gc_allocator gc_allocator_t;
 | `gc_alloc__align_malloc` | `void *gc_alloc__align_malloc(gc_allocator_t *allocator, size_t size, size_t block_size)` | Allocate `size` bytes aligned to `block_size`. |
 | `gc_alloc__align_free` | `void gc_alloc__align_free(gc_allocator_t *allocator, void *ptr, size_t size, size_t block_size)` | Free aligned memory. |
 
+### Thread-Bound Convenience Helpers
+
+These wrap the allocator currently bound to the calling thread via `gc_alloc__bind`. They are part of the public SDK; reach for them when you do not want to thread an allocator handle through every call site.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_malloc` | `void *gc_malloc(size_t size)` | Allocate via the thread-bound allocator. |
+| `gc_free` | `void gc_free(void *ptr, size_t size)` | Free via the thread-bound allocator. The original `size` must be passed. |
+| `gc_realloc` | `void *gc_realloc(void *ptr, size_t old_size, size_t new_size)` | Reallocate via the thread-bound allocator. |
+
 ### Allocator Selection — Required Rule
 
-Every allocation must be explicitly routed to one of the two built-in allocators. Pick the one whose lifetime matches the data:
+Inside a native function, pick the allocator whose lifetime matches the data:
 
 | Allocator | Lifecycle | When to use |
 |-----------|-----------|-------------|
-| `((gc_ctx_t *)ctx)->allocator` | Bound to the current native call / task scope. Reclaimed automatically. | Default for anything scoped to a single native function: scratch buffers, intermediate arrays, per-call result strings, any temporary memory that must not outlive the call. |
-| `gc_host__allocator(gc_host__get_global())` | Plugin-global, persists across threads and native calls. You own the free. | Module-level state allocated in `lib_start` and freed in `lib_stop`: global indices, caches, precomputed lookup tables that are too large for `static const`, per-plugin singletons. Requires your own mutex when multiple workers can touch it concurrently. |
+| `((gc_ctx_t *)ctx)->allocator` (or `gc_machine__allocator(ctx)`) | Bound to the current native call / task scope. Reclaimed automatically. | Default for anything scoped to a single native function: scratch buffers, intermediate arrays, per-call result strings, any temporary memory that must not outlive the call. |
+| `gc_host__allocator(gc_host__get_global())` (or `gc_host__global_allocator()`) | Plugin-global, persists across threads and native calls. You own the free. | Module-level state allocated in `lib_start` and freed in `lib_stop`: global indices, caches, precomputed lookup tables that are too large for `static const`, per-plugin singletons. Requires your own mutex when multiple workers can touch it concurrently. |
 
-`gc_ctx_t` (see `gc/machine.h`) is `{ const gc_program_t *prog; gc_allocator_t *allocator; }`. The layout starts every `gc_machine_t`, so casting `(gc_ctx_t *)ctx` inside a native function is the documented way to reach the per-call allocator.
+`gc_ctx_t` (see `gc/machine.h`) is `{ const gc_program_t *prog; gc_allocator_t *allocator; }`. The layout starts every `gc_machine_t`, so casting `(gc_ctx_t *)ctx` inside a native function — or calling `gc_machine__allocator(ctx)` — is the documented way to reach the per-call allocator.
 
 ### Example — Per-Call Scratch Inside a Native
 
 ```c
 void gc_mymod_Foo__scratch(gc_machine_t *ctx) {
-    gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
+    gc_allocator_t *a = gc_machine__allocator(ctx);
     size_t sz = 4096;
     char *buf = (char *)gc_alloc__malloc(a, sz);
     // ... use buf (lives only for this call) ...
@@ -272,7 +281,7 @@ static gc_allocator_t *g_alloc;     // cached pointer for paired free
 static bool lib_start(gc_unused gc_program_library_t *lib,
                       gc_unused gc_program_t *prog,
                       gc_unused void **user_data) {
-    g_alloc = gc_host__allocator(gc_host__get_global());
+    g_alloc = gc_host__global_allocator();
     g_state = (my_state_t *)gc_alloc__calloc(g_alloc, sizeof(my_state_t));
     pthread_mutex_init(&g_state->lock, NULL);
     return true;
@@ -290,25 +299,10 @@ static bool lib_stop(gc_unused gc_program_library_t *lib,
 ### Helper Macros
 
 ```c
-// Frees only if non-NULL. Expands to a bare gc_alloc__free call — update to pass your allocator.
-gc_free_not_null(ptr, size)
+// Frees only if non-NULL. Expands to a bare gc_free(ptr, size) — uses the thread-bound allocator.
+#define gc_free_not_null(x, x_size) \
+    if ((x) != NULL) { gc_free((x), (x_size)); }
 ```
-
-> Note: in 2.5.6 the `gc_free_not_null(ptr, size)` macro still expands to the legacy `gc_free(ptr, size)` in the header for back-compat. In new code, write the check inline against your explicit allocator:
-> ```c
-> if (ptr != NULL) gc_alloc__free(allocator, ptr, size);
-> ```
-
-### Deprecated (do not use in new code)
-
-```c
-// Still exported for back-compat but not part of the 2.5.6 recommended API.
-void *gc_malloc(size_t size);
-void  gc_free(void *ptr, size_t size);
-void *gc_realloc(void *ptr, size_t old_size, size_t new_size);
-```
-
-Replace with `gc_alloc__malloc / gc_alloc__free / gc_alloc__realloc` and an explicit allocator. All the `gc_gnu_*` and `gc_global_gnu_*` families from prior releases have been removed.
 
 ---
 
@@ -331,7 +325,7 @@ typedef struct gc_buffer {
 } gc_buffer_t;
 ```
 
-> In 2.5.6 the buffer owns its allocator explicitly. The previous `options.global` flag is gone — which allocator gets used is determined by what was passed to `gc_buffer__create`.
+The buffer owns its allocator explicitly — which allocator gets used is determined by what was passed to `gc_buffer__create`.
 
 ### Buffer Options
 
@@ -535,27 +529,7 @@ typedef struct {
 | `gc_string__hash` | `u64_t gc_string__hash(const char *str, u32_t len)` | Compute hash of a raw character buffer. |
 | `gc_string__create_from_or_symbol` | `gc_string_t *gc_string__create_from_or_symbol(const gc_program_t *prog, const char *str, u64_t len, const gc_machine_t *ctx)` | Lookup the string in the program's symbol table; return the interned symbol if found, otherwise allocate a new string via the call's allocator. |
 
-> 2.5.6: these functions all now take a `const gc_machine_t *ctx` tail argument so the string is allocated with the correct allocator.
-
----
-
-<a id="gcstr-h"></a>
-## gc/str.h — Inline Short Strings
-
-Compact encoding that packs short strings (up to ~7 bytes) directly into a `u64_t` value. This avoids heap allocation for very short strings and is used with `gc_type_str`.
-
-### Type
-
-```c
-typedef u64_t gc_str_t;
-```
-
-### Functions
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `gc_core_str__encode` | `u64_t gc_core_str__encode(const char *buf, u32_t len)` | Encode a short string into a `u64_t` |
-| `gc_core_str__add_to_buffer` | `void gc_core_str__add_to_buffer(u64_t value, gc_buffer_t *buf)` | Decode and append the inline string to a buffer |
+> Note: `gc_string_t.buffer` is NOT null-terminated. Use the `size` field for length.
 
 ---
 
@@ -619,7 +593,7 @@ gc_object__field_to_type(field)
 | `gc_object__is_instance_of` | `bool gc_object__is_instance_of(const gc_object_t *self, u32_t of_type, gc_machine_t *ctx)` | Check if the object is an instance of a given type (supports inheritance) |
 | `gc_object__finalize` | `void gc_object__finalize(gc_object_t *self, gc_machine_t *ctx)` | Finalize (destroy) the object |
 
-> 2.5.6: the standalone `gc_object__create(const gc_object_type_t *type)` helper is no longer part of the public SDK — use `gc_machine__create_object(ctx, type_id)` (or `gc_machine__create_return_type_object(ctx)`).
+> To create an object, use `gc_machine__create_object(ctx, type_id)` (or `gc_machine__create_return_type_object(ctx)`).
 
 ### Slot Serialization
 
@@ -629,6 +603,38 @@ gc_object__field_to_type(field)
 | `gc_slot__save_value` | `void gc_slot__save_value(gc_slot_t slot, gc_type_t slot_type, gc_buffer_t *buffer, const gc_machine_t *ctx, bool finalize)` | Serialize a slot value only (no type byte) |
 | `gc_slot__load` | `gc_type_t gc_slot__load(gc_slot_t *slot, gc_block_t *owner, gc_buffer_t *buffer, const gc_machine_t *ctx)` | Deserialize a slot from binary format (reads type byte + value). Returns the type. |
 | `gc_slot__load_value` | `gc_type_t gc_slot__load_value(gc_type_t t, gc_slot_t *slot, gc_block_t *owner, gc_buffer_t *buffer, const gc_machine_t *ctx)` | Deserialize a slot value when the type is already known (skips type byte). |
+
+---
+
+<a id="gclog-h"></a>
+## gc/log.h — Logging
+
+Structured logging from both VM (machine) and host contexts. Emitted records are decorated with the level, ISO timestamp, user/task ids, and (when emitted from a VM frame) the current `module::Type::fn`. CSV records are appended to the host log file. Calls return immediately when `level` exceeds the configured threshold, so it is safe to use the convenience helpers in hot paths.
+
+### Log Levels
+
+```c
+typedef enum gc_log_level {
+    gc_log_level_none  = 0,
+    gc_log_level_error = 1,
+    gc_log_level_warn  = 2,
+    gc_log_level_info  = 3,
+    gc_log_level_perf  = 4,
+    gc_log_level_trace = 5
+} gc_log_level_t;
+```
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_log__level` | `gc_log_level_t gc_log__level(const gc_host_t *host)` | Return the host-configured log level threshold. |
+| `gc_log__is_tty` | `bool gc_log__is_tty(const gc_host_t *host)` | Return `true` if the host log destination is a TTY (controls coloured output). |
+| `gc_log__enabled` | `bool gc_log__enabled(const gc_host_t *host, gc_log_level_t level)` | Convenience check: `true` iff `level` would be emitted. |
+| `gc_log__machine` | `void gc_log__machine(gc_machine_t *ctx, gc_log_level_t level, gc_slot_t value, gc_type_t value_type)` | Emit a record from a VM context, formatting `value` according to its type. |
+| `gc_log__machinef` | `void gc_log__machinef(gc_machine_t *ctx, gc_log_level_t level, const char *cstr)` | Emit a NUL-terminated C-string record from a VM context. |
+| `gc_log__host` | `void gc_log__host(gc_host_t *host, gc_log_level_t level, gc_buffer_t *body)` | Emit a record from a host context (no VM frame). The buffer is left cleared on return. |
+| `gc_log__hostf` | `void gc_log__hostf(gc_host_t *host, gc_log_level_t level, const char *cstr)` | Emit a NUL-terminated C-string record from a host context. |
 
 ---
 
@@ -646,20 +652,7 @@ typedef struct {
 } gc_ctx_t;
 ```
 
-> `gc_machine_t` begins with this layout. Inside any native function, `((gc_ctx_t *)ctx)->allocator` is the allocator to use for per-call scratch memory.
-
-### Log Levels
-
-```c
-typedef enum gc_log_level {
-    gc_log_level_none  = 0,
-    gc_log_level_error = 1,
-    gc_log_level_warn  = 2,
-    gc_log_level_info  = 3,
-    gc_log_level_perf  = 4,
-    gc_log_level_trace = 5
-} gc_log_level_t;
-```
+> `gc_machine_t` begins with this layout. Inside any native function, `((gc_ctx_t *)ctx)->allocator` (or `gc_machine__allocator(ctx)`) is the allocator to use for per-call scratch memory.
 
 ### Functions
 
@@ -689,22 +682,24 @@ typedef enum gc_log_level {
 | `gc_machine__error` | `bool gc_machine__error(gc_machine_t *ctx)` | Check if an error has occurred |
 | `gc_machine__error_buffer` | `gc_buffer_t *gc_machine__error_buffer(gc_machine_t *ctx)` | Get the error message buffer for custom error building |
 
-#### Program & Object
+#### Program, Allocator & Object
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_machine__program` | `const gc_program_t *gc_machine__program(const gc_machine_t *ctx)` | Get the program associated with this machine |
+| `gc_machine__allocator` | `gc_allocator_t *gc_machine__allocator(gc_machine_t *ctx)` | Get the per-call allocator for scratch memory (equivalent to `((gc_ctx_t *)ctx)->allocator`). |
 | `gc_machine__create_object` | `gc_object_t *gc_machine__create_object(const gc_machine_t *ctx, u32_t object_type_code)` | Create a new object of a specific type by type ID |
 | `gc_machine__get_buffer` | `gc_buffer_t *gc_machine__get_buffer(gc_machine_t *ctx)` | Get a reusable scratch buffer (worker-local) |
 | `gc_machine__current_fn_off` | `u32_t gc_machine__current_fn_off(gc_machine_t *ctx)` | Get the current function's offset in the program |
 | `gc_machine__get_host` | `gc_host_t *gc_machine__get_host(gc_machine_t *ctx)` | Get the host managing this machine |
-| `gc_machine__log_level` | `gc_log_level_t gc_machine__log_level(gc_machine_t *ctx)` | Get the current log level |
+| `gc_machine__log_level` | `gc_log_level_t gc_machine__log_level(gc_machine_t *ctx)` | Get the current log level (proxy to `gc_log__level`). |
+| `gc_machine__impersonate` | `void gc_machine__impersonate(gc_machine_t *ctx, u32_t user_id)` | Switch the machine's effective user id for permission-aware calls. |
 
 #### Advanced
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_machine__call_function` | `bool gc_machine__call_function(gc_machine_t *ctx, gc_program_function_body_t *body, gc_slot_t self, gc_type_t self_type, const gc_slot_t *params, const gc_type_t *params_type, u32_t nb_params, gc_slot_t *marked_res, gc_type_t *marked_res_type)` | Call a GCL function from C. The result is marked (caller must unmark). |
+| `gc_machine__call_function` | `bool gc_machine__call_function(gc_machine_t *ctx, const gc_program_function_t *fn, gc_slot_t self, gc_type_t self_type, const gc_slot_t *params, const gc_type_t *params_type, u32_t nb_params, gc_slot_t *marked_res, gc_type_t *marked_res_type)` | Synchronously invoke `fn` (native or bytecode) from a C context with the given `self` and `params`. Always writes the result through `*marked_res` / `*marked_res_type`; the bool return is the Result<T, E> Ok/Err discriminator. On failure `*marked_res` is an `Error` object (type `gc_core_Error`) and `*marked_res_type` is `gc_type_object`; in both branches `ctx`'s error state is left clean. The caller owns one mark on `*marked_res` when it is an object and must call `gc_object__un_mark` when done. |
 | `gc_machine__push_function` | `void gc_machine__push_function(gc_machine_t *ctx, const gc_program_function_t *fn, gc_slot_t self, gc_type_t self_type, const gc_task_t *task)` | Push a function frame onto the execution stack |
 | `gc_machine__load` | `gc_type_t gc_machine__load(gc_machine_t *ctx, char *data, u32_t len, gc_slot_t *value)` | Deserialize a slot from raw binary data |
 | `gc_machine__lru_add` | `void gc_machine__lru_add(gc_machine_t *ctx, gc_block_t *page)` | Add a block to the LRU cache |
@@ -725,7 +720,7 @@ The top-level compiled program:
 ```c
 struct gc_program {
     gc_abi_t *abi;                                // Application Binary Interface
-    gc_allocator_t *allocator;                    // Allocator owning program tables (new in 2.5.6)
+    gc_allocator_t *allocator;                    // Allocator owning program tables
     struct { ... } symbols;                       // Symbol table (interned strings)
     gc_buffer_t fragments;                        // String fragments for doc comments, paths, etc.
     struct { ... } libraries;                     // Loaded native libraries
@@ -776,14 +771,14 @@ Extended type information (wraps `gc_object_type_t`):
 ```c
 struct gc_program_type {
     gc_object_type_t header;       // Runtime type info
-    struct { ... } fields;         // Instance fields (map + table)
+    struct { ... } fields;         // Instance fields (map + table; table has nb_any / nb_nullable counters)
     struct { ... } static_fields;  // Static fields (enum values, constants)
     struct { ... } functions;      // Methods (map + offset table)
     u32_t g1, g2;                  // Generic type parameters
     u32_t super_type;              // Parent type offset
     u32_t super_type_s_type_off;   // Super type specialized type offset
     u32_t companion_type;          // Companion type offset
-    u32_t super_types[4];          // Inheritance chain (max depth 4)
+    u32_t super_types[GC_PROGRAM_INHERITANCE_MAX_DEPTH];  // Inheritance chain (max depth 4)
     u32_t abi_type;                // ABI type ID
     u32_t binary_size;             // Binary serialization size
     u32_t binary_data_off;         // Offset for binary data fields
@@ -800,31 +795,31 @@ Function descriptor:
 
 ```c
 struct gc_program_function {
-    u32_t name_off;             // Symbol offset for the function name
-    u32_t type_off;             // Owning type offset (0 for module-level functions)
-    u32_t mod_off;              // Module offset
-    u32_t op_off;               // Bytecode start offset
-    u32_t type_local_off;       // Type-local function offset
-    u32_t generic_type_symb;    // Generic type symbol
+    u32_t name_off;                 // Symbol offset for the function name
+    u32_t type_off;                 // Owning type offset (0 for module-level functions)
+    u32_t mod_off;                  // Module offset
+    u32_t op_off;                   // Bytecode start offset
+    u32_t type_local_off;           // Type-local function offset
+    u32_t generic_type_symb;        // Generic type symbol
     u32_t doc_comment_fragment_off; // Documentation comment fragment offset
-    u32_t return_type_desc;     // Return type descriptor
-    u32_t return_s_type_off;    // Return specialized type offset
-    u32_t expose_rename_off;    // Exposed name override symbol offset
-    u8_t nb_params;             // Number of parameters
-    bool is_static;             // Static method
-    bool is_native;             // Implemented in C
-    bool is_private;            // Private visibility
-    bool is_reserved;           // Reserved/internal function
-    bool is_exposed;            // Exposed via HTTP (@expose annotation)
-    bool is_test;               // Test function
-    bool is_abstract;           // Abstract method
-    u64_t permissions_mask;     // Required permissions bitmask
-    gc_program_src_id_t source; // Source location
+    u32_t return_type_desc;         // Return type descriptor
+    u32_t return_s_type_off;        // Return specialized type offset
+    u32_t expose_rename_off;        // Exposed name override symbol offset
+    u8_t nb_params;                 // Number of parameters
+    bool is_static;                 // Static method
+    bool is_native;                 // Implemented in C
+    bool is_private;                // Private visibility
+    bool is_reserved;               // Reserved/internal function
+    bool is_exposed;                // Exposed via HTTP (@expose annotation)
+    bool is_test;                   // Test function
+    bool is_abstract;               // Abstract method
+    u64_t permissions_mask;         // Required permissions bitmask
+    gc_program_src_id_t source;     // Source location
     gc_program_function_body_t *body;  // Native function pointer (NULL for GCL functions)
-    u32_t params_type_desc[16]; // Parameter type descriptors
-    u32_t params_s_type_off[16]; // Parameter specialized type offsets
-    u32_t signature_symbols[16]; // Parameter name symbols
-    u32_t tags[2];              // Compiler tags (max 2)
+    u32_t params_type_desc[GC_ABI_FUNCTION_MAX_PARAMS];   // Parameter type descriptors
+    u32_t params_s_type_off[GC_ABI_FUNCTION_MAX_PARAMS];  // Parameter specialized type offsets
+    u32_t signature_symbols[GC_ABI_FUNCTION_MAX_PARAMS];  // Parameter name symbols
+    u32_t tags[gc_compiler_tags_max];                     // Compiler tags (max 2)
 };
 ```
 
@@ -834,16 +829,16 @@ Field descriptor for a type's instance fields:
 
 ```c
 typedef struct gc_program_type_field {
-    u32_t name_off;                // Symbol offset for the field name
-    u32_t type_desc;               // Type descriptor of the field
-    gc_type_t sbi_type;            // Serialization Binary Interface type tag
-    u32_t any_offset;              // Offset in the any_fields array (for dynamically-typed fields)
-    u32_t nullable_offset;         // Offset in the nullable bitset
-    u32_t s_type_off;              // Specialized type offset
+    u32_t name_off;                 // Symbol offset for the field name
+    u32_t type_desc;                // Type descriptor of the field
+    gc_type_t sbi_type;             // Serialization Binary Interface type tag
+    u32_t any_offset;               // Offset in the any_fields array (for dynamically-typed fields)
+    u32_t nullable_offset;          // Offset in the nullable bitset
+    u32_t s_type_off;               // Specialized type offset
     u32_t doc_comment_fragment_off; // Documentation comment fragment offset
-    bool is_private;               // Private visibility
-    u8_t precision;                // Numeric precision (gc_abi_precision_t)
-    gc_program_src_id_t src_id;    // Source location
+    bool is_private;                // Private visibility
+    u8_t precision;                 // Numeric precision (gc_abi_precision_t)
+    gc_program_src_id_t src_id;     // Source location
 } gc_program_type_field_t;
 ```
 
@@ -913,8 +908,17 @@ struct gc_program_module {
     u32_t path_frag_offset; // Path fragment offset
     u32_t path_frag_len;    // Path fragment length
     gc_program_map_t types;      // Type map
-    struct { ... } functions;    // Function map + offset table
-    struct { ... } vars;         // Module-level variables
+    struct {
+        gc_program_map_t map;
+        gc_program_offset_table_t table;
+    } functions;
+    struct {
+        struct {
+            gc_program_module_var_t *data;
+            u32_t size;
+            u32_t capacity;
+        } table;
+    } vars;
 };
 ```
 
@@ -1091,12 +1095,11 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 
 | Value | Name | Description |
 |-------|------|-------------|
-| 0 | `from` | Start key (inclusive) |
-| 1 | `to` | End key (inclusive) |
-| 2 | `limit` | Maximum entries to return |
-| 3 | `nullable` | Include nullable entries |
-| 4 | `from_excl` | Start key (exclusive) |
-| 5 | `to_excl` | End key (exclusive) |
+| 0 | `gc_program_iterator_param_from` | Start key (inclusive) |
+| 1 | `gc_program_iterator_param_to` | End key (inclusive) |
+| 2 | `gc_program_iterator_param_nullable` | Include nullable entries |
+| 3 | `gc_program_iterator_param_from_excl` | Start key (exclusive) |
+| 4 | `gc_program_iterator_param_to_excl` | End key (exclusive) |
 
 ### Program Functions
 
@@ -1104,61 +1107,61 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 
 | Function | Description |
 |----------|-------------|
-| `gc_program__link_mod_fn(prg, module_id, function, fn_name_symbol)` | Link a native function to a module-level function slot |
-| `gc_program__link_type_fn(prg, type_id, function, fn_name_symbol)` | Link a native function to a type method slot |
-| `gc_program_function__set_body(prog, fn_off, fn_body)` | Set the native body of a function |
-| `gc_program_function__is_native_without_body(prog, fn_off)` | Check if a native function has no body yet |
+| `gc_program__link_mod_fn(prg, module_id, function, fn_name_symbol)` | Link a native function to a module-level function slot. |
+| `gc_program__link_type_fn(prg, type_id, function, fn_name_symbol)` | Link a native function to a type method slot. |
+| `gc_program_function__set_body(prog, fn_off, fn_body)` | Set the native body of a function. |
+| `gc_program_function__is_native_without_body(prog, fn_off)` | Check if a native function has no body yet. |
 
 #### Symbol Resolution
 
 | Function | Description |
 |----------|-------------|
-| `gc_program__get_symbol(program, symb_off)` | Get a symbol string by its offset |
-| `gc_program__get_symbol_off(symb)` | Get the symbol offset from a string pointer |
-| `gc_program__resolve_symbol(program, str, len)` | Resolve a raw string to a symbol offset |
-| `gc_program__resolve_module(program, mod_name_offset)` | Resolve a module by name offset |
-| `gc_program__resolve_type(prog, mod_offset, type_name_off)` | Resolve a type within a module |
-| `gc_program__resolve_field(type, name_off, res)` | Resolve a field within a type |
+| `gc_program__get_symbol(program, symb_off)` | Get a symbol string by its offset. |
+| `gc_program__get_symbol_off(symb)` | Get the symbol offset from a string pointer. |
+| `gc_program__resolve_symbol(program, str, len)` | Resolve a raw string to a symbol offset. |
+| `gc_program__resolve_module(program, mod_name_offset)` | Resolve a module by name offset. |
+| `gc_program__resolve_type(prog, mod_offset, type_name_off)` | Resolve a type within a module. |
+| `gc_program__resolve_field(type, name_off, res)` | Resolve a field within a type. |
 
 #### Type Introspection
 
 | Function | Description |
 |----------|-------------|
-| `gc_program__get_program_type(prog, type_id)` | Get the full program type by ID |
-| `gc_program_type__get_field(type, field_offset)` | Get a field descriptor by offset |
-| `gc_program_type__get_field_by_key(type, key)` | Get a field descriptor by symbol key |
-| `gc_program_type__get_g1_type_id(type)` / `gc_program_type__get_g2_type_id(type)` | Get generic type parameter IDs |
-| `gc_program_type__get_g1_type_desc(type)` / `gc_program_type__get_g2_type_desc(type)` | Get generic type parameter descriptors |
-| `gc_program_type__get_generic_id(type)` | Get the generic type ID |
-| `gc_program_type__configure(prog, type_id, header_bytes, native_finalize)` | Configure native type (header size and destructor) |
-| `gc_program_type__abi_type_id(prog, type_id)` | Get the ABI type ID for a program type |
+| `gc_program__get_program_type(prog, type_id)` | Get the full program type by ID. |
+| `gc_program_type__get_field(type, field_offset)` | Get a field descriptor by offset. |
+| `gc_program_type__get_field_by_key(type, key)` | Get a field descriptor by symbol key. |
+| `gc_program_type__get_g1_type_id(type)` / `gc_program_type__get_g2_type_id(type)` | Get generic type parameter IDs. |
+| `gc_program_type__get_g1_type_desc(type)` / `gc_program_type__get_g2_type_desc(type)` | Get generic type parameter descriptors. |
+| `gc_program_type__get_generic_id(type)` | Get the generic type ID. |
+| `gc_program_type__configure(prog, type_id, header_bytes, native_finalize)` | Configure native type (header size and destructor). |
+| `gc_program_type__abi_type_id(prog, type_id)` | Get the ABI type ID for a program type. |
 
 #### Function Introspection
 
 | Function | Description |
 |----------|-------------|
-| `gc_program__get_function(prog, fn_off)` | Get a function descriptor by offset |
-| `gc_program_function__module_name_off(prog, fn_off)` | Get the module name offset |
-| `gc_program_function__type_name_off(prog, fn_off)` | Get the type name offset |
-| `gc_program_function__function_name_off(prog, fn_off)` | Get the function name offset |
-| `gc_program_function__return_type_desc(prog, fn_off)` | Get the return type descriptor |
-| `gc_program_function__get_param_by_off(fn, offset, out)` | Get parameter info by index |
+| `gc_program__get_function(prog, fn_off)` | Get a function descriptor by offset. |
+| `gc_program_function__module_name_off(prog, fn_off)` | Get the module name offset. |
+| `gc_program_function__type_name_off(prog, fn_off)` | Get the type name offset. |
+| `gc_program_function__function_name_off(prog, fn_off)` | Get the function name offset. |
+| `gc_program_function__return_type_desc(prog, fn_off)` | Get the return type descriptor. |
+| `gc_program_function__get_param_by_off(fn, offset, out)` | Get parameter info by index. |
 
 #### Field Introspection
 
 | Function | Description |
 |----------|-------------|
-| `gc_program_type_field__get_type_id(field)` | Get the type ID from a field descriptor |
-| `gc_program_type_field__get_type_desc(field)` | Get the type descriptor from a field descriptor |
-| `gc_program_type_field__get_name(field, prog)` | Get the field name as a `gc_string_t` |
+| `gc_program_type_field__get_type_id(field)` | Get the type ID from a field descriptor. |
+| `gc_program_type_field__get_type_desc(field)` | Get the type descriptor from a field descriptor. |
+| `gc_program_type_field__get_name(field, prog)` | Get the field name as a `gc_string_t`. |
 
 #### Type Descriptor Utilities
 
 | Function | Description |
 |----------|-------------|
-| `gc_type_desc__is_nullable(type_d)` | Check if a type descriptor marks the type as nullable |
-| `gc_type_desc__to_type_id(type_d)` | Extract the type ID from a type descriptor |
-| `gc_type_desc__to_type_desc(type_id, is_nullable)` | Build a type descriptor from a type ID and nullable flag |
+| `gc_type_desc__is_nullable(type_d)` | Check if a type descriptor marks the type as nullable. |
+| `gc_type_desc__to_type_id(type_d)` | Extract the type ID from a type descriptor. |
+| `gc_type_desc__to_type_desc(type_id, is_nullable)` | Build a type descriptor from a type ID and nullable flag. |
 
 #### Format Pragma Extraction
 
@@ -1167,19 +1170,17 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_type__extract_format_pragma_arg(type, field_name, pragma_name, arg_index, buf, prog, slot, slot_type)` | Extract a specific argument from a type field's pragma. Returns `true` if found. |
 | `gc_program_type__extract_field_format(type, field, default_tz, buf, prog, out)` | Extract the full field format (format string, DurationUnit, TimeZone) from a field's `@format` pragma. Writes result to `out`. |
 
-#### Object, Module & Library
+#### Module, Program & Library
 
 | Function | Description |
 |----------|-------------|
 | `gc_program__create_module(program, mod_name_offset, result_offset)` | Create a new module in the program. Returns `true` on success, writes offset to `*result_offset`. |
-| `gc_program__create(gc_abi_t *abi, gc_allocator_t *allocator)` | **(new in 2.5.6)** Create an empty program bound to the given ABI and allocator. |
-| `gc_program__create_from_abi(const gc_abi_t *abi, gc_allocator_t *allocator)` | Create a populated program from an ABI definition. Signature gained `allocator` in 2.5.6. |
-| `gc_program__finalize(const gc_program_t *program)` | Finalize and free a program created with `gc_program__create` / `gc_program__create_from_abi`. |
-
-> 2.5.6: the previous `gc_program__create_object(program, type_code)` helper is no longer public — use `gc_machine__create_object(ctx, type_code)`.
-| `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks |
-| `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks |
-| `gc_lib_std__link(prg, lib)` | Link the standard library to a program |
+| `gc_program__create(abi, allocator)` | Create an empty program bound to the given ABI and allocator. |
+| `gc_program__create_from_abi(abi, allocator)` | Create a populated program from an ABI definition. |
+| `gc_program__finalize(program)` | Finalize and free a program created with `gc_program__create` / `gc_program__create_from_abi`. |
+| `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks. |
+| `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks. |
+| `gc_lib_std__link(prg, lib)` | Link the standard library to a program. |
 
 #### Internal Map Operations
 
@@ -1187,9 +1188,9 @@ These are used internally for program symbol/type/function resolution:
 
 | Function | Description |
 |----------|-------------|
-| `gc_program_map__put(prog, self, hash, offset, key)` | Insert an entry into a program map. Signature gained `gc_program_t *prog` leading parameter in 2.5.6. |
-| `gc_program_map__hash_off(offset)` | Compute a hash for an offset |
-| `gc_program_map__get_key(self, key, hash, offset)` | Look up an entry by key and hash |
+| `gc_program_map__put(prog, self, hash, offset, key)` | Insert an entry into a program map. |
+| `gc_program_map__hash_off(offset)` | Compute a hash for an offset. |
+| `gc_program_map__get_key(self, key, hash, offset)` | Look up an entry by key and hash. |
 
 ### DurationUnit Constants
 
@@ -1256,7 +1257,7 @@ typedef enum {
 } gc_task_status_t;
 ```
 
-### Scheduler Enums (new in 2.5.6)
+### Scheduler Enums
 
 ```c
 typedef enum {
@@ -1279,7 +1280,7 @@ typedef enum {
 } gc_month_t;
 ```
 
-### Scheduler Structures (new in 2.5.6)
+### Scheduler Structures
 
 ```c
 typedef struct {
@@ -1339,16 +1340,17 @@ typedef struct {
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_host__get_global` | `gc_host_t *gc_host__get_global()` | Get the global singleton host instance. |
-| `gc_host__allocator` | `gc_allocator_t *gc_host__allocator(const gc_host_t *self)` | **(new in 2.5.6)** Get the plugin-global allocator (use for `lib_start`/`lib_stop` state). |
+| `gc_host__allocator` | `gc_allocator_t *gc_host__allocator(const gc_host_t *self)` | Get the host's allocator (used for `lib_start`/`lib_stop` state when called on the global host). |
+| `gc_host__global_allocator` | `gc_allocator_t *gc_host__global_allocator()` | Convenience: same as `gc_host__allocator(gc_host__get_global())`. |
 | `gc_host__program` | `const gc_program_t *gc_host__program(const gc_host_t *host)` | Get the program from the host. |
-| `gc_host__scheduler` | `gc_scheduler_t *gc_host__scheduler(gc_host_t *self)` | **(new in 2.5.6)** Get the host's periodic scheduler. |
+| `gc_host__scheduler` | `gc_scheduler_t *gc_host__scheduler(gc_host_t *self)` | Get the host's periodic scheduler. |
 | `gc_host__spawn_task` | `bool gc_host__spawn_task(gc_host_t *self, u32_t fn_off, u32_t user_id, u64_t roles_flags, i64_t *created_task_id)` | Spawn a new task (no arguments). Returns `false` when the queue is full. |
 | `gc_host__spawn_task_with_args` | `bool gc_host__spawn_task_with_args(gc_host_t *self, u32_t fn_off, const char *args_payload, u64_t args_payload_len, gc_format_t args_format, u32_t user_id, u64_t roles_flags, i64_t *created_task_id, gc_buffer_t *extra_buffer)` | Spawn a new task with serialized arguments. |
 | `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, u32_t task_id)` | Cancel a running or queued task. |
 | `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, u32_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
 
-### Scheduler Functions (new in 2.5.6)
+### Scheduler Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -1389,11 +1391,11 @@ typedef struct {
 |----------|-----------|-------------|
 | `gc_array__init` | `void gc_array__init(gc_array_t *self, u32_t capacity, const gc_machine_t *ctx)` | Initialize the array with a given capacity (allocates storage via the call's allocator). |
 | `gc_array__add_slot` | `bool gc_array__add_slot(gc_array_t *self, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Append an element to the end. Returns `false` on error. |
-| `gc_array__set_slot` | `bool gc_array__set_slot(gc_array_t *self, u32_t offset, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Set the element at a given index |
+| `gc_array__set_slot` | `bool gc_array__set_slot(gc_array_t *self, u32_t offset, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Set the element at a given index. |
 | `gc_array__get_slot` | `bool gc_array__get_slot(const gc_array_t *self, u32_t offset, gc_slot_t *value, gc_type_t *type)` | Get the element at a given index. Returns `false` if out of bounds. |
 | `gc_array__remove_at` | `bool gc_array__remove_at(gc_array_t *self, u32_t offset, gc_slot_t *result, gc_type_t *result_type, gc_machine_t *ctx)` | Remove the element at `offset` and return it. **The result is marked; caller must unmark.** |
-| `gc_array__remove_all` | `void gc_array__remove_all(gc_array_t *self, gc_machine_t *ctx)` | Remove all elements from the array |
-| `gc_array__swap` | `bool gc_array__swap(gc_array_t *self, u32_t i, u32_t j)` | Swap two elements by index |
+| `gc_array__remove_all` | `void gc_array__remove_all(gc_array_t *self, gc_machine_t *ctx)` | Remove all elements from the array. |
+| `gc_array__swap` | `bool gc_array__swap(gc_array_t *self, u32_t i, u32_t j)` | Swap two elements by index. |
 | `gc_array__sort` | `void gc_array__sort(gc_array_t *self, bool asc, gc_slot_tuple_u32_t field, gc_machine_t *ctx)` | Sort the array. `field` specifies a sub-field to sort by (for object arrays). |
 
 ---
@@ -1435,9 +1437,9 @@ typedef struct {
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_map__init` | `void gc_map__init(gc_map_t *self, u64_t capacity, const gc_machine_t *ctx)` | Initialize the map with a given capacity (allocates storage via the call's allocator). |
-| `gc_map__set` | `void gc_map__set(gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert or update a key-value pair |
+| `gc_map__set` | `void gc_map__set(gc_map_t *self_map, gc_slot_t key, gc_type_t key_type, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert or update a key-value pair. |
 | `gc_map__get` | `gc_slot_t gc_map__get(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *value_type, const gc_program_t *prog)` | Lookup a value by key. Writes value type to `*value_type`. |
-| `gc_map__contains` | `bool gc_map__contains(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, const gc_program_t *prog)` | Check if a key exists in the map |
+| `gc_map__contains` | `bool gc_map__contains(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, const gc_program_t *prog)` | Check if a key exists in the map. |
 | `gc_map__remove` | `bool gc_map__remove(gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_machine_t *ctx)` | Remove an entry by key. Returns `true` if the key was found and removed. |
 
 ---
@@ -1465,13 +1467,13 @@ typedef struct {
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_table__create` | `gc_table_t *gc_table__create(const gc_machine_t *ctx)` | Create a new table |
+| `gc_table__create` | `gc_table_t *gc_table__create(const gc_machine_t *ctx)` | Create a new table. |
 | `gc_table__init` | `void gc_table__init(gc_table_t *table, u32_t capacity, const gc_machine_t *ctx)` | Initialize with row capacity (allocates storage via the call's allocator). |
 | `gc_table__init_cols` | `bool gc_table__init_cols(gc_table_t *self, u32_t cols, const gc_machine_t *ctx)` | Set the number of columns (must be done before adding rows). |
-| `gc_table__get_cell` | `bool gc_table__get_cell(const gc_table_t *self, i64_t row, i64_t col, gc_slot_t *value, gc_type_t *type)` | Read a cell value |
-| `gc_table__set_cell` | `bool gc_table__set_cell(gc_table_t *self, i64_t row, i64_t col, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Write a cell value |
-| `gc_table__set_row` | `bool gc_table__set_row(gc_table_t *self, i64_t row, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Set all cells in a row to the same value |
-| `gc_table__remove_row` | `bool gc_table__remove_row(gc_table_t *self, u32_t row, gc_machine_t *ctx)` | Remove a row by index |
+| `gc_table__get_cell` | `bool gc_table__get_cell(const gc_table_t *self, i64_t row, i64_t col, gc_slot_t *value, gc_type_t *type)` | Read a cell value. |
+| `gc_table__set_cell` | `bool gc_table__set_cell(gc_table_t *self, i64_t row, i64_t col, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Write a cell value. |
+| `gc_table__set_row` | `bool gc_table__set_row(gc_table_t *self, i64_t row, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Set all cells in a row to the same value. |
+| `gc_table__remove_row` | `bool gc_table__remove_row(gc_table_t *self, u32_t row, gc_machine_t *ctx)` | Remove a row by index. |
 
 ---
 
@@ -1681,14 +1683,14 @@ struct gc_block {
     u16_t cmp_start;           // Compression start index
     u16_t cmp_len;             // Compression length
     u16_t cmp_level;           // Compression level
-    bool value_only : 1;      // Block stores values only (no sub-blocks)
-    bool cmp_is_full : 1;     // Compression covers entire block
-    bool cmp_with_values : 1; // Compressed with values
-    bool cmp_up_to_date : 1;  // Compression is current
-    bool cmp_found : 1;       // Compression data found
-    bool dropped : 1;         // Block has been dropped
+    bool value_only : 1;       // Block stores values only (no sub-blocks)
+    bool cmp_is_full : 1;      // Compression covers entire block
+    bool cmp_with_values : 1;  // Compressed with values
+    bool cmp_up_to_date : 1;   // Compression is current
+    bool cmp_found : 1;        // Compression data found
+    bool dropped : 1;          // Block has been dropped
     bool contains_objects : 1; // Block contains object entries
-    bool dirty : 1;           // Block has been modified since last save
+    bool dirty : 1;            // Block has been modified since last save
     gc_block_slot_t *backend;  // Array of entries
 };
 ```
@@ -1726,21 +1728,31 @@ typedef u32_t gc_symbol_t;  // Symbol reference
 
 ```c
 typedef enum {
-    gc_abi_precision_1          = 0,
-    gc_abi_precision_10         = 1,
-    gc_abi_precision_100        = 2,
-    gc_abi_precision_1000       = 3,
-    gc_abi_precision_10000      = 4,
-    gc_abi_precision_100000     = 5,
-    gc_abi_precision_1000000    = 6,
-    gc_abi_precision_10000000   = 7,
-    gc_abi_precision_100000000  = 8,
-    gc_abi_precision_1000000000 = 9,
-    gc_abi_precision_10000000000 = 10
+    gc_abi_precision_1            = 0,
+    gc_abi_precision_10           = 1,
+    gc_abi_precision_100          = 2,
+    gc_abi_precision_1000         = 3,
+    gc_abi_precision_10000        = 4,
+    gc_abi_precision_100000       = 5,
+    gc_abi_precision_1000000      = 6,
+    gc_abi_precision_10000000     = 7,
+    gc_abi_precision_100000000    = 8,
+    gc_abi_precision_1000000000   = 9,
+    gc_abi_precision_10000000000  = 10
 } gc_abi_precision_t;
 ```
 
 Used for numeric precision/quantization (e.g., storing a float as an integer with known precision).
+
+### ABI Symbols Table
+
+```c
+typedef struct {
+    gc_buffer_t all;         // Concatenated symbol bytes
+    i64_t *inverted_index;   // Inverted lookup table
+    u32_t nb;                // Number of symbols
+} gc_abi_symbols;
+```
 
 ### ABI Attribute
 
@@ -1794,9 +1806,9 @@ typedef struct {
     u32_t name;
     u32_t lib_name;
     u32_t param_nb;
-    u8_t param_nullable[16];     // Per-parameter nullable flags
-    u32_t param_types[16];       // Per-parameter type descriptors
-    u32_t param_symbols[16];     // Per-parameter name symbols
+    u8_t param_nullable[GC_ABI_FUNCTION_MAX_PARAMS];  // Per-parameter nullable flags
+    u32_t param_types[GC_ABI_FUNCTION_MAX_PARAMS];    // Per-parameter type descriptors
+    u32_t param_symbols[GC_ABI_FUNCTION_MAX_PARAMS];  // Per-parameter name symbols
     u32_t return_type;           // Return type descriptor
     u8_t return_nullable;        // Whether return is nullable
 } gc_abi_function_t;
@@ -1806,7 +1818,7 @@ typedef struct {
 
 ```c
 typedef struct {
-    gc_allocator_t *allocator;      // Allocator owning the internal arrays (new in 2.5.6)
+    gc_allocator_t *allocator;      // Allocator owning the internal arrays
     gc_abi_symbols symbols;         // Symbol table
     gc_abi_attribute_t *attributes; // Attribute array
     gc_abi_type_t *types;           // Type array
@@ -1839,7 +1851,8 @@ typedef enum {
     gc_abi_header_check_error_none          = 0,  // No error
     gc_abi_header_check_error_wrong_proto   = 1,  // Protocol version mismatch
     gc_abi_header_check_error_wrong_magic   = 2,  // Magic number mismatch
-    gc_abi_header_check_error_wrong_version = 3   // ABI version mismatch
+    gc_abi_header_check_error_wrong_version = 3,  // ABI version mismatch
+    gc_abi_header_check_error_truncated     = 4   // Truncated header bytes
 } gc_abi_header_check_error_t;
 ```
 
@@ -1878,11 +1891,12 @@ SHA-256 hashing, HMAC-SHA-256, and Base64/Base64URL encoding/decoding.
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `gc_crypto_sha256_len` | 32 | SHA-256 digest length in bytes |
+| `GC_CRYPTO_HMAC_SHA256_BLOCKSIZE` | 64 | HMAC-SHA-256 block size in bytes |
 
 ### SHA-256
 
 ```c
-typedef struct {
+typedef struct gc_crypto__sha256 {
     union {
         u32_t u32[8];
         unsigned char u8[gc_crypto_sha256_len];  // 32-byte hash
@@ -1906,15 +1920,13 @@ typedef struct {
 ### HMAC-SHA-256
 
 ```c
-#define GC_CRYPTO_HMAC_SHA256_BLOCKSIZE 64
-
-typedef struct {
+typedef struct gc_crypto__hmac_sha256 {
     gc_crypto_sha256_t sha;
 } gc_crypto_hmac_sha256_t;
 
-typedef struct {
+typedef struct gc_crypto_hmac_sha256_ctx {
     gc_crypto_sha256_ctx_t sha;
-    u64_t k_opad[8];  // HMAC outer padding
+    u64_t k_opad[GC_CRYPTO_HMAC_SHA256_BLOCKSIZE / sizeof(u64_t)];  // HMAC outer padding
 } gc_crypto_hmac_sha256_ctx_t;
 ```
 
@@ -1946,11 +1958,11 @@ Geospatial encoding/decoding using a 64-bit geohash and Haversine distance calcu
 
 | Constant | Value | Description |
 |----------|-------|-------------|
+| `GC_CORE_GEO_EPS` | 0.00000001 | Coordinate epsilon for comparison |
 | `GC_CORE_GEO_LAT_MIN` | -85.05112878 | Minimum latitude (Web Mercator) |
 | `GC_CORE_GEO_LAT_MAX` | 85.05112878 | Maximum latitude (Web Mercator) |
 | `GC_CORE_GEO_LNG_MIN` | -180 | Minimum longitude |
 | `GC_CORE_GEO_LNG_MAX` | 180 | Maximum longitude |
-| `GC_CORE_GEO_LAT_EPS` | 0.00000001 | Latitude epsilon for comparison |
 | `GC_CORE_GEO_STEP_MAX` | 32 | Maximum hash step resolution |
 | `EARTH_RADIUS_M` | 6371000.0 | Earth radius in meters |
 
@@ -2057,7 +2069,7 @@ typedef struct {
 typedef struct {
     i32_t tz_hh_offset;   // Timezone hour offset
     i32_t tz_mm_offset;   // Timezone minute offset
-    bool parsed;           // Whether a timezone was found in the string
+    bool parsed;          // Whether a timezone was found in the string
 } gc_core_time_parse_tz_t;
 ```
 
@@ -2069,12 +2081,12 @@ typedef struct {
 | `gc_time__tm_from_time` | `gc_tm_t gc_time__tm_from_time(i64_t time, u32_t timezone)` | Convert a GreyCat timestamp to calendar fields |
 | `gc_gmtime_r_safe` | `void gc_gmtime_r_safe(i64_t tim_p, gc_tm_t *res)` | Convert a timestamp to UTC calendar (safe, no timezone) |
 | `gc_mktime_safe` | `i64_t gc_mktime_safe(gc_tm_t *tim_p)` | Convert calendar fields to a timestamp |
-| `gc_dtz_utc_to_time_zone` | `i32_t gc_dtz_utc_to_time_zone(u32_t tz, i64_t utc_epoch, i64_t *localized_epoch)` | Convert UTC epoch to a localized epoch. Returns `GC_DTZ_OK` on success. |
-| `gc_dtz_time_zone_to_utc` | `i32_t gc_dtz_time_zone_to_utc(u32_t tz, i64_t localized_epoch, i64_t *utc_epoch, u32_t *next_utc_offset)` | Convert localized epoch to UTC |
-| `gc_dtz_first_day_of_week` | `u8_t gc_dtz_first_day_of_week(u32_t timezone)` | Get the first day of the week for a timezone (0=Sunday..6=Saturday) |
-| `gc_core_time__parse_iso` | `bool gc_core_time__parse_iso(const char *c, size_t len, gc_tm_t *tm, gc_core_time_parse_tz_t *tz)` | Parse an ISO 8601 date/time string |
-| `gc__print_iso` | `void gc__print_iso(gc_buffer_t *buffer, const gc_tm_t *cal, i64_t epoch_us, i64_t localized_epoch_s)` | Format a time as ISO 8601 string |
-| `gc_strftime_safe` | `size_t gc_strftime_safe(char *s, size_t maxsize, const char *format, const gc_tm_t *t, i32_t utc_offset)` | Format a time with a `strftime`-style format string |
+| `gc_dtz_utc_to_time_zone` | `i32_t gc_dtz_utc_to_time_zone(u32_t time_zone, i64_t utc_epoch, i64_t *localized_epoch)` | Convert UTC epoch to a localized epoch. Returns `GC_DTZ_OK` on success. |
+| `gc_dtz_time_zone_to_utc` | `i32_t gc_dtz_time_zone_to_utc(u32_t time_zone, i64_t localized_epoch, i64_t *utc_epoch, u32_t *next_utc_offset)` | Convert localized epoch to UTC. |
+| `gc_dtz_first_day_of_week` | `u8_t gc_dtz_first_day_of_week(u32_t time_zone)` | Get the first day of the week for a timezone (0=Sunday..6=Saturday). |
+| `gc_core_time__parse_iso` | `bool gc_core_time__parse_iso(const char *c, size_t len, gc_tm_t *tm, gc_core_time_parse_tz_t *tz_offsets)` | Parse an ISO 8601 date/time string. |
+| `gc__print_iso` | `void gc__print_iso(gc_buffer_t *buffer, const gc_tm_t *calendar, i64_t epoch_us, i64_t localized_epoch_s)` | Format a time as ISO 8601 string. |
+| `gc_strftime_safe` | `size_t gc_strftime_safe(char *s, size_t maxsize, const char *format, const gc_tm_t *t, i32_t utc_offset)` | Format a time with a `strftime`-style format string. |
 | `gc_dtz_time__print` | `u32_t gc_dtz_time__print(i64_t epoch_us, u32_t tz, const char *format_c_str, char *out, u32_t out_cap)` | Format a timestamp with timezone into a char buffer. Returns bytes written. |
 | `gc_dtz_time__parse` | `bool gc_dtz_time__parse(const char *str, u32_t len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string with timezone context into a UTC epoch (microseconds). Returns `true` on success. |
 
@@ -2109,7 +2121,7 @@ On WASM targets, provides standalone implementations of standard math functions 
 
 ### Functions (WASM only)
 
-Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `cos`, `tan`, `atan`, `atan2`, `sqrtf`, `sqrt`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `div`, `llabs`, `labs`.
+Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `cos`, `tan`, `atan`, `atan2`, `sqrtf`, `sqrt`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `isfinite`, `div`, `llabs`, `labs`.
 
 ---
 
@@ -2201,7 +2213,7 @@ typedef struct gc_sort_slot {
 void gc_sort__piposort(gc_sort_slot_t *array, u64_t nmemb, gc_type_t t, bool asc, gc_allocator_t *allocator);
 ```
 
-A stable sort implementation for arrays of sort slots. 2.5.6: signature gained a trailing `gc_allocator_t *allocator` parameter (used for temporary workspace).
+A stable sort implementation for arrays of sort slots. The trailing `gc_allocator_t *allocator` parameter is used for temporary workspace.
 
 ### License
 
@@ -2254,7 +2266,7 @@ void my_native_function(gc_machine_t *ctx) {
 
 ### Memory Rules
 
-- **Per-call allocations** (`gc_alloc__malloc(((gc_ctx_t *)ctx)->allocator, sz)`): Default for anything scoped to a single native call. Freed by caller when the call ends.
-- **Global allocations** (`gc_alloc__malloc(gc_host__allocator(gc_host__get_global()), sz)`): Use for module-level state initialized in `lib_start` / freed in `lib_stop`. Requires your own mutex when shared across workers.
+- **Per-call allocations** (`gc_alloc__malloc(gc_machine__allocator(ctx), sz)`): Default for anything scoped to a single native call. Freed by caller when the call ends.
+- **Global allocations** (`gc_alloc__malloc(gc_host__global_allocator(), sz)`): Use for module-level state initialized in `lib_start` / freed in `lib_stop`. Requires your own mutex when shared across workers.
 - **Object creation** (`gc_machine__create_object`): Use for GreyCat objects — they are managed by the GC.
 - **Mark/Unmark**: When you receive a marked object (e.g., from `gc_array__remove_at`), you must `gc_object__un_mark` it when you're done if you don't want to keep it alive.
