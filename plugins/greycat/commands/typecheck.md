@@ -6,546 +6,165 @@ allowed-tools: Bash, Read, Grep, Glob
 
 # Type Safety Checker
 
-**Purpose**: Catch type safety issues and anti-patterns that greycat-lang lint doesn't detect
+**Purpose**: Catch type-safety issues `greycat-lang lint` misses.
 
-**Run After**: Each sprint, before releases, when modifying type definitions
-
----
-
-## Overview
-
-This command performs advanced type safety analysis in 5 categories:
-
-1. **Volatile Checking** - @volatile on API response types
-2. **Collection Type Safety** - Persistent vs non-persistent collections
-3. **Null Safety** - Potential null pointer issues
-4. **Type Consistency** - Proper type usage patterns
-5. **Generic Types** - Static functions with generics (not allowed)
+**Run After**: Each sprint, before releases, when modifying type definitions.
 
 ---
 
-## Phase 1: Volatile Decorator Checking
+## Phase 1: @volatile on API response types
 
-### Objective
-Ensure all API response types are marked @volatile.
+\`\`\`bash
+grep -rn "@expose" src/ --include="*_api.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //; s/ {.*//' | sort -u
+\`\`\`
 
-### Step 1.1: Find @expose Functions
+For each return type:
+- Basic (`int`/`String`/`bool`/`float`) → OK
+- `Array<X>`/`Map<K,V>` → check element type
+- Custom → verify type has `@volatile` decorator
 
-```bash
-# Extract all @expose functions and their return types
-grep -rn "@expose" src/ --include="*_api.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //' | sed 's/ {.*//'
-```
-
-### Step 1.2: Check Each Return Type
-
-For each return type found:
-1. Check if it's a basic type (int, String, bool, float) → OK
-2. Check if it's an Array/Map → Check element type
-3. Check if it's a custom type → Verify has @volatile
-
-### Example Output
-
-```
-📍 src/search/search_api.gcl:63
-
-⚠️ MISSING @volatile: API response type not marked as volatile
-
-Function:
-  @expose
-  fn semanticSearch(...): PaginatedResult<SearchResultView> {
-
-Type Definition (src/search/search_api.gcl:45):
-  type PaginatedResult<T> {  ← Missing @volatile
-      items: Array<T>;
-      total: int;
-  }
-
-Issue:
-  - API response type should be @volatile (not persisted)
-  - Missing decorator causes unnecessary database storage
-
-Fix:
-  @volatile
-  type PaginatedResult<T> {
-      items: Array<T>;
-      total: int;
-  }
-
-Priority: MEDIUM
-Impact: Database bloat, performance
-```
+Missing `@volatile` → DB bloat, persistence overhead.
+**Severity**: MEDIUM.
 
 ---
 
 ## Phase 2: Collection Type Safety
 
-### Objective
-Detect misuse of persistent collections (nodeList/nodeIndex/nodeTime/nodeGeo) in temporary contexts.
-
-### Step 2.1: Find All Collection Usages
-
-```bash
-# Find all persistent collection declarations
+\`\`\`bash
 grep -rn "nodeList\|nodeIndex\|nodeTime\|nodeGeo" src/ --include="*.gcl" -B 3 -A 3
-```
+\`\`\`
 
-### Step 2.2: Classify Usage Context
+Classify each occurrence:
+- ✅ Module-level `var` → OK
+- ✅ Type field → OK
+- ⚠ Local variable → use `Array`/`Map`
+- ⚠ Function parameter → use `Array`/`Map`
 
-For each occurrence, determine context:
-
-**✅ LEGITIMATE (Global variable)**:
-```gcl
-// In src/data/data.gcl (module-level)
-var documents: nodeList<node<Document>>;
-```
-
-**✅ LEGITIMATE (Type field)**:
-```gcl
-type Document {
-    chunks: nodeIndex<node<Chunk>, bool>;
-}
-```
-
-**⚠️ SUSPICIOUS (Local variable)**:
-```gcl
-fn buildResults() {
-    var results = nodeList<T> {};  ← Should be Array
-}
-```
-
-**⚠️ SUSPICIOUS (Function parameter)**:
-```gcl
-fn process(items: nodeList<T>) {  ← Should be Array
-    // ...
-}
-```
-
-### Example Output
-
-```
-📍 src/builder/builder.gcl:34
-
-⚠️ TYPE SAFETY: Local variable using persistent collection
-
-Code:
-  32: fn buildResults(items: Array<Item>): Array<Result> {
-  33:     var results = nodeList<node<Result>> {};
-  34:     for (i, item in items) {
-  35:         results.add(node<Result>{ ... });
-  36:     }
-  37:     return results;  ← Type error!
-  38: }
-
-Problem:
-  - Using nodeList for temporary local variable
-  - Function returns Array but creates nodeList
-  - Unnecessary persistence overhead
-
-Fix:
-  var results = Array<node<Result>> {};
-
-Priority: HIGH
-Impact: Type mismatch, performance overhead
-```
+**Severity**: HIGH (type mismatch + persistence overhead).
 
 ---
 
-## Phase 3: Null Safety Analysis
+## Phase 3: Null Safety
 
-### Objective
-Find potential null pointer dereferences and missing null checks.
-
-### Step 3.1: Find Chained Dereferences
-
-```bash
-# Find .resolve() chains without null checks
+### 3.1 Chained dereferences
+\`\`\`bash
 grep -rn "\.resolve()\..*\." src/ --include="*.gcl"
-
-# Find arrow operator chains
 grep -rn "->.*->" src/ --include="*.gcl"
-```
+\`\`\`
+Check whether null checking exists (`if (x == null)`, `?.`, `!!`) before each dereference.
 
-### Step 3.2: Analyze Safety
+### 3.2 `!!` overuse
+\`\`\`bash
+grep -rn '!!' src/ --include="*.gcl"
+\`\`\`
+`!!` acceptable ONLY when:
+- Global-registry lookup where init guarantees presence (`GameRegistry::getConfig(game)!!`)
+- Value from registry just validated upstream in same function
 
-Check if null checking exists before dereference:
-- Look for `if (x == null)` before usage
-- Look for optional chaining `?.`
-- Look for null assertion `!!`
+NOT acceptable:
+- Receiver from user input / untyped JSON
+- Used to silence the analyzer without a proven invariant
+- When `if (x == null) throw NotFoundError {...};` is more honest
 
-### Example Output
-
-```
-📍 src/document/document.gcl:67
-
-⚠️ NULL SAFETY: Potential null pointer dereference
-
-Code:
-  65: fn getDocumentAuthor(docId: String): String {
-  66:     var doc_node = documents_by_id.get(docId);
-  67:     return doc_node.resolve().author.resolve().name;
-  68: }
-
-Problem:
-  - No null check on doc_node (docId might not exist)
-  - No null check on author (document might not have author)
-  - Will throw runtime error if any step fails
-
-Fix Option 1 (Null checks):
-  fn getDocumentAuthor(docId: String): String {
-      var doc_node = documents_by_id.get(docId);
-      if (doc_node == null) {
-          throw "Document not found: ${docId}";
-      }
-      var doc = doc_node.resolve();
-      if (doc.author == null) {
-          throw "Document has no author";
-      }
-      return doc.author.resolve().name;
-  }
-
-Fix Option 2 (Optional chaining):
-  fn getDocumentAuthor(docId: String): String? {
-      return documents_by_id.get(docId)?.resolve().author?.resolve().name;
-  }
-
-Priority: MEDIUM
-Impact: Runtime errors
-```
+Also flag **redundant `!!`** on receivers already narrowed by `if (x != null) { ... }`.
 
 ---
 
 ## Phase 4: Type Consistency
 
-### Objective
-Ensure proper type usage patterns across codebase.
-
-### Step 4.1: Check Collection Initialization
-
-Find non-nullable collections that might not be initialized:
-
-```bash
-# Find type fields with collections
+### 4.1 Collection initialization
+\`\`\`bash
 grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/ --include="*.gcl"
-```
+\`\`\`
+Non-nullable collection FIELDS must be initialized in object literal (`Document { chunks: nodeList<node<Chunk>>{} }`) or declared nullable.
+**Severity**: HIGH (runtime error).
 
-Check if they're nullable or always initialized.
-
-### Example Output
-
-```
-📍 src/document/document.gcl:12
-
-⚠️ TYPE SAFETY: Non-nullable collection not always initialized
-
-Type:
-  type Document {
-      id: String;
-      chunks: nodeList<node<Chunk>>;  ← Non-nullable
-  }
-
-Usage (src/import/import.gcl:45):
-  var doc = Document {
-      id: "123"
-      // chunks not initialized ← RUNTIME ERROR
-  };
-
-Problem:
-  - Non-nullable collection must be initialized on creation
-  - Missing initialization causes runtime error
-
-Fix Option 1 (Make nullable):
-  chunks: nodeList<node<Chunk>>?;
-
-Fix Option 2 (Always initialize):
-  var doc = Document {
-      id: "123",
-      chunks: nodeList<node<Chunk>> {}
-  };
-
-Priority: HIGH
-Impact: Runtime errors
-```
-
-### Step 4.2: Check Node Storage
-
-Find collections storing objects instead of node references:
-
-```bash
-# Find nodeList/nodeIndex not storing nodes
+### 4.2 Node storage
+\`\`\`bash
 grep -rn "nodeList<[^n]" src/ --include="*.gcl"
 grep -rn "nodeIndex<.*,\s*[^n]" src/ --include="*.gcl"
-```
-
-### Example Output
-
-```
-📍 src/data/data.gcl:8
-
-⚠️ TYPE SAFETY: Storing objects directly in persistent collection
-
-Code:
-  var items: nodeList<Item>;  ← Should be nodeList<node<Item>>
-
-Problem:
-  - nodeList should store node references, not objects
-  - Direct object storage breaks persistence model
-
-Fix:
-  var items: nodeList<node<Item>>;
-
-  // When adding:
-  items.add(node<Item>{ Item { ... } });
-
-Priority: HIGH
-Impact: Persistence errors
-```
+\`\`\`
+Persistent collections must store node refs: `nodeList<node<Item>>`, not `nodeList<Item>`. Note: `greycat-analyzer` does NOT currently flag this — review by hand.
+**Severity**: MEDIUM (style; not lint-enforced).
 
 ---
 
 ## Phase 5: Generic Type Safety
 
-### Objective
-Detect generic type parameters on static functions (not allowed in GreyCat).
-
-### Step 5.1: Find Static Functions with Generics
-
-```bash
-# Find static fn with <T> syntax
+### 5.1 Static fn with generics (runtime erasure risk)
+\`\`\`bash
 grep -rn "static fn.*<.*>.*(" src/ --include="*.gcl"
-```
+\`\`\`
+Compiles cleanly, but generics are erased at runtime — explicit `<T>` calls can crash inside `greycat test`. Either remove `static` (instance method on `type Utils<T>`) or specialize (`processInt`, `processString`).
+**Severity**: MEDIUM (compile passes; runtime risk).
 
-### Example Output
+### 5.2 Generic return types (runtime erasure)
+\`\`\`bash
+grep -rn "fn.*:\s*Array<.*<" src/ --include="*.gcl"
+grep -rn "fn.*:\s*[A-Z][a-zA-Z]*<.*<" src/ --include="*.gcl"
+\`\`\`
+GreyCat erases generics at runtime in `greycat test`. `Array<Wrapper<T>>` return crashes the test runner.
+Fix: non-generic result type with `value: any`; cast at call site.
+\`\`\`gcl
+// ❌
+abstract type Service<T> { static fn run(): Array<Result<T>> {...} }
+// ✅
+@volatile type Result { value: any; meta: String; }
+abstract type Service<T> { static fn run(): Array<Result> {...} }
+// caller: var typed = res.value as MyType;
+\`\`\`
 
-```
-📍 src/utils/utils.gcl:12
-
-❌ TYPE ERROR: Generic type parameter on static function
-
-Code:
-  abstract type Utils {
-      static fn process<T>(value: T): T {  ← NOT ALLOWED
-          return value;
-      }
-  }
-
-Problem:
-  - Generic type parameters (<T>) not allowed on static functions in GreyCat
-  - Will cause compilation error
-
-Fix Option 1 (Remove static):
-  type Utils<T> {
-      fn process(value: T): T {
-          return value;
-      }
-  }
-  // Usage: Utils<int>{}.process(42)
-
-Fix Option 2 (Make concrete):
-  abstract type Utils {
-      static fn processInt(value: int): int { ... }
-      static fn processString(value: String): String { ... }
-  }
-
-Priority: CRITICAL
-Impact: Compilation error
-```
+### 5.3 Anonymous return structs
+\`\`\`bash
+grep -rn "fn.*:\s*{" src/ --include="*.gcl"
+\`\`\`
+`fn foo(): { x: int, y: int }` doesn't parse. Declare a named (typically `@volatile`) type.
 
 ---
 
-## Output Format
+## Phase 6: Precedence Pitfalls
 
-### Executive Summary
+### 6.1 Cast + nullish coalescing
+\`\`\`bash
+grep -rnE 'as +[A-Za-z_][A-Za-z0-9_]*\? +\?\?' src/ --include="*.gcl"
+\`\`\`
+`x as T? ?? "default"` parses with surprising grouping. Prefer `(x as T?) ?? "default"` for clarity.
 
-```
-===============================================================================
-GREYCAT TYPE SAFETY ANALYSIS
-===============================================================================
-
-Files Analyzed: 45 .gcl files
-Analysis Date: 2026-01-08
-
-ISSUES FOUND:
-
-CRITICAL (Compilation Errors):
-  [ ] 2 static functions with generic type parameters
-
-HIGH (Runtime Errors):
-  [ ] 5 uninitialized non-nullable collections
-  [ ] 4 incorrect node storage in persistent collections
-  [ ] 3 local variables using persistent types
-
-MEDIUM (Safety Issues):
-  [ ] 8 missing @volatile on API response types
-  [ ] 6 potential null pointer dereferences
-  [ ] 4 unsafe type casts
-
-LOW (Best Practices):
-  [ ] 12 missing type annotations (could be inferred)
-  [ ] 7 overly broad types (Object vs specific)
-
-TOTAL ISSUES: 51
-
-ESTIMATED FIX TIME:
-  Critical: 30 minutes  (fix immediately)
-  High:     2 hours     (fix this sprint)
-  Medium:   3 hours     (fix next sprint)
-  Low:      1 hour      (nice to have)
-
-===============================================================================
-```
-
-### Detailed Report
-
-```
-===============================================================================
-CRITICAL ISSUES (Fix Immediately)
-===============================================================================
-
-1. COMPILATION ERROR: Generic static function
-   📍 src/utils/utils.gcl:12
-   [Details above]
-
-2. COMPILATION ERROR: Generic static function
-   📍 src/helper/helper.gcl:34
-   [Details above]
-
-===============================================================================
-HIGH PRIORITY ISSUES
-===============================================================================
-
-1. RUNTIME ERROR: Uninitialized collection
-   📍 src/document/document.gcl:12
-   [Details above]
-
-...
-
-===============================================================================
-```
+### 6.2 Module-level non-node vars
+\`\`\`bash
+grep -rnE '^var\s+[a-z_]+:\s*(int|float|String|bool|char|Array|Map|Set)[^;]*;' src/ --include="*.gcl"
+\`\`\`
+Module-level `var` must be a node-tag type (`node<T?>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeTime<T>`, `nodeGeo<T>`). Wrap primitives: `var counter: node<int?>;`.
 
 ---
 
-## Verification Commands
+## Output
 
-After fixes, verify:
-
-```bash
-# 1. Run greycat-lang lint (should pass)
-greycat-lang lint
-
-# 2. Run this type check again
-/typecheck
-
-# 3. Run tests
-greycat test
-
-# 4. Build project
-greycat build
 ```
+ISSUES:
+  CRITICAL (compile errors):     N (generic static fns)
+  HIGH (runtime errors):          N (uninit collections, bad node storage, persistent locals)
+  MEDIUM (safety):                N (missing @volatile, null deref, unsafe casts)
+  LOW (best practices):           N (loose types, missing annotations)
+```
+
+Per finding: `📍 file:line` + severity + problem + fix snippet.
 
 ---
 
-## Success Criteria
+## Verify
 
-✓ **All files scanned** (.gcl files in src/)
-✓ **Volatile decorators checked** on API response types
-✓ **Collection usage validated** (persistent vs non-persistent)
-✓ **Null safety analyzed** (potential NPEs)
-✓ **Type consistency verified** (initialization, node storage)
-✓ **Generic types checked** (no generics on static functions)
-✓ **Report generated** with prioritized issues
-✓ **Zero CRITICAL issues** before release
+\`\`\`bash
+greycat-lang lint   # must pass
+greycat test        # run tests
+greycat build       # build
+\`\`\`
 
 ---
 
 ## Notes
 
-- **Complements greycat-lang lint**: Catches issues the linter misses
-- **Run regularly**: After type changes, before releases
-- **Fix CRITICAL first**: These will cause compilation errors
-- **Test after fixes**: Always run tests after type changes
-- **Non-blocking**: MEDIUM/LOW can be addressed incrementally
-
----
-
-## Example Workflow
-
-```bash
-# 1. Run type safety check
-/typecheck
-
-# 2. Review report (51 issues found)
-# - 2 CRITICAL
-# - 12 HIGH
-# - 18 MEDIUM
-# - 19 LOW
-
-# 3. Fix CRITICAL immediately
-# - Remove generic params from static functions
-
-# 4. Verify fix
-greycat-lang lint  # ✓ Passes
-greycat build      # ✓ Builds successfully
-
-# 5. Fix HIGH priority issues
-# - Initialize collections
-# - Fix node storage
-# - Replace nodeList with Array in local vars
-
-# 6. Re-run check
-/typecheck
-# → CRITICAL: 0
-# → HIGH: 0
-# → MEDIUM: 18 (to address next sprint)
-
-# 7. Commit
-git add src/
-git commit -m "fix: resolve type safety issues (CRITICAL+HIGH)"
-```
-
----
-
-## Integration with Other Commands
-
-**Use Before**:
-- `/apicheck` - Fix type issues before API review
-- `/src` - Type check before general cleanup
-- `/docs` - Ensure types are correct before documentation
-
-**Use After**:
-- Major refactoring
-- Type definition changes
-- Library updates (might introduce type issues)
-
----
-
-## Common Patterns
-
-### Pattern 1: API Response Type Missing @volatile
-
-**Detection**: Function returns custom type, type lacks @volatile
-**Fix**: Add @volatile decorator to type
-**Frequency**: Common in new API endpoints
-
-### Pattern 2: Local Variable Using nodeList
-
-**Detection**: Variable declared inside function with nodeList type
-**Fix**: Change to Array
-**Frequency**: Very common antipattern
-
-### Pattern 3: Uninitialized Collection
-
-**Detection**: Non-nullable collection field, object created without initializing it
-**Fix**: Either make nullable or always initialize
-**Frequency**: Common in model types
-
-### Pattern 4: Null Dereference Chain
-
-**Detection**: Multiple .resolve() or -> without null checks
-**Fix**: Add null checks or use optional chaining
-**Frequency**: Common in service layer
-
-### Pattern 5: Generic Static Function
-
-**Detection**: static fn with <T> syntax
-**Fix**: Remove static or remove generics
-**Frequency**: Rare, but critical error
+- Complements `greycat-lang lint`
+- Fix CRITICAL first (compile errors)
+- Use BEFORE: `/apicheck`, `/backend`, `/docs`
+- Use AFTER: major refactors, type changes, lib upgrades

@@ -6,899 +6,311 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 
 # GreyCat Scaffold Generator
 
-**Purpose**: Generate models, services, API endpoints, and tests with proper GreyCat structure and conventions
+**Purpose**: Generate model + service + API + tests with proper GreyCat structure.
 
-**Run When**: Starting new features, adding CRUD operations, creating new domain entities
+Generated files:
+- `src/<feature>/<feature>.gcl` — type + indices + service
+- `src/<feature>/<feature>_api.gcl` — `@expose` + `@volatile` views
+- `test/<feature>_test.gcl` — tests
 
----
-
-## Overview
-
-This command scaffolds complete GreyCat features with:
-
-1. **Feature File** - Type definition, global indices, and service logic in `src/<feature>/<feature>.gcl`
-2. **API Layer** - @expose endpoints with @volatile response types in `src/<feature>/<feature>_api.gcl`
-3. **Tests** - Comprehensive test suite in `test/<feature>_test.gcl`
-
-**Templates**:
-- **CRUD Service** - Full create/read/update/delete
-- **Time-series Collector** - Model with nodeTime + data collection
-- **Graph Traversal** - Model with relationships + traversal queries
-- **Custom** - Interactive builder
+Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
 ---
 
-## Step 1: Template Selection
+## Step 1: Ask template (AskUserQuestion)
 
-**Ask user** via AskUserQuestion:
-
-```typescript
-AskUserQuestion({
-  questions: [{
-    question: "Which scaffold template would you like to use?",
-    header: "Template",
-    multiSelect: false,
-    options: [
-      {
-        label: "CRUD Service (Recommended)",
-        description: "Complete create/read/update/delete for an entity with global indices"
-      },
-      {
-        label: "Time-series Collector",
-        description: "Model with nodeTime index for temporal data collection and querying"
-      },
-      {
-        label: "Graph Traversal API",
-        description: "Model with relationships and traversal query endpoints"
-      },
-      {
-        label: "Custom (Guided)",
-        description: "Step-by-step builder for specific needs"
-      }
-    ]
-  }]
-})
-```
+- CRUD Service (Recommended) — create/read/update/delete + indices
+- Time-series Collector — `nodeTime` index for temporal data
+- Graph Traversal — relationships + traversal queries
+- Custom (guided)
 
 ---
 
-## Step 2: Detect Project Structure
+## Step 2: Detect project structure
 
-**Check existing project structure**:
-
-```bash
-# Verify we're in a GreyCat project
-if [ ! -f "project.gcl" ]; then
-    echo "ERROR: Not in a GreyCat project root (project.gcl not found)"
-    exit 1
-fi
-
-# Check standard directories exist
-if [ ! -d "src" ]; then
-    mkdir -p src
-fi
-
-if [ ! -d "test" ]; then
-    mkdir -p test
-fi
-```
+\`\`\`bash
+[ ! -f "project.gcl" ] && { echo "ERROR: not a GreyCat project root"; exit 1; }
+mkdir -p src test
+\`\`\`
 
 ---
 
-## Step 3: Gather Entity Details
+## Step 3: Gather entity details (AskUserQuestion)
 
-**Ask for entity information** via AskUserQuestion:
-
-```typescript
-AskUserQuestion({
-  questions: [
-    {
-      question: "What is the entity name? (PascalCase, e.g., Device, User, Order)",
-      header: "Entity Name",
-      multiSelect: false,
-      options: [
-        { label: "I'll provide it", description: "Enter custom entity name" }
-      ]
-    }
-  ]
-})
-```
-
-**Get field definitions** (ask user to provide):
-
-Example format:
-```
-name: String
-email: String
-age: int?
-created_at: time
-```
-
-**Parse fields**:
-- Split by newline
-- Extract field name, type, nullable (?)
-- Validate types against GreyCat types
-
-**Ask for indices** via AskUserQuestion:
-
-```typescript
-AskUserQuestion({
-  questions: [{
-    question: "Which indices do you need for lookups?",
-    header: "Indices",
-    multiSelect: true,
-    options: [
-      {
-        label: "By ID (nodeIndex<int, node<T>>)",
-        description: "Standard ID-based lookup"
-      },
-      {
-        label: "By unique field (nodeIndex<String, node<T>>)",
-        description: "Lookup by email, username, or other unique field"
-      },
-      {
-        label: "List (nodeList<node<T>>)",
-        description: "Ordered collection for iteration"
-      },
-      {
-        label: "Time-series (nodeTime<node<T>> or nodeTime<primitive>)",
-        description: "Temporal data with time-based queries"
-      },
-      {
-        label: "Geo-spatial (nodeGeo<node<T>>)",
-        description: "Geographic queries with bounding box/circle/polygon"
-      }
-    ]
-  }]
-})
-```
+- Entity name (PascalCase: `Device`, `User`, `Order`)
+- Fields (one per line: `name: String`, `email: String`, `age: int?`, `created_at: time`)
+- Indices (multiSelect):
+  - By ID: `nodeIndex<int, node<T>>`
+  - By unique field: `nodeIndex<String, node<T>>`
+  - List: `nodeList<node<T>>`
+  - Time-series: `nodeTime<T>` (primitive or node)
+  - Geo: `nodeGeo<node<T>>`
 
 ---
 
-## Step 4: Analyze Existing Code Style
+## Step 4: Detect project style
 
-**Read existing files to detect naming conventions**:
-
-```bash
-# Check for existing feature files (models + services)
-EXISTING_FEATURES=$(find src -name "*.gcl" -not -name "*_api.gcl" -not -name "*_reader.gcl" -not -name "*_writer.gcl" 2>/dev/null | head -3)
-
-# Check for existing models
-EXISTING_MODELS=$(find src -name "*.gcl" 2>/dev/null | head -3)
-
-# Check for existing APIs
-EXISTING_APIS=$(find src -name "*_api.gcl" 2>/dev/null | head -3)
-```
-
-**Detect patterns** using Read tool:
-- Indentation (tabs vs spaces, 2/4 spaces)
-- Line width (from project.gcl @format_line_width)
-- Naming conventions (snake_case files confirmed)
-- Error handling style (try/catch vs early return)
+\`\`\`bash
+find src -name "*.gcl" | head -3   # check existing patterns
+\`\`\`
+Match: indentation, line width (from `@format_line_width` in project.gcl), error handling style.
 
 ---
 
 ## Step 5: Generate Files
 
-### A. Generate Feature File (Model + Service)
+⚠ **Filename = module name.** Two `.gcl` files with same basename collide at lint regardless of folder. Convention:
+- `src/<feature>/<feature>.gcl` — simple name (model + service)
+- `src/<feature>/<feature>_api.gcl` — suffixed
+- `src/<feature>/<feature>_reader.gcl` / `_writer.gcl` — IO
+- `test/<feature>_test.gcl` — tests
 
-**File**: `src/{entity_name_snake}/{entity_name_snake}.gcl`
+**Typed error hierarchy** (one-time setup, scaffold creates `src/errors.gcl` if absent):
+\`\`\`gcl
+@volatile abstract type AppError { code: String; message: String; }
+@volatile type NotFoundError   extends AppError { id: String; }
+@volatile type ValidationError extends AppError { field: String; }
+@volatile type ConflictError   extends AppError {}
+@volatile type AuthError       extends AppError {}
+\`\`\`
 
-Models, global indices, and service logic all live together in the feature file.
+### A. Feature file (`src/{snake}/{snake}.gcl`)
 
-**Template for CRUD**:
+\`\`\`gcl
+// {Entity} model + indices + service
 
-```gcl
-// {EntityName} data model, global indices, and service logic
-type {EntityName} {
-    {field1}: {Type1};
-    {field2}: {Type2};
-    // ... all fields
+type {Entity} {
+    id: int;
+    {fields}
+    created_at: time;
 }
 
-// Global indices
-var {entity_plural}_by_id: nodeIndex<int, node<{EntityName}>>;
-{optional_additional_indices}
-
-// ID counter for auto-increment
+var {entities}_by_id: nodeIndex<int, node<{Entity}>>;
+{additional_indices}
 var {entity}_id_counter: node<int?>;
 
-// {EntityName} service - business logic and CRUD operations
-abstract type {EntityName}Service {
+abstract type {Entity}Service {
+    static fn create({params}): node<{Entity}> {
+        {validation}              // e.g. unique-name check → throw ConflictError {...}
 
-    static fn create({params}): node<{EntityName}> {
-        // Validation
-        {validation_logic}
-
-        // Generate ID
         var id = ({entity}_id_counter.resolve() ?? 0) + 1;
         {entity}_id_counter.set(id);
 
-        // Create entity
-        var {entity} = node<{EntityName}>{ {EntityName} {
-            id: id,
-            {field_assignments}
-            created_at: Time::now()
+        var {entity} = node<{Entity}>{ {Entity} {
+            id: id, {field_assignments}, created_at: Time::now()
         }};
 
-        // Store in indices
-        {entity_plural}_by_id.set(id, {entity});
+        {entities}_by_id.set(id, {entity});
         {additional_index_inserts}
-
         return {entity};
     }
 
-    static fn find_by_id(id: int): node<{EntityName}>? {
-        return {entity_plural}_by_id.get(id);
+    static fn find_by_id(id: int): node<{Entity}>? {
+        return {entities}_by_id.get(id);
     }
 
     {additional_find_methods}
 
-    static fn list_all(): Array<node<{EntityName}>> {
-        var results = Array<node<{EntityName}>> {};
-        for (id, {entity} in {entity_plural}_by_id) {
-            results.add({entity});
-        }
+    static fn list_all(): Array<node<{Entity}>> {
+        var results = Array<node<{Entity}>> {};
+        for (id, e in {entities}_by_id) results.add(e);
         return results;
     }
 
-    static fn update_{field}({entity}: node<{EntityName}>, new_{field}: {Type}) {
-        // Update index if needed
-        {index_update_logic}
-
-        // Update field
+    static fn update_{field}({entity}: node<{Entity}>, new_{field}: {Type}) {
+        {index_update_logic}      // remove from old key, set new
         {entity}->{field} = new_{field};
     }
 
-    static fn delete({entity}: node<{EntityName}>) {
-        {entity_plural}_by_id.remove({entity}->id);
+    static fn delete({entity}: node<{Entity}>) {
+        {entities}_by_id.remove({entity}->id);
         {additional_index_removals}
     }
 }
-```
+\`\`\`
 
-**Example output** for `Device`:
+### B. API file (`src/{snake}/{snake}_api.gcl`)
 
-```gcl
-// Device data model, global indices, and service logic
-type Device {
-    id: int;
-    name: String;
-    location: geo;
-    status: String?;
-    created_at: time;
-}
+\`\`\`gcl
+@volatile type {Entity}View   { id: int; {fields}; created_at: time; }
+@volatile type {Entity}Create { {fields_without_id_created_at} }
+@volatile type {Entity}Update { {updatable_fields_as_nullable} }
 
-// Global indices
-var devices_by_id: nodeIndex<int, node<Device>>;
-var devices_by_name: nodeIndex<String, node<Device>>;
+// Use explicit module routes from clients: POST /{entities}::get_{entity}_by_id
+// Every @expose body wraps in try/catch + error() + re-throw.
 
-// ID counter
-var device_id_counter: node<int?>;
-
-// Device service - business logic and CRUD operations
-abstract type DeviceService {
-
-    static fn create(name: String, lat: float, lng: float, status: String?): node<Device> {
-        // Validation
-        if (devices_by_name.get(name) != null) {
-            throw "Device with name '${name}' already exists";
-        }
-
-        // Generate ID
-        var id = (device_id_counter.resolve() ?? 0) + 1;
-        device_id_counter.set(id);
-
-        // Create device
-        var device = node<Device>{ Device {
-            id: id,
-            name: name,
-            location: geo { lat: lat, lng: lng },
-            status: status,
-            created_at: Time::now()
-        }};
-
-        // Store in indices
-        devices_by_id.set(id, device);
-        devices_by_name.set(name, device);
-
-        return device;
-    }
-
-    static fn find_by_id(id: int): node<Device>? {
-        return devices_by_id.get(id);
-    }
-
-    static fn find_by_name(name: String): node<Device>? {
-        return devices_by_name.get(name);
-    }
-
-    static fn list_all(): Array<node<Device>> {
-        var results = Array<node<Device>> {};
-        for (id, device in devices_by_id) {
-            results.add(device);
-        }
-        return results;
-    }
-
-    static fn update_name(device: node<Device>, new_name: String) {
-        // Remove from name index
-        devices_by_name.remove(device->name);
-
-        // Update field
-        device->name = new_name;
-
-        // Re-add to name index
-        devices_by_name.set(new_name, device);
-    }
-
-    static fn update_status(device: node<Device>, new_status: String?) {
-        device->status = new_status;
-    }
-
-    static fn delete(device: node<Device>) {
-        devices_by_id.remove(device->id);
-        devices_by_name.remove(device->name);
-    }
-}
-```
-
-**Use Write tool** to create the file.
-
-### B. Generate API File
-
-**File**: `src/{entity_name_snake}/{entity_name_snake}_api.gcl`
-
-**Template**:
-
-```gcl
-// {EntityName} REST API endpoints
-
-// Request/Response types
-@volatile type {EntityName}View {
-    {field1}: {Type1};
-    {field2}: {Type2};
-    // ... all fields
-}
-
-@volatile type {EntityName}Create {
-    {field1}: {Type1};
-    {field2}: {Type2};
-    // ... fields except id, created_at
-}
-
-@volatile type {EntityName}Update {
-    {field1}?: {Type1};
-    {field2}?: {Type2};
-    // ... updatable fields as nullable
-}
-
-// Endpoints
-@expose
-@permission("public")
-fn get_{entity_plural}(): Array<{EntityName}View> {
-    var views = Array<{EntityName}View> {};
-    var {entity_plural} = {EntityName}Service::list_all();
-
-    for ({entity} in {entity_plural}) {
-        views.add({EntityName}View {
-            {field_mappings}
-        });
-    }
-
-    return views;
-}
-
-@expose
-@permission("public")
-fn get_{entity}_by_id(id: int): {EntityName}View {
-    var {entity} = {EntityName}Service::find_by_id(id);
-    if ({entity} == null) {
-        throw "{EntityName} not found";
-    }
-
-    return {EntityName}View {
-        {field_mappings}
-    };
-}
-
-@expose
-@permission("admin")
-fn create_{entity}(data: {EntityName}Create): {EntityName}View {
-    var {entity} = {EntityName}Service::create({param_list});
-
-    return {EntityName}View {
-        {field_mappings}
-    };
-}
-
-@expose
-@permission("admin")
-fn update_{entity}(id: int, data: {EntityName}Update): {EntityName}View {
-    var {entity} = {EntityName}Service::find_by_id(id);
-    if ({entity} == null) {
-        throw "{EntityName} not found";
-    }
-
-    {update_calls}
-
-    return {EntityName}View {
-        {field_mappings}
-    };
-}
-
-@expose
-@permission("admin")
-fn delete_{entity}(id: int) {
-    var {entity} = {EntityName}Service::find_by_id(id);
-    if ({entity} == null) {
-        throw "{EntityName} not found";
-    }
-
-    {EntityName}Service::delete({entity});
-}
-```
-
-**Example for Device**:
-
-```gcl
-// Device REST API endpoints
-
-// Request/Response types
-@volatile type DeviceView {
-    id: int;
-    name: String;
-    location: geo;
-    status: String?;
-    created_at: time;
-}
-
-@volatile type DeviceCreate {
-    name: String;
-    lat: float;
-    lng: float;
-    status: String?;
-}
-
-@volatile type DeviceUpdate {
-    name: String?;
-    status: String?;
-}
-
-// Endpoints
-@expose
-@permission("public")
-fn get_devices(): Array<DeviceView> {
-    var views = Array<DeviceView> {};
-    var devices = DeviceService::list_all();
-
-    for (device in devices) {
-        views.add(DeviceView {
-            id: device->id,
-            name: device->name,
-            location: device->location,
-            status: device->status,
-            created_at: device->created_at
-        });
-    }
-
-    return views;
-}
-
-@expose
-@permission("public")
-fn get_device_by_id(id: int): DeviceView {
-    var device = DeviceService::find_by_id(id);
-    if (device == null) {
-        throw "Device not found";
-    }
-
-    return DeviceView {
-        id: device->id,
-        name: device->name,
-        location: device->location,
-        status: device->status,
-        created_at: device->created_at
-    };
-}
-
-@expose
-@permission("admin")
-fn create_device(data: DeviceCreate): DeviceView {
-    var device = DeviceService::create(data.name, data.lat, data.lng, data.status);
-
-    return DeviceView {
-        id: device->id,
-        name: device->name,
-        location: device->location,
-        status: device->status,
-        created_at: device->created_at
-    };
-}
-
-@expose
-@permission("admin")
-fn update_device(id: int, data: DeviceUpdate): DeviceView {
-    var device = DeviceService::find_by_id(id);
-    if (device == null) {
-        throw "Device not found";
-    }
-
-    if (data.name != null) {
-        DeviceService::update_name(device, data.name!!);
-    }
-
-    if (data.status != null) {
-        DeviceService::update_status(device, data.status);
-    }
-
-    return DeviceView {
-        id: device->id,
-        name: device->name,
-        location: device->location,
-        status: device->status,
-        created_at: device->created_at
-    };
-}
-
-@expose
-@permission("admin")
-fn delete_device(id: int) {
-    var device = DeviceService::find_by_id(id);
-    if (device == null) {
-        throw "Device not found";
-    }
-
-    DeviceService::delete(device);
-}
-```
-
-**Use Write tool** to create the file.
-
-### C. Generate Test File
-
-**File**: `test/{entity_name_snake}_test.gcl`
-
-**Template**:
-
-```gcl
-// {EntityName} tests
-
-@test
-fn test_{entity}_create() {
-    var {entity} = {EntityName}Service::create({test_params});
-
-    Assert::isNotNull({entity});
-    Assert::equals({entity}->field1, expected_value1);
-    Assert::equals({entity}->field2, expected_value2);
-}
-
-@test
-fn test_{entity}_find_by_id() {
-    var {entity} = {EntityName}Service::create({test_params});
-    var found = {EntityName}Service::find_by_id({entity}->id);
-
-    Assert::isNotNull(found);
-    Assert::equals(found->id, {entity}->id);
-}
-
-@test
-fn test_{entity}_find_{unique_field}() {
-    var {entity} = {EntityName}Service::create({test_params});
-    var found = {EntityName}Service::find_by_{field}({entity}->{field});
-
-    Assert::isNotNull(found);
-    Assert::equals(found->{field}, {entity}->{field});
-}
-
-@test
-fn test_{entity}_list_all() {
-    var {entity}1 = {EntityName}Service::create({test_params1});
-    var {entity}2 = {EntityName}Service::create({test_params2});
-
-    var all = {EntityName}Service::list_all();
-
-    Assert::isTrue(all.size() >= 2);
-}
-
-@test
-fn test_{entity}_update() {
-    var {entity} = {EntityName}Service::create({test_params});
-
-    {EntityName}Service::update_field({entity}, new_value);
-
-    Assert::equals({entity}->field, new_value);
-}
-
-@test
-fn test_{entity}_delete() {
-    var {entity} = {EntityName}Service::create({test_params});
-    var id = {entity}->id;
-
-    {EntityName}Service::delete({entity});
-
-    var found = {EntityName}Service::find_by_id(id);
-    Assert::isNull(found);
-}
-
-@test
-fn test_{entity}_duplicate_validation() {
-    var {entity}1 = {EntityName}Service::create({test_params});
-
-    var failed = false;
+@expose @permission("public")
+fn get_{entities}(): Array<{Entity}View> {
     try {
-        var {entity}2 = {EntityName}Service::create({test_params});  // Same unique field
-    } catch (ex) {
-        failed = true;
-    }
+        var views = Array<{Entity}View> {};
+        for ({entity} in {Entity}Service::list_all())
+            views.add({Entity}View { {field_mappings} });
+        return views;
+    } catch (ex) { error("get_{entities}() failed: ${ex}"); throw ex; }
+}
 
+@expose @permission("public")
+fn get_{entity}_by_id({entity}Id: int): {Entity}View {
+    try {
+        var {entity} = {Entity}Service::find_by_id({entity}Id);
+        if ({entity} == null) {
+            throw NotFoundError { code: "NOT_FOUND", message: "{Entity} not found", id: "${{entity}Id}" };
+        }
+        return {Entity}View { {field_mappings} };
+    } catch (ex) { error("get_{entity}_by_id(${{entity}Id}) failed: ${ex}"); throw ex; }
+}
+
+@expose @permission("admin")
+fn create_{entity}(data: {Entity}Create): {Entity}View {
+    try {
+        var {entity} = {Entity}Service::create({param_list});
+        return {Entity}View { {field_mappings} };
+    } catch (ex) { error("create_{entity}() failed: ${ex}"); throw ex; }
+}
+
+@expose @permission("admin")
+fn update_{entity}({entity}Id: int, data: {Entity}Update): {Entity}View {
+    try {
+        var {entity} = {Entity}Service::find_by_id({entity}Id);
+        if ({entity} == null) {
+            throw NotFoundError { code: "NOT_FOUND", message: "{Entity} not found", id: "${{entity}Id}" };
+        }
+        {update_calls}              // if (data.field != null) Service::update_field(entity, data.field!!);
+        return {Entity}View { {field_mappings} };
+    } catch (ex) { error("update_{entity}(${{entity}Id}) failed: ${ex}"); throw ex; }
+}
+
+@expose @permission("admin")
+fn delete_{entity}({entity}Id: int) {
+    try {
+        var {entity} = {Entity}Service::find_by_id({entity}Id);
+        if ({entity} == null) {
+            throw NotFoundError { code: "NOT_FOUND", message: "{Entity} not found", id: "${{entity}Id}" };
+        }
+        {Entity}Service::delete({entity});
+    } catch (ex) { error("delete_{entity}(${{entity}Id}) failed: ${ex}"); throw ex; }
+}
+\`\`\`
+
+### C. Test file (`test/{snake}_test.gcl`)
+
+\`\`\`gcl
+@test fn test_{entity}_create() {
+    var e = {Entity}Service::create({test_params});
+    Assert::isNotNull(e);
+    Assert::equals(e->{field}, {expected});
+}
+
+@test fn test_{entity}_find_by_id() {
+    var e = {Entity}Service::create({test_params});
+    var found = {Entity}Service::find_by_id(e->id);
+    Assert::isNotNull(found);
+    Assert::equals(found->id, e->id);
+}
+
+@test fn test_{entity}_find_{unique_field}() {
+    var e = {Entity}Service::create({test_params});
+    var found = {Entity}Service::find_by_{field}(e->{field});
+    Assert::isNotNull(found);
+}
+
+@test fn test_{entity}_list_all() {
+    {Entity}Service::create({test_params_1});
+    {Entity}Service::create({test_params_2});
+    Assert::isTrue({Entity}Service::list_all().size() >= 2);
+}
+
+@test fn test_{entity}_update() {
+    var e = {Entity}Service::create({test_params});
+    {Entity}Service::update_field(e, {new_value});
+    Assert::equals(e->field, {new_value});
+}
+
+@test fn test_{entity}_delete() {
+    var e = {Entity}Service::create({test_params});
+    var id = e->id;
+    {Entity}Service::delete(e);
+    Assert::isNull({Entity}Service::find_by_id(id));
+}
+
+@test fn test_{entity}_duplicate_validation() {
+    {Entity}Service::create({test_params});
+    var failed = false;
+    try { {Entity}Service::create({test_params}); } catch (ex) { failed = true; }
     Assert::isTrue(failed);
 }
-```
-
-**Example for Device**:
-
-```gcl
-// Device tests
-
-@test
-fn test_device_create() {
-    var device = DeviceService::create("Test Device", 48.8566, 2.3522, "active");
-
-    Assert::isNotNull(device);
-    Assert::equals(device->name, "Test Device");
-    Assert::equals(device->status, "active");
-}
-
-@test
-fn test_device_find_by_id() {
-    var device = DeviceService::create("Test Device", 48.8566, 2.3522, "active");
-    var found = DeviceService::find_by_id(device->id);
-
-    Assert::isNotNull(found);
-    Assert::equals(found->id, device->id);
-}
-
-@test
-fn test_device_find_by_name() {
-    var device = DeviceService::create("Unique Device", 48.8566, 2.3522, "active");
-    var found = DeviceService::find_by_name("Unique Device");
-
-    Assert::isNotNull(found);
-    Assert::equals(found->name, "Unique Device");
-}
-
-@test
-fn test_device_list_all() {
-    var device1 = DeviceService::create("Device 1", 48.8566, 2.3522, "active");
-    var device2 = DeviceService::create("Device 2", 51.5074, -0.1278, "inactive");
-
-    var all = DeviceService::list_all();
-
-    Assert::isTrue(all.size() >= 2);
-}
-
-@test
-fn test_device_update_name() {
-    var device = DeviceService::create("Old Name", 48.8566, 2.3522, "active");
-
-    DeviceService::update_name(device, "New Name");
-
-    Assert::equals(device->name, "New Name");
-
-    var found = DeviceService::find_by_name("New Name");
-    Assert::isNotNull(found);
-}
-
-@test
-fn test_device_update_status() {
-    var device = DeviceService::create("Test Device", 48.8566, 2.3522, "active");
-
-    DeviceService::update_status(device, "inactive");
-
-    Assert::equals(device->status, "inactive");
-}
-
-@test
-fn test_device_delete() {
-    var device = DeviceService::create("To Delete", 48.8566, 2.3522, "active");
-    var id = device->id;
-
-    DeviceService::delete(device);
-
-    var found = DeviceService::find_by_id(id);
-    Assert::isNull(found);
-}
-
-@test
-fn test_device_duplicate_name() {
-    var device1 = DeviceService::create("Duplicate", 48.8566, 2.3522, "active");
-
-    var failed = false;
-    try {
-        var device2 = DeviceService::create("Duplicate", 51.5074, -0.1278, "active");
-    } catch (ex) {
-        failed = true;
-    }
-
-    Assert::isTrue(failed);
-}
-```
-
-**Use Write tool** to create the file.
+\`\`\`
 
 ---
 
-## Step 6: Run greycat-lang lint --fix
-
-**Run linter immediately** to catch any errors:
-
-```bash
-echo "================================================================================"
-echo "RUNNING LINTER"
-echo "================================================================================"
-echo ""
-
+## Step 6: Lint
+\`\`\`bash
 greycat-lang lint --fix
-
-LINT_EXIT=$?
-
-if [ $LINT_EXIT -eq 0 ]; then
-    echo ""
-    echo "✓ All files passed lint"
-else
-    echo ""
-    echo "⚠ Lint found errors - please review and fix"
-fi
-```
+\`\`\`
 
 ---
 
-## Step 7: Generate Report
-
-**Summarize generated files**:
+## Step 7: Report
 
 ```
-===============================================================================
-SCAFFOLD COMPLETE
-===============================================================================
+SCAFFOLD COMPLETE — entity: {Entity}
 
-Generated files for entity: Device
+✓ src/{snake}/{snake}.gcl          — type + N indices + service ({methods})
+✓ src/{snake}/{snake}_api.gcl      — N volatile types + N endpoints
+✓ test/{snake}_test.gcl            — N test cases
 
-✓ src/device/device.gcl
-  - Device type with 5 fields
-  - 2 global indices (by_id, by_name)
-  - ID counter
-  - DeviceService with CRUD operations:
-    create, find_by_id, find_by_name, list_all,
-    update_name, update_status, delete
+Lint: ✓ passes
 
-✓ src/device/device_api.gcl
-  - 3 volatile types (DeviceView, DeviceCreate, DeviceUpdate)
-  - 5 API endpoints (@expose):
-    - GET get_devices() [@permission("public")]
-    - GET get_device_by_id(id) [@permission("public")]
-    - POST create_device(data) [@permission("admin")]
-    - PUT update_device(id, data) [@permission("admin")]
-    - DELETE delete_device(id) [@permission("admin")]
-
-✓ test/device_test.gcl
-  - 8 test cases covering CRUD and validation
-
-===============================================================================
-
-Lint: ✓ All files passed
-
-Next steps:
-  1. Review generated code and customize as needed
-  2. Run tests: greycat test test/device_test.gcl
-  3. Start server: greycat serve
-  4. Test endpoints:
-     curl http://localhost:8080/create_device -d '{"name":"Test","lat":48.8,"lng":2.3,"status":"active"}'
-     curl http://localhost:8080/get_devices
-
-===============================================================================
+Next:
+  1. Customize generated code
+  2. greycat test test/{snake}_test.gcl
+  3. greycat serve → test endpoints
 ```
 
 ---
 
 ## Template Variations
 
-### Time-series Collector Template
-
-**Model differences**:
-```gcl
-type Sensor {
-    id: String;
-    location: geo;
-    readings: nodeTime<float>;  // Time-series data
-}
-
+### Time-series Collector
+\`\`\`gcl
+type Sensor { id: String; location: geo; readings: nodeTime<float>; }
 var sensors_by_id: nodeIndex<String, node<Sensor>>;
-```
 
-**Service additions**:
-```gcl
-static fn record_reading(sensor: node<Sensor>, value: float, timestamp: time) {
-    sensor->readings.setAt(timestamp, value);
+// Service additions:
+static fn record_reading(s: node<Sensor>, v: float, t: time) { s->readings.setAt(t, v); }
+
+static fn get_readings(s: node<Sensor>, start: time, end: time): Array<Tuple<time, float>> {
+    var r = Array<Tuple<time, float>> {};
+    for (t: time, v: float in s->readings[start..end]) r.add(Tuple { x: t, y: v });
+    return r;
 }
 
-static fn get_readings(sensor: node<Sensor>, start: time, end: time): Array<Tuple<time, float>> {
-    var results = Array<Tuple<time, float>> {};
-    for (t: time, val: float in sensor->readings[start..end]) {
-        results.add(Tuple { first: t, second: val });
-    }
-    return results;
+static fn get_average(s: node<Sensor>, start: time, end: time): float {
+    var sum = 0.0; var n = 0;
+    for (t: time, v: float in s->readings[start..end]) { sum = sum + v; n = n + 1; }
+    if (n > 0) { return sum / n; } else { return 0.0; }
 }
+\`\`\`
 
-static fn get_average(sensor: node<Sensor>, start: time, end: time): float {
-    var sum = 0.0;
-    var count = 0;
-    for (t: time, val: float in sensor->readings[start..end]) {
-        sum = sum + val;
-        count = count + 1;
-    }
-    return if (count > 0) { sum / count } else { 0.0 };
-}
-```
+### Graph Traversal
+\`\`\`gcl
+type City   { id: int; name: String; country: node<Country>; streets: nodeList<node<Street>>; }
+type Street { id: int; name: String; city: node<City>;       buildings: nodeList<node<Building>>; }
 
-### Graph Traversal Template
-
-**Model with relationships**:
-```gcl
-type City {
-    id: int;
-    name: String;
-    country: node<Country>;
-    streets: nodeList<node<Street>>;
-}
-
-type Street {
-    id: int;
-    name: String;
-    city: node<City>;
-    buildings: nodeList<node<Building>>;
-}
-```
-
-**Traversal queries**:
-```gcl
+// Traversal:
 static fn get_city_with_streets(city: node<City>): CityWithStreetsView {
-    var street_views = Array<StreetView> {};
-    for (i, street in city->streets) {
-        street_views.add(StreetView {
-            id: street->id,
-            name: street->name
-        });
-    }
-
-    return CityWithStreetsView {
-        id: city->id,
-        name: city->name,
-        streets: street_views
-    };
+    var sv = Array<StreetView> {};
+    for (i, s in city->streets) sv.add(StreetView { id: s->id, name: s->name });
+    return CityWithStreetsView { id: city->id, name: city->name, streets: sv };
 }
-```
-
----
-
-## Success Criteria
-
-✓ **All files generated** with proper structure
-✓ **Follows GreyCat conventions** (naming, initialization, persistence)
-✓ **greycat-lang lint --fix passes** with 0 errors
-✓ **Tests comprehensive** covering CRUD and edge cases
-✓ **API layer proper** (@volatile types, never return nodeList)
-✓ **Service validation** included
-✓ **Indices consistent** maintained across operations
+\`\`\`
 
 ---
 
 ## Notes
 
-- **Customization encouraged**: Generated code is a starting point
-- **Existing code style**: Command detects and matches project conventions
-- **Multiple indices**: Maintains consistency across all indices
-- **Validation**: Includes duplicate checks for unique fields
-- **Permissions**: Uses @permission("public") for reads, "admin" for writes
-- **Error handling**: Throws exceptions for not found / validation failures
+- Generated code is a starting point — customize as needed
+- Maintains index consistency across all CRUD ops
+- Includes duplicate-check validation for unique fields
+- `@permission("public")` for reads, `"admin"` for writes
+- Throws typed errors (`NotFoundError`, `ConflictError`) on failures

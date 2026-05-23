@@ -6,647 +6,210 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion
 
 # GreyCat Performance Optimizer
 
-**Purpose**: Detect and automatically fix performance anti-patterns - unnecessary node allocation, reimplemented native functions, code bloat, algorithmic complexity issues
+**Purpose**: Detect + auto-fix performance anti-patterns — unnecessary persistence, reimplemented natives, useless wrappers, complexity, duplication, memory/storage patterns, concurrency.
 
-**Run When**: Quick performance checks, before releases, when performance degrades
-
----
-
-## Overview
-
-This command performs fast, focused analysis on performance issues:
-
-1. **Unnecessary Persistence** - Using node<T> when plain objects suffice
-2. **Native Function Reimplementation** - Custom code duplicating stdlib
-3. **Useless Function Wrappers** - One-line functions that just call another function
-4. **Algorithmic Complexity** - O(n²) operations where O(n) or O(1) exists
-5. **Code Duplication** - Copy-pasted logic
-
-**Output**: Analysis report + auto-fix options
+**Run When**: Quick performance checks, before releases, when performance degrades.
 
 ---
 
-## Step 1: Scan Backend Files
-
-**Find all .gcl files**:
-
-```bash
-echo "================================================================================"
-echo "SCANNING GREYCAT BACKEND"
-echo "================================================================================"
-echo ""
-
-# Find all GCL files
-GCL_FILES=$(find src -name "*.gcl" -type f | sort)
-FILE_COUNT=$(echo "$GCL_FILES" | wc -l)
-
-echo "Found $FILE_COUNT files to analyze"
-echo ""
-```
+## Step 1: Scan
+\`\`\`bash
+find src -name "*.gcl" -type f | sort
+\`\`\`
 
 ---
 
-## Step 2: Phase 1 - Unnecessary Persistence Detection
+## Phase 1: Unnecessary Persistence
 
-### Concept
+**Rule**: `node<T>`, `nodeList`, `nodeIndex`, `nodeTime`, `nodeGeo` only for module-level vars or type fields needing persistence. **Local vars, function params/returns** → `T`, `Array<T>`, `Map<K,V>`.
 
-**node<T>**, **nodeList**, **nodeIndex**, **nodeTime**, **nodeGeo** should only be used for:
-- Module-level variables (global indices)
-- Type fields that need persistence
+\`\`\`bash
+# Local vars with node types
+grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" src --include="*.gcl"
+# Function params with node types
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" src --include="*.gcl"
+# Function returns nodeList/nodeIndex
+grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gcl"
+\`\`\`
 
-**Local variables, function parameters, and function returns** should use:
-- Plain objects: `T` instead of `node<T>`
-- Arrays: `Array<T>` instead of `nodeList<node<T>>`
-- Maps: `Map<K,V>` instead of `nodeIndex<K,V>`
-
-### Detection Logic
-
-**Scan for**:
-
-```bash
-echo "Phase 1: Detecting unnecessary persistence..."
-echo ""
-
-# Find local variables with node types
-echo "Checking local variables..."
-grep -rn "var [a-z_][a-zA-Z0-9_]* = node\(List\|Index\|Time\|Geo\)?<" src --include="*.gcl" | \
-    grep -v "^[[:space:]]*var [a-z_][a-zA-Z0-9_]*:" | \  # Exclude module-level (no indentation)
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line"
-        echo "     $content"
-    done
-
-# Find function parameters with node types
-echo ""
-echo "Checking function parameters..."
-grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" src --include="*.gcl" | \
-    while IFS=: read -r file line content; do
-        # Skip if it's a service method expecting persisted nodes
-        if ! grep -q "Service" <<< "$file"; then
-            echo "  ⚠ $file:$line"
-            echo "     $content"
-        fi
-    done
-
-# Find function returns with nodeList/nodeIndex
-echo ""
-echo "Checking function return types..."
-grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gcl" | \
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line"
-        echo "     $content"
-    done
-```
-
-**Categorize findings**:
-
-```
-===============================================================================
-PHASE 1: UNNECESSARY PERSISTENCE
-===============================================================================
-
-🔴 CRITICAL (3 issues):
-
-  src/device/device_api.gcl:45
-    fn get_devices(): nodeList<node<Device>>
-    → Should return: Array<DeviceView> (API best practice)
-
-  src/processor/processor.gcl:120
-    var results = nodeList<node<Item>> {};
-    → Should use: Array<Item> {} (local variable, not persisted)
-
-  src/user/user_api.gcl:78
-    fn process_users(users: nodeList<node<User>>)
-    → Should accept: Array<User> (function parameter)
-
-===============================================================================
-```
-
-### Auto-fix Logic
-
-**For local variables**:
-
-```bash
-# Example fix:
-# BEFORE: var results = nodeList<node<Item>> {};
-# AFTER:  var results = Array<Item> {};
-
-# Use Edit tool to replace
-# Pattern: nodeList<node<T>> → Array<T>
-#          nodeIndex<K, node<V>> → Map<K, V>
-#          node<T>{obj} → obj (if local scope)
-```
+**Auto-fix**: `nodeList<node<T>>` → `Array<T>`; `nodeIndex<K, node<V>>` → `Map<K, V>`; `node<T>{obj}` → `obj` (local scope). Note: `greycat-analyzer` does NOT currently flag persistent collections used as locals — review by hand.
+**Severity**: MEDIUM (style; not lint-enforced).
 
 ---
 
-## Step 3: Phase 2 - Native Function Reimplementation
+## Phase 2: Reimplemented Natives
 
-### Common Patterns
+\`\`\`bash
+# Custom sort (nested loops)
+grep -rn "fn [a-z_]*sort" src --include="*.gcl" -A 20 | grep -B 1 -A 15 "for.*for"
+# Custom min/max
+grep -rn "fn find_\(max\|min\|maximum\|minimum\)" src --include="*.gcl"
+# Custom join
+grep -rn "fn [a-z_]*join" src --include="*.gcl" -A 10
+\`\`\`
 
-**Sorting**:
-```gcl
-// ❌ Custom bubble sort
-fn sort_items(items: Array<Item>): Array<Item> {
-    for (i in 0..items.size()) {
-        for (j in i+1..items.size()) {
-            if (items[i]->priority > items[j]->priority) {
-                // swap
-            }
-        }
-    }
-    return items;
-}
+**Replacements**:
+- Custom sort → `items.sort_by(Item::field, SortOrder::asc)`
+- Custom max → module-level `max(a, b)` (no `Math::max` in std)
+- Custom join → manual loop with `Buffer.add` (no native `Array<String>.join` in std 8.0.370-dev)
 
-// ✅ Use native
-items.sort_by(Item::priority, SortOrder::asc);
-```
-
-**Min/Max**:
-```gcl
-// ❌ Custom max finder
-fn find_max(values: Array<float>): float {
-    var max = values[0];
-    for (v in values) {
-        if (v > max) { max = v; }
-    }
-    return max;
-}
-
-// ✅ Use native or Tensor
-// Math::max(values) or tensor operations
-```
-
-**String operations**:
-```gcl
-// ❌ Custom string join
-fn join_strings(strings: Array<String>, sep: String): String {
-    var result = "";
-    for (i, s in strings) {
-        if (i > 0) { result = result + sep; }
-        result = result + s;
-    }
-    return result;
-}
-
-// ✅ Use native
-strings.join(sep)
-```
-
-### Detection
-
-```bash
-echo "Phase 2: Detecting reimplemented native functions..."
-echo ""
-
-# Look for sorting implementations
-echo "Checking for custom sort implementations..."
-grep -rn "fn [a-z_]*sort" src --include="*.gcl" -A 20 | \
-    grep -B 1 -A 15 "for.*for" | \  # Nested loops suggest bubble/selection sort
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line - Possible custom sort (use .sort_by())"
-    done
-
-# Look for min/max implementations
-echo ""
-echo "Checking for custom min/max..."
-grep -rn "fn find_\(max\|min\|maximum\|minimum\)" src --include="*.gcl" | \
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line - Custom min/max (use Math:: or Tensor)"
-    done
-
-# Look for string join implementations
-echo ""
-echo "Checking for custom string operations..."
-grep -rn "fn [a-z_]*join" src --include="*.gcl" -A 10 | \
-    grep -B 1 "for.*in.*{" | \
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line - Custom join (use .join())"
-    done
-```
-
-**Report**:
-
-```
-===============================================================================
-PHASE 2: REIMPLEMENTED NATIVE FUNCTIONS
-===============================================================================
-
-🟡 MEDIUM (3 issues):
-
-  src/array_utils/array_utils.gcl:23
-    fn sort_by_priority(items: Array<Item>)
-    → Use native: items.sort_by(Item::priority, SortOrder::asc)
-
-  src/math_utils/math_utils.gcl:45
-    fn find_maximum(values: Array<float>)
-    → Use Math:: module or Tensor operations
-
-  src/string_utils/string_utils.gcl:67
-    fn join_with_comma(strings: Array<String>)
-    → Use native: strings.join(", ")
-
-===============================================================================
-```
+**Severity**: MEDIUM.
 
 ---
 
-## Step 4: Phase 3 - Useless Function Wrappers
+## Phase 3: Useless Function Wrappers
 
-### Pattern
-
-Functions that contain only a single statement calling another function:
-
-```gcl
-// ❌ Useless wrapper
-fn get_user(id: int): node<User>? {
-    return UserService::find_by_id(id);
-}
-
-// ✅ Just call UserService::find_by_id(id) directly
-```
-
-### Detection
-
-```bash
-echo "Phase 3: Detecting useless function wrappers..."
-echo ""
-
-# Find functions with single return statement
-for file in $GCL_FILES; do
-    # Extract function definitions
-    awk '/^fn [a-z_]/ {
-        func_line = NR;
-        func = $0;
-        getline; # Read opening brace
-        if ($0 ~ /return.*::/) {
-            getline; # Read closing brace
-            if ($0 ~ /^}/) {
-                print FILENAME ":" func_line ": " func
-            }
-        }
-    }' "$file"
-done | while IFS=: read -r file line content; do
-    echo "  ⚠ $file:$line"
-    echo "     $content"
-    echo "     (One-line wrapper - consider removing)"
+\`\`\`bash
+for file in $(find src -name "*.gcl"); do
+  awk '/^fn [a-z_]/{l=NR;f=$0;getline;if($0~/return.*::/){getline;if($0~/^}/)print FILENAME":"l": "f}}' "$file"
 done
-```
+\`\`\`
 
-**Report**:
-
-```
-===============================================================================
-PHASE 3: USELESS FUNCTION WRAPPERS
-===============================================================================
-
-🟡 MEDIUM (5 issues):
-
-  src/user/user_api.gcl:67
-    fn get_user(id: int): node<User>?
-    → Single-line wrapper for UserService::find_by_id()
-    → Consider calling UserService directly
-
-  src/device/device.gcl:34
-    fn find_device(id: int): node<Device>?
-    → Wraps DeviceService::find_by_id()
-
-  ... (3 more)
-
-===============================================================================
-```
+`fn get_user(id) { return UserService::find_by_id(id); }` — single-line forwarder. Remove and call directly.
+**Severity**: MEDIUM (LOW priority).
 
 ---
 
-## Step 5: Phase 4 - Algorithmic Complexity
+## Phase 4: Algorithmic Complexity
 
-### O(n²) Nested Loops
+### O(n²) nested loops
+\`\`\`bash
+grep -rn "for.*in.*{" src --include="*.gcl" -A 5 | grep "for.*in.*{" | head -50
+\`\`\`
+For each: check if inner loop has `if x->id == y->id` → suggest `nodeIndex` for O(1) lookup.
 
-**Problem**:
-```gcl
-// ❌ O(n²) - iterates all users × all orders
-for (user in all_users) {
-    for (order in all_orders) {
-        if (order->user_id == user->id) {
-            // Process order for user
-        }
-    }
-}
+### Linear search where index exists
+\`\`\`bash
+grep -rn "for.*in.*{" src --include="*.gcl" -A 3 | grep -B 1 "if.*->id =="
+\`\`\`
 
-// ✅ O(n) - use nodeIndex for O(1) lookup
-for (user in all_users) {
-    var user_orders = orders_by_user_id.get(user->id) ?? Array<node<Order>>{};
-    for (order in user_orders) {
-        // Process order for user
-    }
-}
-```
-
-### Detection
-
-```bash
-echo "Phase 4: Detecting algorithmic complexity issues..."
-echo ""
-
-# Find nested loops
-echo "Checking for nested loops..."
-grep -rn "for.*in.*{" src --include="*.gcl" -A 5 | \
-    grep "for.*in.*{" | \
-    while IFS=: read -r file line content; do
-        # Check if inner loop has conditional matching
-        CONTEXT=$(sed -n "${line},$((line+10))p" "$file")
-        if grep -q "if.*==.*{" <<< "$CONTEXT"; then
-            echo "  ⚠ $file:$line - Possible O(n²) with conditional match"
-            echo "     Consider using nodeIndex for O(1) lookup"
-        fi
-    done
-
-# Find linear searches where index exists
-echo ""
-echo "Checking for linear searches..."
-grep -rn "for.*in.*{" src --include="*.gcl" -A 3 | \
-    grep -B 1 "if.*->id ==" | \
-    while IFS=: read -r file line content; do
-        echo "  ⚠ $file:$line - Linear search by ID"
-        echo "     Consider using nodeIndex for direct lookup"
-    done
-```
-
-**Report**:
-
-```
-===============================================================================
-PHASE 4: ALGORITHMIC COMPLEXITY
-===============================================================================
-
-🔴 CRITICAL (2 issues):
-
-  src/matcher/matcher.gcl:89
-    Nested loop: for (user in users) { for (order in orders) { if (order->user_id == user->id) ... } }
-    → O(n²) complexity
-    → Solution: Create orders_by_user_id: nodeIndex<int, node<Order>>
-
-  src/lookup/lookup.gcl:134
-    Linear search: for (item in items) { if (item->id == target_id) ... }
-    → O(n) when O(1) possible
-    → Solution: Use items_by_id nodeIndex
-
-===============================================================================
-```
-
-### Auto-fix
-
-**Suggest index creation**:
-
-```gcl
-// Add to model file:
+**Fix** — add index in model:
+\`\`\`gcl
 var orders_by_user_id: nodeIndex<int, nodeList<node<Order>>>;
-
-// Update service to maintain index:
-abstract type OrderService {
-    static fn create(user_id: int, amount: float): node<Order> {
-        var order = node<Order>{ Order { user_id: user_id, amount: amount }};
-
-        // Add to user's orders
-        var user_orders = orders_by_user_id.get(user_id);
-        if (user_orders == null) {
-            user_orders = nodeList<node<Order>>{};
-            orders_by_user_id.set(user_id, user_orders);
-        }
-        user_orders.add(order);
-
-        return order;
-    }
-}
-
-// Use in code:
+// In service create():
+var user_orders = orders_by_user_id.get(user_id);
+if (user_orders == null) { user_orders = nodeList<node<Order>>{}; orders_by_user_id.set(user_id, user_orders); }
+user_orders.add(order);
+// Query:
 for (user in all_users) {
-    var user_orders = orders_by_user_id.get(user->id);
-    if (user_orders != null) {
-        for (i, order in user_orders) {
-            // Process
-        }
-    }
+  var orders = orders_by_user_id.get(user->id);
+  if (orders != null) for (i, o in orders) { /* ... */ }
 }
-```
+\`\`\`
+**Severity**: CRITICAL on large datasets.
 
 ---
 
-## Step 6: Phase 5 - Code Duplication
+## Phase 5: Code Duplication
 
-**Leverage Grep to find similar code blocks**:
+\`\`\`bash
+# Duplicate function signatures
+grep -rn "^fn [a-z_][a-zA-Z0-9_]*(" src --include="*.gcl" | awk -F: '{print $3}' | sort | uniq -d
 
-```bash
-echo "Phase 5: Detecting code duplication..."
-echo ""
-
-# Find duplicate function signatures (same name, different files)
-grep -rn "^fn [a-z_][a-zA-Z0-9_]*(" src --include="*.gcl" | \
-    awk -F: '{print $3}' | \
-    sort | \
-    uniq -d | \
-    while read func; do
-        echo "  ⚠ Duplicate function signature: $func"
-        grep -rn "$func" src --include="*.gcl"
-    done
-
-# Find repeated patterns (e.g., same error message strings)
-echo ""
-echo "Checking for repeated error messages..."
-grep -rn "throw \"" src --include="*.gcl" | \
-    awk -F'"' '{print $2}' | \
-    sort | \
-    uniq -c | \
-    sort -rn | \
-    head -10 | \
-    while read count msg; do
-        if [ $count -gt 2 ]; then
-            echo "  ⚠ Error message repeated $count times: \"$msg\""
-        fi
-    done
-```
-
-**Report**:
-
-```
-===============================================================================
-PHASE 5: CODE DUPLICATION
-===============================================================================
-
-🟢 LOW (4 issues):
-
-  Duplicate error messages (3+ occurrences):
-    - "User not found" (5 times)
-    - "Invalid email format" (4 times)
-    → Consider creating error constant or helper function
-
-  Similar validation logic in 3 files:
-    - src/user/user.gcl:45
-    - src/admin/admin.gcl:78
-    - src/auth/auth_api.gcl:23
-    → Extract to shared validation function
-
-===============================================================================
-```
+# Repeated error message strings (3+)
+grep -rn "throw \"" src --include="*.gcl" | awk -F'"' '{print $2}' | sort | uniq -c | sort -rn | awk '$1>2'
+\`\`\`
+Extract to shared error constants / helper functions.
 
 ---
 
-## Step 7: Consolidate Report
+## Phase 6: Memory & Storage Patterns
 
-**Generate summary**:
+### 6.1 String dedup via `node<String>`
+\`\`\`bash
+grep -rnE '^\s*(tag|tags|category|source|kind|type_name|status|label):\s*String;' src --include="*.gcl"
+\`\`\`
+Same value across many objects (tags, categories, source identifiers) — use `node<String>` instead of `String`. Graph storage deduplicates automatically.
+**Severity**: MEDIUM.
 
-```
-===============================================================================
-PERFORMANCE OPTIMIZATION REPORT
-===============================================================================
+### 6.2 Multi-Index sharing
+\`\`\`gcl
+// ❌ Two distinct nodes for same entity
+by_id.set(item.id, node<Item>{ item });
+by_name.set(item.name, node<Item>{ item });
 
-Analyzed: 47 files (src)
+// ✅ One node, shared
+var n = node<Item>{ item };
+by_id.set(item.id, n);
+by_name.set(item.name, n);
+\`\`\`
+**Severity**: HIGH (storage doubles per extra index).
 
-Found 17 issues:
+### 6.3 Re-import without upsert ("orphan factory")
+\`\`\`bash
+grep -rnE 'fn (import|reload|ingest|reimport)' src --include="*.gcl" -A 30 | grep -E 'node<[A-Z]'
+\`\`\`
+Importers that wipe `nodeIndex`/`nodeTime`/`nodeGeo`/`nodeList` MUST reuse prior `node<T>` per key. See `/migrate` for upsert pattern.
+**Severity**: CRITICAL on regularly-running importers (unbounded gcdata growth).
 
-🔴 CRITICAL (5):
-  1. src/device/device_api.gcl:45 - API returning nodeList instead of Array<View>
-  2. src/processor/processor.gcl:120 - Local var using nodeList instead of Array
-  3. src/matcher/matcher.gcl:89 - O(n²) nested loop, needs nodeIndex
-  4. src/user/user_api.gcl:78 - Function parameter using nodeList
-  5. src/lookup/lookup.gcl:134 - Linear search, needs nodeIndex
-
-🟡 MEDIUM (8):
-  6-10. Reimplemented native functions (sort, max, join, etc.)
-  11-13. Useless function wrappers
-
-🟢 LOW (4):
-  14-17. Code duplication (error messages, validation logic)
-
-Auto-fix available for 12/17 issues
-
-Estimated performance improvement: ~35%
-  - Removing unnecessary persistence: ~20%
-  - Fixing O(n²) operations: ~15%
-  - Native functions: ~5%
-
-===============================================================================
-```
+### 6.4 `greycat defrag` after major reshuffles
+Even with upsert, large reshuffles benefit from `./bin/greycat defrag` to reclaim storage.
 
 ---
 
-## Step 8: Apply Fixes
+## Phase 7: Concurrency Anti-Patterns
 
-**Ask user**:
+### 7.1 `await(jobs)` in plain @expose
+\`\`\`bash
+grep -rnE 'await\s*\(' src --include="*_api.gcl"
+\`\`\`
+Parallel `await` only fires inside task context. Plain `curl POST` runs serially. Either:
+- Spawn endpoint as task: `task:''` HTTP header
+- Move to CLI fn: `./bin/greycat run compute`
+**Severity**: HIGH.
 
-```typescript
-AskUserQuestion({
-  questions: [{
-    question: "Apply automatic fixes?",
-    header: "Auto-fix",
-    multiSelect: false,
-    options: [
-      {
-        label: "Fix critical issues only (Recommended)",
-        description: "Auto-fix the 5 critical performance issues"
-      },
-      {
-        label: "Fix all auto-fixable issues",
-        description: "Fix 12 issues automatically (critical + medium)"
-      },
-      {
-        label: "Show detailed report first",
-        description: "Review each issue before fixing"
-      },
-      {
-        label: "Cancel",
-        description: "No changes, just report"
-      }
-    ]
-  }]
-})
-```
+### 7.2 `Array<Job<T>>` typed jobs
+\`\`\`bash
+grep -rnE 'Array<Job<' src --include="*.gcl"
+\`\`\`
+Crashes at runtime. Use `Array<Job>` + cast `jobs[i].result() as T`.
+**Severity**: CRITICAL.
 
-**Apply fixes** using Edit tool:
+### 7.3 Batch sizes equal to worker count
+Batch `await` jobs in **~120**, never full worker count. Leave ≥8 threads for OS. No nested `await`.
+**Severity**: MEDIUM.
 
-```bash
-echo "================================================================================"
-echo "APPLYING FIXES"
-echo "================================================================================"
-echo ""
+### 7.4 `node<T>{...}` constructors inside parallel jobs
+\`\`\`bash
+grep -rnE 'node<[A-Z][a-zA-Z]+>\s*\{' src --include="*.gcl"
+\`\`\`
+Inside parallel jobs: only WRITE to pre-existing nodes. No `node<T>{...}` constructors, no edges to shared parents, no index instantiation. Global indices read-only during parallel phases. Pre-allocate sequentially.
+**Severity**: HIGH.
 
-# Fix 1: API returning nodeList
-echo "Fixing: src/device/device_api.gcl:45"
-# Use Edit tool to change return type from nodeList<node<Device>> to Array<DeviceView>
-
-# Fix 2: Local var using nodeList
-echo "Fixing: src/processor/processor.gcl:120"
-# Use Edit tool to change "var results = nodeList<node<Item>> {};" to "var results = Array<Item> {};"
-
-# ... apply other fixes
-
-echo ""
-echo "✓ Applied 12 fixes"
-```
-
-**Run lint**:
-
-```bash
-echo "================================================================================"
-echo "VERIFYING FIXES"
-echo "================================================================================"
-echo ""
-
-greycat-lang lint --fix
-
-LINT_EXIT=$?
-
-if [ $LINT_EXIT -eq 0 ]; then
-    echo ""
-    echo "✓ All fixes applied successfully, lint passes"
-else
-    echo ""
-    echo "⚠ Some fixes may need manual adjustment"
-fi
-```
-
-**Final report**:
-
-```
-===============================================================================
-OPTIMIZATION COMPLETE
-===============================================================================
-
-Fixed 12 issues:
-  ✓ 5 critical (unnecessary persistence, O(n²) operations)
-  ✓ 7 medium (native functions, wrappers)
-
-Remaining 5 issues require manual review:
-  ! src/complex/complex.gcl:234 - Complex duplication, needs refactoring
-  ! src/advanced/advanced.gcl:567 - Algorithmic improvement needs design
-
-Lint: ✓ Passes
-
-Estimated performance improvement: ~35%
-
-Next steps:
-  1. Review remaining issues manually
-  2. Run tests: greycat test
-  3. Benchmark before/after if needed
-
-===============================================================================
-```
+### 7.5 `System::exec` as parallelism workaround
+\`\`\`bash
+grep -rnE 'System::exec' src --include="*.gcl"
+\`\`\`
+Second `System::exec` in non-task HTTP request throws uncatchable `"terminated PID X"`. Use `task:''` header pattern instead.
+**Severity**: HIGH.
 
 ---
 
-## Success Criteria
+## Step 8: Report + Apply Fixes
 
-✓ **Performance issues detected** across all categories
-✓ **Auto-fixes applied** safely with lint verification
-✓ **Detailed report generated** with severity levels
-✓ **Estimated improvements** calculated
-✓ **greycat-lang lint --fix passes** after fixes
+Summary:
+```
+Analyzed: N files
+CRITICAL: X (persistence, complexity, orphan-factory imports, Array<Job<T>>)
+HIGH:     Y (multi-index, parallel constructors, await in @expose)
+MEDIUM:   Z (natives, string-dedup, batch sizes)
+LOW:      W (wrappers, duplication)
+
+Auto-fixable: N/M
+```
+
+Ask via AskUserQuestion:
+- A) Fix critical only (Recommended)
+- B) Fix all auto-fixable
+- C) Show detailed report first
+- D) Cancel
+
+Apply Edit operations → `greycat-lang lint --fix` → report success / manual-review items.
 
 ---
 
 ## Notes
 
-- **Focus**: Quick, automated performance wins
-- **Safe fixes**: Only applies changes that don't alter logic
-- **Comprehensive**: Covers persistence, complexity, duplication
-- **Complement to backend**: Use /greycat:backend for full code review
-- **Regular use**: Run before releases or when performance degrades
+- Focus: quick automated wins
+- Only applies changes that don't alter logic
+- Complementary to `/greycat:backend` (full review)

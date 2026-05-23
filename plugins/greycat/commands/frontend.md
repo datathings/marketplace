@@ -8,49 +8,76 @@ allowed-tools: Bash, Read, Grep, Glob
 
 **Purpose**: Review `@greycat/web` frontend code for correctness, best practices, and common pitfalls.
 
-Read [references/frontend.md](../skills/greycat/references/frontend.md) first to understand the @greycat/web patterns.
+Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for `@greycat/web` bundling/integration context.
 
 ---
 
 ## Checklist
 
-Scan all `.ts` and `.tsx` files under `app/` for these issues:
+Scan `.ts` / `.tsx` under `app/` for:
 
-### 1. Initialization Order
-- `import '@greycat/web'` must appear before any `gui-*` or `gc.*` usage
-- `gc.sdk.init()` must complete before creating `gui-*` elements or calling `gc.project.*`
-- CSS import (`@greycat/web/greycat.css` or `greycat-full.css`) must be present
+### 1. Initialization order
+- `import '@greycat/web'` before any `gui-*` or `gc.*` usage
+- `gc.sdk.init()` completes before creating `gui-*` elements or `gc.project.*` calls
+- CSS import present (`@greycat/web/greycat.css` or `greycat-full.css`)
 
-### 2. TypeScript Quality
-- Search for `any` type usage — replace with proper GreyCat types from `gc.core.*` or `gc.project.*`
-- Verify `project.d.ts` is not manually edited
-- Check that custom components declare both `HTMLElementTagNameMap` and `GreyCat.JSX.IntrinsicElements`
+### 2. TypeScript quality
+- No `any` — use `gc.core.*` / `gc.project.*` types
+- `project.d.ts` not manually edited
+- Custom components declare both `HTMLElementTagNameMap` and `GreyCat.JSX.IntrinsicElements`
 
-### 3. Component Patterns
-- Components extending `GuiElement` should use `static override styles` with `css()` + `?inline` imports
-- Components extending `GuiValueElement` should call `this._internalUpdate()` in value setters
-- Event dispatching should use `GuiChangeEvent` / `GuiInputEvent` (bubble + composed)
-- Cleanup should use `addDisposable()` or `abortSignal()`, not manual `removeEventListener`
+### 2b. `gc` namespace shadow (CRITICAL)
 
-### 4. Common Pitfalls
-- `className` in JSX: each token must be a single class name (no spaces in strings)
-- `GreyCat.JSX.IntrinsicElements` (not global `JSX.IntrinsicElements`)
-- No `dangerouslySetInnerHTML` or `innerHTML` — use DOM API or JSX children
-- Fragments (`<>...</>`) empty on append — don't store for reuse
-- MPA: no client-side routing — verify navigation uses `<a href>` or `window.location`
+`@greycat/web` exposes `gc`. **It's shadowed by `@types/node`'s `var gc`** (global GC trigger) at type-resolution time. Direct `gc.X.Y` resolves against the Node global — silent breakage.
+
+**Required**: re-export pattern.
+\`\`\`ts
+// app/gc-runtime.ts
+import * as gcRuntime from '@greycat/web';
+export { gcRuntime };
+
+// elsewhere
+import { gcRuntime } from '~/gc-runtime';
+gcRuntime.sdk.init({ url: '/' });
+gcRuntime.project.MyType.create(/* ... */);
+\`\`\`
+\`\`\`bash
+grep -rnE '\bgc\.' app/ --include="*.ts" --include="*.tsx" | grep -v "app/gc-runtime.ts"
+\`\`\`
+
+### 2c. Codegen freshness
+Backend type / `@expose` changes require `./bin/greycat codegen ts`. Frontend type checker lies otherwise.
+
+### 2d. Derive backend strings from `$fields`, never hard-code
+\`\`\`ts
+// ❌ const key = "MyEnum.RED";
+// ✅ const key = gcRuntime.project.MyEnum.$fields.red;
+\`\`\`
+
+### 3. Component patterns
+- `GuiElement`: `static override styles` + `css()` + `?inline` imports
+- `GuiValueElement`: call `this._internalUpdate()` in value setters
+- Events: `GuiChangeEvent` / `GuiInputEvent` (bubble + composed)
+- Cleanup: `addDisposable()` or `abortSignal()`, never manual `removeEventListener`
+
+### 4. Common pitfalls
+- `className` in JSX: each token a single class name (no spaces in strings)
+- `GreyCat.JSX.IntrinsicElements`, not global `JSX.IntrinsicElements`
+- No `dangerouslySetInnerHTML` / `innerHTML` — use DOM API or JSX children
+- Fragments empty on append — don't reuse
+- MPA: no client-side routing — use `<a href>` / `window.location`
 
 ### 5. Performance
-- Look for components re-creating DOM trees on every update instead of updating properties
-- Check for missing `setAttrs()` batching when setting multiple properties imperatively
-- Verify large data sets use `gui-table` (virtualized) rather than manual DOM loops
+- Don't recreate DOM trees on every update — update properties
+- Batch with `setAttrs()` when setting multiple properties imperatively
+- Use `gui-table` (virtualized) for large datasets, not manual DOM loops
 
 ---
 
 ## Output
 
-Report issues grouped by severity:
-
-- **CRITICAL**: Missing `gc.sdk.init()`, missing CSS imports, security issues
-- **HIGH**: Incorrect component registration, broken event typing
+Group by severity:
+- **CRITICAL**: missing `gc.sdk.init()`, missing CSS, security
+- **HIGH**: bad component registration, broken event typing
 - **MEDIUM**: `any` usage, missing cleanup, unbatched updates
-- **LOW**: Style inconsistencies, missing type casts
+- **LOW**: style inconsistency, missing type casts

@@ -4,667 +4,143 @@ description: Generate test coverage report and suggest new tests to implement
 allowed-tools: Bash, Read, Grep, Glob, Write
 ---
 
-# Test Coverage Analysis & Gap Identification
+# Test Coverage Analysis (manual)
 
-**Purpose**: Analyze current test coverage, identify critical untested code, and generate specific test suggestions prioritized by risk.
+**Purpose**: Identify untested code and suggest tests prioritized by risk. GreyCat does not currently ship a `--coverage` flag — analysis is by inventory + cross-reference, not instrumented runs.
 
-**Run After**: Each development sprint, before releases, when adding new features
-
----
-
-## Overview
-
-This command performs a comprehensive test coverage analysis in 3 phases:
-
-1. **Phase 1**: Generate current coverage report
-2. **Phase 2**: Identify critical gaps (untested code)
-3. **Phase 3**: Suggest specific tests to implement (prioritized)
+**Run After**: Each sprint, before releases, when adding features.
 
 ---
 
-## Phase 1: Generate Coverage Report
+## Phase 1: Run Tests
 
-### Step 1.1: Run All Tests
+⚠ Wipe `gcdata/` before clean runs — stale persistence causes startup failures and false results. Tests in the same module share state across `@test` fns (mutations visible to next within module).
 
-```bash
-echo "================================================================================"
-echo "PHASE 1: GENERATING TEST COVERAGE REPORT"
-echo "================================================================================"
-echo ""
-
-echo "Running all tests..."
+\`\`\`bash
+rm -rf gcdata
 greycat test
-TEST_EXIT_CODE=$?
+\`\`\`
 
-echo ""
-if [ $TEST_EXIT_CODE -eq 0 ]; then
-    echo "✓ All tests passed"
-else
-    echo "⚠ Some tests failed (exit code: $TEST_EXIT_CODE)"
-    echo "  Continuing with coverage analysis..."
-fi
-echo ""
+**Exit codes**:
+| Code | Meaning |
+|------|---------|
+| 0 | PASS (or no tests found) |
+| 2 | ERROR — compile failure (every test affected) |
+| 5 | FAIL — assertion failed |
+| 124 / 137 | TIMEOUT |
+| 139 | SEGFAULT (one crash kills suite) |
+| 134 | ABORT |
+
+If `!= 0` and `!= 5`, coverage numbers are unreliable.
+
+**Single test**: `greycat test <module>::<fn>`. **Cross-module helpers**: plain `fn` (not `private`) in `test/test_helpers.gcl`.
+
+---
+
+## Phase 2: Identify Gaps
+
+### Find code to cover
+\`\`\`bash
+grep -r "^abstract type.*Service" src/ --include="*.gcl"       # services
+grep -r "@expose" src/ --include="*_api.gcl" -A 2              # endpoints
+grep -r "^type [A-Z]" src/ --include="*.gcl"                   # models
+\`\`\`
+
+### Cross-reference with tests
+\`\`\`bash
+find test -name "*_test.gcl"
+\`\`\`
+For each service function / `@expose` / type method, check whether `test_<snake_case>` exists.
+
+### Risk score (0-100)
+```
+Risk = Complexity·20 + Usage·30 + Criticality·50
+
+Criticality:
+  HIGH (1.0)   — auth, payments, data mutations, @expose
+  MEDIUM (0.5) — search, filter, retrieval, validation
+  LOW (0.0)    — utils, formatters, helpers, UI-only
 ```
 
-### Step 1.2: Collect Test Files
+---
 
-Use Glob to find all test files:
+## Phase 3: Suggest Tests
 
-```bash
-# Find all test files
-find test -name "*_test.gcl" -o -name "*test.gcl" 2>/dev/null
-```
+For each gap: test file, function names, ready-to-use template, priority, rationale.
 
-Analyze each test file to extract:
-- Test function names (`@test fn test_name()`)
-- What services/types they test
-- Coverage scope (unit vs integration)
+### Templates
 
-### Step 1.3: Build Coverage Map
+**Service function**:
+\`\`\`gcl
+@test fn test_create_user_valid_input() {
+  var user = UserService::createUser("a@b.com", "pw", "user");
+  Assert::isTrue(user != null);
+  Assert::equals(user.email, "a@b.com");
+}
+@test fn test_create_user_duplicate_email() {
+  UserService::createUser("a@b.com", "p1", "user");
+  try { UserService::createUser("a@b.com", "p2", "user"); Assert::isFalse(true); }
+  catch (ex) { Assert::isTrue(true); }
+}
+@test fn test_create_user_invalid_email() {
+  try { UserService::createUser("invalid", "pw", "user"); Assert::isFalse(true); }
+  catch (ex) { Assert::isTrue(true); }
+}
+\`\`\`
 
-For each test file, identify:
-- **Service/Type Under Test**: Extract from imports or function calls
-- **Functions Tested**: Parse test assertions and function calls
-- **Coverage Type**: Unit, integration, or end-to-end
-
-Create a coverage map:
-```
-{
-  "PaginationService": {
-    "tested_functions": ["validateOffset", "validateLimit"],
-    "untested_functions": ["calculatePage", "calculateTotalPages"],
-    "test_files": ["pagination_service_test.gcl"]
-  },
-  "SearchEngine": {
-    "tested_functions": ["bm25Score", "normalizeScore"],
-    "untested_functions": [],
-    "test_files": ["search_engine_test.gcl"]
+**API endpoint**:
+\`\`\`gcl
+@test fn test_search_valid_query() {
+  var r = search("privacy", null, 0, 10);
+  Assert::isTrue(r != null && r.results != null && r.total >= 0);
+}
+@test fn test_search_pagination() {
+  var p1 = search("test", null, 0, 5);
+  var p2 = search("test", null, 5, 5);
+  Assert::isTrue(p1.results.size() <= 5 && p2.results.size() <= 5);
+  if (p1.results.size() > 0 && p2.results.size() > 0) {
+    Assert::isTrue(p1.results[0].id != p2.results[0].id);
   }
 }
-```
+\`\`\`
+
+**Edge cases**: boundary min/max, null handling, empty collections.
 
 ---
 
-## Phase 2: Identify Critical Gaps
+## Output
 
-### Step 2.1: Scan Backend Code
+```
+COVERAGE REPORT
+  Services:        tested X / N  (Y%)
+  API endpoints:   tested X / N  (Y%)
+  Test files:      M  (P functions)
 
-Find all services, API endpoints, and critical business logic:
-
-**A. Find All Services** (abstract types with static functions):
-```bash
-# Search for abstract types (services)
-grep -r "^abstract type.*Service" src/ --include="*.gcl"
+HIGH gaps:    N items
+MEDIUM gaps:  N items
+LOW gaps:     N items
 ```
 
-**B. Find All API Endpoints** (@expose functions):
-```bash
-# Search for @expose functions
-grep -r "@expose" src/ --include="*_api.gcl" -A 2
-```
-
-**C. Find All Model Types**:
-```bash
-# Search for type definitions
-grep -r "^type [A-Z]" src/ --include="*.gcl"
-```
-
-**D. Find Critical Business Logic**:
-- Functions with complex logic (> 20 lines)
-- Functions with multiple branches
-- Functions handling money/security/data integrity
-
-### Step 2.2: Cross-Reference with Tests
-
-For each discovered item, check if tests exist:
-
-**Service Functions**:
-```gcl
-// Service: src/user/user.gcl
-abstract type UserService {
-    static fn createUser(...): User;      // ⚠️ No test found
-    static fn getUserByEmail(...): User?; // ✓ Tested in user_test.gcl
-    static fn deleteUser(...): bool;      // ⚠️ No test found
-}
-```
-
-**API Endpoints**:
-```gcl
-// API: src/search/search_api.gcl
-@expose
-@permission("app.user")
-fn search(query: String, ...): SearchResponse {  // ⚠️ No integration test
-    // ...
-}
-```
-
-**Model Validation**:
-```gcl
-// Model: src/user/user.gcl
-type User {
-    email: String;
-
-    fn validate(): bool {  // ⚠️ No test found
-        // complex validation logic
-    }
-}
-```
-
-### Step 2.3: Calculate Risk Scores
-
-Prioritize gaps by risk (0-100):
-
-**Risk Formula**:
-```
-Risk = (Complexity × 20) + (Usage × 30) + (Criticality × 50)
-
-Where:
-- Complexity: Lines of code / branches (0-1 normalized)
-- Usage: Number of call sites (0-1 normalized)
-- Criticality: Domain importance (0-1: 0=low, 0.5=medium, 1=high)
-```
-
-**Criticality Heuristics**:
-- **HIGH (1.0)**: Auth, payments, data mutations, @expose endpoints
-- **MEDIUM (0.5)**: Search, filtering, data retrieval, validation
-- **LOW (0.0)**: Utilities, formatters, helpers, UI-only code
+Per high gap: `📍 file:line` + risk score + criticality + complexity + usage + suggested test names + estimated effort.
 
 ---
 
-## Phase 3: Suggest Specific Tests
-
-### Step 3.1: Generate Test Suggestions
-
-For each gap, create actionable test suggestions with:
-
-1. **Test file name**: `test/xxx_test.gcl`
-2. **Test function names**: Specific to scenario
-3. **Test code template**: Ready-to-use skeleton
-4. **Priority**: HIGH/MEDIUM/LOW (based on risk score)
-5. **Rationale**: Why this test matters
-
-### Step 3.2: Template Generation
-
-Generate test templates based on code patterns:
-
-**Template 1: Service Function Test**
-```gcl
-// test/user_test.gcl
-
-@test
-fn test_create_user_valid_input() {
-    var user = UserService::createUser("test@example.com", "password123", "user");
-
-    Assert::isTrue(user != null);
-    Assert::equals(user.email, "test@example.com");
-    Assert::equals(user.role, "user");
-}
-
-@test
-fn test_create_user_duplicate_email() {
-    // Create first user
-    UserService::createUser("test@example.com", "pass1", "user");
-
-    // Attempt duplicate
-    try {
-        UserService::createUser("test@example.com", "pass2", "user");
-        Assert::isFalse(true);  // Should have thrown
-    } catch (ex) {
-        Assert::isTrue(true);   // Expected error
-    }
-}
-
-@test
-fn test_create_user_invalid_email() {
-    try {
-        UserService::createUser("invalid-email", "password", "user");
-        Assert::isFalse(true);
-    } catch (ex) {
-        var msg = "${ex}";
-        Assert::isTrue(msg.contains("email") || msg.contains("invalid"));
-    }
-}
-```
-
-**Template 2: API Endpoint Test**
-```gcl
-// test/search_test.gcl
-
-@test
-fn test_search_valid_query() {
-    var response = search("privacy", null, 0, 10);
-
-    Assert::isTrue(response != null);
-    Assert::isTrue(response.results != null);
-    Assert::isTrue(response.total >= 0);
-}
-
-@test
-fn test_search_empty_query() {
-    var response = search("", null, 0, 10);
-
-    // Should return empty results, not error
-    Assert::equals(response.total, 0);
-    Assert::equals(response.results.size(), 0);
-}
-
-@test
-fn test_search_pagination() {
-    var page1 = search("test", null, 0, 5);
-    var page2 = search("test", null, 5, 5);
-
-    Assert::isTrue(page1.results.size() <= 5);
-    Assert::isTrue(page2.results.size() <= 5);
-
-    // Verify no overlap
-    if (page1.results.size() > 0 && page2.results.size() > 0) {
-        var id1 = page1.results[0].id;
-        var id2 = page2.results[0].id;
-        Assert::isTrue(id1 != id2);
-    }
-}
-
-@test
-fn test_search_requires_permission() {
-    // This test verifies @permission("app.user") is enforced
-    // Requires authentication context setup
-    // Implementation depends on your auth system
-}
-```
-
-**Template 3: Validation Logic Test**
-```gcl
-// test/user_test.gcl
-
-@test
-fn test_user_validate_valid_email() {
-    var user = User { email: "valid@example.com", ... };
-    Assert::isTrue(user.validate());
-}
-
-@test
-fn test_user_validate_invalid_email() {
-    var user = User { email: "not-an-email", ... };
-    Assert::isFalse(user.validate());
-}
-
-@test
-fn test_user_validate_missing_fields() {
-    var user = User { email: "", ... };
-    Assert::isFalse(user.validate());
-}
-```
-
-**Template 4: Edge Case Test**
-```gcl
-@test
-fn test_function_boundary_min() {
-    var result = Service::process(0);
-    // Verify behavior at minimum value
-}
-
-@test
-fn test_function_boundary_max() {
-    var result = Service::process(2147483647);
-    // Verify behavior at maximum int
-}
-
-@test
-fn test_function_null_handling() {
-    var result = Service::process(null);
-    Assert::isTrue(result == null || /* expected behavior */);
-}
-
-@test
-fn test_function_empty_collection() {
-    var result = Service::processList(Array<T>{});
-    Assert::equals(result.size(), 0);
-}
-```
-
----
-
-## Output Format
-
-### Summary Report
-
-```
-===============================================================================
-TEST COVERAGE ANALYSIS REPORT
-===============================================================================
-
-CURRENT COVERAGE:
-  Total Services:        15
-  Tested Services:       8  (53%)
-  Untested Services:     7  (47%)
-
-  Total API Endpoints:   22
-  Tested Endpoints:      5  (23%)
-  Untested Endpoints:    17 (77%)
-
-  Total Test Files:      6
-  Total Test Functions:  45
-
-RISK SUMMARY:
-  HIGH Priority Gaps:    12 items
-  MEDIUM Priority Gaps:  18 items
-  LOW Priority Gaps:     7 items
-
-===============================================================================
-```
-
-### Detailed Gap Report
-
-```
-===============================================================================
-HIGH PRIORITY TEST GAPS (Risk Score > 70)
-===============================================================================
-
-📍 src/user/user.gcl
-
-⚠️ UNTESTED: UserService::createUser
-   Risk Score: 95 (HIGH)
-   Criticality: HIGH (auth function)
-   Complexity: MEDIUM (30 lines, 5 branches)
-   Usage: 8 call sites
-
-   Why Test This:
-   - Authentication is critical for security
-   - Creates persistent user data
-   - Has multiple failure modes (duplicate email, invalid input)
-
-   Suggested Tests:
-   1. test_create_user_valid_input
-   2. test_create_user_duplicate_email
-   3. test_create_user_invalid_email
-   4. test_create_user_invalid_role
-   5. test_create_user_weak_password
-
-   Test File: test/user_test.gcl
-   Estimated Effort: 30 minutes
-
----
-
-📍 src/payment/payment_api.gcl
-
-⚠️ UNTESTED: processPayment
-   Risk Score: 98 (HIGH)
-   Criticality: HIGH (payment processing)
-   Complexity: HIGH (80 lines, 12 branches)
-   Usage: 3 call sites
-
-   Why Test This:
-   - Financial transactions require thorough testing
-   - Complex error handling (network, validation, auth)
-   - Data integrity critical
-
-   Suggested Tests:
-   1. test_process_payment_valid
-   2. test_process_payment_insufficient_funds
-   3. test_process_payment_invalid_card
-   4. test_process_payment_network_error
-   5. test_process_payment_duplicate_transaction
-
-   Test File: test/payment_test.gcl
-   Estimated Effort: 60 minutes
-
-===============================================================================
-MEDIUM PRIORITY TEST GAPS (Risk Score 40-70)
-===============================================================================
-
-📍 src/search/search.gcl
-
-⚠️ UNTESTED: SearchService::buildQuery
-   Risk Score: 62 (MEDIUM)
-   Criticality: MEDIUM (search functionality)
-   Complexity: MEDIUM (40 lines, 8 branches)
-   Usage: 12 call sites
-
-   Why Test This:
-   - High usage across application
-   - Complex query construction logic
-   - Multiple filter combinations
-
-   Suggested Tests:
-   1. test_build_query_simple
-   2. test_build_query_with_filters
-   3. test_build_query_with_date_range
-   4. test_build_query_empty_input
-
-   Test File: test/search_test.gcl
-   Estimated Effort: 20 minutes
-
-===============================================================================
-```
-
-### Test Implementation Plan
-
-```
-===============================================================================
-RECOMMENDED TEST IMPLEMENTATION PLAN
-===============================================================================
-
-SPRINT 1 (HIGH Priority - 2-3 days):
-  [ ] UserService::createUser (6 tests)
-  [ ] UserService::deleteUser (4 tests)
-  [ ] processPayment API endpoint (5 tests)
-  [ ] updateUserRole API endpoint (3 tests)
-
-SPRINT 2 (MEDIUM Priority - 2 days):
-  [ ] SearchService::buildQuery (4 tests)
-  [ ] DocumentService::getDocumentCandidates (5 tests)
-  [ ] PaginationService (remaining functions - 8 tests)
-
-SPRINT 3 (LOW Priority - 1 day):
-  [ ] Utility functions (string formatting, date helpers)
-  [ ] View builders (formatters, mappers)
-
-TOTAL ESTIMATED EFFORT: 5-6 days
-PRIORITY: Complete Sprint 1 before next release
-
-===============================================================================
-```
-
-### Generated Test Files
-
-For each high-priority gap, create ready-to-use test file templates:
-
-**File: test/user_test.gcl** (generated)
-```gcl
-// AUTO-GENERATED TEST TEMPLATE
-// TODO: Implement test assertions based on your business logic
-
-@test
-fn test_create_user_valid_input() {
-    // TODO: Implement test
-    // Expected: User created successfully with correct fields
-    var user = UserService::createUser("test@example.com", "password123", "user");
-
-    Assert::isTrue(user != null);
-    Assert::equals(user.email, "test@example.com");
-    // Add more assertions...
-}
-
-@test
-fn test_create_user_duplicate_email() {
-    // TODO: Implement test
-    // Expected: Should throw error or return null
-    UserService::createUser("dup@example.com", "pass1", "user");
-
-    try {
-        UserService::createUser("dup@example.com", "pass2", "user");
-        Assert::isFalse(true);  // Should not reach here
-    } catch (ex) {
-        Assert::isTrue(true);   // Expected
-    }
-}
-
-// ... more tests
-```
-
----
-
-## Execution Steps
-
-### Step 1: Run Coverage Analysis
-
-Execute the command and let it analyze your codebase:
-
-1. Scans all backend files for services, APIs, models
-2. Cross-references with existing test files
-3. Calculates risk scores
-4. Generates prioritized gap report
-
-### Step 2: Review Suggestions
-
-Present the report to the user:
-- Show summary statistics
-- Highlight HIGH priority gaps
-- Explain risk rationale for each item
-
-### Step 3: Offer to Generate Tests
-
-Ask the user:
-```
-I found 12 HIGH priority test gaps. Would you like me to:
-
-A) Generate test file templates for HIGH priority items (recommended)
-B) Generate tests for specific items (I'll ask which ones)
-C) Just show the report (you'll write tests manually)
-D) Generate all suggested tests (HIGH + MEDIUM + LOW)
-```
-
-### Step 4: Generate Test Templates
-
-Based on user choice, create test files:
-- Use Write tool to create `test/xxx_test.gcl` files
-- Include TODO comments for user to complete
-- Add descriptive test names and structure
-- Include edge cases and error scenarios
-
-### Step 5: Verify Generated Tests
-
-```bash
-# Run linter on generated tests
-greycat-lang lint
-
-# Try running the new (incomplete) tests
-greycat test
-
-echo ""
-echo "✓ Test templates generated successfully"
-echo "  Next steps:"
-echo "  1. Complete TODO sections in generated test files"
-echo "  2. Run 'greycat test' to verify"
-echo "  3. Add more test cases as needed"
-```
-
----
-
-## Detection Heuristics
-
-### Finding Untested Code
-
-**Service Functions**:
-```bash
-# Find all static functions in services
-grep -rn "static fn" src/ --include="*.gcl"
-
-# For each function, check if test exists
-# Search pattern: test_<snake_case_function_name>
-```
-
-**API Endpoints**:
-```bash
-# Find all @expose functions
-grep -rn "@expose" src/ --include="*_api.gcl" -A 5
-
-# Extract function signature
-# Check if integration test exists
-```
-
-**Model Methods**:
-```bash
-# Find all type methods
-grep -rn "^\s*fn [a-z]" src/ --include="*.gcl"
-
-# Exclude simple getters/setters
-# Check for tests in test/
-```
-
-### Complexity Calculation
-
-**Lines of Code**:
-```bash
-# Count lines in function (between fn declaration and closing })
-sed -n '/fn functionName/,/^}/p' file.gcl | wc -l
-```
-
-**Branch Count**:
-```bash
-# Count if/else/match/for/while keywords
-grep -o '\(if\|else\|match\|for\|while\)' file.gcl | wc -l
-```
-
-**Call Sites** (usage):
-```bash
-# Search for function calls across codebase
-grep -r "FunctionName(" src/ --include="*.gcl" | wc -l
-```
-
----
-
-## Success Criteria
-
-✓ **Coverage report generated** with statistics
-✓ **All services scanned** for test coverage
-✓ **All API endpoints analyzed** for integration tests
-✓ **Risk scores calculated** for each gap
-✓ **Prioritized suggestions** (HIGH/MEDIUM/LOW)
-✓ **Test templates generated** (if requested)
-✓ **Templates lint successfully** (`greycat-lang lint` passes)
+## Workflow
+
+1. Run analysis → report
+2. Ask:
+   - A) Generate templates for HIGH only (recommended)
+   - B) Specific items
+   - C) Report only
+   - D) Generate all (HIGH + MEDIUM + LOW)
+3. Use Write to create `test/xxx_test.gcl` templates with `TODO:` comments
+4. `greycat-lang lint` then `greycat test` to verify templates compile
 
 ---
 
 ## Notes
 
-- **Data Dependency**: Some tests require database data (use setup/teardown or fixtures)
-- **Authentication Tests**: May require auth context setup
-- **Integration Tests**: May need running server (`greycat serve`)
-- **Generated Tests**: Templates include TODOs - user must complete business logic
-- **Iterative**: Run after each sprint to track coverage improvements
-
----
-
-## Example Workflow
-
-```bash
-# 1. Run test gap analysis
-/coverage
-
-# 2. Review HIGH priority gaps (12 items)
-# 3. Choose to generate templates for HIGH priority
-
-# 4. Templates created in test/
-#    - user_test.gcl (6 tests)
-#    - payment_test.gcl (5 tests)
-
-# 5. Complete TODO sections in generated files
-
-# 6. Run tests
-greycat test
-
-# 7. Fix any failures, add more tests as needed
-
-# 8. Re-run /coverage to see improved coverage
-```
-
----
-
-## Future Enhancements
-
-- **Coverage Percentage**: Calculate actual line/branch coverage (requires instrumentation)
-- **Mutation Testing**: Detect weak tests that don't catch bugs
-- **Performance Tests**: Suggest performance benchmarks for critical paths
-- **Regression Tests**: Auto-generate tests from production bugs
-- **Test Quality**: Analyze existing tests for anti-patterns
+- Some tests need DB data (setup/teardown / fixtures)
+- Auth tests need auth context setup
+- Generated templates include TODOs — user completes business logic
+- Re-run after sprints to track improvement

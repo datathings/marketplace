@@ -36,10 +36,10 @@ This ensures:
 
 ## Step 3: Sync GCL Files from lib/ to skill
 
-Copy all `.gcl` files from `./lib/*/` to `greycat/references/*/`:
+Copy all `.gcl` files from `./lib/*/` to `greycat/reference/*/`:
 
 For each library directory in `./lib`:
-- Copy all `.gcl` files to the corresponding `greycat/references/` subdirectory
+- Copy all `.gcl` files to the corresponding `greycat/reference/` subdirectory
 - Preserve the file structure
 
 Libraries to sync:
@@ -58,22 +58,22 @@ Libraries to sync:
 
 Read `project.gcl` to extract all library versions (e.g., `@library("kafka", "7.5.68-dev")`).
 
-For each library's markdown documentation file in `greycat/references/`:
+For each library's markdown documentation file in `greycat/reference/`:
 - Find the installation section with `@library("library-name", "version")`
 - Update the version to match what's in `project.gcl`
 
 Files to update:
-- `greycat/references/kafka/kafka.md`
-- `greycat/references/sql/postgres.md`
-- `greycat/references/s3/s3.md`
-- `greycat/references/finance/finance.md`
-- `greycat/references/powerflow/powerflow.md`
-- `greycat/references/opcua/opcua.md`
-- `greycat/references/useragent/useragent.md`
-- `greycat/references/ai/README.md`
-- `greycat/references/algebra/README.md` (if exists)
-- `greycat/references/std/README.md`
-- `greycat/references/LIBRARIES.md`
+- `greycat/reference/kafka/kafka.md`
+- `greycat/reference/sql/postgres.md`
+- `greycat/reference/s3/s3.md`
+- `greycat/reference/finance/finance.md`
+- `greycat/reference/powerflow/powerflow.md`
+- `greycat/reference/opcua/opcua.md`
+- `greycat/reference/useragent/useragent.md`
+- `greycat/reference/ai/README.md`
+- `greycat/reference/algebra/README.md` (if exists)
+- `greycat/reference/std/README.md`
+- `greycat/reference/LIBRARIES.md`
 
 ## Step 5: Analyze Function Signatures
 
@@ -115,8 +115,8 @@ This will create `greycat.skill` with all the updated files.
 ## Success Criteria
 
 The upgrade is complete when:
-1. All old GCL files are deleted from greycat/references/
-2. All GCL files are copied from lib/ to greycat/references/
+1. All old GCL files are deleted from greycat/reference/
+2. All GCL files are copied from lib/ to greycat/reference/
 3. All library versions in markdown files match project.gcl
 4. All function signatures are documented and accurate
 5. The skill is successfully re-packaged
