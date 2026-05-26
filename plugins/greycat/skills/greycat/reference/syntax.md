@@ -339,7 +339,18 @@ var add = fn (a: int, b: int): int { return a + b; };
 var x = add(40, 2); // x: int
 ```
 
-A lambda has the same parameter / return-type shape as a `fn` declaration but no name. The resulting value is of type `function` — see the `function` opacity note in [idioms.md](idioms.md).
+A lambda has the same parameter / return-type shape as a `fn` declaration but no name. The resulting value carries its structural signature, displayed as `fn(P0, P1): R` (or `fn(P0, P1)` when no return is declared or inferable). See [types.md](types.md) for how this interacts with the nominal `function` slot.
+
+**Lambdas have a closed scope — there are no closures.** A lambda body can reference its own parameters, locals declared inside the body, and module-scope decls. References to *enclosing* locals, params, or `this` are rejected by the analyzer (`lambda-capture`) and would fail at runtime (`unresolved identifier`, or segfault for `this`). Pass anything the lambda needs as an explicit parameter:
+
+```gcl
+fn main() {
+    var threshold = 10;
+    var f = fn (x: int): bool { return x > threshold; };  // ERROR: `threshold` captured
+    var g = fn (x: int, t: int): bool { return x > t; };  // OK: pass it in
+    g(42, threshold);
+}
+```
 
 ## Type identifiers
 

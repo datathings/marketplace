@@ -53,7 +53,6 @@ The libraries below are published to `get.greycat.io` and resolvable via `@libra
 | `kafka`       | Typed Kafka producer/consumer: `KafkaReader<T>`, `KafkaWriter<T>`, `KafkaConf`.                           |
 | `mqtt`        | MQTT pub/sub client: `Mqtt`, `MqttQoS`.                                                                   |
 | `opcua`       | OPC UA client: `OpcuaClient` (browse / read / write / subscribe), `OpcuaEvent`, `OpcuaCertificate`.       |
-| `s3`          | S3-compatible object storage helpers built on `Http<T>`.                                                  |
 | `ftp`         | FTP/FTPS client: `Ftp`, `FtpEntry`.                                                                       |
 | `ssh`         | SSH and SFTP: `Sftp`, `SftpFile`, `SshPasswordAuth`, `SshKeyAuth`.                                        |
 | `osm`         | OpenStreetMap toolkit: Overpass API client + Overpass-QL builder, ring math on `geo` / `GeoBox` / `GeoPoly`, opt-in persistent graph (`OsmNode` / `OsmWay` / `OsmRelation`), GPS edge snapping, elevation enrichment. |

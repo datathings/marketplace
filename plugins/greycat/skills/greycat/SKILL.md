@@ -25,7 +25,7 @@ This file covers the 80% you need across language *and* tooling. Drill into a re
 - **[reference/types.md](reference/types.md)** — Type system in depth: nullability, narrowing, generic invariance, casting, inheritance, `is`/`as`.
 - **[reference/stdlib.md](reference/stdlib.md)** — Built-in types by category (collections, node types, time/duration/geo, IO, HTTP, S3, Crypto). Method signatures.
 - **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
-- **[reference/idioms.md](reference/idioms.md)** — Idiomatic patterns and common pitfalls (no ternary, no `void`, no `::new()`, `function` opacity, `private` semantics, generic invariance).
+- **[reference/idioms.md](reference/idioms.md)** — Idiomatic patterns and common pitfalls (no ternary, no `void`, no `::new()`, `function` slot semantics, `private` semantics, generic invariance).
 
 **Tooling / project / runtime:**
 
@@ -458,7 +458,7 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 1. **No ternary.** Write `if (c) { return a; } return b;`, not `c ? a : b`.
 2. **No `void` keyword.** Omit the `: T` return-type clause.
 3. **No `::new()`.** Always `Type {}` or `Type<G> {}`. Unless an explicit `Type { static fn new(): Type { /*...*/ } }` exists.
-4. **`function` parameters are opaque.** A value typed `function` is runtime-checked, not compile-checked.
+4. **`function` parameters are opaque.** Lambdas and static fn references carry their signature in source position (`var f = fn(a: int): int {...}` → `f: fn(int): int`), but once a value flows into a `function`-typed slot the signature is gone and calls through it are runtime-checked. Instance methods (`obj.method`, non-static `Foo::method`) are NOT first-class values; the workaround is a lambda that takes the receiver as a parameter (`fn (r: Foo) { r.method(); }`), since lambdas don't capture enclosing locals or `this`.
 5. **Generics are invariantly typed.** `Array<int?>` is not assignable to `Array<int>`. Same for `Map`, `nodeIndex`, etc.
 6. **`->` is reserved for stdlib node tags.** Only `node<T>`, `nodeTime<T>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeGeo<T>` support `->`. User types cannot opt in — use `.` instead.
 7. **`private` ≠ "hidden."** A `private type` is still visible across modules via its fully-qualified name; only bare-name lookup is blocked. A `private attr` is read-public, write-private. Never gate same-module access on `private`.

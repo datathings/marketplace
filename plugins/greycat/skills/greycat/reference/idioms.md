@@ -188,16 +188,25 @@ for (t, v in series[from..to[) {}
 
 ## Calling a `function`-typed value
 
-Lambdas and stored function references have static type `function`, which is opaque:
+A `function`-typed parameter is opaque — the signature it was assigned from is gone, so calls through it are runtime-checked:
 
 ```gcl
 fn run(callback: function): int {
-    var r = callback();         // function-typed param is opaque but callable, runtime-checked
+    var r = callback();         // accepted; runtime throws if signature mismatches
     return r as int;
 }
 ```
 
-Note: the analyzer rejects `var f: function = fn() { ... };` with `type-mismatch` (lambda type is `() -> any?`, not the opaque `function` type). Either drop the annotation (`var f = fn() {...};`) and let inference take it, or pass the lambda directly to a `function` parameter.
+Values held in a local var keep their structural signature, so calls through them are statically checked:
+
+```gcl
+var f = fn(a: int): int { return a + 1; };
+f(3.14);                                    // ERROR: float not assignable to int
+var g: function = fn(a: int): int { ... };  // explicit `function` annotation forgets the signature
+g(3.14);                                    // accepted; runtime-checked
+```
+
+Annotating a local as `: function` is legal (Lambda → function is assignable) but discards the static checks you'd otherwise get — drop the annotation when you want the signature preserved.
 
 ## Generic invariance — when assignments don't compose
 

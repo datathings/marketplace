@@ -27,7 +27,7 @@ Reach for this when reasoning about assignability, nullability, generics, narrow
 | `time`     | Universal instant. Microsecond precision. Literal: `'2025-05-22T16:47:42Z'`, `42_time`. |
 | `duration` | Span of time. Built via `60s`, `2hour_30min`, or `duration::new(v, unit)`.              |
 | `geo`      | A `(lat, lng)` decimal coordinate. Literal: `geo { 49.6, 6.1 }`.                        |
-| `function` | Function pointer. **Opaque** — see "The `function` type" below.                         |
+| `function` | Nominal slot for any function value. Lambdas and fn references flow in; the slot itself loses the signature. See "The `function` type" below. |
 | `field`    | Reflective field descriptor (used by `Table`, sort-by-field, etc.).                     |
 | `type`     | Reflective type descriptor.                                                             |
 
@@ -231,17 +231,41 @@ Use `as` to:
 
 The analyzer rejects `as` casts between unrelated types. Use `is` first when you want a checked downcast.
 
-## The `function` type — opacity
+## The `function` type
 
-A value of static type `function` is **opaque** to the analyzer. You can call it directly, but you must ensure the signature contract yourself. The runtime will throw an exception if wrongly called:
+Function-valued expressions carry a structural signature; the nominal `function` type is the slot they flow into.
+
+```gcl
+var f = fn(a: int, b: int): int { return a + b; };  // f: fn(int, int): int
+var g = Runtime::on_files_put;                       // g: fn(function?)
+f(3.14, 42);  // ERROR: float not assignable to int
+```
+
+The signature is displayed using fn-decl syntax — `fn(P)` for no declared return, `fn(P): R` when present. Body inference fills in `R` when every reachable `return` agrees on a single `T` or `T?`.
+
+Carrying the signature applies to:
+
+- Lambda expressions (`fn (...) { ... }`)
+- Top-level fn references (`fetch_stuff`, `module::fetch_stuff`)
+- `static` method references (`Foo::create`, `module::Foo::create`)
+
+Generic fns (`fn<T>(...)`) in value position fall back to the opaque `function` — no GCL-expressible shape exists for `T` outside the call site.
+
+Once a value flows into a `function`-typed slot (e.g. a `function` parameter), the signature is gone. Calls through such values are runtime-checked:
 
 ```gcl
 fn run(callback: function) {
-    callback(); // OK if the function takes no args, ERROR if it does
+    callback(); // analyzer accepts; runtime throws if `callback` expects args
 }
 ```
 
-Lambdas (`fn (...) { ... }` as expressions) produce values typed `function`, so they suffer the same opacity. Pass them around freely, but recover a typed call site with `as`.
+The wrapper rule allows `Lambda → function` freely; the reverse (`function → fn(specific)`) requires a cast.
+
+**Instance method references are not first-class.** `obj.method` (or `Foo::instance_method`) outside a call position raises `instance-method-value-ref` — instance methods carry an implicit `this` with no representation as a free value. And since lambdas don't capture (see [syntax.md](syntax.md#lambdas)), you can't smuggle the receiver in either. Pass it explicitly as a lambda parameter:
+
+```gcl
+var f = fn (r: Foo) { r.method(); };  // call later with the receiver: `f(obj);`
+```
 
 ## The `any` and `null` meta-types
 
