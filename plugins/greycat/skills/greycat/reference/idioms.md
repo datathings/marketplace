@@ -256,7 +256,11 @@ A bare `thing as User` without an `is` check is allowed but will behave unpredic
 
 ## HTTP / `@expose` patterns
 
-### Basic endpoint
+### Permission defaults — authenticated by default, public is rare
+
+A bare `@expose` already requires the `api` permission, which is exactly what you want for almost every endpoint. **Do not** add `@permission("public")` reflexively to make a frontend work without login — that hands anonymous callers on the network the same write access as an authenticated user. `@permission("public")` is reserved for the small set of endpoints that genuinely *must* serve anonymous traffic (`Identity::login`, a no-auth health probe). When you're unsure, leave the default in place and have the frontend authenticate via `Identity::login` first. Adding `@permission("public")` to a new endpoint is a judgment call that should be made by the project owner, not the agent.
+
+### Authenticated endpoint (the default)
 
 ```gcl
 @expose
@@ -264,6 +268,29 @@ fn ping(): String {
     return "pong";
 }
 ```
+
+No `@permission` clause — calls require a valid session. The browser obtains one via `Identity::login` (cookie) or `greycat token --user=<id>` (header / query string). See [runtime.md § Identity and permissions](runtime.md).
+
+### Per-user data (scope by caller)
+
+```gcl
+var todos: nodeIndex<int, nodeIndex<String, Todo>>;     // keyed by user id
+
+@expose
+fn my_todos(): Array<Todo> {
+    var mine = todos.get(Identity::current_id());
+    var out = Array<Todo> {};
+    if (mine == null) {
+        return out;
+    }
+    for (_, v in mine) {
+        out.add(v);
+    }
+    return out;
+}
+```
+
+`Identity::current_id()` returns the authenticated caller. Don't mix users' data in a single flat collection unless every endpoint that touches it filters explicitly.
 
 ### Permission-gated endpoint
 
@@ -275,19 +302,25 @@ fn restart() {
 }
 ```
 
-### Public endpoint (anonymous callers)
+Custom permissions declared in `project.gcl` (`@permission("audit", "read audit logs");`) compose the same way.
+
+### Anonymous endpoint — only when the user asks for it
 
 ```gcl
 @expose
 @permission("public")
 fn current_id(): int {
-    return Identity::current_id();
+    return Identity::current_id();         // 0 for anonymous
 }
 ```
+
+`@permission("public")` opens the function to anonymous callers. Reach for it **only** when the user has explicitly described an anonymous-access requirement; otherwise default to the authenticated form above.
 
 ### Typed input / output
 
 `@expose` functions can take typed parameters and return typed results. The runtime serializes both sides via JSON (or GCB for typed callers).
+
+`login` is one of the rare cases where `@permission("public")` is correct — anonymous callers need to reach it to obtain a session.
 
 ```gcl
 type LoginRequest { username: String; password: String; }

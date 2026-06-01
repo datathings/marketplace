@@ -171,7 +171,6 @@ The primary path is **plain `fetch` against the GreyCat HTTP endpoints**. No SDK
 ```gcl
 // src/api.gcl
 @expose
-@permission("public")
 fn ping(): String {
     return "pong";
 }
@@ -181,6 +180,8 @@ fn add(a: int, b: int): int {
     return a + b;
 }
 ```
+
+Both endpoints require the default `api` permission. The browser obtains a session via `Identity::login` (see [Authentication](#authentication) below) before calling them. **Do not** sprinkle `@permission("public")` on endpoints to skip login during development — that opens them to every anonymous caller on the network. `@permission("public")` is reserved for endpoints that genuinely must serve anonymous traffic (`login` itself, a no-auth health probe), and should be a deliberate user-driven decision, not an agent shortcut.
 
 ### Path-RPC (one function per request)
 
@@ -211,7 +212,7 @@ const { result } = await res.json();    // 42
 
 ### Authentication
 
-Anonymous calls only reach functions gated by `@permission("public")`. To call anything else, the request needs a session token. Two ways the browser carries it:
+Authentication is **the default path, not an optional add-on**. A request without a session token can only reach functions explicitly marked `@permission("public")`; every other `@expose` returns 401. Two ways the browser carries the token:
 
 1. **Cookie (typical).** `Identity::login` sets `Set-Cookie: greycat=<TOKEN>` on the response. Subsequent same-origin `fetch` calls send the cookie automatically.
 2. **Query parameter.** `?authorization=<TOKEN>` — handy for the boot URL printed by `serve` on first start.

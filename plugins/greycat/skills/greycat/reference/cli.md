@@ -146,7 +146,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--workers` / `GREYCAT_WORKERS`    | host CPU count         | `run`, `serve`, `test`    | Number of GreyCat task workers.                                                  |
 | `--http_threads`                   | `3`                    | `serve`                   | IO threads serving HTTP connections.                                             |
 | `--req_workers`                    | `2`                    | `serve`                   | Workers dedicated to handling JSON-RPC requests.                                 |
-| `--user` / `GREYCAT_USER`          | `0`                    | `run`, `serve`, `test`    | Impersonate this user id (skip auth — server runs as that user).                 |
+| `--user` / `GREYCAT_USER`          | `0`                    | `run`, `serve`, `test`    | **Footgun.** Bypasses auth on every request, running it as `<id>`. Never propose this flag — use `greycat token` + a real `Authorization` header instead. See [runtime.md § the `--user=<id>` impersonation flag](runtime.md). |
 | `--validity` / `GREYCAT_VALIDITY`  | `24h`                  | `serve`, `token`          | TTL for session tokens.                                                          |
 | `--tz` / `GREYCAT_TZ`              | host TZ                | `run`, `serve`            | Default IANA timezone (e.g. `Europe/Luxembourg`).                                |
 | `--mode` / `GREYCAT_MODE`          | none                   | (global)                  | If set, runs as if the user had typed that command. Values: `serve`, `run`.      |
@@ -172,8 +172,11 @@ Run `greycat <command> -h` to see only the options that apply to `<command>` alo
 A short prescriptive cookbook — adapt paths/users to your project.
 
 ```bash
-# Local dev — auto-rebuild + impersonate root, verbose logs:
-greycat dev --user=1 --log=debug
+# Local dev — auto-rebuild watcher + verbose logs.
+# The boot URL printed on first start includes a root token; copy it,
+# or run `greycat token` separately to mint one. DO NOT add --user=<id>
+# — that disables auth for every caller on the network. See runtime.md.
+greycat dev --log=debug
 
 # CI build (no server):
 greycat install && greycat build && greycat test

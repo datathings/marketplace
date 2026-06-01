@@ -36,11 +36,12 @@ fn main() {
 ```gcl
 // src/api.gcl
 @expose
-@permission("public")
 fn ping(): String {
     return "pong";
 }
 ```
+
+No `@permission` clause — `ping` requires the default `api` permission (any authenticated caller). Don't reach for `@permission("public")` to dodge auth during bootstrap; the boot URL printed by `serve` carries a `root` token, which is enough to exercise the endpoint.
 
 First-time install + serve:
 
@@ -49,10 +50,13 @@ greycat install                 # downloads lib/std/ and bin/greycat
 ./bin/greycat serve             # or: greycat serve  (system binary auto-redirects to bin/)
 ```
 
-The serve command prints the boot URL with the `root` user's token. Open it, or call `ping` with `curl`:
+The serve command prints the boot URL with the `root` user's token. Open it, then call `ping` with the token attached:
 
 ```sh
-curl -X POST http://localhost:8080/api::ping
+ID="user_id" # eg. 1, 2, etc.
+VALIDITY="duration" # eg. 3day, 2hour, etc.
+TOKEN=$(greycat token --user=$ID --validity=$VALIDITY)
+curl -X POST -H "Authorization: $TOKEN" "http://localhost:8080/api::ping"
 ```
 
 For a frontend-bundled project, swap `serve` for `dev` to also spawn a watcher (`vp`, `vite`, or a custom `--with` command). See [webapp.md](webapp.md) for the recommended layout (`app/` sources, Vite/VitePlus config at the project root, bundle into `webroot/`).
@@ -103,7 +107,7 @@ fn echo(req: EchoRequest): EchoResponse {
 Notes:
 
 - `@expose` makes it reachable at `POST /<module>::echo` (here `/api::echo`) and via JSON-RPC method `"api.echo"`.
-- Without `@permission`, the function requires the `api` permission (default for authenticated callers). Add `@permission("public")` to allow anonymous calls.
+- Without `@permission`, the function requires the `api` permission (any authenticated caller) — that is the right default. Add `@permission("admin")` (or a custom permission declared in `project.gcl`) to narrow it further. **Do not** add `@permission("public")` unless the user explicitly asked for an anonymous-access endpoint; making a write-capable endpoint public exposes it to every caller on the network.
 - `@tag("openapi")` includes it in the spec returned by `OpenApi::v3`. `@tag("mcp")` exposes it as an MCP tool.
 - `/// @param <name> <description>` doc-comment lines surface in the generated OpenAPI / MCP schemas.
 

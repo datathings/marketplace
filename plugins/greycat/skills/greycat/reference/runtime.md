@@ -184,26 +184,35 @@ Built-in roles:
 | `user`   | `public`, `api`                     |
 | `admin`  | `public`, `admin`, `api`, `debug`   |
 
-`@permission("name")` on a function gates it on that permission. With no `@permission`, an `@expose`d function defaults to requiring `api`.
+`@permission("name")` on a function gates it on that permission. With no `@permission`, an `@expose`d function defaults to requiring `api` — that is the recommended default. Reserve `@permission("public")` for endpoints that genuinely must serve anonymous callers (the `login` endpoint itself, an unauthenticated health probe); never add it to a write-capable endpoint just to avoid wiring up login.
 
 ```gcl
 @expose
-@permission("public")
-fn ping(): String { return "pong"; }       // open to anonymous
-
-@expose
-fn list_users(): Array<User> { /*...*/ }         // requires "api" by default
+fn list_users(): Array<User> { /*...*/ }         // default: requires "api" (authenticated)
 
 @expose
 @permission("admin")
-fn restart() { /*...*/ }                          // admins only
+fn restart() { /*...*/ }                          // narrowed: admins only
+
+@expose
+@permission("public")
+fn ping(): String { return "pong"; }              // anonymous — use only when the endpoint must serve anonymous traffic
 ```
 
 Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`. CLI equivalents under `greycat user`.
 
-### The `--user=<id>` impersonation flag
+### The `--user=<id>` impersonation flag — footgun, do not promote
 
-`greycat serve --user=1` (or `GREYCAT_USER=1`) skips auth entirely — every request runs as that user. Useful for local development, dangerous in production.
+`greycat serve --user=<id>` (or `GREYCAT_USER=<id>`) makes **every incoming request run as that user, without checking auth**. Anyone who can reach the port executes endpoints with that user's full permission set — there is no "only on localhost" guard. It is **not** a dev convenience to reach for by default. Catastrophic in production; risky on a laptop on a shared / open network.
+
+Do not propose this flag, put it in a recipe, or bake it into a `.env`. The correct dev pattern is:
+
+1. `greycat token --user=<id>` to mint a short-lived token for `<id>` (default `1` = `root`), then attach it via `Authorization: <TOKEN>` header or `?authorization=<TOKEN>`.
+2. Or call `Identity::login(name, pass)` from the browser / a script to get a cookie-backed session.
+
+The boot URL printed by `greycat serve` on a fresh `gcdata/` already carries a `root` token — that's the intended bootstrap path.
+
+If the user explicitly asks for `--user=<id>` for a one-off local test, fine; never propose it yourself.
 
 ## Tasks and the scheduler
 
