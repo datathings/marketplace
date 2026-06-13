@@ -48,6 +48,12 @@ if (!ctx) {
 
 - `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
 
+- `ctx_other` (`struct llama_context *`) - A source/target/parent context. Can be used in various ways, for example to share results or `llama_memory` between two contexts. Default: NULL. [b9621]
+
+**Output limiting [b9621]:**
+
+- `n_outputs_max` (`uint32_t`) - Maximum number of outputs in a ubatch. `0` means use `n_batch`. Limits the peak memory used for output logits/embeddings. Default: 0.
+
 **Multi-Token Prediction (MTP) and Recurrent-State Rollback [b9246, EXPERIMENTAL]:**
 
 - `ctx_type` (`enum llama_context_type`) - Set the context type. Values: `LLAMA_CONTEXT_TYPE_DEFAULT` (0) for standard inference; `LLAMA_CONTEXT_TYPE_MTP` (1) to enable Multi-Token Prediction (e.g., for speculative decoding with MTP-trained models). Default: `LLAMA_CONTEXT_TYPE_DEFAULT`.

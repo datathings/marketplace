@@ -72,7 +72,7 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (396 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 197 active functions (b9246) across 6 organized files
+**Total:** 196 active functions (b9621) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -156,6 +156,17 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-sampling.md](references/api-sampling.md) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
+
+## What's New in b9621
+
+**b9621** is an additive release (from b9246) — no removals, no signature changes. New capabilities:
+
+**Context sharing & output limiting:**
+- New `llama_context_params.ctx_other` field — a source/target/parent context, used to share results or `llama_memory` between two contexts
+- New `llama_context_params.n_outputs_max` field — max outputs in a ubatch (0 = `n_batch`), caps peak output-logit memory
+
+**Deprecation:**
+- `llama_set_warmup()` is now **deprecated** — do warmup runs manually instead. It changes graph topology with MoE models (extra reallocations) and will be removed in the future.
 
 ## What's New in b9246
 

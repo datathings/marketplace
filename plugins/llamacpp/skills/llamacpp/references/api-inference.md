@@ -134,11 +134,13 @@ void llama_set_causal_attn(struct llama_context * ctx, bool causal_attn);
 ```
 Set whether to use causal attention or not. If set to true, the model will only attend to past tokens.
 
-### llama_set_warmup
+### llama_set_warmup [DEPRECATED b9621]
 ```c
-void llama_set_warmup(struct llama_context * ctx, bool warmup);
+DEPRECATED(void llama_set_warmup(struct llama_context * ctx, bool warmup));
 ```
 Set whether the model is in warmup mode. If true, all model tensors are activated during `llama_decode()` to load and cache their weights.
+
+**Deprecated since b9621** — user code should do warmup runs manually. Using this can cause extra graph reallocations because it changes the graph topology with MoE models. Will be removed in the future. (`[TAG_LLAMA_GRAPH_NO_WARMUP]`)
 
 ### llama_set_abort_callback
 ```c
