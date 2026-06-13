@@ -101,7 +101,7 @@ line = pp.create_line_from_parameters(
 
 ## Transformers
 
-### `create_transformer(net, hv_bus, lv_bus, std_type, name=None, tap_pos=nan, in_service=True, index=None, max_loading_percent=nan, parallel=1, df=1.0, tap_changer_type=None, tap_dependency_table=False, oltc=False, xn_ohm=nan, tap2_pos=nan, **kwargs) -> int`
+### `create_transformer(net, hv_bus, lv_bus, std_type, name=None, tap_pos=nan, in_service=True, index=None, max_loading_percent=nan, parallel=1, df=1.0, tap_changer_type=None, tap_dependency_table=False, id_characteristic_table=None, pt_percent=nan, oltc=False, xn_ohm=nan, tap2_pos=nan, **kwargs) -> int`
 **Description:** Creates a two-winding transformer from standard type library.
 **Parameters:**
 - `hv_bus`: High-voltage side bus index
@@ -170,7 +170,7 @@ pp.create_loads(net, buses=[0, 1, 2], p_mw=[1.0, 2.0, 3.0])
 
 ## Generators
 
-### `create_gen(net, bus, p_mw, vm_pu=1.0, sn_mva=nan, name=None, index=None, max_q_mvar=nan, min_q_mvar=nan, min_p_mw=nan, max_p_mw=nan, scaling=1.0, type=None, slack=False, controllable=nan, vn_kv=nan, xdss_pu=nan, rdss_ohm=nan, cos_phi=nan, in_service=True, slack_weight=0.0, **kwargs) -> int`
+### `create_gen(net, bus, p_mw, vm_pu=1.0, sn_mva=nan, name=None, index=None, max_q_mvar=nan, min_q_mvar=nan, min_p_mw=nan, max_p_mw=nan, min_vm_pu=nan, max_vm_pu=nan, scaling=1.0, type=None, slack=False, id_q_capability_characteristic=None, reactive_capability_curve=False, curve_style=None, controllable=nan, vn_kv=nan, xdss_pu=nan, rdss_ohm=nan, cos_phi=nan, pg_percent=nan, power_station_trafo=nan, in_service=True, slack_weight=0.0, **kwargs) -> int`
 **Description:** Adds a voltage-controlled generator (PV node). Active power and voltage setpoint are inputs.
 **Parameters:**
 - `p_mw`: Active power in MW (positive = generation)
@@ -184,7 +184,7 @@ pp.create_loads(net, buses=[0, 1, 2], p_mw=[1.0, 2.0, 3.0])
 gen = pp.create_gen(net, bus=hv_bus, p_mw=50., vm_pu=1.02, name="Gas Turbine", slack=True)
 ```
 
-### `create_sgen(net, bus, p_mw, q_mvar=0, sn_mva=nan, name=None, index=None, scaling=1.0, type="wye", in_service=True, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, controllable=nan, k=nan, rx=nan, current_source=True, **kwargs) -> int`
+### `create_sgen(net, bus, p_mw, q_mvar=0, sn_mva=nan, name=None, index=None, scaling=1.0, type="wye", in_service=True, max_p_mw=nan, min_p_mw=nan, max_q_mvar=nan, min_q_mvar=nan, controllable=nan, k=nan, rx=nan, id_q_capability_characteristic=None, reactive_capability_curve=False, curve_style=None, current_source=True, generator_type=None, max_ik_ka=nan, kappa=nan, lrc_pu=nan, **kwargs) -> int`
 **Description:** Adds a static generator (PQ node) - models renewables, inverter-based resources.
 **Parameters:**
 - `p_mw`: Active power (positive = injection)

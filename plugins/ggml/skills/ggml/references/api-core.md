@@ -218,6 +218,8 @@ ggml_backend_graph_compute(backend, gf);
 
 ## Scalar Helpers
 
+> **Note:** These helpers moved out of `ggml.h` into `ggml-cpu.h` and are now declared `GGML_BACKEND_API` — they operate directly on host data and are only available with the CPU backend (include `ggml-cpu.h`).
+
 ```c
 struct ggml_tensor * ggml_new_i32(struct ggml_context * ctx, int32_t value);
 struct ggml_tensor * ggml_new_f32(struct ggml_context * ctx, float value);
@@ -244,6 +246,7 @@ void    ggml_set_f32_nd(const struct ggml_tensor * tensor, int i0, int i1, int i
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `GGML_FILE_MAGIC` | 0x67676d6c | "ggml" |
+| `GGML_FILE_VERSION` | 2 | file format version |
 | `GGML_MAX_DIMS` | 4 | max tensor dimensions |
 | `GGML_MAX_PARAMS` | 2048 | max number of params |
 | `GGML_MAX_SRC` | 10 | max source tensors per op |

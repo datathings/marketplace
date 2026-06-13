@@ -8,9 +8,11 @@
 5. [Devices](#devices)
 6. [Backend Registry](#backend-registry)
 7. [Scheduler](#scheduler)
-8. [Memory Allocation](#memory-allocation)
-9. [CPU Backend](#cpu-backend)
-10. [Utilities & Float Conversions](#utilities--float-conversions)
+8. [Graph Copy & Comparison](#graph-copy--comparison)
+9. [Meta Backend (Tensor Parallelism)](#meta-backend-tensor-parallelism)
+10. [Memory Allocation](#memory-allocation)
+11. [CPU Backend](#cpu-backend)
+12. [Utilities & Float Conversions](#utilities--float-conversions)
 
 ---
 
@@ -49,9 +51,9 @@ ggml_backend_buffer_type_t ggml_backend_buffer_get_type(ggml_backend_buffer_t bu
 void                     ggml_backend_buffer_reset(ggml_backend_buffer_t buffer);
 
 // Copy tensor data between backends
-void ggml_backend_tensor_copy(struct ggml_tensor * src, struct ggml_tensor * dst);
+void ggml_backend_tensor_copy(const struct ggml_tensor * src, struct ggml_tensor * dst);
 void ggml_backend_tensor_copy_async(ggml_backend_t backend_src, ggml_backend_t backend_dst,
-                                    struct ggml_tensor * src, struct ggml_tensor * dst);
+                                    const struct ggml_tensor * src, struct ggml_tensor * dst);
 ```
 
 **ggml_backend_buffer_usage:**
@@ -73,11 +75,18 @@ size_t                   ggml_backend_get_alignment(ggml_backend_t backend);
 size_t                   ggml_backend_get_max_size(ggml_backend_t backend);
 
 // Transfer data to/from backend tensors
+// "offset" refers to the offset in tensor->data for setting/getting data
 void ggml_backend_tensor_set(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
 void ggml_backend_tensor_get(const struct ggml_tensor * tensor, void * data, size_t offset, size_t size);
 void ggml_backend_tensor_set_async(ggml_backend_t backend, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
 void ggml_backend_tensor_get_async(ggml_backend_t backend, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size);
 void ggml_backend_tensor_memset(struct ggml_tensor * tensor, uint8_t value, size_t offset, size_t size);
+
+// Strided 2D transfers
+void ggml_backend_tensor_set_2d(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+void ggml_backend_tensor_get_2d(const struct ggml_tensor * tensor, void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+void ggml_backend_tensor_set_2d_async(ggml_backend_t backend, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+void ggml_backend_tensor_get_2d_async(ggml_backend_t backend, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
 
 // Compute
 void             ggml_backend_synchronize(ggml_backend_t backend);
@@ -131,10 +140,31 @@ bool                   ggml_backend_dev_offload_op(ggml_backend_dev_t device, co
 ```
 
 **ggml_backend_dev_type:**
-- `GGML_BACKEND_DEVICE_TYPE_CPU`
-- `GGML_BACKEND_DEVICE_TYPE_GPU`
-- `GGML_BACKEND_DEVICE_TYPE_GPU_UMA` — integrated GPU sharing host memory
-- `GGML_BACKEND_DEVICE_TYPE_ACCEL` — specialized accelerator (DSP, NPU)
+- `GGML_BACKEND_DEVICE_TYPE_CPU` — CPU device using system memory
+- `GGML_BACKEND_DEVICE_TYPE_GPU` — GPU device using dedicated memory
+- `GGML_BACKEND_DEVICE_TYPE_IGPU` — integrated GPU using host memory
+- `GGML_BACKEND_DEVICE_TYPE_ACCEL` — accelerator used together with the CPU backend (e.g. BLAS or AMX)
+- `GGML_BACKEND_DEVICE_TYPE_META` — "meta" device wrapping multiple devices for tensor parallelism
+
+**ggml_backend_dev_props** (filled by `ggml_backend_dev_get_props`):
+```c
+struct ggml_backend_dev_props {
+    const char * name;
+    const char * description;
+    size_t memory_free;
+    size_t memory_total;
+    enum ggml_backend_dev_type type;
+    const char * device_id;          // e.g. PCI bus id "0000:c1:00.0", or NULL if unknown
+    struct ggml_backend_dev_caps caps;
+};
+
+struct ggml_backend_dev_caps {
+    bool async;                // asynchronous operations
+    bool host_buffer;          // pinned host buffer
+    bool buffer_from_host_ptr; // creating buffers from host ptr
+    bool events;               // event synchronization
+};
+```
 
 ---
 
@@ -244,6 +274,65 @@ void ggml_backend_sched_set_eval_callback(ggml_backend_sched_t sched,
 
 ---
 
+## Graph Copy & Comparison
+
+Utilities for copying a graph to another backend and comparing two backends' output:
+
+```c
+struct ggml_backend_graph_copy {
+    ggml_backend_buffer_t buffer;
+    struct ggml_context * ctx_allocated;
+    struct ggml_context * ctx_unallocated;
+    struct ggml_cgraph  * graph;
+};
+
+// Copy a graph to a different backend
+struct ggml_backend_graph_copy ggml_backend_graph_copy(ggml_backend_t backend, struct ggml_cgraph * graph);
+void                           ggml_backend_graph_copy_free(struct ggml_backend_graph_copy copy);
+
+// Per-node comparison callback
+typedef bool (*ggml_backend_eval_callback)(int node_index, struct ggml_tensor * t1, struct ggml_tensor * t2, void * user_data);
+
+// Compare the output of two backends node-by-node
+bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t backend2,
+                                        struct ggml_cgraph * graph,
+                                        ggml_backend_eval_callback callback, void * user_data,
+                                        struct ggml_tensor const * const * test_nodes, size_t num_test_nodes);
+```
+
+---
+
+## Meta Backend (Tensor Parallelism)
+
+A "meta" device wraps multiple "simple" devices and splits tensors across them for tensor parallelism. The meta buffer type / buffer / backend are derived from the meta device.
+
+```c
+#define GGML_BACKEND_META_MAX_DEVICES 16
+
+// How a tensor is split across the wrapped devices
+enum ggml_backend_meta_split_axis {
+    GGML_BACKEND_SPLIT_AXIS_0 = 0,
+    GGML_BACKEND_SPLIT_AXIS_1 = 1,
+    GGML_BACKEND_SPLIT_AXIS_2 = 2,
+    GGML_BACKEND_SPLIT_AXIS_3 = 3,
+    GGML_BACKEND_SPLIT_AXIS_MIRRORED = 10, // all values on all backends
+    GGML_BACKEND_SPLIT_AXIS_PARTIAL  = 11, // each backend has a partial sum
+    GGML_BACKEND_SPLIT_AXIS_NONE     = 98, // internal bookkeeping
+    GGML_BACKEND_SPLIT_AXIS_UNKNOWN  = 99, // internal bookkeeping
+};
+const char * ggml_backend_meta_split_axis_name(enum ggml_backend_meta_split_axis split_axis);
+
+// Callback assigning split states to statically allocated tensors
+typedef struct ggml_backend_meta_split_state (*ggml_backend_meta_get_split_state_t)(const struct ggml_tensor * tensor, void * userdata);
+
+// Create a meta device from an array of simple devices
+ggml_backend_dev_t ggml_backend_meta_device(ggml_backend_dev_t * devs, size_t n_devs,
+                                            ggml_backend_meta_get_split_state_t get_split_state,
+                                            void * get_split_state_ud);
+```
+
+---
+
 ## Memory Allocation
 
 ### Tensor Allocator (single buffer)
@@ -339,8 +428,8 @@ void                     ggml_threadpool_resume(struct ggml_threadpool * threadp
 ### CPU Feature Detection
 
 ```c
-void ggml_numa_init(enum ggml_numa_strategy numa);
-bool ggml_is_numa(void);
+void ggml_numa_init(enum ggml_numa_strategy numa);  // call once for better performance on NUMA systems
+bool ggml_is_numa(void);                             // true if >1 NUMA node was detected
 void ggml_cpu_init(void);
 
 // Returns 1 if supported, 0 otherwise
@@ -362,6 +451,14 @@ int ggml_cpu_has_wasm_simd(void);
 int ggml_cpu_has_llamafile(void);
 const struct ggml_type_traits_cpu * ggml_get_type_traits_cpu(enum ggml_type type);
 ```
+
+**ggml_numa_strategy:**
+- `GGML_NUMA_STRATEGY_DISABLED` (0)
+- `GGML_NUMA_STRATEGY_DISTRIBUTE` (1)
+- `GGML_NUMA_STRATEGY_ISOLATE` (2)
+- `GGML_NUMA_STRATEGY_NUMACTL` (3)
+- `GGML_NUMA_STRATEGY_MIRROR` (4)
+- `GGML_NUMA_STRATEGY_COUNT`
 
 ---
 

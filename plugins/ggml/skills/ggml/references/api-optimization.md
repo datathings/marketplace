@@ -8,7 +8,8 @@ High-level training framework built on top of the ggml backend system.
 3. [Optimizer Context](#optimizer-context)
 4. [Result Collection](#result-collection)
 5. [Graph Preparation & Execution](#graph-preparation--execution)
-6. [High-Level Training Loop](#high-level-training-loop)
+6. [Low-Level Building Blocks](#low-level-building-blocks-from-ggmlh)
+7. [High-Level Training Loop](#high-level-training-loop)
 
 ---
 
@@ -23,34 +24,51 @@ enum ggml_opt_loss_type {
     GGML_OPT_LOSS_TYPE_MEAN_SQUARED_ERROR,
 };
 
-// Build type controls whether the graph includes backward pass
+// Build type controls whether the graph includes backward / optimizer pass
 enum ggml_opt_build_type {
-    GGML_OPT_BUILD_TYPE_FORWARD,
-    GGML_OPT_BUILD_TYPE_GRAD,
-    GGML_OPT_BUILD_TYPE_OPT,
+    GGML_OPT_BUILD_TYPE_FORWARD = 10,
+    GGML_OPT_BUILD_TYPE_GRAD    = 20,
+    GGML_OPT_BUILD_TYPE_OPT     = 30,
 };
 
 // Optimizer algorithm
 enum ggml_opt_optimizer_type {
     GGML_OPT_OPTIMIZER_TYPE_ADAMW,
     GGML_OPT_OPTIMIZER_TYPE_SGD,
+    GGML_OPT_OPTIMIZER_TYPE_COUNT,
 };
 
-// Optimizer hyperparameters (union-style)
+// Optimizer hyperparameters (one sub-struct per optimizer type)
 struct ggml_opt_optimizer_params {
-    struct { float alpha; float beta1; float beta2; float eps; float wd; } adamw;
-    struct { float alpha; float wd; } sgd;
+    struct {
+        float alpha; // learning rate
+        float beta1; // first AdamW momentum
+        float beta2; // second AdamW momentum
+        float eps;   // epsilon for numerical stability
+        float wd;    // weight decay (0.0f to disable)
+    } adamw;
+    struct {
+        float alpha; // learning rate
+        float wd;    // weight decay
+    } sgd;
 };
 
 // Top-level training parameters
 struct ggml_opt_params {
-    ggml_backend_sched_t backend_sched;       // multi-backend scheduler
+    ggml_backend_sched_t backend_sched;        // multi-backend scheduler
+
+    // if ctx_compute, inputs, and outputs are all set the graphs are allocated
+    // statically; otherwise the forward graph is reconstructed for each eval
     struct ggml_context * ctx_compute;         // compute context
-    enum ggml_opt_loss_type loss_type;
+    struct ggml_tensor  * inputs;
+    struct ggml_tensor  * outputs;
+
+    enum ggml_opt_loss_type  loss_type;
     enum ggml_opt_build_type build_type;
     int32_t opt_period;                        // optimizer step every N gradient accumulations
     ggml_opt_get_optimizer_params get_opt_pars; // callback for per-step hyperparams
     void * get_opt_pars_ud;
+    enum ggml_opt_optimizer_type optimizer;    // ADAMW (needs m,v momenta) or SGD
 };
 
 // Typedefs
@@ -185,6 +203,44 @@ void ggml_opt_alloc(ggml_opt_context_t opt_ctx, bool backward);
 // Run one forward/backward/optimizer step and accumulate results
 void ggml_opt_eval(ggml_opt_context_t opt_ctx, ggml_opt_result_t result);
 ```
+
+---
+
+## Low-Level Building Blocks (from `ggml.h`)
+
+The high-level `ggml-opt` API is built on these core ops. Use them directly only when building a custom training graph.
+
+```c
+// Mark a tensor as a trainable parameter (needed for automatic backprop)
+void ggml_set_param(struct ggml_tensor * tensor);
+
+// Build the backward (gradient) pass for an existing forward graph.
+// grad_accs: optional per-node gradient accumulators (may be NULL)
+void ggml_build_backward_expand(
+    struct ggml_context * ctx,        // context for gradient computation
+    struct ggml_cgraph  * cgraph,
+    struct ggml_tensor ** grad_accs);
+
+// AdamW optimizer step op (GGML_OP_OPT_STEP_ADAMW)
+// m, v: first/second moment accumulators; adamw_params holds alpha, beta1, beta2, eps, wd
+struct ggml_tensor * ggml_opt_step_adamw(
+    struct ggml_context * ctx,
+    struct ggml_tensor  * a,
+    struct ggml_tensor  * grad,
+    struct ggml_tensor  * m,
+    struct ggml_tensor  * v,
+    struct ggml_tensor  * adamw_params);
+
+// SGD optimizer step op with weight decay (GGML_OP_OPT_STEP_SGD)
+// sgd_params holds alpha (learning rate) and wd (weight decay)
+struct ggml_tensor * ggml_opt_step_sgd(
+    struct ggml_context * ctx,
+    struct ggml_tensor  * a,
+    struct ggml_tensor  * grad,
+    struct ggml_tensor  * sgd_params);
+```
+
+Related ops (in `enum ggml_op`): `GGML_OP_CROSS_ENTROPY_LOSS`, `GGML_OP_OPT_STEP_ADAMW`, `GGML_OP_OPT_STEP_SGD`.
 
 ---
 

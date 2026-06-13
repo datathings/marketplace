@@ -29,14 +29,14 @@ struct ggml_tensor * ggml_div_inplace(struct ggml_context * ctx, struct ggml_ten
 
 **Scalar-like variants:**
 ```c
-// add a scalar tensor b (broadcast) to a
+// DEPRECATED: add a scalar tensor b (broadcast) to a — use ggml_add instead
 struct ggml_tensor * ggml_add1(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 struct ggml_tensor * ggml_add1_inplace(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 
 // add with type cast
 struct ggml_tensor * ggml_add_cast(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, enum ggml_type type);
 
-// scatter-add: add rows of b into a at positions given by ids
+// indirect add: dst[i0, i1, i2] = a[i0, i1, i2] + b[i0, ids[i1, i2]]
 struct ggml_tensor * ggml_add_id(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, struct ggml_tensor * ids);
 ```
 
@@ -63,6 +63,15 @@ struct ggml_tensor * ggml_argmax(struct ggml_context * ctx, struct ggml_tensor *
 // Count equal elements between a and b → scalar I64
 struct ggml_tensor * ggml_count_equal(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 
+// Repeat (broadcast) a to match the shape of b
+struct ggml_tensor * ggml_repeat(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
+
+// Repeat a to an explicit shape
+struct ggml_tensor * ggml_repeat_4d(struct ggml_context * ctx, struct ggml_tensor * a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+
+// Sum repetitions of a back into the shape of b (gradient of ggml_repeat)
+struct ggml_tensor * ggml_repeat_back(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
+
 // Top-k values and indices
 struct ggml_tensor * ggml_top_k(struct ggml_context * ctx, struct ggml_tensor * a, int k);
 
@@ -86,6 +95,16 @@ struct ggml_tensor * ggml_sqrt_inplace(struct ggml_context * ctx, struct ggml_te
 
 struct ggml_tensor * ggml_log(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_log_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+
+struct ggml_tensor * ggml_sin(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_sin_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+
+struct ggml_tensor * ggml_cos(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_cos_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+
+// Negate (unary minus)
+struct ggml_tensor * ggml_neg(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_neg_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 
 struct ggml_tensor * ggml_exp(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_dup(struct ggml_context * ctx, struct ggml_tensor * a);

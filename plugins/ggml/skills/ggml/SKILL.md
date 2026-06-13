@@ -9,13 +9,13 @@ description: "C tensor computation library for ML inference and training. Use wh
 
 ggml is a minimalistic C tensor computation library powering llama.cpp and many other ML inference engines. It provides:
 - A define-and-run computation graph model (similar to TensorFlow 1.x)
-- CPU, CUDA, Metal, Vulkan, and other hardware backends
-- 41+ quantization formats (Q4_0, Q8_0, Q5_K, NVFP4, etc.)
+- CPU, CUDA, Metal, Vulkan, WebGPU, and other hardware backends
+- 35+ quantization formats (Q4_0, Q8_0, Q5_K, MXFP4, NVFP4, TQ1_0, Q1_0, etc.)
 - GGUF binary file format for model weights and metadata
 - Automatic differentiation and AdamW/SGD optimizers
 - Zero runtime allocations — all memory is pre-reserved
 
-**Version:** v0.9.11
+**Version:** v0.15.1
 **Language:** C (C++ optional)
 **License:** MIT
 **Repo:** https://github.com/ggml-org/ggml
@@ -97,3 +97,5 @@ Quick reference:
 - **Quantized matmul** — `ggml_mul_mat` supports mixed precision (e.g. Q4_0 weights × F32 activations) natively
 - **Inplace variants** — `ggml_add_inplace` overwrites tensor `a` and avoids an allocation; only safe when `a` is not used elsewhere in the graph
 - **Thread count** — default is 4 threads; use `ggml_backend_cpu_set_n_threads()` or a custom threadpool
+- **Scalar accessors are CPU-only** — `ggml_get_f32_1d`, `ggml_set_f32`, etc. now live in `ggml-cpu.h` (not `ggml.h`); include it and link the CPU backend to use them
+- **GLU activations** — fused gated-linear-unit ops (`ggml_swiglu`, `ggml_geglu`, `ggml_reglu`, …) take a single tensor split in half, or use `_split` variants for separate value/gate tensors

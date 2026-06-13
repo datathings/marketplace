@@ -14,6 +14,7 @@
 11. [Serialization utilities](#serialization-utilities)
 12. [Stream serialization](#stream-serialization)
 13. [self_test](#self_test)
+14. [__version__](#__version__)
 
 ---
 
@@ -341,3 +342,13 @@ loaded = msgpack_deserialize_from_stream(buf)
 from power_grid_model.utils import self_test
 self_test()  # runs a minimal sanity check; raises PowerGridError on failure
 ```
+
+## __version__
+
+```python
+import power_grid_model
+power_grid_model.__version__   # e.g. "1.13.93" — the C++ core version string (PGM_version)
+```
+
+Available since v1.13.78. The value is read from the native core at import time, so it
+reflects the actually-loaded binary rather than the Python package metadata.

@@ -55,11 +55,11 @@ Build complex plots by composing `PatchCollection` objects:
 ### `create_bus_collection(net, buses=None, size=5., patch_type="circle", color=None, z=None, cmap=None, norm=None, infofunc=None, picker=False, **kwargs) -> PatchCollection`
 **Description:** Creates matplotlib patch collection for buses.
 
-### `create_line_collection(net, lines=None, line_width=1.0, infofunc=None, cmap=None, norm=None, picker=False, **kwargs) -> LineCollection`
-**Description:** Creates matplotlib line collection for lines.
+### `create_line_collection(net, lines=None, line_geodata=None, bus_geodata=None, use_bus_geodata=False, infofunc=None, cmap=None, norm=None, picker=False, z=None, cbar_title="Line Loading [%]", clim=None, plot_colormap=True, line_table="line", **kwargs) -> LineCollection`
+**Description:** Creates matplotlib line collection for lines. (`linewidths`/`color` passed via `**kwargs`.)
 
-### `create_trafo_collection(net, trafos=None, size=None, color="k", picker=False, infofunc=None, cmap=None, **kwargs) -> PatchCollection`
-**Description:** Creates patches for transformers (displayed as circles at midpoint).
+### `create_trafo_collection(net, trafos=None, picker=False, size=None, infofunc=None, cmap=None, norm=None, z=None, clim=None, cbar_title="Transformer Loading", plot_colormap=True, bus_geodata=None, **kwargs) -> PatchCollection`
+**Description:** Creates patches for transformers (displayed as circles at midpoint). (`color` passed via `**kwargs`.)
 
 ### `create_ext_grid_collection(net, ext_grids=None, size=1., color="y", infofunc=None, picker=False, **kwargs) -> PatchCollection`
 **Description:** Creates patches for external grid connections.

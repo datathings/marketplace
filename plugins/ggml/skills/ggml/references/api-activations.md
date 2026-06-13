@@ -28,6 +28,7 @@ struct ggml_tensor * ggml_step(struct ggml_context * ctx, struct ggml_tensor * a
 struct ggml_tensor * ggml_step_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_relu(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_relu_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+// leaky_relu carries its own `inplace` flag (no separate _inplace symbol)
 struct ggml_tensor * ggml_leaky_relu(struct ggml_context * ctx, struct ggml_tensor * a, float negative_slope, bool inplace);
 
 // Sigmoid-family
@@ -43,7 +44,8 @@ struct ggml_tensor * ggml_gelu(struct ggml_context * ctx, struct ggml_tensor * a
 struct ggml_tensor * ggml_gelu_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_gelu_quick(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_gelu_quick_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
-struct ggml_tensor * ggml_gelu_erf(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_gelu_erf(struct ggml_context * ctx, struct ggml_tensor * a);          // exact erf-based GELU
+struct ggml_tensor * ggml_gelu_erf_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 
 // SiLU (Swish)
 struct ggml_tensor * ggml_silu(struct ggml_context * ctx, struct ggml_tensor * a);
@@ -53,7 +55,14 @@ struct ggml_tensor * ggml_silu_back(struct ggml_context * ctx, struct ggml_tenso
 // Hard activations (mobile-friendly)
 struct ggml_tensor * ggml_hardswish(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_hardsigmoid(struct ggml_context * ctx, struct ggml_tensor * a);
-struct ggml_tensor * ggml_softplus(struct ggml_context * ctx, struct ggml_tensor * a);
+
+// Exp / softplus
+struct ggml_tensor * ggml_exp(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_exp_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_expm1(struct ggml_context * ctx, struct ggml_tensor * a);          // exp(x) - 1
+struct ggml_tensor * ggml_expm1_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_softplus(struct ggml_context * ctx, struct ggml_tensor * a);       // log(1 + exp(x))
+struct ggml_tensor * ggml_softplus_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 
 // Trig
 struct ggml_tensor * ggml_sin(struct ggml_context * ctx, struct ggml_tensor * a);
@@ -61,56 +70,75 @@ struct ggml_tensor * ggml_sin_inplace(struct ggml_context * ctx, struct ggml_ten
 struct ggml_tensor * ggml_cos(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_cos_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 
-// Rounding
+// Rounding (all element-wise; trunc rounds towards zero)
 struct ggml_tensor * ggml_floor(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_floor_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_ceil(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_ceil_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_round(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_round_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 struct ggml_tensor * ggml_trunc(struct ggml_context * ctx, struct ggml_tensor * a);
-struct ggml_tensor * ggml_expm1(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_trunc_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
 
-// XIELU (xi+ELU) — parameterized
+// XIELU (xi+ELU) — parameterized; no _inplace variant
+// x = x * (c_a(alpha_n) + c_b(alpha_p, beta) * sigmoid(beta * x)) + eps * (x > 0)
 struct ggml_tensor * ggml_xielu(struct ggml_context * ctx, struct ggml_tensor * a,
                                 float alpha_n, float alpha_p, float beta, float eps);
-struct ggml_tensor * ggml_xielu_inplace(struct ggml_context * ctx, struct ggml_tensor * a,
-                                        float alpha_n, float alpha_p, float beta, float eps);
 
 // Generic unary dispatch (enum ggml_unary_op)
 struct ggml_tensor * ggml_unary(struct ggml_context * ctx, struct ggml_tensor * a, enum ggml_unary_op op);
 struct ggml_tensor * ggml_unary_inplace(struct ggml_context * ctx, struct ggml_tensor * a, enum ggml_unary_op op);
 ```
 
-**ggml_unary_op values (21):**
-`GGML_UNARY_OP_ABS, NEG, SGN, STEP, TANH, ELU, RELU, SIGMOID, GELU, GELU_QUICK, SILU, HARDSWISH, HARDSIGMOID, EXP, SIN, COS, GELU_ERF, RELU_THRESHOLD, SOFTPLUS, FLOOR, CEIL, ROUND, TRUNC`
+**ggml_unary_op values (22, excluding `GGML_UNARY_OP_COUNT`), in declaration order:**
+`GGML_UNARY_OP_ABS, SGN, NEG, STEP, TANH, ELU, RELU, SIGMOID, GELU, GELU_QUICK, SILU, HARDSWISH, HARDSIGMOID, EXP, EXPM1, SOFTPLUS, GELU_ERF, XIELU, FLOOR, CEIL, ROUND, TRUNC`
+
+New since v0.9.11: `EXPM1, SOFTPLUS, GELU_ERF, XIELU, FLOOR, CEIL, ROUND, TRUNC`. Note `SIN`/`COS` are **not** members of `ggml_unary_op` (they are standalone ops), and there is no `RELU_THRESHOLD` member.
 
 ---
 
 ## GLU Variants
 
-Gated Linear Units — split input in half and apply a gate function:
+Gated Linear Units (new since v0.9.11). A GLU op splits the input row into a value
+half and a gate half, applies an activation to the gate, then multiplies the two
+halves element-wise. Input has `n` columns / `r` rows; the result has `n/2` columns
+/ `r` rows. The gate is expected in the **second** half of each row unless `swapped`
+is true (the `*_swapped` helpers set this flag).
 
 ```c
 // Generic dispatch (op selects gate: REGLU, GEGLU, SWIGLU, etc.)
 struct ggml_tensor * ggml_glu(struct ggml_context * ctx, struct ggml_tensor * a,
                               enum ggml_glu_op op, bool swapped);
 
-// Concrete variants — split along ne0
-struct ggml_tensor * ggml_reglu(struct ggml_context * ctx, struct ggml_tensor * a);
-struct ggml_tensor * ggml_geglu(struct ggml_context * ctx, struct ggml_tensor * a);
-struct ggml_tensor * ggml_swiglu(struct ggml_context * ctx, struct ggml_tensor * a);
+// Concrete variants — single tensor, split along ne0
+struct ggml_tensor * ggml_reglu(struct ggml_context * ctx, struct ggml_tensor * a);         // ReLU gate
 struct ggml_tensor * ggml_reglu_swapped(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_geglu(struct ggml_context * ctx, struct ggml_tensor * a);         // GELU gate (tanh approx)
 struct ggml_tensor * ggml_geglu_swapped(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_swiglu(struct ggml_context * ctx, struct ggml_tensor * a);        // SiLU gate
 struct ggml_tensor * ggml_swiglu_swapped(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_geglu_erf(struct ggml_context * ctx, struct ggml_tensor * a);     // exact erf GELU gate
+struct ggml_tensor * ggml_geglu_erf_swapped(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_geglu_quick(struct ggml_context * ctx, struct ggml_tensor * a);   // quick GELU gate
+struct ggml_tensor * ggml_geglu_quick_swapped(struct ggml_context * ctx, struct ggml_tensor * a);
 
-// Split variants — a and b are separate gate/value tensors
+// Split variants — a is the value tensor, b is the gate tensor (both n columns, r rows)
 struct ggml_tensor * ggml_glu_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, enum ggml_glu_op op);
 struct ggml_tensor * ggml_reglu_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 struct ggml_tensor * ggml_geglu_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 struct ggml_tensor * ggml_swiglu_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
+struct ggml_tensor * ggml_geglu_erf_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
+struct ggml_tensor * ggml_geglu_quick_split(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 
-// OAI-style SwiGLU with scale and clamp
+// OAI-style SwiGLU with scale and clamp (a = value, b = gate)
 struct ggml_tensor * ggml_swiglu_oai(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b,
                                      float alpha, float limit);
 ```
+
+**ggml_glu_op values (6, excluding `GGML_GLU_OP_COUNT`), in declaration order:**
+`GGML_GLU_OP_REGLU, GEGLU, SWIGLU, SWIGLU_OAI, GEGLU_ERF, GEGLU_QUICK`
+
+Helpers: `ggml_glu_op_name(op)` returns the op name; `ggml_get_glu_op(tensor)` reads it back from a tensor.
 
 ---
 
@@ -140,6 +168,10 @@ struct ggml_tensor * ggml_l2_norm_inplace(struct ggml_context * ctx, struct ggml
 ## Shape & Layout Operations
 
 ```c
+// Duplicate (deep copy into a new contiguous tensor)
+struct ggml_tensor * ggml_dup(struct ggml_context * ctx, struct ggml_tensor * a);
+struct ggml_tensor * ggml_dup_inplace(struct ggml_context * ctx, struct ggml_tensor * a);
+
 // Reshape (must be same number of elements)
 struct ggml_tensor * ggml_reshape(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
 struct ggml_tensor * ggml_reshape_1d(struct ggml_context * ctx, struct ggml_tensor * a, int64_t ne0);
@@ -177,12 +209,26 @@ struct ggml_tensor * ggml_repeat_back(struct ggml_context * ctx, struct ggml_ten
 struct ggml_tensor * ggml_concat(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, int dim);
 
 // Row gather / scatter
-struct ggml_tensor * ggml_get_rows(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);
+struct ggml_tensor * ggml_get_rows(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b);          // b = I32 row indices
 struct ggml_tensor * ggml_get_rows_back(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, struct ggml_tensor * c);
-struct ggml_tensor * ggml_set_rows(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, struct ggml_tensor * c);
+struct ggml_tensor * ggml_set_rows(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, struct ggml_tensor * c); // a=dst, b=src, c=I64 indices; returns view(a)
 
-// Circular shift along all dimensions
+// Write b into a view of a (offset/strides in bytes); _inplace returns view(a)
+struct ggml_tensor * ggml_set(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t nb1, size_t nb2, size_t nb3, size_t offset);
+struct ggml_tensor * ggml_set_inplace(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t nb1, size_t nb2, size_t nb3, size_t offset);
+struct ggml_tensor * ggml_set_1d(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t offset);
+struct ggml_tensor * ggml_set_1d_inplace(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t offset);
+struct ggml_tensor * ggml_set_2d(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t nb1, size_t offset);
+struct ggml_tensor * ggml_set_2d_inplace(struct ggml_context * ctx, struct ggml_tensor * a, struct ggml_tensor * b, size_t nb1, size_t offset);
+
+// Diagonal: turn vector rows into a diagonal matrix
+struct ggml_tensor * ggml_diag(struct ggml_context * ctx, struct ggml_tensor * a);
+
+// Circular shift along all dimensions (elements shifted past the end wrap around)
 struct ggml_tensor * ggml_roll(struct ggml_context * ctx, struct ggml_tensor * a, int shift0, int shift1, int shift2, int shift3);
+
+// 1-D ramp [start, stop) with the given step
+struct ggml_tensor * ggml_arange(struct ggml_context * ctx, float start, float stop, float step);
 ```
 
 ---

@@ -60,6 +60,17 @@ struct gguf_context * gguf_init_from_file(const char * fname, struct gguf_init_p
 // Load from an already-opened FILE pointer
 struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_params params);
 
+// Load from an in-memory buffer
+struct gguf_context * gguf_init_from_buffer(const void * data, size_t size, struct gguf_init_params params);
+
+// Load via a reader callback that simulates or wraps a FILE pointer.
+// The callback reads up to `len` bytes at `offset` into `output` and returns the number of bytes read.
+// max_chunk_read is the maximum number of bytes read at once from the callback (0 means no limit).
+typedef size_t (*gguf_reader_callback_t)(void * userdata, void * output, uint64_t offset, size_t len);
+struct gguf_context * gguf_init_from_callback(gguf_reader_callback_t callback, void * userdata,
+                                              size_t max_chunk_read, uint64_t max_expected_size,
+                                              struct gguf_init_params params);
+
 // Free the GGUF context
 void gguf_free(struct gguf_context * ctx);
 
