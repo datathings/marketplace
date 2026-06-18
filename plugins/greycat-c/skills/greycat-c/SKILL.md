@@ -5,7 +5,7 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **2.6.3**.
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.0**.
 
 ## Key Considerations
 
@@ -16,7 +16,7 @@ Comprehensive reference for GreyCat native development (C API), the GCL Standard
 - **Host/Scheduler (`gc/host.h`).** `gc_host__cancel_task` / `gc_host__get_task_status` take `i64_t task_id`. Periodic scheduling via `gc_scheduler_t`, `gc_periodic_task_t`, `gc_periodicity_t` (fixed / daily / weekly / monthly / yearly), `gc_scheduler__add/activate/deactivate/create_object`.
 - **ABI.** `GC_ABI_PROTO` is `3`. `gc_abi_header_check_error_t` includes `..._truncated = 4`; `gc_abi_t` carries its own allocator.
 - **Iterator params** `gc_program_iterator_param_t`: `from=0`, `to=1`, `nullable=2`, `from_excl=3`, `to_excl=4` (no `limit`). Geo epsilon constant is `GC_CORE_GEO_EPS`.
-- **Stdlib changes since 2.5.6.** Security model is now `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). `std::io` gained S3 object storage (`S3`, `S3Bucket`, `S3Object`, `S3BasicCredentials`) and the `HttpMethod` / `HttpRequest` / `HttpResponse` request model — HTTP headers are now `Map<String, String>?` (no `HttpHeader` type). `std::util` adds `Uuid` (v4 / v7). HTTP/S3, `Crypto`, periodicity field shapes (weekly/monthly use a nested `daily`, yearly uses `dates: Array<DateTuple>`), and the `LogLevel` / `TaskStatus` / `LicenseType` enums all changed — see the stdlib reference.
+- **Stdlib (GreyCat 8.0).** Security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). GCL logging is via module-level `info` / `warn` / `error` / `perf` / `trace` functions — `Log` is a parse record, not a callable namespace. `std::io` has S3 object storage (`S3`, `S3Bucket`, `S3Object`, `S3BasicCredentials`) and the `HttpMethod` / `HttpRequest` / `HttpResponse` request model (headers are `Map<String, String>?`, no `HttpHeader` type); `Csv::analyze` takes `Array<String>` paths. `std::util` adds `Uuid` (v4 / v7). Periodicity field shapes (weekly/monthly use a nested `daily`, yearly uses `dates: Array<DateTuple>`) and the `LogLevel` / `TaskStatus` / `LicenseType` enums — see the stdlib reference.
 
 ## Contents
 

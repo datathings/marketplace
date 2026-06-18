@@ -2,47 +2,55 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.0**. The library is organized into four modules:
 
-- **core** - Fundamental types and data structures
-- **runtime** - Scheduler, tasks, logging, security, system operations
-- **io** - File I/O, CSV/JSON/XML, HTTP client, email
-- **util** - Collections, statistics, quantizers, cryptography
+- **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, math)
+- **runtime** - Scheduler, tasks, jobs, logging, identity/security, system operations, OpenAPI, MCP
+- **io** - File I/O, CSV/JSON/XML, HTTP client, email/SMTP, S3 object storage
+- **util** - Collections, statistics, quantizers, cryptography, UUID
+
+> Signatures below are copied verbatim from the `.gcl` source. `native` means the implementation is provided by the runtime. `@expose` marks a function reachable over the API; `@permission("...")` is the required permission. `private` members are omitted.
 
 ## Table of Contents
 
 ### Modules
 - [std::core - Core Types](#core-module-stdcore)
-  - [Fundamental Types](#fundamental-types) - Tuple, Date, Error
-  - [Geospatial Types](#geospatial-types) - GeoCircle, GeoPoly, GeoBox
-  - [Enumerations](#enumerations) - FloatPrecision, CalendarUnit, TensorType, etc.
+  - [Numbers & Strings](#numbers--strings) - int, float, String, Buffer, Chars
+  - [Time & Duration](#time--duration) - time, duration, Date
+  - [Containers](#containers) - Array, Map, Tuple, Table
+  - [Nodes](#nodes) - node, nodeTime, nodeList, nodeIndex, nodeGeo, VectorIndex
+  - [Tensors](#tensors) - Tensor, TensorType, TensorDistance
+  - [Geospatial Types](#geospatial-types) - geo, GeoCircle, GeoPoly, GeoBox
+  - [Reflection](#reflection) - type, field
+  - [Errors](#errors) - Error, ErrorFrame, ErrorCode
+  - [Math & Free Functions](#math--free-functions)
+  - [Enumerations](#core-enumerations)
 
 - [std::runtime - Runtime Features](#runtime-module-stdruntime)
-  - [Scheduler & Task Automation](#scheduler---task-automation)
+  - [Scheduler & Periodicities](#scheduler--periodicities)
   - [Task & Job Management](#task--job-management)
   - [Logging](#logging)
   - [System Information](#system-information)
-  - [Security & Identity](#security--identity) - Identity, IdentityGrant, IdentityGrantType
+  - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
   - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
 
 - [std::io - Input/Output](#io-module-stdio)
-  - [Binary I/O](#binary-io) - GcbWriter, GcbReader
-  - [Text I/O](#text-io) - TextWriter, TextReader
-  - [JSON I/O](#json-io) - JsonWriter, JsonReader
-  - [CSV I/O](#csv-io) - CsvWriter, CsvReader, CsvAnalyzer
-  - [File System](#file-system) - File, FileWalker
-  - [HTTP Client](#http-client) - Http, Url
-  - [Email](#email) - Email, Smtp
+  - [Readers & Writers](#readers--writers) - Writer, Reader, GcbWriter/Reader, TextWriter/Reader, BinReader
+  - [JSON I/O](#json-io) - JsonWriter, JsonReader, Json
   - [XML I/O](#xml-io) - XmlReader
+  - [CSV I/O](#csv-io) - CsvWriter, CsvReader, CsvFormat, Csv analysis
+  - [File System](#file-system) - File, FileWalker
+  - [HTTP Client](#http-client) - Http, HttpRequest, HttpResponse, HttpMethod, Url
+  - [Email](#email) - Email, Smtp
   - [S3 Object Storage](#s3-object-storage) - S3, S3Bucket, S3Object, S3BasicCredentials
 
 - [std::util - Utilities](#util-module-stdutil)
   - [Collections](#collections) - Queue, Stack, SlidingWindow, TimeWindow
-  - [Statistics](#statistics) - Gaussian, Histogram, GaussianProfile
-  - [Quantizers](#quantizers) - Linear, Log, Custom, Multi
-  - [Utilities](#utilities) - Random, Assert, ProgressTracker, Crypto, Uuid, Plot
+  - [Statistics](#statistics) - Gaussian, Histogram, HistogramStats, GaussianProfile
+  - [Quantizers](#quantizers) - Quantizer, Linear, Log, Custom, Multi
+  - [Utilities](#utilities) - Random, Assert, ProgressTracker, Crypto, Uuid
 
 ### Additional Sections
 - [Usage Guidelines](#usage-guidelines)
@@ -53,194 +61,399 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
 
 ## Core Module (std::core)
 
-### Fundamental Types
+### Numbers & Strings
 
-#### Tuple<T, U>
-Two-element tuple for pairing values of potentially different types. Fields are `x` and `y`.
+#### int / float
+`int` is signed 64-bit; `float` is IEEE 754 64-bit.
 ```gcl
-var pair = Tuple<String, int> { x: "count", y: 42 };
-println("${pair.x}: ${pair.y}");
+// int::min, int::max, float::min, float::max
+var s = int::to_string(1234567, '_');                 // "1_234_567"
+var f = float::to_string(3.14159, '.', null, 2, false);
+```
+
+#### String
+Immutable UTF-8 string with rich query/transform/similarity methods.
+```gcl
+// native fns: compare, startsWith, endsWith, contains, get(int): char,
+//   indexOf(char), indexOfFrom, lastIndexOf, slice(from, to), trim,
+//   lowercase, uppercase, size, replace(s, s2), indexOfString,
+//   indexOfStringFrom, split(c: char): Array<String>, chars(): Chars,
+//   jaro, jarowinkler (similarity), levenshtein, nfkd_casefold
+var parts = "a,b,c".split(',');
+var d = "kitten".levenshtein("sitting");   // 3
+```
+
+#### Chars
+```gcl
+type Chars {
+  codepoints: Array<char>;
+  // native fn to_string(): String;
+}
+```
+
+#### Buffer
+Mutable binary blob builder.
+```gcl
+// native fns: add(any?), add_and_pad(v, max, pad: char), get(i): char,
+//   size(): int, clear(), toString(): String
+var b = Buffer {};
+b.add("hello");
+println(b.toString());
+```
+
+### Time & Duration
+
+#### duration
+```gcl
+// static native fn new(v: int, unit: DurationUnit): duration
+// static native fn newf(v: float, unit: DurationUnit): duration
+// native fns: to(unit): int, tof(unit): float, add(value, unit), subtract(value, unit)
+var d = duration::new(5, DurationUnit::minutes);
+```
+
+#### time
+Universal precise instant. Created with `time::new(...)` or a literal (`'2025-05-06T16:47:42Z'`).
+```gcl
+// static: current(), now(), new(epoch, unit), parse(value, format?),
+//   isLeap(year), totalDaysInYear(year), totalDaysInMonth(month, year)
+// instance: to(unit), floor(unit), calendar_add(value, unit: CalendarUnit, tz?),
+//   calendar_floor(unit: CalendarUnit, tz?), calendar_ceiling(unit, tz?),
+//   dayOfYear(tz?), dayOfWeek(tz?), weekOfYear(tz?), daysInMonth(tz?),
+//   startOfWeek(tz?), endOfWeek(tz?), toDate(tz?): Date, format(format, tz?)
+var t = time::now();
+var d: Date = t.toDate(null);
+var s = t.format("%+", null);                 // ISO8601
+var tomorrow = t.calendar_add(1, CalendarUnit::day, null);
 ```
 
 #### Date
-Date/time representation with calendar operations.
+A moment in the human calendar. Built from a `time` (not via `Date::now()`).
 ```gcl
-var now = Date::now();
-var yesterday = now - 1day;
-var next_week = now + 7day;
+type Date {
+  year: int; month: int; day: int;     // month 1-12, day 1-31
+  hour: int; minute: int; second: int;
+  microsecond: int;                    // 0..999_999
+  // static native fn from_time(time: time, tz: TimeZone?): Date
+  // static native fn parse(value: String, format: String?): Date
+  // native fn to_time(tz: TimeZone?): time
+  // native fn to_nearest_time(tz: TimeZone): time
+}
+var date = Date::from_time(time::now(), TimeZone::"Europe/Luxembourg");
+var back = date.to_time(null);
 ```
 
-#### Error & ErrorFrame
-Error handling with stack traces.
+### Containers
+
+#### Array<T>
 ```gcl
-type Error {
-  message: String?;
-  stack: Array<ErrorFrame>;
-}
+// native fns: fill(size, default), add(value), add_all(values), get(i), set(i, value),
+//   swap(i, j), sort(order: SortOrder), sort_by(field, order), size(),
+//   index_of(value), remove(i): T, remove_first(): T, remove_last(): T,
+//   set_capacity(value), range_equals(start, end, v)
+```
 
-type ErrorFrame {
-  module: String?;
-  function: String;
-  line: int;
-  column: int;
-}
+#### Map<K, V>
+```gcl
+// native fns: set(key, value): V, get(key): V?, contains(key): bool,
+//   remove(key), size(): int, values(): Array<V>
+```
 
-// ErrorCode enum: none, interrupted, await, timeout, forbidden, runtime_error
+#### Tuple<T, U>
+```gcl
+type Tuple<T, U> { x: T; y: U; }
+var pair = Tuple<String, int> { x: "count", y: 42 };
+```
+
+#### Table<T>
+Two-dimensional structure of values of any type.
+```gcl
+// native fns: cols(), rows(), set_cell(row, col: any, value), get_cell(row, col: any),
+//   set_row(row, v: T), get_row(row): T, add_row(v: T), remove_row(row),
+//   sort(col: any, order: SortOrder), sort_by(col: any, cell_field: field, order),
+//   init(rows, cols)
+// @expose @permission("debug") static native fn applyMappings(table, mappings: Array<TableColumnMapping>): Table
+type TableColumnMapping { column: int; extractors: Array<any>; }
+```
+
+### Nodes
+
+Persistent graph node primitives. All are `native` and stored to disk.
+
+- **`node<T>`** - singleton boxed value. `resolve(): T`, `set(value: T)`, static `resolve_all(n: Array<node?>): Array<any?>`.
+- **`nodeTime<T>`** - temporal series. `resolve()`, `resolveAt(time)`, `resolveAtWithin(time, duration)`, `resolveTimeAt`, `resolveTimeValueAt`, `getAt`, `removeAt`, `setAt(time, value)`, `setAll(time, values, delta)`, `rangeSize(from, to)`, `size`, `firstTime`/`first`/`lastTime`/`last`, `prev(time)`/`next(time)`, `removeAll`, static `sample(...)`, static `info(...)`.
+- **`nodeList<T>`** - sparse indexed list. `get(index)`, `set(index, value)`, `add(value)`, `resolve(index)`, `resolveEntry(index): Tuple<int,T>?`, `remove(index): bool`, `firstIndex`/`first`/`lastIndex`/`last`, etc.
+- **`nodeIndex<K, V>`** - keyed map, O(log n). `set(key, value)`, `get(key)`, `remove(key)`, `search(key, max): Array<SearchResult<K,V>>`, static `search_closest`, static `sample`/`info`.
+- **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), etc.
+- **`nodeTimeCursor<T>`** (`@volatile`) - iterator over a nodeTime (`first`, `last`, `next`, `previous`, `lessOrEq(t)`, `skip_values`, `skip_duration`, `currentTime`, `current`).
+
+```gcl
+type NodeInfo<T> { size: int; from: T?; to: T?; }
+type SearchResult<K, V> { key: K; value: V; distance: float; }   // @volatile
+```
+
+#### VectorIndex<T>
+Persistent vector store with distance-based nearest-neighbour search.
+```gcl
+// native fn add(vector: node<Tensor>, value: T)
+// native fn search(query: Tensor, wanted: int?): Array<SearchResult<Tensor, T>>
+// native fn size(): int
+// native static fn wrap(values: Array<float>, type: TensorType): Tensor
+```
+
+### Tensors
+
+#### Tensor
+N-dimensional numeric structure.
+```gcl
+// native fns include: init(etype: TensorType, shape: Array<int>), get(pos), set(pos, value),
+//   getImag/setImag, add(pos, value), append(value), fill(value), setCapacity(value),
+//   sum(): float, size(): int, type(): TensorType, shape(): Array<int>, dim(): int,
+//   initPos(): Array<int>, incPos(pos): bool, reshape(shape), scale(value, inPlace: float): Tensor,
+//   slice(pos, size): Tensor, slide(steps), copyElementsFrom(...), distance(v, d: TensorDistance): float,
+//   reset(), toTable(): Table, toString(): String,
+//   to_complex_tensor(), get_real_tensor(), get_imaginary_tensor(),
+//   get_absolute_tensor(), get_phase_tensor(inDegrees: bool)
+// static native fn wrap_1d(etype: TensorType, values: Array): Tensor
+```
+
+```gcl
+enum TensorType { i32(4); i64(8); f32(4); f64(8); c64(8); c128(16); }
+enum TensorDistance { euclidean; l2sq; cosine; }   // euclidean aka l2
 ```
 
 ### Geospatial Types
 
-#### GeoCircle
-Circular geographic region defined by a center `geo` point and a radius in meters. Has `native fn contains(point: geo): bool`.
+#### geo
+A precise location given by latitude/longitude. Created with a literal: `geo{49.5964, 6.1287}` (NOT `geo::new`).
 ```gcl
-var zone = GeoCircle {
-  center: geo::new(45.5, -73.6),
-  radius: 5000.0  // meters
-};
+// static: geo::min, geo::max, distance_to_segment(point, a, b): float, meters_per_deg_lon(lat): float
+// instance: lat(): float, lng(): float, distance(value: geo): float,
+//   bearing(value: geo): float, toString(): String, toGeohash(): String
+var hq = geo{ 49.59640167862028, 6.128662935665594 };
+var meters = hq.distance(geo{ 49.6, 6.13 });
+```
+
+#### GeoCircle
+```gcl
+type GeoCircle {
+  center: geo;
+  radius: float;        // meters
+  // native fn contains(point: geo): bool
+  // native fn sw(): geo; native fn ne(): geo;
+}
 ```
 
 #### GeoPoly
-Polygon geographic region: an array of `geo` vertices. Has `native fn contains(point: geo): bool`.
 ```gcl
-var boundary = GeoPoly {
-  points: [
-    geo::new(45.5, -73.6),
-    geo::new(45.6, -73.5),
-    geo::new(45.4, -73.4)
-  ]
-};
+type GeoPoly {
+  points: Array<geo>;
+  // native fns: contains(point): bool, sw(), ne(), bbox(): GeoBox, is_closed(): bool,
+  //   perimeter(): float, area(): float, centroid(): geo?, mean_centroid(): geo?,
+  //   interpolate(step: float): Array<geo>
+}
 ```
 
 #### GeoBox
-Rectangular bounding box for geographic queries, defined by South-West (`sw`) and North-East (`ne`) `geo` corners. Has `native fn contains(point: geo): bool`.
 ```gcl
-var bbox = GeoBox {
-  sw: geo::new(45.4, -73.7),
-  ne: geo::new(45.6, -73.5)
-};
+type GeoBox {
+  sw: geo;
+  ne: geo;
+  // static native fn from_point(center: geo, radius: float): GeoBox
+  // native fns: contains(point): bool, intersects(other): bool, union(other): GeoBox,
+  //   intersection(other): GeoBox?, expand(margin: float): GeoBox, center(): geo,
+  //   width(): float, height(): float, split(rows, cols): Array<GeoBox>
+}
 ```
 
-### Enumerations
+### Reflection
+
+```gcl
+native type type {
+  // static: all(): Array<type>, of(v: any?): type, enum_by_offset/name<T>, enum_name(x), enum_offset(x),
+  //   fields_set_from(dst, src, clone), field_set(target, offset, value), field_get(target, offset)
+  // instance: nb_fields(): int, fields(): Array<field>, field_by_name(name): field?,
+  //   field_offset_by_name(name): int?, nb_enum_values(): int, enum_values(): Array,
+  //   has_parent(parent): bool, create_instance(): any?
+}
+native type field {
+  // native fns: name(): String, type(): type, is_nullable(): bool, offset(): int
+}
+```
+
+### Errors
+
+```gcl
+type Error      { message: String?; stack: Array<ErrorFrame>; }
+type ErrorFrame { module: String?; function: String; line: int; column: int; }
+
+enum ErrorCode {
+  none(0); interrupted(1); await(2); timeout(6); forbidden(7); runtime_error(8);
+}
+```
+
+### Math & Free Functions
+
+Module-level functions (called without a type prefix):
+```gcl
+// logging (write to the task/console log if level allows):
+println(v); pprint(v); print(v); error(v); warn(v); info(v); perf(v); trace(v);
+// values:
+valueOf(en: any): any?;        // value of an enum field
+parseNumber(value: String): any;   // int or float, throws on failure
+parseHex(value: String): int;
+clone<T>(v: T): T;
+// math: exp, cos, sin, tan, sqrt, floor, ceil, cosh, sinh, tanh, acos, asin, atan,
+//   atan2(y, x), log, log2, log10, pow(x, y), trunc, round, abs<T>, min<T>, max<T>,
+//   isNaN(v: float): bool, roundp(x: float, p: int): float
+type MathConstants { /* static: e, log_2e, log_10e, ln2, ln10, pi, pi_2, pi_4, m1_pi,
+                        m2_pi, m2_sqrt_pi, sqrt2, sqrt1_2 */ }
+```
+
+### Core Enumerations
 
 #### FloatPrecision
-Precision levels for floating-point calculations: `p1`, `p10`, `p100`, `p1000`, etc.
+`p1`(1.0), `p10`(0.1), `p100`(0.01), ... down to `p10000000000`(1e-10).
 
 #### CalendarUnit
-Time units for date operations: `year`, `month`, `day`, `hour`, `minute`, `second`, `microsecond`.
+`year`(0), `month`(1), `day`(2), `hour`(3), `minute`(4), `second`(5), `microsecond`(6).
 
 #### DurationUnit
-Duration units: `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`.
+`microseconds`(1), `milliseconds`(1e3), `seconds`(1e6), `minutes`(60e6), `hours`(3600e6), `days`(86400e6).
 
-#### TensorType
-Tensor element types: `i32`, `i64`, `f32`, `f64`, `c64`, `c128`.
+#### SamplingMode
+`fixed`(0), `fixed_reg`(1), `adaptative`(2), `dense`(3).
 
-#### TensorDistance
-Distance metrics for tensors: `euclidean` (aka l2), `l2sq`, `cosine`.
+#### SortOrder
+`asc`, `desc`.
+
+#### TensorType / TensorDistance
+See [Tensors](#tensors).
+
+#### TimeZone
+Large enum of IANA timezone names (e.g. `TimeZone::"UTC"`, `TimeZone::"Europe/Luxembourg"`, `TimeZone::"America/New_York"`).
 
 ## Runtime Module (std::runtime)
 
-### Scheduler - Task Automation
+### Scheduler & Periodicities
 
-The scheduler manages recurring tasks with various periodicity options.
+`Scheduler` manages recurring tasks; each function may have at most one scheduled task (identified by function-pointer equality, so re-adding the same function replaces it).
+```gcl
+type Scheduler {
+  // @expose @permission("admin"):
+  // static native fn add(function: function, periodicity: Periodicity, options: PeriodicOptions?)
+  // static native fn list(): Array<PeriodicTask>
+  // static native fn find(function: function): PeriodicTask?
+  // static native fn activate(function: function): bool
+  // static native fn deactivate(function: function): bool
+}
+```
 
 #### Basic Usage
 ```gcl
-fn backup_database() {
-  // Backup logic...
-}
+fn backup_database() { /* ... */ }
 
 fn schedule_backups() {
-  Scheduler::add(
-    backup_database,
-    DailyPeriodicity { hour: 2 },  // Run at 2 AM daily
-    null
-  );
+  Scheduler::add(backup_database, DailyPeriodicity { hour: 2 }, null);  // 2 AM daily
 }
 ```
 
 #### Periodicity Types
+`Periodicity` is an `abstract type`; use a concrete subtype.
 
-**FixedPeriodicity** - Run every N time units
+**FixedPeriodicity** - fixed interval
 ```gcl
+type FixedPeriodicity extends Periodicity { every: duration; }
 FixedPeriodicity { every: 5min }
-FixedPeriodicity { every: 1hour }
 ```
 
-**DailyPeriodicity** - Run at specific time each day
+**DailyPeriodicity** - a time-of-day (all fields optional, default midnight)
 ```gcl
-DailyPeriodicity { hour: 14, minute: 30 }  // 2:30 PM daily
+type DailyPeriodicity extends Periodicity {
+  hour: int?; minute: int?; second: int?; timezone: TimeZone?;
+}
+DailyPeriodicity { hour: 14, minute: 30 }   // 2:30 PM
 ```
 
-**WeeklyPeriodicity** - Run on given weekdays, at the time given by `daily`
+**WeeklyPeriodicity** - selected weekdays at a `daily` time
 ```gcl
+type WeeklyPeriodicity extends Periodicity {
+  days: Array<DayOfWeek>;
+  daily: DailyPeriodicity?;
+}
 WeeklyPeriodicity {
-  days: [DayOfWeek::Mon, DayOfWeek::Fri],  // enum values: Mon..Sun
+  days: [DayOfWeek::Mon, DayOfWeek::Fri],
   daily: DailyPeriodicity { hour: 9 }
 }
 ```
 
-**MonthlyPeriodicity** - Run on given days-of-month (negatives count from end), at `daily` time
+**MonthlyPeriodicity** - days of month (negatives count from end) at a `daily` time
 ```gcl
+type MonthlyPeriodicity extends Periodicity {
+  days: Array<int>;            // 1..31, or -1..-31 from end of month
+  daily: DailyPeriodicity?;
+}
 MonthlyPeriodicity {
-  days: [1, 15, -1],                        // 1st, 15th, last day of month
+  days: [1, 15, -1],
   daily: DailyPeriodicity { hour: 9, minute: 30 }
 }
 ```
 
-**YearlyPeriodicity** - Run on specific calendar dates each year
+**YearlyPeriodicity** - specific calendar dates each year
 ```gcl
+type YearlyPeriodicity extends Periodicity {
+  dates: Array<DateTuple>;
+  timezone: TimeZone?;
+}
+type DateTuple { day: int; month: Month; }
 YearlyPeriodicity {
-  dates: [
-    DateTuple { day: 1, month: Month::Jan },
-    DateTuple { day: 25, month: Month::Dec }
-  ],
+  dates: [ DateTuple { day: 1, month: Month::Jan }, DateTuple { day: 25, month: Month::Dec } ],
   timezone: TimeZone::"Europe/Luxembourg"
 }
 ```
 
-#### Advanced Scheduling
+#### PeriodicOptions
 ```gcl
-fn health_check() {
-  // Check system health...
+type PeriodicOptions {
+  immediate: bool?;       // run immediately, default true
+  activated: bool?;       // default true
+  start: time?;           // default time::now()
+  max_duration: duration?;// force-cancel after this; null = unlimited
 }
-
-Scheduler::add(
-  health_check,
-  FixedPeriodicity { every: 5min },
-  PeriodicOptions {
-    start: time::now() + 1hour,    // Start in 1 hour
-    max_duration: 30s,              // Timeout after 30 seconds
-  }
-);
+Scheduler::add(health_check, FixedPeriodicity { every: 5min },
+  PeriodicOptions { start: time::now() + 1hour, max_duration: 30s });
 ```
 
-#### Managing Tasks
+#### PeriodicTask & Management
 ```gcl
-// Find task -> PeriodicTask?
-var ptask = Scheduler::find(health_check);
-if (ptask != null) {
-  println("active=${ptask.is_active}, runs=${ptask.execution_count}");
+type PeriodicTask {
+  function: function;
+  periodicity: Periodicity;
+  options: PeriodicOptions;
+  is_active: bool;
+  next_execution: time;
+  execution_count: int;
 }
 
-// Control execution (return bool)
-Scheduler::deactivate(backup_database);  // Pause
-Scheduler::activate(backup_database);    // Resume
+var ptask = Scheduler::find(health_check);          // PeriodicTask?
+Scheduler::deactivate(backup_database);             // bool
+Scheduler::activate(backup_database);               // bool
+var all = Scheduler::list();                        // Array<PeriodicTask>
+```
 
-// List all tasks -> Array<PeriodicTask>
-var all_tasks = Scheduler::list();
-for (_, task in all_tasks) {
-  println("${task.function}: active=${task.is_active}, next=${task.next_execution}");
-}
+#### DayOfWeek / Month enums
+```gcl
+enum DayOfWeek { Mon(0); Tue(1); Wed(2); Thu(3); Fri(4); Sat(5); Sun(6); }
+enum Month { Jan(0); Feb(1); Mar(2); Apr(3); May(4); Jun(5);
+             Jul(6); Aug(7); Sep(8); Oct(9); Nov(10); Dec(11); }
 ```
 
 ### Task & Job Management
 
 #### Task
-Asynchronous task execution with status tracking.
 ```gcl
 enum TaskStatus {
-  empty, waiting, running, await, cancelled,
-  error, ended, ended_with_errors, breakpoint
+  empty; waiting; running; await; cancelled;
+  error; ended; ended_with_errors; breakpoint;
 }
 
 type Task {
@@ -254,45 +467,75 @@ type Task {
   duration: duration?;
   status: TaskStatus;
   progress: float?;
-  // static native fns: expected_steps, add_steps, parentId, id,
-  // no_history, running, history, cancel, is_running
+  // static native fns:
+  //   expected_steps(total_expected_steps: int)
+  //   add_steps(steps: int)
+  //   parentId(): int
+  //   id(): int
+  //   no_history(v: bool)
+  //   running(): Array<Task>             (@expose @reserved)
+  //   history(offset, max): Array<Task>  (@expose @reserved)
+  //   cancel(task_id): bool              (@expose @reserved)
+  //   is_running(task_id): bool          (@expose @reserved)
 }
 ```
 
-#### Job<T>
-Generic job container for asynchronous operations.
+#### Job<T> & await
 ```gcl
-var job = Job<Result> {};
-// Submit for processing...
+type Job<T> {
+  function: core::function;
+  arguments: Array<any?>?;
+  // native fn result(): T
+}
+enum MergeStrategy { strict; first_wins; last_wins; }
+// native fn await(jobs: Array<Job>, strategy: MergeStrategy)
 ```
 
 ### Logging
 
-#### Log
-Structured logging with severity levels.
+Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace.
 ```gcl
-enum LogLevel { error, warn, info, perf, trace }
+enum LogLevel { error; warn; info; perf; trace; }
 
-Log::info("Application started");
-Log::error("Failed to connect: ${error_message}");
-Log::trace("Processing item ${id}");
+@volatile
+type Log {
+  level: LogLevel;
+  time: time;
+  user_id: int?;
+  id: int?;
+  id2: int?;
+  src: function?;
+  data: any?;
+}
+
+info("Application started");
+error("Failed to connect: ${error_message}");
+trace("Processing item ${id}");
 ```
 
-#### LogDataUsage
-Track data usage metrics.
+#### LogDataUsage / RuntimeUsage
 ```gcl
-var usage = LogDataUsage {
-  bytes_read: 1024000,
-  bytes_written: 512000,
-  timestamp: time::now()
-};
+@volatile
+type LogDataUsage {
+  read_bytes: int; read_hits: int; read_wasted: int;
+  write_bytes: int; write_hits: int;
+  cache_bytes: int; cache_hits: int;
+}
+
+type RuntimeUsage {
+  os_total_bytes: int; os_used_bytes: int;
+  proc_virt_bytes: int; proc_res_bytes: int; proc_shr_bytes: int;
+  global_memory: int; memory_drift: int;
+  workers: Array<WorkerUsage>; zones: Array<ZoneUsage>;
+  // static native fn collect()
+}
 ```
 
 ### System Information
 
 #### Runtime / RuntimeInfo
-Query runtime environment information.
 ```gcl
+@volatile
 type RuntimeInfo {
   version: String;
   program_version: String?;
@@ -307,67 +550,84 @@ type RuntimeInfo {
   disk_data_bytes: int;
 }
 
+type Runtime {
+  // @expose @permission("debug"): info(): RuntimeInfo, usage(): RuntimeUsage, root(): any
+  // @expose @reserved @permission("api"): abi()
+  // static native fns: sbi_tree(node: any?), sleep(d: duration), backup_delta(), defrag(),
+  //   on_files_put(handler: function?)
+  // @expose @permission("admin"): backup_full()
+}
+
 var info = Runtime::info();
 println("Version: ${info.version}, arch: ${info.arch}");
+Runtime::sleep(1s);
 ```
 
 #### System
-System-level operations: run subprocesses, read env vars, query timezone.
 ```gcl
-// Run a command, returns stdout (throws with stderr on failure)
-var out = System::exec("/usr/bin/ls", ["-la"]);
+type System {
+  // static native fn exec(path: String, params: Array<String>): String   // returns stdout
+  // static native fn spawn(path: String, params: Array<String>): ChildProcess
+  // static native fn tz(): TimeZone
+  // static native fn getEnv(key: String): String?
+  // @expose @permission("admin") static native fn get_all_envs(): Array<Tuple<String, String?>>
+}
 
-// Spawn without waiting -> ChildProcess
-var child = System::spawn("/usr/bin/sleep", ["10"]);
-var result = child.wait();   // ChildProcessResult { code, stdout, stderr }
-// child.kill();             // force exit
-
-var tz  = System::tz();              // local TimeZone
-var home = System::getEnv("HOME");   // String?
+var out  = System::exec("/usr/bin/ls", ["-la"]);
+var tz   = System::tz();
+var home = System::getEnv("HOME");        // String?
 ```
 
 #### ChildProcess
-Handle to a spawned external process.
 ```gcl
 type ChildProcess {
   // private pid: int;
-  // native fn wait(): ChildProcessResult;
-  // native fn kill();
+  // native fn wait(): ChildProcessResult
+  // native fn kill()
 }
+type ChildProcessResult { code: int; stdout: String; stderr: String; }
 
-type ChildProcessResult {
-  code: int;        // process return code
-  stdout: String;
-  stderr: String;
-}
+var child  = System::spawn("/usr/bin/sleep", ["10"]);
+var result = child.wait();    // ChildProcessResult
 ```
 
-### Security & Identity
+### Identity & Security
 
-#### Identity
-A user account on the server: a numeric `id` (`0` is the anonymous/public user), a unique login `name`, a `role` (maps to a set of permission flags granted at login), and the read/write grants this identity extends to others.
+The 8.0 security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). Anonymous callers are id `0`.
+
 ```gcl
+@volatile
 type Identity {
   id: int;            // 0 = anonymous/public user
   name: String;       // unique login name
-  role: String;       // role name -> permission flags
+  role: String;       // role name -> permission flags at login
   grants: Array<IdentityGrant>;
-  // static native fns include:
-  //   current_id(): int           (public, lock-free)
-  //   current(): Identity         (requires authentication)
-  //   get_by_id(id: int): Identity?   (admin)
-  //   get_by_name(name: String): Identity?  (admin)
+
+  // @expose @permission("public") static native fn current_id(): int   (cheap, lock-free)
+  // @expose                       static native fn current(): Identity  (requires auth)
+  // @expose @permission("admin")  static native fn get_by_id(id: int): Identity?
+  // @expose @permission("admin")  static native fn get_by_name(name: String): Identity?
+  // @expose @permission("admin")  static native fn all(): Array<Identity>
+  // @expose @permission("admin")  static native fn create(name: String, role: String): Identity
+  // @expose                       static native fn token(id: int, ttl: duration?): String
+  // @expose @permission("public") static native fn login(login: String, password: String): String
+  // @expose                       static native fn logout()
+  // @expose @permission("public") static native fn permissions(): Array<String>
+  //                               static native fn has_permission(permission: String): bool
+  // @expose                       static native fn set_password(name: String, pass: String): bool
+  // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
 }
 
-var me = Identity::current();
-var caller_id = Identity::current_id();  // 0 if unauthenticated
+var me        = Identity::current();
+var caller_id = Identity::current_id();   // 0 if unauthenticated
+var token     = Identity::login("alice", "secret");
 ```
 
 #### IdentityGrant & IdentityGrantType
-Per-identity read/write grants extended to other identities.
 ```gcl
 enum IdentityGrantType { read, write, read_write, none }
 
+@volatile
 type IdentityGrant {
   name: String;
   grant: IdentityGrantType;
@@ -377,14 +637,14 @@ type IdentityGrant {
 ### License Management
 
 ```gcl
-enum LicenseType { community, enterprise, testing }
+enum LicenseType { community; enterprise; testing; }
 
 type License {
   name: String?;        // associated username
   start: time;          // start of validity
   end: time;            // end of validity
   company: String?;     // associated company
-  max_memory: int;      // maximum allowed memory in MB
+  max_memory: int;      // max allowed memory in MB
   extra_1: int?;
   extra_2: int?;
   type: LicenseType?;
@@ -393,296 +653,315 @@ type License {
 
 ### OpenAPI Integration
 
+`OpenApi` exposes a single static method that exports all exposed functions as an OpenAPI v3 spec.
 ```gcl
 type OpenApi {
-  title: String;
-  version: String;
-  paths: Map<String, any>;
+  // @expose @permission("api") static native fn v3(): OpenApiV3
 }
+var spec = OpenApi::v3();
 ```
 
 ### Model Context Protocol (MCP)
 
-Types for MCP server integration:
-- `McpInitializeParams`, `McpInitializeResult`
-- `McpServerCapabilities`, `McpClientCapabilities`
-- `McpTool`, `McpToolsListParams`, `McpToolsCallParams`
-- `McpTextContent`, `McpImageContent`, `McpAudioContent`
-- `McpPriority`, `McpRole`, `McpContentType`
+`@expose`d module-level handlers implement an MCP server endpoint:
+```gcl
+@expose("initialize")  native fn mcp_initialize(params: McpInitializeParams): McpInitializeResult;
+@expose("tools/list")  native fn mcp_tools_list(params: McpToolsListParams?): McpToolsListResult;
+@expose("tools/call")  native fn mcp_tools_call(params: McpToolsCallParams): any;
+@expose("tasks/get")    native fn mcp_tasks_get(params: McpTasksGetParams): any;
+@expose("tasks/result") native fn mcp_tasks_result(params: McpTasksResultParams): McpToolsCallResult;
+@expose("tasks/list")   native fn mcp_tasks_list(params: McpTasksListParams?): McpTasksListResult;
+@expose("tasks/cancel") native fn mcp_tasks_cancel(params: McpTasksCancelParams): McpTask;
+```
+Supporting `@volatile` types include: `McpInitializeParams` / `McpInitializeResult`, `McpClientCapabilities` / `McpServerCapabilities` (with prompts/resources/tools/tasks sub-capabilities), `McpImplementation`, `McpTool` (+ `McpToolExecution`), `McpToolsCallResult`, content blocks `McpTextContent` / `McpImageContent` / `McpAudioContent` / `McpResourceContent`, and task types `McpTask` / `McpTaskCreateParams` / the `McpTasks*Params`/`*Result` family. Enums: `McpContentType` (text, image, audio, resource_link, resource), `McpRole` (user, assistant), `McpPriority` (MostImportant(1), LeastImportant(0)), `McpTaskSupport` (forbidden, required, optional), `McpTaskStatus` (working, input_required, completed, failed, cancelled).
 
 ## I/O Module (std::io)
 
-### Binary I/O
+### Readers & Writers
+
+`Writer<T>` and `Reader<T>` are `abstract type`s; use a concrete implementation. `Writer` has `write(v: T)` and `flush()`; `Reader` has `read(): T`, `can_read(): bool`, `available(): int` and a public `pos: int?`.
 
 #### GcbWriter<T> / GcbReader<T>
-Binary serialization using GreyCat's ABI encoding.
+GreyCat Binary (ABI-encoded) serialization.
 ```gcl
-// Write
 var writer = GcbWriter<MyType> { path: "/data/output.gcb" };
 writer.write(my_object);
 writer.flush();
 
-// Read
 var reader = GcbReader<MyType> { path: "/data/output.gcb" };
-while (reader.can_read()) {
-  var obj = reader.read();
-  process(obj);
-}
+while (reader.can_read()) { process(reader.read()); }
 ```
 
-### Text I/O
-
 #### TextWriter<T> / TextReader
-UTF-8 text file operations.
+UTF-8 text, line oriented. `TextWriter` adds `writeln(v: T)`. `TextReader` reads one line per `read()` (trims trailing `\r` and null bytes; throws when exhausted).
 ```gcl
-// Write
 var writer = TextWriter<String> { path: "/logs/output.txt" };
 writer.writeln("Line 1");
-writer.writeln("Line 2");
 writer.flush();
 
-// Read
 var reader = TextReader { path: "/logs/output.txt" };
-while (reader.can_read()) {
-  var line = reader.read();
-  println(line);
+while (reader.can_read()) { println(reader.read()); }
+```
+
+#### BinReader
+Typed binary reader (not generic).
+```gcl
+type BinReader {
+  pos: int?;
+  // native fns: read_i32(): int, read_i64(): int, read_f32(): float, read_f64(): float,
+  //   read_tensor(etype: TensorType, shape: Array<int>): Tensor,
+  //   can_read(): bool, available(): int
 }
 ```
 
 ### JSON I/O
 
 #### JsonWriter<T> / JsonReader<T>
-JSON and NDJSON (newline-delimited) support.
+NDJSON (one JSON value per line). `JsonWriter` adds `writeln(v: T)`.
 ```gcl
-// Write NDJSON
 var writer = JsonWriter<Person> { path: "/data/people.json" };
-writer.writeln(person1);  // One JSON object per line
-writer.writeln(person2);
+writer.writeln(person1);
 writer.flush();
 
-// Read NDJSON
 var reader = JsonReader<Person> { path: "/data/people.json" };
-while (reader.can_read()) {
-  var person = reader.read();
-  process(person);
-}
+while (reader.can_read()) { process(reader.read()); }
+```
 
-// Parse JSON string
-var json = Json<Person> {};
-var obj = json.parse("{\"name\":\"Alice\",\"age\":30}");
+#### Json<T>
+Parse / serialize JSON strings.
+```gcl
+type Json<T> {
+  // native fn parse(data: String): T
+  // static native fn to_string(value: any?): String
+}
+var obj  = Json<Person> {}.parse("{\"name\":\"Alice\",\"age\":30}");
+var text = Json::to_string(obj);
+```
+
+### XML I/O
+
+#### XmlReader<T>
+```gcl
+var reader = XmlReader<Config> { path: "/config/settings.xml" };
+while (reader.can_read()) { apply_config(reader.read()); }
 ```
 
 ### CSV I/O
 
 #### CsvWriter<T> / CsvReader<T>
-CSV operations with automatic header generation.
+Auto-generates headers from `T`'s fields when `format.header_lines > 0`. `CsvWriter` also has `write_line(line: String)`. `CsvReader` has `last_line(): String?` and `set_path(path: String)` (re-uses buffers across files).
 ```gcl
-// Configure format
-var format = CsvFormat {
-  header_lines: 1,
-  separator: ',',
-  string_delimiter: '"'
-};
+var format = CsvFormat { header_lines: 1, separator: ',', string_delimiter: '"' };
 
-// Write
-var writer = CsvWriter<Employee> {
-  path: "/data/employees.csv",
-  format: format
-};
-writer.write(emp1);  // Headers auto-generated from type
-writer.write(emp2);
+var writer = CsvWriter<Employee> { path: "/data/employees.csv", format: format };
+writer.write(emp1);     // headers lazily written on first write
 writer.flush();
 
-// Read
-var reader = CsvReader<Employee> {
-  path: "/data/employees.csv",
-  format: format
-};
-while (reader.can_read()) {
-  var emp = reader.read();
-  process(emp);
+var reader = CsvReader<Employee> { path: "/data/employees.csv", format: format };
+while (reader.can_read()) { process(reader.read()); }
+```
+
+#### CsvFormat
+```gcl
+type CsvFormat {
+  header_lines: int?;          // null/0 = none
+  separator: char?;
+  string_delimiter: char?;     // e.g. '"'
+  decimal_separator: char?;
+  thousands_separator: char?;
+  trim: bool?;                 // default false
+  format: String?;             // date format, default ISO8601 / epoch ms
+  tz: TimeZone?;
+  strict: bool?;               // strict null checking
+  nearest_time: bool?;         // fall back to nearest valid time, default false
 }
 ```
 
 #### CSV Analysis
-Analyze CSV structure and generate GCL types.
 ```gcl
-var config = CsvAnalysisConfig {
-  row_limit: 1000,
-  enumerable_limit: 50
-};
+type Csv {
+  // @expose static native fn generate(stats: CsvStatistics): String
+  // @expose static native fn analyze(paths: Array<String>, config: CsvAnalysisConfig?): CsvStatistics
+  // @expose static native fn sample(reader: CsvReader, max_lines: int?): Table
+}
 
-var files = Array<File> { File::open("/data/sales.csv")!! };
-var stats = Csv::analyze(files, config);
+var config = CsvAnalysisConfig { row_limit: 1000, enumerable_limit: 50 };
+var stats  = Csv::analyze(["/data/sales.csv"], config);   // paths are Array<String>
+var type_code = Csv::generate(stats);                     // generated GCL types
 
-// Generate type definitions
-var type_code = Csv::generate(stats);
-println(type_code);  // Generated GCL type definitions
-
-// Sample data
 var reader = CsvReader<any> { path: "/data/sales.csv" };
-var sample = Csv::sample(reader, 100);  // First 100 rows
+var sample = Csv::sample(reader, 100);                     // Table
 ```
+`CsvStatistics` (per-`CsvColumnStatistics` profiling, `line_count`, `fail_count`, `file_count`), `CsvColumnStatistics` (type counts, `date_format_count`, `enumerable_count`, `profile: Gaussian`), `CsvAnalysisConfig` (`header_lines?`, `separator?`, `row_limit?`, `enumerable_limit?`, `date_check_limit?`, `date_formats?`), and `CsvSharding` (`id`, `column`, `modulo`) round out CSV support.
 
 ### File System
 
 #### File
-Comprehensive file operations.
 ```gcl
-// Discovery
-var csv_files = File::ls("/data", ".csv", true);  // Recursive
+type File {
+  path: String;
+  size: int?;                // null for directories
+  last_modification: time?;
+  // static native fns: baseDir(): String, userDir(): String, workingDir(): String,
+  //   open(path): File?, delete(path): bool, rename(old, new): bool, copy(src, target): bool,
+  //   mkdir(path): bool, ls(path, ends_with: String?, recursive: bool): Array<File>
+  // native fns: isDir(): bool, name(): String, extension(): String?, sha256(): String?
+}
 
-// Open and inspect
+var csv_files = File::ls("/data", ".csv", true);   // recursive
 var file = File::open("/data/input.txt")!!;
-println("Size: ${file.size}");
-println("Extension: ${file.extension()!!}");
-println("Is directory: ${file.isDir()}");
-println("SHA-256: ${file.sha256()!!}");
-
-// Operations
+println("Size: ${file.size}, ext: ${file.extension()!!}, sha: ${file.sha256()!!}");
 File::copy("/data/src.txt", "/data/dst.txt");
-File::rename("/data/old.txt", "/data/new.txt");
-File::delete("/data/temp.txt");
 File::mkdir("/data/archive");
-
-// Paths
-var base = File::baseDir();
-var user = File::userDir();
-var work = File::workingDir();
 ```
 
 #### FileWalker
-Iterate through directory hierarchies.
 ```gcl
+type FileWalker {
+  path: String;
+  // native fn isEmpty(): bool, next(): File?
+}
 var walker = FileWalker { path: "/data" };
-var file_count = 0;
-
 while (!walker.isEmpty()) {
-  var file = walker.next();
-  if (file != null && !file.isDir()) {
-    file_count++;
-    println(file.path);
-  }
+  var f = walker.next();
+  if (f != null && !f.isDir()) { println(f.path); }
 }
 ```
 
 ### HTTP Client
 
 #### Http<T>
-REST API client with type-safe requests. Headers are a `Map<String, String>?`.
+HTTP client; headers are `Map<String, String>?`.
 ```gcl
+type Http<T> {
+  // native fn get(url: String, headers: Map<String, String>?): T
+  // native fn getFile(url: String, path: String, headers: Map<String, String>?)
+  // native fn post(url: String, body: any?, headers: Map<String, String>?): T
+  // native fn put(url: String, body: any?, headers: Map<String, String>?): T
+  // native fn send(request: HttpRequest): HttpResponse<T>
+}
+
 var headers = Map<String, String> {};
 headers.set("Authorization", "Bearer token");
-headers.set("Accept", "application/json");
 
-// GET request
-var response = Http<User> {}.get(
-  "https://api.example.com/users/123",
-  headers
-);
+var user = Http<User> {}.get("https://api.example.com/users/123", headers);
+Http<any> {}.getFile("https://example.com/data.csv", "/local/data.csv", null);
 
-// Download file
-Http<any> {}.getFile(
-  "https://example.com/data.csv",
-  "/local/data.csv",
-  null
-);
-
-// POST / PUT request
-var new_user = User { name: "Alice", email: "alice@example.com" };
-var result = Http<User> {}.post(
-  "https://api.example.com/users",
-  new_user,
-  headers
-);
-
-// Low-level request/response
 var resp = Http<User> {}.send(HttpRequest {
   method: HttpMethod::GET,
   url: "https://api.example.com/users/123",
   headers: headers
-});
+});                                       // HttpResponse<User>
+println("status: ${resp.status_code}");
+```
+
+#### HttpMethod / HttpRequest / HttpResponse
+```gcl
+enum HttpMethod { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH; }
+
+type HttpRequest {
+  method: HttpMethod;
+  url: String;
+  headers: Map<String, String>?;
+  body: String?;
+  timeout: duration?;
+}
+
+type HttpResponse<T> {
+  status_code: int;
+  headers: Map<String, String>;
+  content: T?;
+  error_msg: String?;
+}
 ```
 
 #### Url
-URL parsing and manipulation.
 ```gcl
+type Url {
+  protocol: String?; host: String?; port: int?; path: String?;
+  user: String?; password: String?; params: Map<String, String>?; hash: String?;
+  // static native fn parse(url: String): Url
+  // static native fn encode(value: any): String   // x-www-form-urlencoded
+}
 var url = Url::parse("https://api.example.com:8080/users?active=true#top");
-
-println("Protocol: ${url.protocol}");  // "https"
-println("Host: ${url.host}");          // "api.example.com"
-println("Port: ${url.port}");          // 8080
-println("Path: ${url.path}");          // "/users"
-println("Param: ${url.params?.get("active")}");  // "true"
-println("Hash: ${url.hash}");          // "top"
+println("${url.protocol} ${url.host} ${url.port} ${url.path}");
 ```
 
 ### Email
 
 #### Email & Smtp
-Email composition and SMTP delivery.
+There is **no** `attachments` field on `Email` in 8.0.
 ```gcl
-var smtp = Smtp {
-  host: "smtp.gmail.com",
-  port: 587,
-  mode: SmtpMode::starttls,
-  authenticate: SmtpAuth::plain,
-  user: "sender@example.com",
-  pass: "app_password"
-};
+type Email {
+  from: String;
+  subject: String;
+  body: String;
+  body_is_html: bool;
+  to: Array<String>;
+  cc: Array<String>?;
+  bcc: Array<String>?;
+}
 
-var email = Email {
+type Smtp {
+  host: String;
+  port: int;
+  mode: SmtpMode?;
+  authenticate: SmtpAuth?;
+  user: String?;
+  pass: String?;
+  // native fn send(email: Email)
+}
+
+enum SmtpMode { plain(0); ssl_tls(1); starttls(2); }
+enum SmtpAuth { none(0); plain(1); login(2); }
+
+var smtp = Smtp {
+  host: "smtp.gmail.com", port: 587,
+  mode: SmtpMode::starttls, authenticate: SmtpAuth::login,
+  user: "sender@example.com", pass: "app_password"
+};
+smtp.send(Email {
   from: "sender@example.com",
   to: ["recipient@example.com"],
-  cc: ["cc@example.com"],
   subject: "Monthly Report",
-  body: "<h1>Report</h1><p>Content here...</p>",
-  body_is_html: true,
-  attachments: ["/reports/monthly.pdf"]
-};
-
-smtp.send(email);
-```
-
-### XML I/O
-
-#### XmlReader<T>
-XML parsing and deserialization.
-```gcl
-var reader = XmlReader<Config> { path: "/config/settings.xml" };
-while (reader.can_read()) {
-  var config = reader.read();
-  apply_config(config);
-}
+  body: "<h1>Report</h1>",
+  body_is_html: true
+});
 ```
 
 ### S3 Object Storage
 
 #### S3, S3Bucket, S3Object, S3BasicCredentials
-S3-compatible object storage client (access/secret-key authentication).
 ```gcl
-var s3 = S3 {
-  host: "localhost:9000",
-  region: "us-east-1",
-  credentials: S3BasicCredentials {
-    access_key: "AKIA...",
-    secret_key: "secret"
-  },
-  force_path_style: true
-};
+type S3Object   { key: String; last_modified: time; size: int; etag: String; }
+type S3Bucket   { name: String; creation_date: time; }
+type S3BasicCredentials { access_key: String; secret_key: String; }
 
-s3.create_bucket("my-bucket");
-s3.put_object("my-bucket", "/local/file.txt", "virtual/path/file.txt");
-
-var objects = s3.list_objects("my-bucket", "prefix/", null, 1000);
-for (_, obj in objects) {
-  println("${obj.key} (${obj.size} bytes, etag=${obj.etag})");
+type S3 {
+  host: String;
+  region: String;
+  credentials: S3BasicCredentials;
+  force_path_style: bool?;
+  // native fns:
+  //   list_objects(bucket, prefix: String?, start_after: String?, max_keys: int?): Array<S3Object>
+  //   get_object(bucket, key, filepath)
+  //   put_object(bucket, filepath, key)
+  //   delete_object(bucket, key)
+  //   create_bucket(bucket)
+  //   list_buckets(prefix: String?): Array<S3Bucket>
 }
 
+var s3 = S3 {
+  host: "localhost:9000", region: "us-east-1",
+  credentials: S3BasicCredentials { access_key: "AKIA...", secret_key: "secret" },
+  force_path_style: true
+};
+s3.create_bucket("my-bucket");
+s3.put_object("my-bucket", "/local/file.txt", "virtual/path/file.txt");
+var objects = s3.list_objects("my-bucket", "prefix/", null, 1000);
+for (_, obj in objects) { println("${obj.key} (${obj.size} bytes, etag=${obj.etag})"); }
 s3.get_object("my-bucket", "virtual/path/file.txt", "/local/download.txt");
-s3.delete_object("my-bucket", "virtual/path/file.txt");
-
-var buckets = s3.list_buckets(null);  // Array<S3Bucket>
+var buckets = s3.list_buckets(null);     // Array<S3Bucket>
 ```
 
 ## Util Module (std::util)
@@ -690,299 +969,262 @@ var buckets = s3.list_buckets(null);  // Array<S3Bucket>
 ### Collections
 
 #### Queue<T>
-FIFO queue with optional capacity bounds.
+Optionally bounded FIFO (`capacity` is private; drops the front element when full).
 ```gcl
-var queue = Queue<String> { capacity: 100 };
-queue.push("first");
-queue.push("second");
-
-var item = queue.pop();       // "first"
-var next = queue.front();     // Peek without removing
-var last = queue.back();      // View last element
+// native fns: push(value), pop(): T?, front(): T?, back(): T?, clear()
+var q = Queue<String> {};
+q.push("first");
+var item = q.pop();
 ```
 
 #### Stack<T>
-LIFO stack.
+LIFO.
 ```gcl
-var stack = Stack<int> {};
-stack.push(10);
-stack.push(20);
-
-var top = stack.pop();        // 20
-var peek = stack.last();      // Peek at top
-var bottom = stack.first();   // View bottom
+// native fns: push(value), pop(): T?, first(): T? (top), last(): T? (bottom), clear()
+var s = Stack<int> {};
+s.push(10); s.push(20);
+var top = s.pop();        // 20
 ```
 
 #### SlidingWindow<T>
-Fixed-size window with streaming statistics.
+Fixed-count window with streaming stats.
 ```gcl
-var window = SlidingWindow<float> { span: 100 };
-
-window.add(10.5);
-window.add(20.3);
-window.add(15.7);
-
-var avg = window.avg()!!;
-var std = window.std()!!;
-var median = window.median()!!;
-var min = window.min();
-var max = window.max();
+type SlidingWindow<T> {
+  span: int;              // max number of elements
+  sum: float?; sumsq: float?;
+  // native fns: add(value), clear(), median(): float?, min(): T?, max(): T?,
+  //   std(): float?, avg(): float?, size(): int
+}
+var w = SlidingWindow<float> { span: 100 };
+w.add(10.5);
+var avg = w.avg()!!;
 ```
 
 #### TimeWindow<T>
-Time-based sliding window with automatic expiration.
+Window bounded by a `duration` span; values older than `span` from the latest timepoint expire.
 ```gcl
-var window = TimeWindow<float> { span: 5min };
-
-window.add(time::now(), temperature);
-window.add(time::now() + 30s, next_temp);
-
-// Statistics on recent data only
-var avg = window.avg();
-var min_tuple = window.min();  // Tuple<time, float>
-var max_tuple = window.max();  // Tuple<time, float>
+type TimeWindow<T> {
+  span: duration;
+  sum: float?; sumsq: float?;
+  // native fns: add(t: time, value), update(t: time), clear(),
+  //   min(): Tuple<time, T>?, max(): Tuple<time, T>?, median(): float?,
+  //   std(): float?, avg(): float?, size(): int
+}
+var tw = TimeWindow<float> { span: 5min };
+tw.add(time::now(), temperature);
+var avg = tw.avg();
 ```
 
 ### Statistics
 
 #### Gaussian<T>
-Running statistical profile with normalization.
+Live (streaming) distribution.
 ```gcl
-var profile = Gaussian<float> {};
-
-profile.add(10.0);
-profile.add(20.0);
-profile.add(30.0);
-
-var avg = profile.avg()!!;        // 20.0
-var std = profile.std()!!;
-var min = profile.min;            // 10.0
-var max = profile.max;            // 30.0
-
-// Normalize: (value - min) / (max - min)
-var norm = profile.normalize(15.0)!!;  // 0.25
-
-// Standardize: (value - avg) / std
-var z_score = profile.standardize(25.0);
+type Gaussian<T> {
+  sum: float?; sumsq: float?; count: int?;
+  min: T?; max: T?;
+  // native fns: add(value: T?): bool, addx(value: T?, count: int): bool,
+  //   add_gaussian(value: Gaussian<T>): bool,
+  //   std(): T?, avg(): T?, normalize(value): float?, inverse_normalize(value: float): T,
+  //   standardize(value): float, inverse_standardize(value: float): T,
+  //   confidence(value): float, pdf(value): float, cdf(value): float
+}
+var g = Gaussian<float> {};
+g.add(10.0); g.add(20.0); g.add(30.0);
+var avg = g.avg()!!;             // 20.0
+var z   = g.standardize(25.0);
 ```
 
-#### Histogram<T>
-Binned distribution analysis.
+#### Histogram<T> & HistogramStats<T>
 ```gcl
-var quantizer = LinearQuantizer<float> {
-  min: 0.0,
-  max: 100.0,
-  bins: 20
-};
-var histogram = Histogram<float> { quantizer: quantizer };
-
-for (_, score in test_scores) {
-  histogram.add(score);
+type Histogram<T> {
+  quantizer: Quantizer<T>;
+  bins: Array<int?>?;
+  nb_rejected: int?; nb_accepted: int?;
+  min: T?; max: T?; sum: float?; sumsq: float?;
+  // native fns: add(value), addx(value, count), stats(): HistogramStats<T>?,
+  //   percentile(ratio: float): T?, ratio_under(value): float,
+  //   get_bins(): Array<HistogramBin<T>>
 }
+type HistogramBin<T> {
+  bin: QuantizerSlotBound<T>;
+  count: int; ratio: float;
+  cumulative_count: int; cumulative_ratio: float;
+}
+// HistogramStats<T> exposes min/max, whisker_low/high, percentile1..99, sum, avg, std, size
 
-var median = histogram.percentile(0.5);      // 50th percentile
-var p90 = histogram.percentile(0.9);         // 90th percentile
-var below_60 = histogram.ratio_under(60.0);  // Fraction below 60
-
-var stats = histogram.stats();  // Comprehensive statistics
+var h = Histogram<float> { quantizer: LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 20 } };
+for (_, score in test_scores) { h.add(score); }
+var p90      = h.percentile(0.9);
+var below_60 = h.ratio_under(60.0);
+var stats    = h.stats();
 ```
 
 #### GaussianProfile<T>
-Multi-dimensional Gaussian statistics by category.
+Per-quantizer-slot gaussian statistics.
 ```gcl
-var quantizer = LinearQuantizer<int> { min: 0, max: 100, bins: 10 };
-var profile = GaussianProfile<int> {
-  quantizer: quantizer,
-  precision: FloatPrecision::p1000
-};
-
-profile.add(age_group, salary);
-profile.add(age_group, another_salary);
-
-var avg_salary = profile.avg(age_group);
-var std_salary = profile.std(age_group);
+type GaussianProfile<T> {
+  quantizer: Quantizer<T>;
+  value_min: float?; nb_rejected: int?;
+  // native fns: add(key: T, value: float), avg(key): float, std(key): float,
+  //   sum(key): float, count(key): int
+}
+var profile = GaussianProfile<int> { quantizer: LinearQuantizer<int> { min: 0, max: 100, bins: 10 } };
+profile.add(age, salary);
+var avg_salary = profile.avg(age);
 ```
 
 ### Quantizers
 
-#### LinearQuantizer<T>
-Uniform bin spacing.
+`Quantizer<T>` is an `abstract type` with `size(): int`, `quantize(value: T): int`, `bounds(slot: int): QuantizerSlotBound<T>`.
 ```gcl
-var linear = LinearQuantizer<float> {
-  min: 0.0,
-  max: 100.0,
-  bins: 10
-};
-
-var bin = linear.quantize(25.0);  // Returns bin index (2)
-var bounds = linear.bounds(2);    // QuantizerSlotBound
-// bounds.min = 20.0, bounds.max = 30.0, bounds.center = 25.0
+type QuantizerSlotBound<T> { min: T; max: T; center: T; }
 ```
 
-#### LogQuantizer<T>
-Logarithmic bin spacing for exponential distributions.
+#### LinearQuantizer<T> / LogQuantizer<T>
+Uniform / logarithmic bins. Fields: `min`, `max`, `bins`, `open: bool?`.
 ```gcl
-var log_quant = LogQuantizer<float> {
-  min: 1.0,
-  max: 1000.0,
-  bins: 10
-};
-var bin = log_quant.quantize(50.0);
+var linear = LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 10 };
+var bin    = linear.quantize(25.0);        // 2
+var bounds = linear.bounds(2);             // QuantizerSlotBound
+
+var logq = LogQuantizer<float> { min: 1.0, max: 1000.0, bins: 10 };
 ```
 
 #### CustomQuantizer<T>
-User-defined bin boundaries.
+Bins defined by step boundaries. Fields: `min`, `max`, `step_starts: Array<T>`, `open: bool?`.
 ```gcl
-var age_bins = CustomQuantizer<int> {
-  min: 0,
-  max: 100,
-  step_starts: [0, 18, 25, 40, 65]  // Custom age groups
-};
-var group = age_bins.quantize(32);  // Returns appropriate bin
+var age_bins = CustomQuantizer<int> { min: 0, max: 100, step_starts: [0, 18, 25, 40, 65] };
+var group    = age_bins.quantize(32);
 ```
 
 #### MultiQuantizer<T>
-Multi-dimensional quantization.
+Combines several quantizers into one multidimensional index. `quantizers: Array<Quantizer<T>>`; adds `slot_vector(slot: int): Array<int>`.
 ```gcl
-var quantizers = Array<Quantizer<float>> {
-  LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 5 },
-  LogQuantizer<float> { min: 1000.0, max: 200000.0, bins: 8 },
-  LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 10 }
+var multi = MultiQuantizer<float> {
+  quantizers: [
+    LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 5 },
+    LogQuantizer<float>    { min: 1000.0, max: 200000.0, bins: 8 },
+    LinearQuantizer<float> { min: 0.0, max: 100.0, bins: 10 }
+  ]
 };
-
-var multi = MultiQuantizer<float> { quantizers: quantizers };
-var slot = multi.quantize([35.0, 45000.0, 87.5]);
-var vector = multi.slot_vector(slot);  // [age_bin, income_bin, score_bin]
+var slot   = multi.quantize([35.0, 45000.0, 87.5]);
+var vector = multi.slot_vector(slot);
 ```
 
 ### Utilities
 
 #### Random
-Seeded random number generator.
+Seedable PRNG (xorshift64*).
 ```gcl
-var rng = Random { seed: 12345 };
-
-var dice = rng.uniform(1, 7);           // 1-6 inclusive
-var prob = rng.uniformf(0.0, 1.0);      // Float [0.0, 1.0)
-
-// Fill array with normal distribution
-var samples = Array<float> {};
-rng.fill(samples, 1000, 50.0, 60.0);    // 1000 samples, mean=50, std=10
+type Random {
+  seed: int?;
+  // native fns: char(): char, uniform(min: int, max: int): int,
+  //   uniformf(min: float, max: float): float, uniformGeo(min: geo, max: geo): geo,
+  //   normal(avg, std): float, gaussian(profile: Gaussian): float,
+  //   fill<T>(target: any, nb: int, min: T, max: T),
+  //   uuid(): String  (UUID v4, reproducible), uuid_v7(): String (UUID v7, reproducible tail)
+}
+var rng  = Random { seed: 12345 };
+var dice = rng.uniform(1, 7);            // 1..6
+var prob = rng.uniformf(0.0, 1.0);
+var id   = rng.uuid();                   // seedable UUID v4 (NOT crypto-secure)
 ```
 
 #### Assert
-Testing utilities.
 ```gcl
+// static native fns: equals(a: any?, b: any?), equalsd(a: float, b: float, epsilon: float),
+//   equalst(a: Tensor, b: Tensor, epsilon: float), isTrue(v: bool), isFalse(v: bool),
+//   isNull(v: any?), isNotNull(v: any?)
 Assert::equals(actual, expected);
-Assert::equalsd(pi, 3.14159, 0.001);    // Float with epsilon
-Assert::equalst(tensor_a, tensor_b, 0.01);  // Tensor with epsilon
-Assert::isTrue(condition);
-Assert::isFalse(condition);
+Assert::equalsd(pi, 3.14159, 0.001);
 Assert::isNotNull(value);
-Assert::isNull(value);
 ```
 
 #### ProgressTracker
-Monitor long-running operations.
 ```gcl
-var tracker = ProgressTracker {
-  start: time::now(),
-  total: 10000
-};
-
-// Update progress
+type ProgressTracker {
+  start: time;
+  total: int?;
+  counter: int?;
+  duration: duration?;
+  progress: float?;        // 0.0 .. 1.0
+  speed: float?;           // counter per second
+  remaining: duration?;
+  // native fn update(nb: int)
+}
+var tracker = ProgressTracker { start: time::now(), total: 10000 };
 tracker.update(2500);
-println("Progress: ${tracker.progress * 100}%");     // 25%
-println("Speed: ${tracker.speed} items/sec");
-println("Remaining: ${tracker.remaining}");
-
-// Complete
-tracker.update(10000);
-println("Done! Progress: ${tracker.progress}");      // 1.0
+println("Progress: ${tracker.progress}");      // 0.25
 ```
 
 #### Crypto
-Cryptographic operations.
 ```gcl
-var input = "sensitive data";
-
-// Hashing
-var sha1 = Crypto::sha1hex(input);
-var sha256 = Crypto::sha256hex(input);
-
-// Encoding
-var b64 = Crypto::base64_encode(input);
-var decoded = Crypto::base64_decode(b64);
-
-var url_enc = Crypto::url_encode("param with spaces");
-var url_dec = Crypto::url_decode(url_enc);
-
-var hex = Crypto::hex_encode(input);
-var raw = Crypto::hex_decode(hex);
-
-// HMAC-SHA256 (hex output)
-var mac = Crypto::sha256_hmac_hex(input, secret_key);
-
-// PKCS1 signing (key is read from a path on disk)
-var signature = Crypto::sha256_sign_pkcs1(data, "/keys/private.pem");
-var signature_hex = Crypto::sha256_sign_pkcs1_hex(data, "/keys/private.pem");
+type Crypto {
+  // static native fns:
+  //   sha1(content): String, sha1hex(content): String,
+  //   sha256(content): String, sha256hex(content): String,
+  //   sha256_sign_pkcs1(input, key_path): String, sha256_sign_pkcs1_hex(input, key_path): String,
+  //   sha256_hmac_hex(input, key): String,
+  //   base64_encode/decode(v): String, base64url_encode/decode(v): String,
+  //   hex_encode/decode(v): String, url_encode/decode(v): String
+}
+var digest = Crypto::sha256hex("sensitive data");
+var b64    = Crypto::base64_encode("hello");
+var mac    = Crypto::sha256_hmac_hex(payload, secret_key);
+var sig    = Crypto::sha256_sign_pkcs1("data", "/keys/private.pem");
 ```
 
 #### Uuid
-Cryptographically strong UUID generator (CTR_DRBG seeded from system entropy; not reproducible).
+Cryptographically strong UUID generator (CTR_DRBG seeded from system entropy; not reproducible). Use this for security tokens and database keys; use `Random.uuid()` / `Random.uuid_v7()` for deterministic/seedable values.
 ```gcl
-var token = Uuid::v4();   // UUID v4: 122 bits CSPRNG entropy, canonical 8-4-4-4-12
-var key   = Uuid::v7();   // UUID v7: time-sortable (48-bit ms timestamp + counter + CSPRNG)
-// For deterministic/seedable UUIDs use Random.uuid() / Random.uuid_v7()
-```
-
-#### Plot
-Basic plotting from tabular data.
-```gcl
-var data = Table {};
-data.set_row(0, ["Jan", 1, 10.5]);
-data.set_row(1, ["Feb", 2, 15.3]);
-data.set_row(2, ["Mar", 3, 20.1]);
-
-// Plot column 1 (x-axis) vs columns 2+ (y-axis series)
-Plot::scatter_plot(data, 1, [2], "output.png");
+type Uuid {
+  // static native fn v4(): String   // 122 bits CSPRNG, canonical 8-4-4-4-12
+  // static native fn v7(): String   // time-sortable: 48-bit ms ts + counter + CSPRNG
+}
+var token = Uuid::v4();
+var key   = Uuid::v7();
 ```
 
 ## Usage Guidelines
 
 ### When to Use Each Module
 
-**core** - Use for fundamental data types, error handling, and geospatial operations.
+**core** - Fundamental data types, time/date, nodes/tensors, error handling, geospatial, math.
 
 **runtime** - Use for:
-- Scheduled/recurring tasks (Scheduler)
-- Background job processing (Task, Job)
-- Application logging (Log)
-- Security and authentication (Identity, IdentityGrant)
-- System information queries (Runtime, System)
+- Scheduled/recurring tasks (`Scheduler` + periodicities)
+- Background job processing (`Task`, `Job`, `await`)
+- Application logging (module-level `info`/`warn`/`error`/`perf`/`trace`)
+- Identity & authentication (`Identity`, `IdentityGrant`)
+- System information queries (`Runtime`, `System`)
+- OpenAPI export and MCP server endpoints
 
 **io** - Use for:
-- File I/O operations (File, FileWalker)
-- Data serialization (GcbWriter, JsonWriter, CsvWriter)
-- HTTP API calls (Http, Url)
-- Email notifications (Email, Smtp)
+- File I/O (`File`, `FileWalker`)
+- Data serialization (`GcbWriter`, `JsonWriter`, `CsvWriter`, `TextWriter`)
+- HTTP API calls (`Http`, `HttpRequest`/`HttpResponse`, `Url`)
+- Email notifications (`Email`, `Smtp`)
+- S3 object storage (`S3`)
 
 **util** - Use for:
-- Data structures (Queue, Stack, SlidingWindow)
-- Statistical analysis (Gaussian, Histogram)
-- Data binning (LinearQuantizer, LogQuantizer)
-- Testing (Assert)
-- Monitoring (ProgressTracker)
+- Data structures (`Queue`, `Stack`, `SlidingWindow`, `TimeWindow`)
+- Statistical analysis (`Gaussian`, `Histogram`, `GaussianProfile`)
+- Data binning (`LinearQuantizer`, `LogQuantizer`, `CustomQuantizer`, `MultiQuantizer`)
+- Testing (`Assert`)
+- Monitoring (`ProgressTracker`)
+- Crypto and UUID generation (`Crypto`, `Uuid`)
 
 ### Best Practices
 
-1. **Resource Management**: Always call `flush()` on writers and close readers when done.
-2. **Error Handling**: Check return values (especially `?` nullable types) before use.
-3. **Scheduling**: Use appropriate periodicity type for your use case; `FixedPeriodicity` for simple intervals, `DailyPeriodicity` for scheduled times.
-4. **CSV Analysis**: Use `Csv::analyze()` to understand data structure before processing large files.
-5. **Statistics**: Use `Gaussian` for running statistics, `Histogram` for distribution analysis.
-6. **File Operations**: Use `File::ls()` with file extensions for efficient discovery.
-7. **HTTP**: Always include appropriate headers (Authorization, Content-Type) in requests.
+1. **Resource Management**: Always call `flush()` on writers before opening a reader on the same path.
+2. **Error Handling**: Check nullable (`?`) return values before use.
+3. **Scheduling**: Pick the right periodicity — `FixedPeriodicity` for intervals, `DailyPeriodicity`/`WeeklyPeriodicity`/`MonthlyPeriodicity`/`YearlyPeriodicity` for calendar timing.
+4. **CSV Analysis**: Use `Csv::analyze(paths, config)` (paths is `Array<String>`) to understand structure before processing large files.
+5. **Statistics**: `Gaussian` for running stats, `Histogram` for distributions, `GaussianProfile` for per-bin stats.
+6. **File Discovery**: Use `File::ls(path, ends_with, recursive)` to filter by extension.
+7. **HTTP**: Build headers as a `Map<String, String>` and pass them to `get`/`post`/`put` or use `send(HttpRequest)` for full control over method/timeout.
+8. **Security**: Prefer `Uuid::v4()`/`v7()` for tokens and DB keys; reserve `Random.uuid()` for reproducible test data.
 
 ### Common Patterns
 
@@ -992,18 +1234,12 @@ fn process_daily_data() {
   var files = File::ls("/data/incoming", ".csv", false);
   for (_, file in files) {
     var reader = CsvReader<Record> { path: file.path };
-    while (reader.can_read()) {
-      process_record(reader.read());
-    }
-    File::rename(file.path, "/data/processed/${file.name}");
+    while (reader.can_read()) { process_record(reader.read()); }
+    File::rename(file.path, "/data/processed/${file.name()}");
   }
 }
 
-Scheduler::add(
-  process_daily_data,
-  DailyPeriodicity { hour: 1, minute: 0 },
-  null
-);
+Scheduler::add(process_daily_data, DailyPeriodicity { hour: 1, minute: 0 }, null);
 ```
 
 #### Streaming Statistics
@@ -1013,14 +1249,10 @@ var window = SlidingWindow<float> { span: 1000 };
 fn process_sensor_data(readings: Array<float>) {
   for (_, value in readings) {
     window.add(value);
-
     if (window.size() >= 100) {
       var avg = window.avg()!!;
       var std = window.std()!!;
-
-      if (value > avg + 3.0 * std) {
-        Log::warn("Anomaly detected: ${value}");
-      }
+      if (value > avg + 3.0 * std) { warn("Anomaly detected: ${value}"); }
     }
   }
 }
@@ -1028,20 +1260,14 @@ fn process_sensor_data(readings: Array<float>) {
 
 #### HTTP API Integration
 ```gcl
-fn fetch_and_store_data() {
+fn fetch_and_store_data(api_key: String) {
   var headers = Map<String, String> {};
   headers.set("Authorization", "Bearer ${api_key}");
 
-  var response = Http<Array<Record>> {}.get(
-    "https://api.example.com/data",
-    headers
-  );
-
+  var response = Http<Array<Record>> {}.get("https://api.example.com/data", headers);
   if (response != null) {
     var writer = JsonWriter<Record> { path: "/data/cache.json" };
-    for (_, record in response) {
-      writer.writeln(record);
-    }
+    for (_, record in response) { writer.writeln(record); }
     writer.flush();
   }
 }

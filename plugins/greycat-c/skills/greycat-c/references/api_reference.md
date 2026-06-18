@@ -2032,7 +2032,10 @@ Calendar conversion, timezone handling, ISO 8601 parsing, and formatting. GreyCa
 | `GC_ADJUSTED_EPOCH_YEAR` | 0 | Adjusted epoch year (Year 0, March 1) |
 | `GC_ADJUSTED_EPOCH_WDAY` | 3 | 0000-03-01 was a Wednesday |
 | `GC_MIN_YEAR` | `INT32_MIN + 1900` | Minimum representable year |
-| `GC_MAX_YEAR` | `INT32_MAX + 1900` | Maximum representable year |
+| `GC_MAX_YEAR` | `(i64_t) INT32_MAX + 1900` | Maximum representable year |
+| `GC_MKTIME_MAX_TM_YEAR` | 10000 | Maximum absolute `tm_year` (year − 1900) supported by `gc_mktime_safe` |
+| `GC_MKTIME_MIN_YEAR` | `GC_YEAR_BASE - GC_MKTIME_MAX_TM_YEAR` (= -8100) | Inclusive lower year bound for which `gc_mktime_safe` returns a valid epoch |
+| `GC_MKTIME_MAX_YEAR` | `GC_YEAR_BASE + GC_MKTIME_MAX_TM_YEAR` (= 11900) | Inclusive upper year bound for which `gc_mktime_safe` returns a valid epoch |
 
 **Timezone conversion status codes:**
 
