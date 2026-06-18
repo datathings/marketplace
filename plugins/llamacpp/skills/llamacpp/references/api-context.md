@@ -40,6 +40,8 @@ if (!ctx) {
 
 - `kv_unified` (bool) - Use a unified buffer across input sequences when computing attention. Try disabling when `n_seq_max > 1` for improved performance when sequences do not share a large prefix. Default: true.
 
+- `n_outputs_max` (`uint32_t`) - Maximum number of outputs in a ubatch (`0` = `n_batch`). Capping this lets the context reserve less output VRAM when you only ever read a few logits/embeddings per batch (e.g. one output per sequence during generation). Added in b9704. Default: 0.
+
 - `defrag_thold` (float) - [DEPRECATED] Defragment the KV cache if holes/size > threshold, <= 0 disabled. This parameter is deprecated and should not be used in new code.
 
 **Backend Sampling parameters [EXPERIMENTAL]:**
@@ -48,17 +50,13 @@ if (!ctx) {
 
 - `n_samplers` (`size_t`) - Number of sampler configurations in the `samplers` array. Default: 0.
 
-- `ctx_other` (`struct llama_context *`) - A source/target/parent context. Can be used in various ways, for example to share results or `llama_memory` between two contexts. Default: NULL. [b9621]
-
-**Output limiting [b9621]:**
-
-- `n_outputs_max` (`uint32_t`) - Maximum number of outputs in a ubatch. `0` means use `n_batch`. Limits the peak memory used for output logits/embeddings. Default: 0.
-
 **Multi-Token Prediction (MTP) and Recurrent-State Rollback [b9246, EXPERIMENTAL]:**
 
 - `ctx_type` (`enum llama_context_type`) - Set the context type. Values: `LLAMA_CONTEXT_TYPE_DEFAULT` (0) for standard inference; `LLAMA_CONTEXT_TYPE_MTP` (1) to enable Multi-Token Prediction (e.g., for speculative decoding with MTP-trained models). Default: `LLAMA_CONTEXT_TYPE_DEFAULT`.
 
 - `n_rs_seq` (`uint32_t`) - Number of recurrent-state snapshots per sequence used for rollback in recurrent (Mamba/RWKV) or hybrid models. `0` disables rollback. Higher values allow more rollback steps at the cost of memory. Default: 0.
+
+- `ctx_other` (`struct llama_context *`) - A source/target/parent context that can be shared between two contexts, e.g. to share inference results or `llama_memory` (KV cache) between them. Used by MTP/speculative-decoding setups such as Gemma4 MTP. Added in b9704. Default: NULL.
 
 **Example with Backend Sampling:**
 ```c

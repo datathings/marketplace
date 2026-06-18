@@ -22,7 +22,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Task & Job Management](#task--job-management)
   - [Logging](#logging)
   - [System Information](#system-information)
-  - [Security](#security) - User, UserGroup, SecurityPolicy, OpenIDConnect
+  - [Security & Identity](#security--identity) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
   - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
@@ -36,12 +36,13 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [HTTP Client](#http-client) - Http, Url
   - [Email](#email) - Email, Smtp
   - [XML I/O](#xml-io) - XmlReader
+  - [S3 Object Storage](#s3-object-storage) - S3, S3Bucket, S3Object, S3BasicCredentials
 
 - [std::util - Utilities](#util-module-stdutil)
   - [Collections](#collections) - Queue, Stack, SlidingWindow, TimeWindow
   - [Statistics](#statistics) - Gaussian, Histogram, GaussianProfile
   - [Quantizers](#quantizers) - Linear, Log, Custom, Multi
-  - [Utilities](#utilities) - Random, Assert, ProgressTracker, Crypto, Plot
+  - [Utilities](#utilities) - Random, Assert, ProgressTracker, Crypto, Uuid, Plot
 
 ### Additional Sections
 - [Usage Guidelines](#usage-guidelines)
@@ -55,10 +56,10 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
 ### Fundamental Types
 
 #### Tuple<T, U>
-Two-element tuple for pairing values of potentially different types.
+Two-element tuple for pairing values of potentially different types. Fields are `x` and `y`.
 ```gcl
-var pair = Tuple<String, int> { first: "count", second: 42 };
-println("${pair.first}: ${pair.second}");
+var pair = Tuple<String, int> { x: "count", y: 42 };
+println("${pair.x}: ${pair.y}");
 ```
 
 #### Date
@@ -73,42 +74,49 @@ var next_week = now + 7day;
 Error handling with stack traces.
 ```gcl
 type Error {
-  code: ErrorCode;
-  message: String;
+  message: String?;
   stack: Array<ErrorFrame>;
 }
+
+type ErrorFrame {
+  module: String?;
+  function: String;
+  line: int;
+  column: int;
+}
+
+// ErrorCode enum: none, interrupted, await, timeout, forbidden, runtime_error
 ```
 
 ### Geospatial Types
 
 #### GeoCircle
-Circular geographic region defined by center point and radius.
+Circular geographic region defined by a center `geo` point and a radius in meters. Has `native fn contains(point: geo): bool`.
 ```gcl
 var zone = GeoCircle {
-  lat: 45.5,
-  lng: -73.6,
+  center: geo::new(45.5, -73.6),
   radius: 5000.0  // meters
 };
 ```
 
 #### GeoPoly
-Polygon geographic region.
+Polygon geographic region: an array of `geo` vertices. Has `native fn contains(point: geo): bool`.
 ```gcl
 var boundary = GeoPoly {
   points: [
-    GeoPoint { lat: 45.5, lng: -73.6 },
-    GeoPoint { lat: 45.6, lng: -73.5 },
-    GeoPoint { lat: 45.4, lng: -73.4 }
+    geo::new(45.5, -73.6),
+    geo::new(45.6, -73.5),
+    geo::new(45.4, -73.4)
   ]
 };
 ```
 
 #### GeoBox
-Rectangular bounding box for geographic queries.
+Rectangular bounding box for geographic queries, defined by South-West (`sw`) and North-East (`ne`) `geo` corners. Has `native fn contains(point: geo): bool`.
 ```gcl
 var bbox = GeoBox {
-  south_west: GeoPoint { lat: 45.4, lng: -73.7 },
-  north_east: GeoPoint { lat: 45.6, lng: -73.5 }
+  sw: geo::new(45.4, -73.7),
+  ne: geo::new(45.6, -73.5)
 };
 ```
 
@@ -118,16 +126,16 @@ var bbox = GeoBox {
 Precision levels for floating-point calculations: `p1`, `p10`, `p100`, `p1000`, etc.
 
 #### CalendarUnit
-Time units for date operations: `year`, `month`, `week`, `day`, `hour`, `minute`, `second`.
+Time units for date operations: `year`, `month`, `day`, `hour`, `minute`, `second`, `microsecond`.
 
 #### DurationUnit
-Duration units: `us` (microseconds), `ms`, `s`, `min`, `hour`, `day`.
+Duration units: `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `days`.
 
 #### TensorType
-Tensor data types: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `c64`, `c128`.
+Tensor element types: `i32`, `i64`, `f32`, `f64`, `c64`, `c128`.
 
 #### TensorDistance
-Distance metrics for tensors: `euclidean`, `cosine`, `manhattan`, `hamming`.
+Distance metrics for tensors: `euclidean` (aka l2), `l2sq`, `cosine`.
 
 ## Runtime Module (std::runtime)
 
@@ -163,26 +171,30 @@ FixedPeriodicity { every: 1hour }
 DailyPeriodicity { hour: 14, minute: 30 }  // 2:30 PM daily
 ```
 
-**WeeklyPeriodicity** - Run on specific day/time each week
+**WeeklyPeriodicity** - Run on given weekdays, at the time given by `daily`
 ```gcl
 WeeklyPeriodicity {
-  day: DayOfWeek::monday,
-  hour: 9,
-  minute: 0
+  days: [DayOfWeek::Mon, DayOfWeek::Fri],  // enum values: Mon..Sun
+  daily: DailyPeriodicity { hour: 9 }
 }
 ```
 
-**MonthlyPeriodicity** - Run on specific day/time each month
+**MonthlyPeriodicity** - Run on given days-of-month (negatives count from end), at `daily` time
 ```gcl
-MonthlyPeriodicity { day: 1, hour: 0, minute: 0 }  // First of month
+MonthlyPeriodicity {
+  days: [1, 15, -1],                        // 1st, 15th, last day of month
+  daily: DailyPeriodicity { hour: 9, minute: 30 }
+}
 ```
 
-**YearlyPeriodicity** - Run on specific date/time each year
+**YearlyPeriodicity** - Run on specific calendar dates each year
 ```gcl
 YearlyPeriodicity {
-  month: Month::january,
-  day: 1,
-  hour: 0
+  dates: [
+    DateTuple { day: 1, month: Month::Jan },
+    DateTuple { day: 25, month: Month::Dec }
+  ],
+  timezone: TimeZone::"Europe/Luxembourg"
 }
 ```
 
@@ -204,21 +216,20 @@ Scheduler::add(
 
 #### Managing Tasks
 ```gcl
-// Find task
+// Find task -> PeriodicTask?
 var ptask = Scheduler::find(health_check);
 if (ptask != null) {
-  println("Runs every ${ptask.periodicity.every}");
+  println("active=${ptask.is_active}, runs=${ptask.execution_count}");
 }
 
-// Control execution
+// Control execution (return bool)
 Scheduler::deactivate(backup_database);  // Pause
 Scheduler::activate(backup_database);    // Resume
-Scheduler::remove(backup_database);      // Delete
 
-// List all tasks
+// List all tasks -> Array<PeriodicTask>
 var all_tasks = Scheduler::list();
 for (_, task in all_tasks) {
-  println("${task.function}: active=${task.is_active}");
+  println("${task.function}: active=${task.is_active}, next=${task.next_execution}");
 }
 ```
 
@@ -227,13 +238,24 @@ for (_, task in all_tasks) {
 #### Task
 Asynchronous task execution with status tracking.
 ```gcl
-enum TaskStatus { running, completed, failed, cancelled }
+enum TaskStatus {
+  empty, waiting, running, await, cancelled,
+  error, ended, ended_with_errors, breakpoint
+}
 
 type Task {
-  id: String;
+  user_id: int;
+  task_id: int;
+  mod: String?;
+  type: String?;
+  fun: String?;
+  creation: time;
+  start: time?;
+  duration: duration?;
   status: TaskStatus;
   progress: float?;
-  error: Error?;
+  // static native fns: expected_steps, add_steps, parentId, id,
+  // no_history, running, history, cancel, is_running
 }
 ```
 
@@ -249,11 +271,11 @@ var job = Job<Result> {};
 #### Log
 Structured logging with severity levels.
 ```gcl
-enum LogLevel { trace, debug, info, warn, error, fatal }
+enum LogLevel { error, warn, info, perf, trace }
 
 Log::info("Application started");
 Log::error("Failed to connect: ${error_message}");
-Log::debug("Processing item ${id}");
+Log::trace("Processing item ${id}");
 ```
 
 #### LogDataUsage
@@ -268,84 +290,104 @@ var usage = LogDataUsage {
 
 ### System Information
 
-#### Runtime
+#### Runtime / RuntimeInfo
 Query runtime environment information.
 ```gcl
-var info = RuntimeInfo {};
-println("Platform: ${info.platform}");
-println("Version: ${info.version}");
+type RuntimeInfo {
+  version: String;
+  program_version: String?;
+  arch: String;
+  timezone: TimeZone;
+  license: License;
+  io_threads: int;
+  bg_threads: int;
+  fg_threads: int;
+  mem_total: int;
+  mem_worker: int;
+  disk_data_bytes: int;
+}
+
+var info = Runtime::info();
+println("Version: ${info.version}, arch: ${info.arch}");
 ```
 
 #### System
-System-level operations and utilities.
+System-level operations: run subprocesses, read env vars, query timezone.
 ```gcl
-var sys_info = System::info();
-println("CPU cores: ${sys_info.cpu_count}");
+// Run a command, returns stdout (throws with stderr on failure)
+var out = System::exec("/usr/bin/ls", ["-la"]);
+
+// Spawn without waiting -> ChildProcess
+var child = System::spawn("/usr/bin/sleep", ["10"]);
+var result = child.wait();   // ChildProcessResult { code, stdout, stderr }
+// child.kill();             // force exit
+
+var tz  = System::tz();              // local TimeZone
+var home = System::getEnv("HOME");   // String?
 ```
 
 #### ChildProcess
-Execute external processes.
+Handle to a spawned external process.
 ```gcl
 type ChildProcess {
-  command: String;
-  args: Array<String>?;
-  env: Map<String, String>?;
+  // private pid: int;
+  // native fn wait(): ChildProcessResult;
+  // native fn kill();
 }
 
 type ChildProcessResult {
-  exit_code: int;
+  code: int;        // process return code
   stdout: String;
   stderr: String;
 }
 ```
 
-### Security
+### Security & Identity
 
-#### User & UserGroup
-User and group management.
+#### Identity
+A user account on the server: a numeric `id` (`0` is the anonymous/public user), a unique login `name`, a `role` (maps to a set of permission flags granted at login), and the read/write grants this identity extends to others.
 ```gcl
-type User extends SecurityEntity {
-  username: String;
-  email: String;
-  groups: Array<UserGroup>;
+type Identity {
+  id: int;            // 0 = anonymous/public user
+  name: String;       // unique login name
+  role: String;       // role name -> permission flags
+  grants: Array<IdentityGrant>;
+  // static native fns include:
+  //   current_id(): int           (public, lock-free)
+  //   current(): Identity         (requires authentication)
+  //   get_by_id(id: int): Identity?   (admin)
+  //   get_by_name(name: String): Identity?  (admin)
 }
 
-type UserGroup extends SecurityEntity {
+var me = Identity::current();
+var caller_id = Identity::current_id();  // 0 if unauthenticated
+```
+
+#### IdentityGrant & IdentityGrantType
+Per-identity read/write grants extended to other identities.
+```gcl
+enum IdentityGrantType { read, write, read_write, none }
+
+type IdentityGrant {
   name: String;
-  policies: Array<UserGroupPolicy>;
-}
-```
-
-#### SecurityPolicy
-Access control and permissions.
-```gcl
-type SecurityPolicy {
-  resource: String;
-  actions: Array<String>;
-  allow: bool;
-}
-```
-
-#### OpenIDConnect
-OpenID Connect authentication.
-```gcl
-type OpenIDConnect {
-  issuer: String;
-  client_id: String;
-  client_secret: String;
-  redirect_uri: String;
+  grant: IdentityGrantType;
 }
 ```
 
 ### License Management
 
 ```gcl
-enum LicenseType { trial, commercial, enterprise, opensource }
+enum LicenseType { community, enterprise, testing }
 
 type License {
-  type: LicenseType;
-  valid_until: time;
-  features: Array<String>;
+  name: String?;        // associated username
+  start: time;          // start of validity
+  end: time;            // end of validity
+  company: String?;     // associated company
+  max_memory: int;      // maximum allowed memory in MB
+  extra_1: int?;
+  extra_2: int?;
+  type: LicenseType?;
 }
 ```
 
@@ -527,12 +569,11 @@ while (!walker.isEmpty()) {
 ### HTTP Client
 
 #### Http<T>
-REST API client with type-safe requests.
+REST API client with type-safe requests. Headers are a `Map<String, String>?`.
 ```gcl
-var headers = [
-  HttpHeader { name: "Authorization", value: "Bearer token" },
-  HttpHeader { name: "Accept", value: "application/json" }
-];
+var headers = Map<String, String> {};
+headers.set("Authorization", "Bearer token");
+headers.set("Accept", "application/json");
 
 // GET request
 var response = Http<User> {}.get(
@@ -547,13 +588,20 @@ Http<any> {}.getFile(
   null
 );
 
-// POST request
+// POST / PUT request
 var new_user = User { name: "Alice", email: "alice@example.com" };
 var result = Http<User> {}.post(
   "https://api.example.com/users",
   new_user,
   headers
 );
+
+// Low-level request/response
+var resp = Http<User> {}.send(HttpRequest {
+  method: HttpMethod::GET,
+  url: "https://api.example.com/users/123",
+  headers: headers
+});
 ```
 
 #### Url
@@ -606,6 +654,35 @@ while (reader.can_read()) {
   var config = reader.read();
   apply_config(config);
 }
+```
+
+### S3 Object Storage
+
+#### S3, S3Bucket, S3Object, S3BasicCredentials
+S3-compatible object storage client (access/secret-key authentication).
+```gcl
+var s3 = S3 {
+  host: "localhost:9000",
+  region: "us-east-1",
+  credentials: S3BasicCredentials {
+    access_key: "AKIA...",
+    secret_key: "secret"
+  },
+  force_path_style: true
+};
+
+s3.create_bucket("my-bucket");
+s3.put_object("my-bucket", "/local/file.txt", "virtual/path/file.txt");
+
+var objects = s3.list_objects("my-bucket", "prefix/", null, 1000);
+for (_, obj in objects) {
+  println("${obj.key} (${obj.size} bytes, etag=${obj.etag})");
+}
+
+s3.get_object("my-bucket", "virtual/path/file.txt", "/local/download.txt");
+s3.delete_object("my-bucket", "virtual/path/file.txt");
+
+var buckets = s3.list_buckets(null);  // Array<S3Bucket>
 ```
 
 ## Util Module (std::util)
@@ -840,8 +917,23 @@ var decoded = Crypto::base64_decode(b64);
 var url_enc = Crypto::url_encode("param with spaces");
 var url_dec = Crypto::url_decode(url_enc);
 
-// PKCS1 signing (requires private key)
-var signature = Crypto::pkcs1_sign(data, private_key);
+var hex = Crypto::hex_encode(input);
+var raw = Crypto::hex_decode(hex);
+
+// HMAC-SHA256 (hex output)
+var mac = Crypto::sha256_hmac_hex(input, secret_key);
+
+// PKCS1 signing (key is read from a path on disk)
+var signature = Crypto::sha256_sign_pkcs1(data, "/keys/private.pem");
+var signature_hex = Crypto::sha256_sign_pkcs1_hex(data, "/keys/private.pem");
+```
+
+#### Uuid
+Cryptographically strong UUID generator (CTR_DRBG seeded from system entropy; not reproducible).
+```gcl
+var token = Uuid::v4();   // UUID v4: 122 bits CSPRNG entropy, canonical 8-4-4-4-12
+var key   = Uuid::v7();   // UUID v7: time-sortable (48-bit ms timestamp + counter + CSPRNG)
+// For deterministic/seedable UUIDs use Random.uuid() / Random.uuid_v7()
 ```
 
 #### Plot
@@ -866,7 +958,7 @@ Plot::scatter_plot(data, 1, [2], "output.png");
 - Scheduled/recurring tasks (Scheduler)
 - Background job processing (Task, Job)
 - Application logging (Log)
-- Security and authentication (User, SecurityPolicy, OpenIDConnect)
+- Security and authentication (Identity, IdentityGrant)
 - System information queries (Runtime, System)
 
 **io** - Use for:
@@ -937,9 +1029,8 @@ fn process_sensor_data(readings: Array<float>) {
 #### HTTP API Integration
 ```gcl
 fn fetch_and_store_data() {
-  var headers = [
-    HttpHeader { name: "Authorization", value: "Bearer ${api_key}" }
-  ];
+  var headers = Map<String, String> {};
+  headers.set("Authorization", "Bearer ${api_key}");
 
   var response = Http<Array<Record>> {}.get(
     "https://api.example.com/data",

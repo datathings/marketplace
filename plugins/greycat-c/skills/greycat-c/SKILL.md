@@ -1,23 +1,22 @@
 ---
 name: greycat-c
-description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/User/Security/System/OpenAPI/MCP), std::io (CSV/JSON/XML/HTTP/Email/FileWalker), std::util (Queue/Stack/SlidingWindow/Gaussian/Histogram/Quantizers/Random/Plot); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
+description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/Identity/Security/System/License/OpenAPI/MCP), std::io (CSV/JSON/XML/HTTP/Email/FileWalker/S3), std::util (Queue/Stack/SlidingWindow/Gaussian/Histogram/Quantizers/Random/Uuid/Crypto/Plot); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
 ---
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **2.5.6**.
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **2.6.3**.
 
 ## Key Considerations
 
-- **Allocator API is mandatory.** Every non-trivial allocation routes through an explicit `gc_allocator_t *`. Per-call scratch comes from `gc_machine__allocator(ctx)` (or `((gc_ctx_t *)ctx)->allocator`); plugin-global state comes from `gc_host__global_allocator()` (a convenience wrapper around `gc_host__allocator(gc_host__get_global())`). The thread-bound helpers `gc_malloc` / `gc_free` / `gc_realloc` are public API too — they target whichever allocator is currently bound to the calling thread via `gc_alloc__bind`.
-- **`gc_alloc__create(bool shared)`** — creating your own allocator now takes a `shared` flag. Pass `true` for arenas touched by multiple threads, `false` for a thread-private arena. `gc_alloc__allocated` and `gc_alloc__stats` are exposed for live-bytes accounting and debug dumps.
-- **New `gc/log.h` module.** Structured logging is now first-class: `gc_log_level_t` plus `gc_log__machine` / `gc_log__machinef` (VM context) and `gc_log__host` / `gc_log__hostf` (host context). Use `gc_log__enabled(host, level)` to skip work in cold paths.
-- **`gc/str.h` (inline short strings) is gone.** `gc_str_t`, `gc_core_str__encode/_add_to_buffer`, and the `gc_core_str` / `gc_core_t2…t4f` extern globals are no longer part of the public SDK. Use `gc_string_t` for all string handling.
-- **`gc_machine__call_function` takes a `const gc_program_function_t *fn`** (not a raw function-body pointer). On `false` the result is a synthesized `Error` object (type `gc_core_Error`); the caller owns one mark on the result. `gc_machine__impersonate(ctx, user_id)` is new for permission-aware sub-calls. `gc_machine__allocator(ctx)` is the documented sugar for the per-call allocator.
-- **Scheduler API** in `gc/host.h`: `gc_scheduler_t`, `gc_periodic_task_t`, `gc_periodicity_t` (fixed / daily / weekly / monthly / yearly configs), `gc_scheduler__add/activate/deactivate/create_object`.
-- **ABI**: `gc_abi_header_check_error_truncated = 4` is a new variant of `gc_abi_header_check_error_t`. `gc_abi_t` carries its own allocator.
-- **Iterator params**: `gc_program_iterator_param_t` lost the old `limit` variant. Values are now `from=0`, `to=1`, `nullable=2`, `from_excl=3`, `to_excl=4`.
-- **Geo constant rename**: `GC_CORE_GEO_LAT_EPS` is now `GC_CORE_GEO_EPS`.
+- **Allocator API is mandatory.** Every non-trivial allocation routes through an explicit `gc_allocator_t *`. Per-call scratch comes from `gc_machine__allocator(ctx)` (or `((gc_ctx_t *)ctx)->allocator`); plugin-global state comes from `gc_host__global_allocator()` (a convenience wrapper around `gc_host__allocator(gc_host__get_global())`). `gc_alloc__create(bool shared)` takes a `shared` flag (`true` for multi-thread arenas, `false` for thread-private). `gc_alloc__size(allocator, ptr)` returns an allocation's usable size; `gc_alloc__allocated` / `gc_alloc__stats` give live-bytes accounting and debug dumps. The thread-bound helpers `gc_malloc` / `gc_free` / `gc_realloc` are public too — they target whichever allocator is bound to the calling thread via `gc_alloc__bind`.
+- **Structured logging (`gc/log.h`).** `gc_log_level_t` is `none / error / warn / info / perf / trace`. Use `gc_log__machine` / `gc_log__machinef` (VM context) and `gc_log__host` / `gc_log__hostf` (host context); gate hot paths with `gc_log__enabled(host, level)`.
+- **No inline short strings.** There is no `gc/str.h`: `gc_str_t` and the `gc_core_str` / `gc_core_t2…t4f` globals are not public. Use `gc_string_t` (heap, immutable, hash-cached; `buffer` is NOT NUL-terminated — use `size`).
+- **`gc_machine__call_function` takes a `const gc_program_function_t *fn`** (not a raw body pointer). On `false` the result is a synthesized `Error` object (type `gc_core_Error`) and `*marked_res_type` is `gc_type_object`; the caller owns one mark on the result. `gc_machine__impersonate(ctx, user_id)` switches the effective user for permission-aware sub-calls; `gc_machine__allocator(ctx)` is the per-call allocator sugar.
+- **Host/Scheduler (`gc/host.h`).** `gc_host__cancel_task` / `gc_host__get_task_status` take `i64_t task_id`. Periodic scheduling via `gc_scheduler_t`, `gc_periodic_task_t`, `gc_periodicity_t` (fixed / daily / weekly / monthly / yearly), `gc_scheduler__add/activate/deactivate/create_object`.
+- **ABI.** `GC_ABI_PROTO` is `3`. `gc_abi_header_check_error_t` includes `..._truncated = 4`; `gc_abi_t` carries its own allocator.
+- **Iterator params** `gc_program_iterator_param_t`: `from=0`, `to=1`, `nullable=2`, `from_excl=3`, `to_excl=4` (no `limit`). Geo epsilon constant is `GC_CORE_GEO_EPS`.
+- **Stdlib changes since 2.5.6.** Security model is now `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). `std::io` gained S3 object storage (`S3`, `S3Bucket`, `S3Object`, `S3BasicCredentials`) and the `HttpMethod` / `HttpRequest` / `HttpResponse` request model — HTTP headers are now `Map<String, String>?` (no `HttpHeader` type). `std::util` adds `Uuid` (v4 / v7). HTTP/S3, `Crypto`, periodicity field shapes (weekly/monthly use a nested `daily`, yearly uses `dates: Array<DateTuple>`), and the `LogLevel` / `TaskStatus` / `LicenseType` enums all changed — see the stdlib reference.
 
 ## Contents
 
@@ -211,9 +210,9 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 ## Module Organization
 
 - **std::core** - Fundamental types (Date, Time, Duration, Tuple, Error, geospatial types, enumerations)
-- **std::runtime** - Scheduler, Task, Job, Logger, User/Security, System, ChildProcess, License, OpenAPI, MCP
-- **std::io** - Text/Binary I/O, CSV, JSON, XML, HTTP client, Email/SMTP, FileWalker
-- **std::util** - Collections (Queue, Stack, SlidingWindow, TimeWindow), Statistics (Gaussian, Histogram), Quantizers, Assert, ProgressTracker, Crypto, Random, Plot
+- **std::runtime** - Scheduler, Task, Job, Logger, Identity/Security, System, ChildProcess, License, OpenAPI, MCP
+- **std::io** - Text/Binary I/O, CSV, JSON, XML, HTTP client, Email/SMTP, FileWalker, S3 object storage
+- **std::util** - Collections (Queue, Stack, SlidingWindow, TimeWindow), Statistics (Gaussian, Histogram, GaussianProfile), Quantizers, Assert, ProgressTracker, Crypto, Uuid, Random, Plot
 
 ## Detailed Reference
 
@@ -222,9 +221,9 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 **Load when working with:**
 - Task scheduling and automation (Scheduler with periodicities)
 - File I/O operations (CSV, JSON, XML, binary files)
-- HTTP integration and REST APIs
+- HTTP integration and REST APIs, S3 object storage
 - Statistical analysis and data processing
-- Security, authentication, and user management
+- Identity, security, and authentication
 - System operations and logging
 
 **Contains:** Complete documentation for all four standard library modules with code examples, usage patterns, and best practices.

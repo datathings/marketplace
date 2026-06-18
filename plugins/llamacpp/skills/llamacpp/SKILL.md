@@ -65,14 +65,14 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (304 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (310 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
-- **[api-context.md](references/api-context.md)** (415 lines) - Context, memory (KV cache), state management
-- **[api-inference.md](references/api-inference.md)** (418 lines) - Batch operations, inference, tokenization, chat
+- **[api-context.md](references/api-context.md)** (419 lines) - Context, memory (KV cache), state management
+- **[api-inference.md](references/api-inference.md)** (412 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (396 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 196 active functions (b9621) across 6 organized files
+**Total:** 196 active functions (b9704) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,246 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,252 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,32 +157,21 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b9621
+## What's New in b9704
 
-**b9621** is an additive release (from b9246) — no removals, no signature changes. New capabilities:
+**b9704** is an additive release (from b9246) — no functions added or removed. The public C API gained two `llama_context_params` fields and deprecated one function:
 
-**Context sharing & output limiting:**
-- New `llama_context_params.ctx_other` field — a source/target/parent context, used to share results or `llama_memory` between two contexts
-- New `llama_context_params.n_outputs_max` field — max outputs in a ubatch (0 = `n_batch`), caps peak output-logit memory
+**New `llama_context_params` fields:**
+- `n_outputs_max` (`uint32_t`) — max outputs in a ubatch (0 = `n_batch`). Cap it to reserve less output VRAM when you read only a few logits/embeddings per batch (e.g. one output per sequence during generation).
+- `ctx_other` (`struct llama_context *`) [EXPERIMENTAL] — a source/target/parent context for sharing inference results or `llama_memory` (KV cache) between two contexts; used by MTP setups such as Gemma4 MTP.
 
-**Deprecation:**
-- `llama_set_warmup()` is now **deprecated** — do warmup runs manually instead. It changes graph topology with MoE models (extra reallocations) and will be removed in the future.
+**Deprecated:**
+- `llama_set_warmup()` — perform warmup runs manually instead. It changed graph topology with MoE models (causing extra reallocations) and will be removed in a future release.
 
-## What's New in b9246
-
-**b9246** is an additive release (from b8920) — no removals, no signature changes. New capabilities:
-
-**Multi-Token Prediction (MTP) [EXPERIMENTAL]:**
-- New `enum llama_context_type` with `LLAMA_CONTEXT_TYPE_DEFAULT` (0) and `LLAMA_CONTEXT_TYPE_MTP` (1)
-- New `llama_context_params.ctx_type` field — set to `LLAMA_CONTEXT_TYPE_MTP` to enable MTP-style speculative decoding
-
-**Recurrent-state rollback (Mamba/RWKV) [EXPERIMENTAL]:**
-- New `llama_context_params.n_rs_seq` field — number of recurrent-state snapshots per sequence for rollback (0 = disabled)
-- New `llama_n_rs_seq(ctx)` — query the configured rollback depth
-
-**Sequence-state flags:**
-- New `LLAMA_STATE_SEQ_FLAGS_NONE` (0) — explicit no-flags constant
-- New `LLAMA_STATE_SEQ_FLAGS_ON_DEVICE` (2) — keep tensor data on device buffers for faster save/load (not host-readable)
+**Still recent (added in b9246) [EXPERIMENTAL]:**
+- Multi-Token Prediction: `enum llama_context_type` (`LLAMA_CONTEXT_TYPE_DEFAULT`/`LLAMA_CONTEXT_TYPE_MTP`) + `llama_context_params.ctx_type`
+- Recurrent-state rollback (Mamba/RWKV): `llama_context_params.n_rs_seq` + `llama_n_rs_seq(ctx)`
+- Sequence-state flags: `LLAMA_STATE_SEQ_FLAGS_NONE` (0), `LLAMA_STATE_SEQ_FLAGS_ON_DEVICE` (2)
 
 **Stable Since b8809:**
 - Model loading: `llama_model_load_from_file_ptr()`, `llama_model_init_from_user()`
@@ -203,5 +192,6 @@ If you're updating old code:
 - Use `llama_set_adapters_lora()` instead of `llama_set_adapter_lora()` for LoRA adapters
 - Use `llama_vocab_bos()` instead of `llama_vocab_cls()` (CLS is equivalent to BOS)
 - Use `llama_sampler_init_grammar_lazy_patterns()` instead of `llama_sampler_init_grammar_lazy()`
+- Perform warmup runs manually instead of calling deprecated `llama_set_warmup()` (deprecated in b9704)
 
 See the API reference for complete mappings.

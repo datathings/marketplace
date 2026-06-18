@@ -489,7 +489,7 @@ void gc_mymod_Model__load(gc_machine_t *ctx) {
 
 ## Memory Management Patterns
 
-### Allocator Selection (required in 2.5.6)
+### Allocator Selection (required)
 
 Every allocation must be routed to one of two allocators — pick the one whose lifetime matches the data:
 
@@ -780,7 +780,7 @@ void my_function(gc_machine_t *ctx) {
 ### Creating String Results
 
 ```c
-// From buffer with known length (the ctx tail argument is required in 2.5.6)
+// From buffer with known length (the trailing ctx argument is required)
 gc_string_t *result = gc_string__create_from(data, length, ctx);
 gc_machine__set_result(ctx, (gc_slot_t){.object = (gc_object_t *)result}, gc_type_object);
 gc_object__un_mark((gc_object_t *)result, ctx);

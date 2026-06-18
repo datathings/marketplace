@@ -374,6 +374,7 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `n_batch`: Logical maximum batch size
 - `n_ubatch`: Physical maximum batch size
 - `n_seq_max`: Max number of sequences
+- `n_outputs_max`: Max outputs in a ubatch (0 = n_batch); cap to save output VRAM (b9704+)
 - `n_threads`: Threads for generation
 - `n_threads_batch`: Threads for batch processing
 - `embeddings`: Extract embeddings (together with logits)
@@ -389,6 +390,7 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `kv_unified`: Use a unified buffer across input sequences
 - `samplers`: [EXPERIMENTAL] Backend sampler chain configuration
 - `n_samplers`: Number of backend sampler configurations
+- `ctx_other`: [EXPERIMENTAL] Source/target/parent context for sharing results or `llama_memory` between two contexts (e.g. MTP) (b9704+)
 
 ### llama_token_data / llama_token_data_array
 Used for sampling:

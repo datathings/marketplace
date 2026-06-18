@@ -235,6 +235,7 @@ typedef struct gc_allocator gc_allocator_t;
 | `gc_alloc__malloc` | `void *gc_alloc__malloc(gc_allocator_t *allocator, size_t size)` | Allocate `size` bytes from `allocator`. |
 | `gc_alloc__calloc` | `void *gc_alloc__calloc(gc_allocator_t *allocator, size_t size)` | Allocate `size` bytes, zero-initialized. |
 | `gc_alloc__free` | `void gc_alloc__free(gc_allocator_t *allocator, void *ptr, size_t size)` | Free memory back to `allocator`. The original allocation `size` MUST be passed. |
+| `gc_alloc__size` | `size_t gc_alloc__size(gc_allocator_t *allocator, void *ptr)` | Return the usable size of the allocation `ptr` belongs to. |
 | `gc_alloc__realloc` | `void *gc_alloc__realloc(gc_allocator_t *allocator, void *ptr, size_t old_size, size_t new_size)` | Resize allocation from `old_size` to `new_size`. |
 | `gc_alloc__align_malloc` | `void *gc_alloc__align_malloc(gc_allocator_t *allocator, size_t size, size_t block_size)` | Allocate `size` bytes aligned to `block_size`. |
 | `gc_alloc__align_free` | `void gc_alloc__align_free(gc_allocator_t *allocator, void *ptr, size_t size, size_t block_size)` | Free aligned memory. |
@@ -1346,8 +1347,8 @@ typedef struct {
 | `gc_host__scheduler` | `gc_scheduler_t *gc_host__scheduler(gc_host_t *self)` | Get the host's periodic scheduler. |
 | `gc_host__spawn_task` | `bool gc_host__spawn_task(gc_host_t *self, u32_t fn_off, u32_t user_id, u64_t roles_flags, i64_t *created_task_id)` | Spawn a new task (no arguments). Returns `false` when the queue is full. |
 | `gc_host__spawn_task_with_args` | `bool gc_host__spawn_task_with_args(gc_host_t *self, u32_t fn_off, const char *args_payload, u64_t args_payload_len, gc_format_t args_format, u32_t user_id, u64_t roles_flags, i64_t *created_task_id, gc_buffer_t *extra_buffer)` | Spawn a new task with serialized arguments. |
-| `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, u32_t task_id)` | Cancel a running or queued task. |
-| `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, u32_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
+| `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, i64_t task_id)` | Cancel a running or queued task. |
+| `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, i64_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
 
 ### Scheduler Functions
@@ -1714,7 +1715,7 @@ The ABI defines the binary wire format for GreyCat's type system — how types, 
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `GC_ABI_PROTO` | 2 | Current ABI protocol version |
+| `GC_ABI_PROTO` | 3 | Current ABI protocol version |
 | `GC_ABI_HEADER_SZ` | 8 | ABI header size in bytes |
 | `GC_ABI_FUNCTION_MAX_PARAMS` | 16 | Maximum parameters per function |
 
