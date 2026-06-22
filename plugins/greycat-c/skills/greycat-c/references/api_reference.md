@@ -300,9 +300,13 @@ static bool lib_stop(gc_unused gc_program_library_t *lib,
 ### Helper Macros
 
 ```c
-// Frees only if non-NULL. Expands to a bare gc_free(ptr, size) — uses the thread-bound allocator.
-#define gc_free_not_null(x, x_size) \
-    if ((x) != NULL) { gc_free((x), (x_size)); }
+// Frees only if non-NULL. Wraps gc_free(ptr, size) — uses the thread-bound allocator.
+#define gc_free_not_null(x, x_size)                                            \
+    do {                                                                       \
+        if ((x) != NULL) {                                                     \
+            gc_free((x), (x_size));                                            \
+        }                                                                      \
+    } while (0)
 ```
 
 ---
@@ -2115,30 +2119,56 @@ On WASM targets, provides standalone implementations of standard math functions 
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `M_PI` | 3.14159265358979323846 | Pi (f64) |
-| `PI` | 3.14159265f | Pi (f32) |
-| `TAU` | 6.28318530f | 2*Pi (f32) |
-| `HALF_PI` | 1.57079632f | Pi/2 (f32) |
-| `E` | 2.71828182f | Euler's number (f32) |
-| `LN2` | 0.69314718f | Natural log of 2 (f32) |
-| `EPSILON` | 1.19209290e-7f | Machine epsilon for f32 |
-| `SQRT2` | 1.41421356f | Square root of 2 (f32) |
+| `PI` | 3.14159265358979323846 | Pi (f64) |
+| `TAU` | 6.28318530717958647692 | 2*Pi (f64) |
+| `HALF_PI` | 1.57079632679489661923 | Pi/2 (f64) |
+| `E` | 2.71828182845904523536 | Euler's number (f64) |
+| `LN2` | 0.69314718055994530942 | Natural log of 2 (f64) |
+| `EPSILON` | 1.19209290e-7f | Machine epsilon (f32) |
+| `SQRT2` | 1.41421356237f | Square root of 2 (f32) |
+
+### Types (WASM only)
+
+```c
+typedef i64_t time_t;
+
+typedef struct {
+    int quot;  // Quotient
+    int rem;   // Remainder
+} div_t;
+```
 
 ### Functions (WASM only)
 
-Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `cos`, `tan`, `atan`, `atan2`, `sqrtf`, `sqrt`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `isfinite`, `div`, `llabs`, `labs`.
+Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `sqrtf`, `sqrt`, `div`, `llabs`, `labs`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `cos`, `tan`, `atan`, `atan2`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `isfinite`.
 
 ---
 
 <a id="gcnode-h"></a>
 ## gc/node.h — Node Resolution
 
-Functions for resolving node references from their compact `u64_t` representation into full slot values.
+Functions for resolving node references from their compact `u64_t` representation into full slot values, and for reading/writing entries on time/index/list/geo nodes.
+
+### Single-Value Result
+
+```c
+typedef struct {
+    gc_slot_t key;         // Entry key
+    gc_slot_t value;       // Entry value
+    gc_type_t value_type;  // Value type tag
+    gc_type_t key_type;    // Key type tag
+    u32_t node_type;       // Node type id
+} gc_node_single_value_t;
+```
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to a slot value. Writes the resolved type to `*result_type`. |
+| `gc_machine_native__node_set_at` | `void gc_machine_native__node_set_at(u64_t node_ref, gc_slot_t key_value, gc_type_t key_type, bool add_semantic, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Set (or add, when `add_semantic` is `true`) the entry identified by `key_value` on the node referenced by `node_ref`. |
+| `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, gc_machine_t *ctx)` | Read a single entry (`key`/`value`/types/node type) from the node referenced by `node_ref`. |
+| `gc_node_single_value__clear` | `void gc_node_single_value__clear(gc_node_single_value_t *value, gc_machine_t *ctx)` | Release/unmark the contents of a `gc_node_single_value_t` returned by `gc_machine_native__node_get`. |
 
 ---
 

@@ -1069,6 +1069,7 @@ type GaussianProfile<T> {
   // native fns: add(key: T, value: float), avg(key): float, std(key): float,
   //   sum(key): float, count(key): int
 }
+type GaussianProfileSlot { sum: int; sumsq: int; count: int; }   // per-slot accumulator
 var profile = GaussianProfile<int> { quantizer: LinearQuantizer<int> { min: 0, max: 100, bins: 10 } };
 profile.add(age, salary);
 var avg_salary = profile.avg(age);
