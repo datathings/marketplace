@@ -4,10 +4,10 @@
 
 The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.0**. The library is organized into four modules:
 
-- **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, math)
-- **runtime** - Scheduler, tasks, jobs, logging, identity/security, system operations, OpenAPI, MCP
-- **io** - File I/O, CSV/JSON/XML, HTTP client, email/SMTP, S3 object storage
-- **util** - Collections, statistics, quantizers, cryptography, UUID
+- **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
+- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, OpenAPI export, MCP server endpoints
+- **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications, S3 object storage
+- **util** - Data structures (Queue/Stack/SlidingWindow/TimeWindow), statistical analysis, data binning (quantizers), testing (Assert), monitoring (ProgressTracker), cryptography, UUID
 
 > Signatures below are copied verbatim from the `.gcl` source. `native` means the implementation is provided by the runtime. `@expose` marks a function reachable over the API; `@permission("...")` is the required permission. `private` members are omitted.
 
@@ -554,7 +554,7 @@ type RuntimeInfo {
 type Runtime {
   // @expose @permission("debug"): info(): RuntimeInfo, usage(): RuntimeUsage, root(): any
   // @expose @reserved @permission("api"): abi()
-  // static native fns: sbi_tree(node: any?), sleep(d: duration), backup_delta(), defrag(),
+  // static native fns: sbi_tree(node: any?): Array<Tuple<int, int>>?, sleep(d: duration), backup_delta(), defrag(),
   //   on_files_put(handler: function?)
   // @expose @permission("admin"): backup_full()
 }
@@ -1190,32 +1190,7 @@ var key   = Uuid::v7();
 
 ## Usage Guidelines
 
-### When to Use Each Module
-
-**core** - Fundamental data types, time/date, nodes/tensors, error handling, geospatial, math.
-
-**runtime** - Use for:
-- Scheduled/recurring tasks (`Scheduler` + periodicities)
-- Background job processing (`Task`, `Job`, `await`)
-- Application logging (module-level `info`/`warn`/`error`/`perf`/`trace`)
-- Identity & authentication (`Identity`, `IdentityGrant`)
-- System information queries (`Runtime`, `System`)
-- OpenAPI export and MCP server endpoints
-
-**io** - Use for:
-- File I/O (`File`, `FileWalker`)
-- Data serialization (`GcbWriter`, `JsonWriter`, `CsvWriter`, `TextWriter`)
-- HTTP API calls (`Http`, `HttpRequest`/`HttpResponse`, `Url`)
-- Email notifications (`Email`, `Smtp`)
-- S3 object storage (`S3`)
-
-**util** - Use for:
-- Data structures (`Queue`, `Stack`, `SlidingWindow`, `TimeWindow`)
-- Statistical analysis (`Gaussian`, `Histogram`, `GaussianProfile`)
-- Data binning (`LinearQuantizer`, `LogQuantizer`, `CustomQuantizer`, `MultiQuantizer`)
-- Testing (`Assert`)
-- Monitoring (`ProgressTracker`)
-- Crypto and UUID generation (`Crypto`, `Uuid`)
+(Module purposes and the types each provides are summarized in the [Overview](#overview).)
 
 ### Best Practices
 
@@ -1265,12 +1240,10 @@ fn process_sensor_data(readings: Array<float>) {
 fn fetch_and_store_data(api_key: String) {
   var headers = Map<String, String> {};
   headers.set("Authorization", "Bearer ${api_key}");
-
+  // Http<T>.get returns T directly (non-nullable); a failed request throws rather than returning null
   var response = Http<Array<Record>> {}.get("https://api.example.com/data", headers);
-  if (response != null) {
-    var writer = JsonWriter<Record> { path: "/data/cache.json" };
-    for (_, record in response) { writer.writeln(record); }
-    writer.flush();
-  }
+  var writer = JsonWriter<Record> { path: "/data/cache.json" };
+  for (_, record in response) { writer.writeln(record); }
+  writer.flush();
 }
 ```

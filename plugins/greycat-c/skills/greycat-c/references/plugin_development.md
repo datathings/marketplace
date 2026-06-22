@@ -505,48 +505,9 @@ static gc_allocator_t *g_alloc;    // plugin-global
 // in lib_start:  g_alloc = gc_host__allocator(gc_host__get_global());
 ```
 
-### Temporary Allocations (within a native call)
+**Allocation mechanics** (`gc_alloc__malloc(a, size)` / `gc_alloc__free(a, ptr, size)` — size required on free — plus `gc_alloc__calloc`/`gc_alloc__realloc`, and the per-call scratch vs. `lib_start`/`lib_stop` global-state examples) are documented in **api_memory_text.md** (`gc/alloc.h`). Plugin rule of thumb: temporaries use the per-call allocator `((gc_ctx_t *)ctx)->allocator`; persistent global state uses the cached `g_alloc` under your mutex and is freed in `lib_stop`.
 
-```c
-void my_function(gc_machine_t *ctx) {
-    gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
-    size_t n = 1024;
-    char *temp = (char *)gc_alloc__malloc(a, n);
-
-    // ... use temp ...
-
-    gc_alloc__free(a, temp, n);
-}
-```
-
-### Persistent Allocations (global state)
-
-```c
-// In lib_start or native functions (use global allocator + mutex)
-pthread_mutex_lock(&global_store->lock);
-char *persistent = (char *)gc_alloc__malloc(g_alloc, size);
-// Store in global state, remember size for the eventual free...
-pthread_mutex_unlock(&global_store->lock);
-
-// In lib_stop (cleanup)
-gc_alloc__free(g_alloc, persistent, size);
-```
-
-### Buffer Reuse Pattern
-
-```c
-void my_function(gc_machine_t *ctx) {
-    // Reuse the machine's scratch buffer (avoids allocation)
-    gc_buffer_t *buf = gc_machine__get_buffer(ctx);
-    gc_buffer__clear(buf);
-
-    // Ensure capacity for raw data
-    gc_buffer__prepare(buf, needed_bytes);
-
-    // Use buf->data directly
-    memcpy(buf->data, source, needed_bytes);
-}
-```
+To avoid allocation entirely for scratch raw bytes, reuse the machine's scratch buffer: `gc_machine__get_buffer(ctx)` → `gc_buffer__clear(buf)` → `gc_buffer__prepare(buf, needed_bytes)`, then write `buf->data` directly (see `gc/buffer.h` in api_memory_text.md, and the Tokenization Retry pattern below).
 
 ### Dynamic Array Growth Pattern
 
@@ -664,77 +625,33 @@ void apply_params(gc_object_t *params, gc_machine_t *ctx) {
 
 ## Returning Results
 
-### Primitive Results
+Full `gc_machine__set_result` signature and primitive/object/string return examples live in **api_core.md** (`gc/machine.h`). Quick reference:
+
+- Primitives: `gc_machine__set_result(ctx, (gc_slot_t){.i64=42}, gc_type_int)` (and `.f64`/`gc_type_float`, `.b`/`gc_type_bool`, `(gc_slot_t){0}`/`gc_type_null`).
+- Enum result: `gc_machine__set_result(ctx, (gc_slot_t){.tu32={.left=0,.right=N}}, gc_type_static_field)` where `N` is the variant ordinal (mirrors the enum-read caveat above).
+
+**Plugin-critical caveat — un_mark before returning an object.** A freshly created object is GC-marked; you MUST `gc_object__un_mark` it after `set_result` or it leaks / is collected at the wrong time:
 
 ```c
-// Return int
-gc_machine__set_result(ctx, (gc_slot_t){.i64 = 42}, gc_type_int);
-
-// Return float
-gc_machine__set_result(ctx, (gc_slot_t){.f64 = 3.14}, gc_type_float);
-
-// Return bool
-gc_machine__set_result(ctx, (gc_slot_t){.b = true}, gc_type_bool);
-
-// Return null
-gc_machine__set_result(ctx, (gc_slot_t){0}, gc_type_null);
-```
-
-### Object Results (IMPORTANT: un_mark pattern)
-
-```c
-// Create and return an object
 gc_object_t *result = gc_machine__create_object(ctx, gc_mymod_Model);
-
-// Set fields...
 gc_object__set_at(result, field_offset, value, value_type, ctx);
-
-// CRITICAL: un_mark before returning (prevents premature GC)
 gc_machine__set_result(ctx, (gc_slot_t){.object = result}, gc_type_object);
-gc_object__un_mark(result, ctx);
-```
-
-### Enum Results
-
-```c
-// Return an enum value (e.g., MyEnum::variant2 where variant2 is index 1)
-gc_slot_t result = {.tu32 = {.left = 0, .right = 1}};
-gc_machine__set_result(ctx, result, gc_type_static_field);
+gc_object__un_mark(result, ctx);   // CRITICAL: prevents premature GC / leak
 ```
 
 ## Error Handling
 
-```c
-void my_function(gc_machine_t *ctx) {
-    // Validate parameter count
-    if (gc_machine__get_param_nb(ctx) < 2) {
-        gc_machine__set_runtime_error(ctx, "Expected at least 2 parameters");
-        return;
-    }
+Error/abort APIs are documented in **api_core.md** (`gc/machine.h`). Use `gc_machine__set_runtime_error(ctx, "msg")` then `return;` to abort a native call. Key helpers:
 
-    // Check for null
-    if (gc_machine__get_param_type(ctx, 0) == gc_type_null) {
-        gc_machine__set_runtime_error(ctx, "Parameter 'name' cannot be null");
-        return;
-    }
+- `gc_machine__set_runtime_error(ctx, "msg")` — set a runtime error and unwind.
+- `gc_machine__set_runtime_error_syserr(ctx)` — set error from `errno` (after a failed syscall / `fopen`).
+- `gc_machine__error(ctx)` — true if a callee already set an error; `return;` immediately to propagate.
 
-    // Check system errors
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
-        gc_machine__set_runtime_error_syserr(ctx);  // Uses errno
-        return;
-    }
-
-    // Check for propagated errors
-    if (gc_machine__error(ctx)) {
-        return;  // Error already set by a called function
-    }
-}
-```
+Always validate parameter count (`gc_machine__get_param_nb(ctx)`) and null params (`gc_machine__get_param_type(ctx, i) == gc_type_null`) before use.
 
 ## Conditional Logging
 
-Use `gc_machine__log_level` to check the machine's verbosity level before performing expensive logging operations:
+Use `gc_machine__log_level` to check the machine's verbosity level before performing expensive logging operations (equivalently, `gc_log__enabled(gc_machine__get_host(ctx), level)` — see `gc/log.h` in api_core.md):
 
 ```c
 void my_function(gc_machine_t *ctx) {
@@ -779,92 +696,15 @@ void my_function(gc_machine_t *ctx) {
 
 ### Creating String Results
 
-```c
-// From buffer with known length (the trailing ctx argument is required)
-gc_string_t *result = gc_string__create_from(data, length, ctx);
-gc_machine__set_result(ctx, (gc_slot_t){.object = (gc_object_t *)result}, gc_type_object);
-gc_object__un_mark((gc_object_t *)result, ctx);
-
-// From gc_buffer_t
-gc_buffer_t *buf = gc_machine__get_buffer(ctx);
-gc_buffer__clear(buf);
-gc_buffer__add_cstr(buf, "Hello ");
-gc_buffer__add_u64(buf, 42);
-gc_string_t *result = gc_string__create_from(buf->data, buf->size, ctx);
-```
+Create with `gc_string__create_from(data, length, ctx)` (trailing `ctx` required), set it as the result, then `gc_object__un_mark` it. To build text first, use the scratch buffer (`gc_machine__get_buffer` → `gc_buffer__clear` → `gc_buffer__add_cstr` / `gc_buffer__add_u64`) and pass `buf->data, buf->size` to `gc_string__create_from`. Full `gc/string.h` and `gc/buffer.h` reference + examples in **api_memory_text.md**.
 
 ## Working with Arrays
 
-### Creating and Populating Arrays
-
-```c
-void create_token_array(gc_machine_t *ctx, int *tokens, int count) {
-    gc_array_t *arr = (gc_array_t *)gc_machine__create_object(ctx, gc_core_Array);
-
-    for (int i = 0; i < count; i++) {
-        gc_array__add_slot(arr, (gc_slot_t){.i64 = tokens[i]}, gc_type_int, ctx);
-    }
-
-    gc_machine__set_result(ctx, (gc_slot_t){.object = (gc_object_t *)arr}, gc_type_object);
-    gc_object__un_mark((gc_object_t *)arr, ctx);
-}
-```
-
-### Reading Array Parameters
-
-```c
-void process_array(gc_machine_t *ctx) {
-    gc_array_t *arr = (gc_array_t *)gc_machine__get_param(ctx, 0).object;
-
-    for (u32_t i = 0; i < arr->size; i++) {
-        gc_slot_t slot;
-        gc_type_t slot_type;
-        gc_array__get_slot(arr, i, &slot, &slot_type);
-
-        if (slot_type == gc_type_int) {
-            i64_t value = slot.i64;
-            // Process value...
-        }
-    }
-}
-```
+`gc/array.h` (full reference + examples in **api_collections.md**). Plugin pattern: create with `gc_machine__create_object(ctx, gc_core_Array)`, populate with `gc_array__add_slot(arr, slot, type, ctx)`, then `set_result` + `gc_object__un_mark`. Read a param array by iterating `0..arr->size` and calling `gc_array__get_slot(arr, i, &slot, &slot_type)`, checking `slot_type` before using the slot. (See the Tokenization Retry pattern below for a worked array-build example.)
 
 ## Working with Tensors
 
-### Creating and Returning Tensors
-
-```c
-void create_embedding(gc_machine_t *ctx, float *data, int n_embd) {
-    gc_core_tensor_t *tensor = gc_core_tensor__create(ctx);
-    gc_core_tensor__init_1d(tensor, n_embd, gc_core_TensorType_f32, ctx);
-
-    // Copy data into tensor
-    for (i32_t i = 0; i < n_embd; i++) {
-        gc_core_tensor__set_1d_f32(tensor, i, data[i], ctx);
-    }
-
-    gc_machine__set_result(ctx,
-        (gc_slot_t){.object = (gc_object_t *)tensor}, gc_type_object);
-    gc_object__un_mark((gc_object_t *)tensor, ctx);
-}
-```
-
-### Direct Memory Access (High Performance)
-
-```c
-void fast_tensor_fill(gc_machine_t *ctx) {
-    gc_core_tensor_t *tensor = gc_core_tensor__create(ctx);
-    gc_core_tensor__init_1d(tensor, 1000, gc_core_TensorType_f64, ctx);
-
-    // Get raw data pointer for fast access
-    f64_t *data = (f64_t *)gc_core_tensor__get_data(tensor);
-    gc_core_tensor_descriptor_t *desc = gc_core_tensor__get_descriptor(tensor);
-
-    for (i64_t i = 0; i < desc->size; i++) {
-        data[i] = (f64_t)i * 0.001;
-    }
-}
-```
+`gc/tensor.h` (full reference + examples in **api_collections.md**). Plugin pattern: `gc_core_tensor__create(ctx)` → `gc_core_tensor__init_1d(tensor, n, tensor_type, ctx)`, fill element-wise with `gc_core_tensor__set_1d_f32`, then `set_result` + `gc_object__un_mark`. Note: the `tensor_type` argument to `gc_core_tensor__init_1d`/`_xd` is a plain `u8_t` element-type code, NOT the GCL `TensorType` enum object — `TensorType` is `gc_core_TensorType` on the GCL side, and when received as a native-function parameter it arrives as `gc_type_static_field` (read the ordinal from `.tu32.right`, per the enum caveat above), which you then pass through as the `u8_t` element-type code. For hot loops, get the raw pointer via `gc_core_tensor__get_data(tensor)` and the shape via `gc_core_tensor__get_descriptor(tensor)` (`gc_core_tensor_descriptor_t`, with `desc->size`) and write the buffer directly. The Complete Example below unboxes an input `Tensor` this way.
 
 ## Working with Buffers
 
@@ -876,6 +716,7 @@ When a C library uses negative return values to indicate "buffer too small":
 void tokenize_text(gc_machine_t *ctx) {
     gc_string_t *text = (gc_string_t *)gc_machine__get_param(ctx, 0).object;
     gc_buffer_t *buf = gc_machine__get_buffer(ctx);
+    gc_buffer__clear(buf);   // reset the shared scratch buffer before reuse
 
     // First attempt with reasonable buffer
     gc_buffer__prepare(buf, 2048 * sizeof(int));
