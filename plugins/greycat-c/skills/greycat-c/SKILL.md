@@ -1,6 +1,6 @@
 ---
 name: greycat-c
-description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/Identity/Security/System/License/OpenAPI/MCP), std::io (CSV/JSON/XML/HTTP/Email/FileWalker/S3), std::util (Queue/Stack/SlidingWindow/Gaussian/Histogram/Quantizers/Random/Uuid/Crypto/Plot); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
+description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/Identity/Security/System/License/OpenAPI/MCP), std::io (CSV/JSON/XML/HTTP/Email/FileWalker/S3), std::util (Queue/Stack/SlidingWindow/TimeWindow/Gaussian/Histogram/Quantizers/Random/Uuid/Crypto); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
 ---
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
@@ -212,7 +212,7 @@ u32_t type_id = gc_program__resolve_type(prog, mod, type_sym);
 - **std::core** - Fundamental types (Date, Time, Duration, Tuple, Error, geospatial types, enumerations)
 - **std::runtime** - Scheduler, Task, Job, Logger, Identity/Security, System, ChildProcess, License, OpenAPI, MCP
 - **std::io** - Text/Binary I/O, CSV, JSON, XML, HTTP client, Email/SMTP, FileWalker, S3 object storage
-- **std::util** - Collections (Queue, Stack, SlidingWindow, TimeWindow), Statistics (Gaussian, Histogram, GaussianProfile), Quantizers, Assert, ProgressTracker, Crypto, Uuid, Random, Plot
+- **std::util** - Collections (Queue, Stack, SlidingWindow, TimeWindow), Statistics (Gaussian, Histogram, GaussianProfile), Quantizers (Linear/Log/Custom/Multi), Assert, ProgressTracker, Crypto, Uuid, Random
 
 ## Detailed Reference
 

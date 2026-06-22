@@ -114,6 +114,7 @@ var d = duration::new(5, DurationUnit::minutes);
 #### time
 Universal precise instant. Created with `time::new(...)` or a literal (`'2025-05-06T16:47:42Z'`).
 ```gcl
+// static fields: time::min, time::max
 // static: current(), now(), new(epoch, unit), parse(value, format?),
 //   isLeap(year), totalDaysInYear(year), totalDaysInMonth(month, year)
 // instance: to(unit), floor(unit), calendar_add(value, unit: CalendarUnit, tz?),
