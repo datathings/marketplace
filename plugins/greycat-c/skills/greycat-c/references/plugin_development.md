@@ -353,8 +353,8 @@ bool gc_lib_my_plugin__link_native(gc_program_t *prog, gc_program_library_t *lib
 ### Library Start/Stop (Global)
 
 ```c
-// Cached plugin-global allocator. Use this anywhere you'd have reached for
-// gc_global_gnu_malloc in earlier releases.
+// Cached plugin-global allocator. Use this for any allocation that must
+// outlive a single native call.
 static gc_allocator_t *g_alloc;
 
 static bool lib_start(gc_unused gc_program_library_t *lib,
@@ -589,7 +589,7 @@ void apply_params(gc_object_t *params, gc_machine_t *ctx) {
     if (params == NULL) return;
 
     const gc_program_t *prog = gc_machine__program(ctx);
-    gc_program_type_t *type = gc_program__get_program_type(prog, params->type_id);
+    const gc_program_type_t *type = gc_program__get_program_type(prog, params->type_id);
     gc_object_data_t data = gc_object__segments(params, type);
 
     gc_type_t field_type;

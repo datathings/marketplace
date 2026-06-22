@@ -110,7 +110,7 @@ typedef struct {
 typedef struct {
     bool immediate;            // default true
     bool activated;            // default true
-    i64_t start_time_us;       // default gc_common__current_us()
+    i64_t start_time_us;       // default: current time (µs since epoch)
     i64_t max_duration_us;     // 0 for unlimited
 } gc_periodic_options_t;
 
@@ -703,9 +703,9 @@ if (fp == -1) {
     return;
 }
 
-// stat / mmap / read from fp ...
-struct GC_HAL_STRUCT_STAT_T s;
-if (GC_HAL_FSTAT(fp, &s) != 0) {
+// stat / mmap / read from fp ... (standard POSIX fstat on the returned fd)
+struct stat s;
+if (fstat(fp, &s) != 0) {
     close(fp);
     gc_machine__set_runtime_error(ctx, "error while getting file stats");
     return;
@@ -799,9 +799,9 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 | `nodeTime` | `time` (µs since epoch) | `(u64_t)(time + INT64_MIN)` — same offset-binary on the timestamp; `nodeTime.resolve()` uses the ambient `ctx->current_time_offset` |
 | `nodeGeo` | `geo` (geohash/Morton code) | the `geo` value used directly as `.u64` (already an unsigned, order-preserving code) |
 | `node` | none (single slot) | n/a — a plain `node<T>` holds one value; use `gc_node__resolve` to dereference it (there is no per-key `node_get`) |
-| `nodeIndex` | typed / multi-field key | not a flat `u64_t` — lookups go through the internal `gc_machine_native__node_index_get(node_ref, key_slot, key_type, ctx)`; writes still use `node_set_at` |
+| `nodeIndex` | typed / multi-field key | not a flat `u64_t` — `nodeIndex` has no public per-key `node_get`; writes still use `node_set_at` |
 
-> **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — are powered by an internal *floor* lookup (`gc_machine_native__node_resolve`) plus helpers like `node_first`/`node_last`/`node_size`/`node_range_size`/`node_remove`. Those broader helpers follow the exact same `u64_t node_ref` convention but are declared in the runtime's internal `machine.h`, not in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The four functions documented above are the publicly exported, uniform-across-variants surface.
+> **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — plus broader range helpers (first / last / size / range-size / remove) are powered by internal *floor* lookups declared in the runtime's internal `machine.h`, **not** in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The four functions documented above are the publicly exported, uniform-across-variants surface.
 
 ### Usage Examples
 

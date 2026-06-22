@@ -404,7 +404,7 @@ GC_MODULO(x, y)           // True modulo (not C remainder)
 
 All twelve functions are listed in the table above with byte-accurate signatures, but the section has no runnable code. The snippets below are grounded in the real runtime call sites. The recurring idiom: epochs are split into a whole-second part (passed through the calendar/timezone helpers) and a microsecond remainder (`tm_us_offset`) recombined as `utc_epoch * 1000000L + tm_us_offset`.
 
-**Render a microsecond timestamp to ISO 8601 (timezone-aware).** This is the `gc_buffer__add_time` / `gc_core_time__print_iso` pattern: shift the second-granularity epoch into the target timezone, expand it into calendar fields, carry the sub-second remainder, then emit.
+**Render a microsecond timestamp to ISO 8601 (timezone-aware).** This is the `gc_buffer__add_time` pattern: shift the second-granularity epoch into the target timezone, expand it into calendar fields, carry the sub-second remainder, then emit.
 
 ```c
 // epoch_us: microseconds since Unix epoch; tz: timezone id from options
@@ -419,7 +419,7 @@ t.tm_us_offset = (i32_t) (epoch_us % GC_MICROSECONDS_IN_SECOND);
 gc__print_iso(buffer, &t, epoch_us, aligned_epoch_s); // appends e.g. 2026-06-22T14:30:00.000000+02:00 into the gc_buffer_t
 ```
 
-**Format a timestamp with a strftime-style pattern.** Grounded in `gc_dtz_time__print` and `gc_core_time__print_formatted`. `gc_time__tm_from_time` already folds the timezone shift into the returned calendar, so `gc_mktime_safe` reproduces the localized second-count and the difference against the UTC second-count yields the offset that `gc_strftime_safe` needs for `%z`-style fields.
+**Format a timestamp with a strftime-style pattern.** Grounded in `gc_dtz_time__print`. `gc_time__tm_from_time` already folds the timezone shift into the returned calendar, so `gc_mktime_safe` reproduces the localized second-count and the difference against the UTC second-count yields the offset that `gc_strftime_safe` needs for `%z`-style fields.
 
 ```c
 char out[128];

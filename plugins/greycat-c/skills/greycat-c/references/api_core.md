@@ -398,8 +398,8 @@ typedef struct {
 Every native function receives `gc_machine_t *ctx`. The common shape is: read the receiver via `gc_machine__this`, do the work, then publish the return value with `gc_machine__set_result`. Object results are created marked, set into the slot, then un-marked by the native (the machine took its own reference inside `set_result`).
 
 ```c
-// Grounded in src/std/core/chars.c (gc_core_Chars__to_string)
-void gc_core_Chars__to_string(gc_machine_t *ctx) {
+// Native impl of MyText::to_string (GCL module "mymod")
+void gc_mymod_MyText__to_string(gc_machine_t *ctx) {
     const gc_object_t *self = gc_machine__this(ctx).object;
 
     // get_buffer returns a reusable worker-local scratch buffer; clear before use
@@ -408,7 +408,7 @@ void gc_core_Chars__to_string(gc_machine_t *ctx) {
 
     gc_type_t stub;
     const gc_array_t *codepoints =
-        (gc_array_t *) gc_object__get_at(self, gc_core_Chars_codepoints, &stub, ctx).object;
+        (gc_array_t *) gc_object__get_at(self, gc_mymod_MyText_codepoints, &stub, ctx).object;
     for (u32_t i = 0; i < codepoints->size; i++) {
         gc_slot_t value = {0};
         gc_type_t value_type = gc_type_null;
@@ -425,7 +425,7 @@ void gc_core_Chars__to_string(gc_machine_t *ctx) {
 For a primitive result, set the slot inline with no marking needed:
 
 ```c
-// Grounded in src/std/core/nodegeo.c (gc_core_nodeGeo__remove)
+// Native returning a primitive bool result
 void mylib_node_remove(gc_machine_t *ctx) {
     const u64_t node_ref = gc_machine__this(ctx).u64;
     bool removed = do_remove(node_ref, ctx);
@@ -491,13 +491,13 @@ while (read_next_row(reader, ctx)) {
 When a native declares an object return type, `gc_machine__create_return_type_object` allocates an instance of exactly that declared type; `gc_machine__create_object` allocates a specific type by its type id (e.g. resolved from the function's `return_type_desc`). Both return a marked object you must un-mark after handing it to `set_result`.
 
 ```c
-// Grounded in src/std/core/nodegeo.c (gc_core_nodeGeo__resolveEntry)
+// Native that allocates and returns a user Tuple{x, y} object (module "mymod")
 const gc_program_function_t *fn = current_function(ctx);
 u32_t tuple_type_id = gc_type_desc__to_type_id(fn->return_type_desc);
 gc_object_t *tuple = gc_machine__create_object(ctx, tuple_type_id);
 
-gc_object__set_at(tuple, gc_core_Tuple_x, (gc_slot_t) {.u64 = key},  gc_type_geo, ctx);
-gc_object__set_at(tuple, gc_core_Tuple_y, val_slot, val_type, ctx);
+gc_object__set_at(tuple, gc_mymod_Tuple_x, (gc_slot_t) {.u64 = key},  gc_type_geo, ctx);
+gc_object__set_at(tuple, gc_mymod_Tuple_y, val_slot, val_type, ctx);
 
 gc_machine__set_result(ctx, (gc_slot_t) {.object = tuple}, gc_type_object);
 gc_object__un_mark(tuple, ctx);
@@ -519,18 +519,18 @@ gc_alloc__free(alloc, scratch, n * sizeof(double)); // size is mandatory on free
 `gc_machine__impersonate` switches the machine's effective user id. After authenticating a login, switch to that user; `impersonate(ctx, 0)` resets to the anonymous/system identity (logout).
 
 ```c
-// Grounded in src/std/runtime/identity.c (login / logout)
-void gc_runtime_Identity__login(gc_machine_t *ctx) {
-    gc_token_t token = {0};
-    if (!check_password(ctx, &token)) {
+// GCL: type Auth in module "myauth" with `native fn login(); native fn logout();`
+void gc_myauth_Auth__login(gc_machine_t *ctx) {
+    u32_t user_id = 0;
+    if (!check_password(ctx, &user_id)) {     // your auth check fills user_id
         gc_machine__set_runtime_error(ctx, "login rejected");
         return;
     }
-    gc_machine__impersonate(ctx, token.user); // subsequent calls run as this user
+    gc_machine__impersonate(ctx, user_id); // subsequent calls run as this user
     // ... emit a session token as the result ...
 }
 
-void gc_runtime_Identity__logout(gc_machine_t *ctx) {
+void gc_myauth_Auth__logout(gc_machine_t *ctx) {
     gc_machine__impersonate(ctx, 0); // back to anonymous
 }
 ```
@@ -1103,26 +1103,26 @@ These examples mirror the real GreyCat runtime: the program (`gc_program_t`) is 
 
 #### Linking native functions and types into a program
 
-Inside a library link function (`<lib>__link(gc_program_t *prg, gc_program_library_t *lib)`), resolve each symbol then bind the native body. Module-level functions use `gc_program__link_mod_fn`; type methods use `gc_program__link_type_fn`. This is exactly the pattern emitted by `nativegen` and consumed in `std_native.c`.
+Inside a library link function (`<lib>__link(gc_program_t *prg, gc_program_library_t *lib)`), resolve each symbol then bind the native body. Module-level functions use `gc_program__link_mod_fn`; type methods use `gc_program__link_type_fn`. This is exactly the pattern emitted by `nativegen`.
 
 ```c
 bool mylib__link(gc_program_t *prg, gc_program_library_t *lib) {
     bool res = true;
 
-    // Resolve the module offset once (core, std, or your own module).
-    u32_t core = gc_program__resolve_module(prg, gc_program__resolve_symbol(prg, "core", 4));
-    res &= (core != 0);
+    // Resolve your module's offset once (the GCL module that declares the natives).
+    u32_t mymod = gc_program__resolve_module(prg, gc_program__resolve_symbol(prg, "mymod", 5));
+    res &= (mymod != 0);
 
-    // Bind a module-level function: core::valueOf -> native gc_core__valueOf.
-    res &= gc_program__link_mod_fn(prg, core, gc_core__valueOf,
-                                   gc_program__resolve_symbol(prg, "valueOf", 7));
+    // Bind a module-level function: mymod::compute -> native gc_mymod__compute.
+    res &= gc_program__link_mod_fn(prg, mymod, gc_mymod__compute,
+                                   gc_program__resolve_symbol(prg, "compute", 7));
 
-    // Resolve a type, then bind a method on it: Date.from_time -> gc_core_Date__from_time.
-    u32_t date_t = gc_program__resolve_type(prg, core,
-                                            gc_program__resolve_symbol(prg, "Date", 4));
-    res &= (date_t != 0);
-    res &= gc_program__link_type_fn(prg, date_t, gc_core_Date__from_time,
-                                    gc_program__resolve_symbol(prg, "from_time", 9));
+    // Resolve a type, then bind a method on it: Point.norm -> gc_mymod_Point__norm.
+    u32_t point_t = gc_program__resolve_type(prg, mymod,
+                                             gc_program__resolve_symbol(prg, "Point", 5));
+    res &= (point_t != 0);
+    res &= gc_program__link_type_fn(prg, point_t, gc_mymod_Point__norm,
+                                    gc_program__resolve_symbol(prg, "norm", 4));
 
     // Register lifecycle hooks for the library and per-worker callbacks.
     gc_program_library__set_lib_hooks(lib, mylib_start, mylib_stop);
@@ -1144,20 +1144,20 @@ static bool mylib_start(gc_program_library_t *lib, gc_program_t *prog, void **us
 
 #### Configuring a native type (header bytes + finalizer)
 
-Native types reserve extra header bytes for their C struct and supply a finalizer that runs when the object is freed. `gc_program_type__configure` takes the type id, the header size (often `sizeof(...)`), and a `gc_object_type_native_finalize_t *`. Grounded in `std_native.c`.
+Native types reserve extra header bytes for their C struct and supply a finalizer that runs when the object is freed. `gc_program_type__configure` takes the type id, the header size (often `sizeof(...)`), and a `gc_object_type_native_finalize_t *`.
 
 ```c
-extern void gc_io_GcbReader__native_finalize(gc_object_t *self, gc_machine_t *ctx);
+extern void gc_mymod_Reader__native_finalize(gc_object_t *self, gc_machine_t *ctx);
 
-// Reserve sizeof(gc_io_gcb_reader_t) bytes in the object header and install the destructor.
-gc_program_type__configure(prog, gc_io_GcbReader,
-                           sizeof(gc_io_gcb_reader_t),
-                           gc_io_GcbReader__native_finalize);
+// Reserve sizeof(gc_mymod_reader_t) bytes in the object header and install the destructor.
+gc_program_type__configure(prog, gc_mymod_Reader,
+                           sizeof(gc_mymod_reader_t),
+                           gc_mymod_Reader__native_finalize);
 ```
 
 #### Resolving a field and reading its descriptor
 
-To read or write an object field by symbol, resolve the field offset on the type, then index `type->fields.table.data`. `gc_program__resolve_field` returns `false` for unknown fields. This is the path used by `gc_object__get` and the JSON reader.
+To read or write an object field by symbol, resolve the field offset on the type, then index `type->fields.table.data`. `gc_program__resolve_field` returns `false` for unknown fields. This is the path used by `gc_object__get_at` and the JSON reader.
 
 ```c
 const gc_program_t *prog = gc_machine__program(ctx);
@@ -1311,10 +1311,10 @@ Both return immediately when `level` exceeds the configured threshold, so they a
 
 ```c
 if (gc_log__enabled(gc_machine__get_host(ctx), gc_log_level_perf)) {
-    gc_object_t *usage = gc_machine__create_object(ctx, gc_runtime_LogDataUsage);
-    gc_object__set_at(usage, gc_runtime_LogDataUsage_read_bytes,
+    gc_object_t *usage = gc_machine__create_object(ctx, gc_mymod_UsageStat);
+    gc_object__set_at(usage, gc_mymod_UsageStat_read_bytes,
                       (gc_slot_t) {.u64 = stat->read_bytes}, gc_type_int, ctx);
-    gc_object__set_at(usage, gc_runtime_LogDataUsage_write_bytes,
+    gc_object__set_at(usage, gc_mymod_UsageStat_write_bytes,
                       (gc_slot_t) {.u64 = stat->write_bytes}, gc_type_int, ctx);
     gc_log__machine(ctx, gc_log_level_perf, (gc_slot_t) {.object = usage}, gc_type_object);
     gc_object__un_mark(usage, ctx);

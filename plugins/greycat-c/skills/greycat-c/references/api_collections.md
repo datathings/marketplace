@@ -123,10 +123,10 @@ if (offset_i < 0 || offset_j < 0 ||
 **Sort, optionally by an object sub-field** — the `field` argument is a `gc_slot_tuple_u32_t` of `{.left = <type id>, .right = <field offset>}`. For arrays of objects this sorts by that field; `asc = true` for ascending order:
 
 ```c
-// sort an array of SearchResult objects ascending by their 'distance' field
+// sort an array of mymod::Hit objects ascending by their 'distance' field
 gc_array__sort(array_result, true,
-    (gc_slot_tuple_u32_t) {.left = gc_core_SearchResult,
-                           .right = gc_core_SearchResult_distance},
+    (gc_slot_tuple_u32_t) {.left = gc_mymod_Hit,
+                           .right = gc_mymod_Hit_distance},
     ctx);
 ```
 
@@ -197,7 +197,7 @@ gc_map_t *map = (gc_map_t *) gc_machine__create_object(ctx, gc_core_Map);
 gc_map__init(map, 100, ctx); // grows to the next power of two >= 100
 
 // Insert string -> int entries (e.g. counting enum occurrences).
-gc_string_t *key = gc_string__create_from(ctx, "apple", 5);
+gc_string_t *key = gc_string__create_from("apple", 5, ctx);
 gc_map__set(map,
             (gc_slot_t) {.object = (gc_object_t *) key}, gc_type_object,
             (gc_slot_t) {.i64 = 1}, gc_type_int,
@@ -342,7 +342,7 @@ while (values->rows > 0) {
     if (!gc_table__get_cell(values, 0, 0 /*time col*/, &slot, &slot_type)) {
         break;
     }
-    if (slot.time < cutoff) {
+    if (slot.i64 < cutoff) {
         gc_table__remove_row(values, 0, ctx);   // drop oldest row, shifts start
     } else {
         break;
@@ -533,7 +533,7 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 The TensorType element-type tags used everywhere below are integer constants:
 `gc_core_TensorType_i32` (0), `_i64` (1), `_f32` (2), `_f64` (3), `_c64` (4), `_c128` (5).
 
-> Note: the named `gc_core_TensorType_*` constants are emitted by the generated/native headers (the public `gc/type.h` exposes only the `gc_core_TensorType` type id). They are consumed as the `u8_t tensor_type` argument of the public tensor API (`gc_core_tensor__init_*`, etc.).
+> Note: these are the integer ordinals of the `TensorType` enum. The public tensor API takes a raw `u8_t tensor_type`, and the public headers expose only the `gc_core_TensorType` type id — not per-member constants. Pass the ordinal directly; plugins typically `#define gc_core_TensorType_f64 3` (etc.) in their own header for readability, as the bundled libraries do.
 
 **Create, initialize, fill, and return a tensor** — the canonical native-function pattern. `gc_core_tensor__create` produces an empty (uninitialized) tensor object; you must call one of the `init_*` functions before any element access. `init_*` may set a runtime error (e.g. `GC_ERROR_TENSOR_TOO_LARGE`, `GC_ERROR_TENSOR_INCORRECT_DIM`) and leave the tensor untouched, so always check before writing. Because `create` returns a freshly marked object, un-mark it after publishing the result:
 

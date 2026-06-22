@@ -119,11 +119,11 @@ static bool lib_stop(gc_unused gc_program_library_t *lib,
 
 #### Growable buffer with `gc_alloc__realloc`
 
-The realloc growth pattern always passes both the old and new byte sizes, then zeroes the freshly grown tail. Modeled on `gc_simple_block_array__prepare` in the stats CLI.
+The realloc growth pattern always passes both the old and new byte sizes, then zeroes the freshly grown tail.
 
 ```c
 typedef struct {
-    gc_simple_block_t *data;
+    block_t *data;                                 // your element type
     u64_t len;
     u64_t cap;
 } block_array_t;
@@ -137,10 +137,10 @@ static void block_array__prepare(block_array_t *arr, u64_t nb_elems, gc_allocato
         u64_t old_cap = arr->cap;
         arr->data = gc_alloc__realloc(
             allocator, arr->data,
-            old_cap * sizeof(gc_simple_block_t),
-            new_cap * sizeof(gc_simple_block_t));
+            old_cap * sizeof(block_t),
+            new_cap * sizeof(block_t));
         // zero only the newly grown region
-        memset(arr->data + old_cap, 0, (new_cap - old_cap) * sizeof(gc_simple_block_t));
+        memset(arr->data + old_cap, 0, (new_cap - old_cap) * sizeof(block_t));
         arr->cap = new_cap;
     }
 }
@@ -148,7 +148,7 @@ static void block_array__prepare(block_array_t *arr, u64_t nb_elems, gc_allocato
 
 #### Block-aligned allocation with `gc_alloc__align_malloc` / `gc_alloc__align_free`
 
-Use the aligned pair for disk/IO buffers that must be aligned to a storage block size. The `block_size` passed to `gc_alloc__align_free` MUST match the value passed to `gc_alloc__align_malloc`. Grounded in the disk-buffer path of `gc_buffer` / `gc_zone_walker`.
+Use the aligned pair for disk/IO buffers that must be aligned to a storage block size. The `block_size` passed to `gc_alloc__align_free` MUST match the value passed to `gc_alloc__align_malloc`.
 
 ```c
 size_t block_size = 4096;                          // storage block size (typical disk page)
@@ -406,8 +406,8 @@ A buffer created from the host allocator can be filled with mixed text/value app
 ```c
 gc_buffer_t *buf = gc_buffer__create(gc_host__allocator(host));
 
-gc_buffer__add_str(buf, gc_host_data_dir, gc_host_data_dir_len);
-gc_buffer__add_char(buf, GC_HAL_PATH_SEP);
+gc_buffer__add_str(buf, data_dir, data_dir_len);   // const char* dir + its length, in scope
+gc_buffer__add_char(buf, GC_PATH_SEP);             // public path separator from gc/io.h
 gc_buffer__add_pstr(buf, "program");   // sizeof(literal)-1 length, no terminator
 gc_buffer__add_char(buf, '\0');        // make buf->data a valid C string for open()
 
@@ -459,7 +459,7 @@ gc_buffer__finalize(buf);
 The `static inline gc_buffer_write_*` helpers do NOT grow the buffer themselves — you must reserve worst-case capacity with `gc_buffer_write_check(buf, len)` first (a `vu64` is at most 9 bytes), then write. After a batch of inline writes, sync `buf->size` from the advanced cursor. `gc_buffer_write_ptr` is NULL-safe and copies raw bytes:
 
 ```c
-const u64_t reserved_bin_len = sizeof(u64_t) * gc_data_store_zones_len;
+const u64_t reserved_bin_len = sizeof(u64_t) * nb_zones;
 gc_buffer_write_check(buf, reserved_bin_len);
 gc_buffer_write_ptr(buf, (char *) reserved_blocks_per_zones, reserved_bin_len);
 buf->size = (buf->current - buf->data);
@@ -715,24 +715,27 @@ gc_object__field_to_type(field)
 
 Newly created objects (and any objects/strings you allocate to put in their
 fields) come back GC-marked. Set the field with `gc_object__set_at`, then
-un-mark the temporary you allocated — the parent object now retains it.
+un-mark the temporary you allocated — the parent object now retains it. The
+`gc_<module>_<Type>` type ids and `gc_<module>_<Type>_<field>` field offsets
+used below are emitted by `greycat codegen c` into your plugin's `nativegen.h`
+(field offsets are generated for your own GCL types).
 
 ```c
-// Build a runtime::Identity object from raw values.
-gc_object_t *result = gc_machine__create_object(ctx, gc_runtime_Identity);
+// Build a mymod::Account object from raw values.
+gc_object_t *result = gc_machine__create_object(ctx, gc_mymod_Account);
 
 // Scalar fields: write the slot inline with its type tag.
-gc_object__set_at(result, gc_runtime_Identity_id, (gc_slot_t) {.i64 = (i64_t) user_id}, gc_type_int, ctx);
+gc_object__set_at(result, gc_mymod_Account_id, (gc_slot_t) {.i64 = (i64_t) user_id}, gc_type_int, ctx);
 
 // Object fields: allocate, assign, then drop your local mark.
 gc_string_t *name = gc_string__create_from(name_bytes, name_size, ctx);
-gc_object__set_at(result, gc_runtime_Identity_name, (gc_slot_t) {.object = (gc_object_t *) name}, gc_type_object, ctx);
+gc_object__set_at(result, gc_mymod_Account_name, (gc_slot_t) {.object = (gc_object_t *) name}, gc_type_object, ctx);
 gc_object__un_mark((gc_object_t *) name, ctx); // result now retains `name`
 
 // Enum/static-field values use the tuple-u32 slot (type id, member id).
 gc_object__set_at(
-    result, gc_runtime_IdentityGrant_grant,
-    (gc_slot_t) {.tu32 = (gc_slot_tuple_u32_t) {.left = gc_runtime_IdentityGrantType, .right = gc_runtime_IdentityGrantType_read}},
+    result, gc_mymod_Account_role,
+    (gc_slot_t) {.tu32 = (gc_slot_tuple_u32_t) {.left = gc_mymod_Role, .right = gc_mymod_Role_admin}},
     gc_type_static_field, ctx);
 
 // `result` is returned to the caller still marked; the receiver owns the mark.
@@ -745,21 +748,21 @@ return result;
 branch on that before touching the slot union.
 
 ```c
-// Extract Error.message (an object field that may be null).
-gc_type_t msg_type = gc_type_null;
-gc_slot_t msg = gc_object__get_at(slot.object, gc_core_Error_message, &msg_type, ctx);
-if (msg_type == gc_type_object) {
-    gc_string_t *err_msg = (gc_string_t *) msg.object;
-    gc_buffer__add_str(buf, err_msg->buffer, err_msg->size);
+// Extract Record.label (an object field that may be null).
+gc_type_t label_type = gc_type_null;
+gc_slot_t label = gc_object__get_at(self, gc_mymod_Record_label, &label_type, ctx);
+if (label_type == gc_type_object) {
+    gc_string_t *label_str = (gc_string_t *) label.object;
+    gc_buffer__add_str(buf, label_str->buffer, label_str->size);
 }
 ```
 
 #### Type-checking before extracting a field (`gc_object__is_instance_of`)
 
 ```c
-// A TimeWindow stores a `field` reference (tuple of {type id, field offset}).
+// A Selector stores a `field` reference (tuple of {type id, field offset}).
 gc_type_t field_type;
-const gc_slot_t field_slot = gc_object__get_at(self, gc_util_TimeWindow_field, &field_type, ctx);
+const gc_slot_t field_slot = gc_object__get_at(self, gc_mymod_Selector_field, &field_type, ctx);
 if (field_type != gc_type_field) {
     return 0.0;
 }
@@ -787,10 +790,10 @@ the program. The type-out parameter still tells you whether the field is set.
 
 ```c
 gc_type_t t = gc_type_null;
-u64_t seed = (u64_t) gc_object__get_offset(random, gc_util_Random_seed, &t, gc_machine__program(ctx)).i64;
+u64_t seed = (u64_t) gc_object__get_offset(gen, gc_mymod_Generator_seed, &t, gc_machine__program(ctx)).i64;
 if (t == gc_type_null) {
     // field unset: fall back to a time-derived seed
-    seed = (u64_t) gc_common__current_us() ^ (u64_t) (uintptr_t) random;
+    seed = (u64_t) gc_time__now() ^ (u64_t) (uintptr_t) gen;
 }
 ```
 
@@ -804,7 +807,7 @@ fields).
 ```c
 const gc_object_data_t self_data = gc_object__segments(src.object, type);
 for (u32_t i = 0; i < type->fields.table.size; i++) {
-    const gc_field_t *field = &type->fields.table.data[i];
+    const gc_program_type_field_t *field = &type->fields.table.data[i];
     const gc_type_t field_type = gc_object__field_to_type(field);
     // self_data.data[i] holds the i-th field's slot value
     if (field_type == gc_type_object && self_data.data[i].object != NULL) {
@@ -819,7 +822,7 @@ Any in-place mutation of a persisted object must flag it dirty so the storage
 layer flushes it. This is the standard tail of mutating collection ops.
 
 ```c
-void gc_std_core_Array__add(gc_array_t *self, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx) {
+void gc_mymod_MyList__add(gc_array_t *self, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx) {
     gc_array__add_slot(self, value, value_type, ctx);
     gc_object__declare_dirty((gc_object_t *) self);
 }
