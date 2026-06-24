@@ -191,7 +191,7 @@ Stack baseline: **Lit + TypeScript + Shoelace + Lucide (`lucide`/`lucide-static`
 
 ### 8.1 Off-stack / heavyweight deps
 \`\`\`bash
-grep -nE '"(react|react-dom|@mui|tailwindcss|lucide-react|moment|lodash)"' package.json
+grep -nE '"(moment|lodash|jquery)"' package.json   # heavy/duplicate libs — prefer native/web-component equivalents
 grep -nE '"\^|"~' package.json   # non-exact pins — pin exact latest
 \`\`\`
 Prefer Lit + Shoelace + Lucide (`lucide`/`lucide-static`); replace heavy/duplicate libs with native/web-component equivalents.
@@ -206,7 +206,7 @@ grep -rn "from '@shoelace-style/shoelace'" frontend/ app/ --include="*.ts" 2>/de
 
 ### 8.3 Runtime/CDN icon or font fetch
 \`\`\`bash
-grep -rnE "lucide-react|cdn|unpkg|googleapis\.com" frontend/ app/ --include="*.ts" --include="*.html" 2>/dev/null
+grep -rnE "cdn|unpkg|googleapis\.com" frontend/ app/ --include="*.ts" --include="*.html" 2>/dev/null
 \`\`\`
 **Fix**: use `lucide`/`lucide-static` (self-hosted/bundled SVG), self-host fonts.
 **Severity**: HIGH (render-blocking, extra RTTs).

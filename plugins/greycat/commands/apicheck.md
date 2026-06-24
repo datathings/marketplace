@@ -129,6 +129,12 @@ Every `@expose` needs `///` with description, `@param`, `@return`, `@throws`.
 ### 5.4 Endpoint complexity
 `@expose` functions > 50 lines should delegate to a `Service`. API layer = validation + delegation only.
 
+### 5.5 Frontend & LLM/SEO consumption
+These endpoints are consumed by the **Lit + Shoelace + Lucide** frontend through the generated `@greycat/web` client, and they back the **`llms.txt`** site index (see `/docs` Phase 5).
+- Return lean `@volatile` `…View` types (not full domain types) so the typed client and Lit components stay light — smaller payloads also help Lighthouse.
+- Self-documenting params (`documentId`, not `id`) make both the TS SDK and the `llms.txt` endpoint list clearer for humans and LLM agents.
+- For any data that must be crawlable/indexable, prefer an endpoint that returns pre-rendered/SSR-friendly content (or feed a server-rendered route) — SPA Shadow-DOM content alone is weak for SEO.
+
 ---
 
 ## Phase 6: API Design

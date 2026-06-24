@@ -16,7 +16,7 @@ Generated files:
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
-**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), Vite + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO. Never React/MUI/Tailwind/`lucide-react`.
+**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), Vite + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO.
 
 ---
 

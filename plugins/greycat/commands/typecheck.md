@@ -138,6 +138,32 @@ Module-level `var` must be a node-tag type (`node<T?>`, `nodeIndex<K,V>`, `nodeL
 
 ---
 
+## Phase 7: Frontend type safety (Lit + TypeScript) — if `frontend/` exists
+
+Stack: **Lit + TypeScript + Shoelace + Lucide** on Vite + `@greycat/web`. Beyond `tsc --noEmit` (`pnpm lint`):
+
+### 7.1 tsconfig for Lit decorators
+\`\`\`bash
+grep -E 'experimentalDecorators|useDefineForClassFields|moduleResolution' tsconfig*.json
+\`\`\`
+Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"strict": true`. Missing these → `@property`/`@customElement` mistype or runtime field-init bugs.
+
+### 7.2 `gc` namespace shadow
+\`\`\`bash
+grep -rnE '\bgc\.' frontend/ --include="*.ts" | grep -v "gc-runtime.ts"
+\`\`\`
+`@greycat/web`'s `gc` is shadowed by `@types/node`'s `var gc`. Use the `gcRuntime` re-export, never bare `gc.*`.
+
+### 7.3 Stale codegen / hard-coded strings
+`project.d.ts` must be regenerated (`pnpm gen`) after backend type/`@expose` changes; never hand-edit it. Derive endpoint/field strings from `$fields`, not string literals. **No `any`** — use `gc.core.*` / `gc.project.*` types.
+
+### 7.4 Custom element typing
+Each `@customElement` must extend `HTMLElementTagNameMap` so templates and `document.createElement` are typed.
+
+**Severity**: HIGH (7.1 decorator config), MEDIUM (shadow, stale codegen), LOW (element-map gaps).
+
+---
+
 ## Output
 
 ```
@@ -158,6 +184,8 @@ Per finding: `📍 file:line` + severity + problem + fix snippet.
 greycat-lang lint   # must pass
 greycat test        # run tests
 greycat build       # build
+# frontend (if exists):
+pnpm gen && pnpm lint   # regenerate client, then tsc --noEmit
 \`\`\`
 
 ---

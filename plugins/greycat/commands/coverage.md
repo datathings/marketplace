@@ -108,6 +108,19 @@ For each gap: test file, function names, ready-to-use template, priority, ration
 
 ---
 
+## Phase 3b: Frontend coverage (if `frontend/` exists)
+
+The **Lit + Shoelace + Lucide** frontend is tested with **Vitest** (jsdom). Treat two things as coverage gates:
+- **Unit/component tests** — data-transform helpers and Lit component rendering against fixture payloads:
+  \`\`\`bash
+  find frontend -name "*.test.ts" -o -name "*.spec.ts"   # inventory
+  pnpm test                                               # vitest run
+  \`\`\`
+  Gaps: components with no render test, untested formatters/derive helpers, untested error/loading states.
+- **Lighthouse as a non-functional gate** — serve, then `pnpm lighthouse:ci` (performance, accessibility, best-practices, seo). Treat any category < 90 as an open coverage item, same as a missing unit test.
+
+---
+
 ## Output
 
 ```

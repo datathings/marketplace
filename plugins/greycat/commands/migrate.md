@@ -267,3 +267,4 @@ systemctl start greycat
 - Always backup before risky ops
 - Batch large migrations + log progress every N rows
 - Dev: can delete gcdata; Prod: must migrate (rotate, not delete)
+- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration, run `pnpm gen` (regenerate `project.d.ts`) and rebuild the **Lit + Shoelace + Lucide** frontend so types stay in sync; re-audit with `pnpm lighthouse:ci` if payload shapes changed.

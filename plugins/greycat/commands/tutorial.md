@@ -8,7 +8,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 
 **Purpose**: Progressive hands-on learning of GreyCat with code examples + validation.
 
-10 sequential modules (~4 hours total):
+11 sequential modules (~4.5 hours total):
 
 | # | Module | Time | Topic |
 |---|--------|------|-------|
@@ -22,6 +22,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 | 8 | Parallelization | 25m | Jobs, await |
 | 9 | Time & Geo | 30m | nodeTime, nodeGeo |
 | 10 | Advanced | 30m | Inheritance, polymorphism |
+| 11 | Frontend | 35m | Lit + Shoelace + Lucide, Lighthouse, LLM-friendly SEO |
 
 ---
 
@@ -260,6 +261,54 @@ Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abs
 
 ---
 
+## Module 11: Frontend (Lit + Shoelace + Lucide) (35m)
+
+**Concept**: the preferred GreyCat frontend is **web components** — **Lit** + **TypeScript** + **Shoelace** (UI kit) + **Lucide** icons (`lucide`/`lucide-static`), built with **Vite** and the typed **`@greycat/web`** client. Pin exact latest versions; use the native packages above.
+
+**Setup** (configs in root, source in `frontend/`, builds to `webroot/`):
+\`\`\`bash
+pnpm install
+pnpm gen            # greycat codegen ts → project.d.ts (typed client)
+pnpm dev            # Vite dev server
+\`\`\`
+
+**A Lit component** consuming an `@expose` endpoint (from Module 6):
+\`\`\`ts
+import { LitElement, html, css } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import '@shoelace-style/shoelace/dist/components/card/card.js';   // per-component (tree-shaking)
+import { gcRuntime } from '~/gc-runtime';     // re-export — never bare `gc.*` (@types/node shadow)
+import { icon } from '~/icons';               // Lucide, self-hosted (no CDN)
+
+@customElement('app-products')
+export class AppProducts extends LitElement {
+  static styles = css`:host{display:block}`;
+  @state() private rows: gcRuntime.project.ProductView[] = [];
+
+  async connectedCallback() {
+    super.connectedCallback();
+    this.rows = await gcRuntime.default.call('products::get_products', []);
+  }
+  render() {
+    return html`<sl-card><h2 slot="header">${icon('boxes', 18)} Products</h2>
+      <ul>${this.rows.map(r => html`<li>${r.name}</li>`)}</ul></sl-card>`;
+  }
+}
+\`\`\`
+
+**Optimize with Lighthouse** (target ≥ 90 in performance / accessibility / best-practices / SEO):
+\`\`\`bash
+greycat serve            # serve the built app first
+pnpm lighthouse          # full report; also :desktop / :ci
+\`\`\`
+Levers: per-component Shoelace imports, self-hosted Lucide icons (no CDN), code-split routes, defer non-critical JS, reserve element sizes (avoid layout shift).
+
+**LLM-friendly SEO** (always): in `index.html` set `<html lang>`, a unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, and JSON-LD (`schema.org`). Use semantic landmarks + `alt`/ARIA (pre-render/SSR if content is in Shadow DOM). Ship `robots.txt`, `sitemap.xml`, a web manifest, and **`llms.txt`** (a Markdown index of pages + endpoints) to `webroot/`.
+
+**Exercise**: build an `<app-products>` page for the Module 4 blog/catalog, wire it to your `@expose` endpoint, then run `pnpm lighthouse` and get every category ≥ 90.
+
+---
+
 ## Between Modules
 
 Ask (AskUserQuestion):
@@ -273,7 +322,7 @@ Update progress file after each completion.
 
 ## Completion
 
-After Module 10: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project, use `/scaffold` / `/migrate`, read references, https://greycat.io/community).
+After Module 11: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project with a Lit + Shoelace + Lucide frontend, use `/scaffold` / `/migrate` / `/frontend`, audit with `pnpm lighthouse`, read references, https://greycat.io/community).
 
 ---
 
@@ -290,7 +339,8 @@ tutorial/
 ├── module7_testing.gcl
 ├── module8_parallelization.gcl
 ├── module9_timeseries_geo.gcl
-└── module10_advanced.gcl
+├── module10_advanced.gcl
+└── module11_frontend/             # Lit + Shoelace + Lucide (app-products.ts, index.html, llms.txt)
 ```
 
 ---

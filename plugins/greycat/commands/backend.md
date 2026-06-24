@@ -212,6 +212,7 @@ Nested loops with conditional id-match → add `nodeIndex<id, ...>` for O(1) loo
 - **Global index order**: declare `var xxx_by_id: nodeIndex<...>` BEFORE types that reference them in the same file.
 - **@permission**: every `@expose` has one (CRITICAL when missing).
 - **Try/catch on @expose**: every body wrapped.
+- **Lean `…View` types for the frontend**: `@expose` returns feed the **Lit + Shoelace + Lucide** frontend via the generated `@greycat/web` client — return slim `@volatile …View` types (not full domain types) so payloads stay small (helps Lighthouse) and codegen→TS stays clean. After any backend type/`@expose` change, regenerate the client (`pnpm gen`). For full frontend review (Lit patterns, Shoelace tree-shaking, Lighthouse/SEO), use `/greycat:frontend`.
 
 ---
 

@@ -121,7 +121,7 @@ If `frontend/` (or `app/`) exists, keep the **preferred stack** current too — 
 |---------|------|
 | `lit` | web components |
 | `@shoelace-style/shoelace` | UI kit |
-| `lucide` / `lucide-static` | icons (never `lucide-react`) |
+| `lucide` / `lucide-static` | icons (native, self-hosted) |
 | `@greycat/web` | typed client (dev SDK tarball) |
 | `vite` | build |
 | `typescript` | language |

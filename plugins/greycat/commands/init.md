@@ -106,7 +106,7 @@ pnpm lighthouse                # audit served app; also :desktop / :ci
   - **Lit** (web components) — one `LitElement` per file, `@customElement`
   - **TypeScript** (`experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"`)
   - **Shoelace** (`@shoelace-style/shoelace`) — UI kit (layout, cards, tabs, dialogs, date-picker)
-  - **Lucide** icons — `lucide` (tree-shakable) or `lucide-static` (inline SVG); self-hosted, **never `lucide-react`**
+  - **Lucide** icons — `lucide` (tree-shakable) or `lucide-static` (inline SVG); native + self-hosted (no CDN)
   - **Vite** + `@greycat/web/vite-plugin`; `@greycat/web` typed client; optional **chart.js** + **d3** (or **maplibre-gl** for maps) for data-viz
   - **i18next** (+ language detector) if multi-locale; **Vitest** for tests
   - **Lighthouse** (devDep) — `pnpm lighthouse` audits performance/SEO/accessibility/best-practices
@@ -203,7 +203,7 @@ fn document(id: String): Document {
 
 ### Frontend (Lit + Shoelace + lucide-static) — if exists
 
-Preferred stack: **Lit** + **TypeScript** + **Shoelace** + **Lucide (`lucide-static`)** on **Vite** + `@greycat/web`. Pin **exact latest** versions; check for newer releases when adding/upgrading. (Not React/MUI/Tailwind — `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.)
+Preferred stack: **Lit** + **TypeScript** + **Shoelace** + **Lucide** (`lucide`/`lucide-static`) on **Vite** + `@greycat/web`. Pin **exact latest** versions; check for newer releases when adding/upgrading. `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
 
 **⚠️ `gc` namespace shadow**: `@greycat/web`'s `gc` is shadowed by `@types/node`'s `var gc`. Use re-export:
 \`\`\`ts
@@ -219,7 +219,7 @@ gcRuntime.project.MyType.create(...);
 
 **Components (Lit)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. `@property()` for public inputs, `@state()` for internal state, `static styles = css\`…\``, `html\`…\`` templates. Charts (chart.js): create in `firstUpdated`, **destroy in `disconnectedCallback`**.
 **Shoelace**: import components **individually** (tree-shaking); load light+dark theme CSS and set the asset base path once at startup; app `styles.css` imported after so its tokens win.
-**Icons**: **`lucide`** (import only used glyphs) or **`lucide-static`** (inline via Lit `unsafeSVG`), `currentColor` + `aria-hidden` — self-hosted, no runtime/CDN fetch, never `lucide-react`.
+**Icons**: **`lucide`** (import only used glyphs) or **`lucide-static`** (inline via Lit `unsafeSVG`), `currentColor` + `aria-hidden` — native + self-hosted, no runtime/CDN fetch.
 **Services**: thin layer over the generated client + retry wrapper; types from `project.d.ts`.
 **State**: URL query params (shareable view state), localStorage (theme). **Styling**: CSS custom-property theme tokens (dark + light); no inline styles except dynamic values.
 **Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
@@ -559,7 +559,7 @@ export default defineConfig({
 - [ ] `greycat codegen ts` re-run after backend type changes
 - [ ] Re-import path is upsert
 - [ ] New fields on persisted types are nullable OR `gcdata/` reset planned
-- [ ] Frontend: exact (latest) versions in package.json — Lit + Shoelace + Lucide (`lucide`/`lucide-static`), no React/MUI/Tailwind/`lucide-react`
+- [ ] Frontend: exact (latest) versions in package.json — Lit + Shoelace + Lucide (`lucide`/`lucide-static`), native packages only
 - [ ] Frontend uses `gcRuntime` re-export, not bare `gc.*`
 - [ ] Shoelace imported per-component; icons self-hosted via Lucide (no CDN fetch)
 - [ ] Lighthouse ≥ 90 perf/SEO/a11y/best-practices (`pnpm lighthouse:ci`)
