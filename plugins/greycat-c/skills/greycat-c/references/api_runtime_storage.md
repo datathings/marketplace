@@ -686,6 +686,7 @@ Basic file I/O operations with platform-aware path separators.
 | `gc_io_file__open_read` | `i32_t gc_io_file__open_read(gc_string_t *path, gc_machine_t *ctx)` | Open a file for read-only. Returns file descriptor, or -1 on error. |
 | `gc_io_open` | `i32_t gc_io_open(const gc_string_t *path, i32_t flags, gc_machine_t *ctx)` | Open a file with custom flags. Returns file descriptor. |
 | `gc_io_file__sync` | `void gc_io_file__sync(i32_t fp)` | Flush file data to disk (fsync). |
+| `gc_io__write_all` | `bool gc_io__write_all(i32_t fd, const char *data, u64_t data_len, u64_t *written)` | Write all `data_len` bytes of `data` to `fd`, retrying partial writes and `EINTR`. Returns `true` on success; `false` on error with `errno` set (`EIO` when `write` returns 0). `*written`, if non-NULL, is advanced by the number of bytes written. |
 
 ### Usage Examples
 
@@ -754,6 +755,26 @@ if (in_fd == -1) {
 }
 // ... consume ...
 close(in_fd);
+```
+
+**Write a whole buffer with partial-write/`EINTR` handling**
+
+`gc_io__write_all` is the robust counterpart to a raw `write(2)`: it loops until every byte of `data` is written, restarting on `EINTR` and resuming after partial writes. It returns `false` with `errno` set on error (`EIO` when `write` returns 0), and advances `*written` (if non-NULL) by the number of bytes actually written so the caller can track progress.
+
+```c
+i32_t out_fd = gc_io_file__open_rdwr(filepath, ctx);
+if (out_fd == -1) {
+    return; // error set on ctx
+}
+
+u64_t written = 0;
+if (!gc_io__write_all(out_fd, buf->data, buf->size, &written)) {
+    close(out_fd);
+    gc_machine__set_runtime_error_syserr(ctx); // errno set by gc_io__write_all
+    return;
+}
+gc_io_file__sync(out_fd); // flush buffered data to disk (fsync)
+close(out_fd);
 ```
 
 

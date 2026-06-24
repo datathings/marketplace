@@ -113,6 +113,36 @@ See `/migrate` Operation A and D for full safe-rollback flow.
 
 ---
 
+## Frontend dependencies (Lit + Shoelace + Lucide stack)
+
+If `frontend/` (or `app/`) exists, keep the **preferred stack** current too — pin **exact latest** published versions (no `^`/`~`):
+
+| Package | Role |
+|---------|------|
+| `lit` | web components |
+| `@shoelace-style/shoelace` | UI kit |
+| `lucide` / `lucide-static` | icons (never `lucide-react`) |
+| `@greycat/web` | typed client (dev SDK tarball) |
+| `vite` | build |
+| `typescript` | language |
+| `vitest` | frontend tests |
+| `lighthouse` | perf/SEO/a11y audits |
+| `i18next` (+ language detector) | i18n, if multi-locale |
+| `maplibre-gl` / `chart.js` / `d3` | maps & data-viz, if used |
+
+\`\`\`bash
+# Inspect current vs latest, then pin exact
+pnpm outdated
+pnpm up --latest lit @shoelace-style/shoelace lucide vite typescript vitest lighthouse
+# then re-pin to exact versions in package.json (drop ^/~) and reinstall
+\`\`\`
+
+**pnpm release-age gate**: pnpm 11 may reject just-published packages (and ignores `minimumReleaseAgeExclude` for that audit). To ship trusted just-released tooling (e.g. Vite), set `minimumReleaseAge: 0` (or add exact exclusions) in `pnpm-workspace.yaml`.
+
+**After upgrading**: `pnpm gen` (regen client) → `pnpm lint` (typecheck) → `pnpm build` → serve → `pnpm lighthouse:ci` (confirm perf/SEO/a11y/best-practices ≥ 90). Note Shoelace/Lit major bumps can change component APIs — check their changelogs like you would GreyCat's.
+
+---
+
 ## Channels
 
 - **Dev**: `https://get.greycat.io/files/<lib>/dev/latest` — latest, may have breaking changes
@@ -177,7 +207,8 @@ Breaking changes:
 
 ## Notes
 
-- **No code changes**: this command only updates library versions
+- **No code changes**: this command only updates library versions (backend `@library` + optional frontend deps)
+- **Frontend deps**: keep Lit + Shoelace + Lucide + Vite + TS + Vitest + Lighthouse on exact latest; re-audit with `pnpm lighthouse:ci`
 - **gcdata NOT auto-migrated** on schema drift — see "Persisted schema check" above
 - **Rollback**: `git checkout project.gcl` for code; for prod data, rely on `gcdata_bk_*` rotation
 - **`greycat --version` = `0.0.0`** on dev builds — not a bug, treat as "latest"

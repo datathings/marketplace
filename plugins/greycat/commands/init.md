@@ -16,7 +16,7 @@ allowed-tools: Write, Read, Bash
 
 1. **Check CLAUDE.md exists** — if yes, ask to backup or cancel
 2. **Detect features**:
-   - Frontend: `app/` exists or `package.json` has `@greycat/web`
+   - Frontend: `frontend/` (or legacy `app/`) exists or `package.json` has `@greycat/web` / `lit` / `@shoelace-style/shoelace`
    - GreyCat version: parse `@library("std", ...)` from `project.gcl`
 3. **Check `.gitignore`** — create or append GreyCat entries if missing
 4. **Write CLAUDE.md** from the template below, customizing:
@@ -91,8 +91,10 @@ greycat run [function]         # Run function (default: main)
 greycat codegen ts             # Generate project.d.ts
 greycat install                # Install libraries
 
-# Frontend (if exists)
+# Frontend (if exists) — Lit + Shoelace + lucide-static
 pnpm install/dev/build/lint/test
+pnpm gen                       # greycat codegen ts (after backend type/@expose changes)
+pnpm lighthouse                # audit served app; also :desktop / :ci
 \`\`\`
 
 ---
@@ -100,11 +102,18 @@ pnpm install/dev/build/lint/test
 ## Stack
 
 - **Backend**: GreyCat [version] (GCL)
-- **Frontend** (if exists): TypeScript + Vite + @greycat/web
+- **Frontend** (if exists) — preferred stack, pin **exact latest** (no `^`/`~`):
+  - **Lit** (web components) — one `LitElement` per file, `@customElement`
+  - **TypeScript** (`experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"`)
+  - **Shoelace** (`@shoelace-style/shoelace`) — UI kit (layout, cards, tabs, dialogs, date-picker)
+  - **Lucide** icons — `lucide` (tree-shakable) or `lucide-static` (inline SVG); self-hosted, **never `lucide-react`**
+  - **Vite** + `@greycat/web/vite-plugin`; `@greycat/web` typed client; optional **chart.js** + **d3** (or **maplibre-gl** for maps) for data-viz
+  - **i18next** (+ language detector) if multi-locale; **Vitest** for tests
+  - **Lighthouse** (devDep) — `pnpm lighthouse` audits performance/SEO/accessibility/best-practices
 - **Libraries**: `@library("std", "[version]")`, `@library("explorer", "[version]")`
 - **Testing**: backend `@test`, frontend Vitest
 
-**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json), source in `app/`, builds to `webroot/`. Use exact versions (no `^`/`~`).
+**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json), source in `frontend/`, builds to `webroot/` (`emptyOutDir: false` — preserve `webroot/explorer/`). Use exact versions (no `^`/`~`); always check for newer releases when adding/upgrading deps. Optimize with Lighthouse (perf/SEO/a11y ≥ 90) and ship LLM-friendly SEO (see Frontend coding style).
 
 ---
 
@@ -119,9 +128,15 @@ pnpm install/dev/build/lint/test
 │   ├── <feature>_reader.gcl   # CSV/JSON readers (optional)
 │   └── <feature>_writer.gcl   # Writers (optional)
 ├── test/<feature>_test.gcl
-├── app/                       # Frontend source (if exists)
+├── frontend/                  # Lit + Shoelace + lucide-static source (if exists)
+│   ├── index.html             # SEO head (title, description, OG, JSON-LD, lang)
+│   ├── main.ts                # Shoelace themes + asset base path + mount root
+│   ├── icons.ts               # Lucide glyphs (lucide / lucide-static), no runtime fetch
+│   └── components/ pages/      # one LitElement per file, `app-*` custom elements
 ├── package.json / vite.config.ts / tsconfig.json   # Root level
-├── webroot/                   # Built frontend (gitignored)
+├── webroot/                   # Built frontend + greycat explorer (gitignored)
+│   ├── robots.txt sitemap.xml site.webmanifest      # SEO discoverability
+│   └── llms.txt               # LLM-friendly Markdown site index
 ├── lib/                       # Installed libs (gitignored)
 ├── gcdata/                    # DB storage (gitignored)
 └── CLAUDE.md
@@ -186,11 +201,13 @@ fn document(id: String): Document {
 
 **Naming**: snake_case fields, camelCase functions, `…View` suffix for `@volatile` API response types.
 
-### Frontend (TypeScript) — if exists
+### Frontend (Lit + Shoelace + lucide-static) — if exists
+
+Preferred stack: **Lit** + **TypeScript** + **Shoelace** + **Lucide (`lucide-static`)** on **Vite** + `@greycat/web`. Pin **exact latest** versions; check for newer releases when adding/upgrading. (Not React/MUI/Tailwind — `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.)
 
 **⚠️ `gc` namespace shadow**: `@greycat/web`'s `gc` is shadowed by `@types/node`'s `var gc`. Use re-export:
 \`\`\`ts
-// app/gc-runtime.ts
+// frontend/gc-runtime.ts
 import * as gcRuntime from '@greycat/web';
 export { gcRuntime };
 // elsewhere:
@@ -198,15 +215,18 @@ import { gcRuntime } from '~/gc-runtime';
 gcRuntime.project.MyType.create(...);
 \`\`\`
 
-**Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`. Derive backend strings from codegen via `$fields` — never hard-code.
+**Codegen discipline**: re-run `greycat codegen ts` (`pnpm gen`) after every backend type/`@expose` change. Never hand-edit `project.d.ts`. Derive backend strings from codegen via `$fields` — never hard-code.
 
-**Components**: Named export + memo, props interface ABOVE component, JSDoc. (Default export for pages only.)
+**Components (Lit)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. `@property()` for public inputs, `@state()` for internal state, `static styles = css\`…\``, `html\`…\`` templates. Charts (chart.js): create in `firstUpdated`, **destroy in `disconnectedCallback`**.
+**Shoelace**: import components **individually** (tree-shaking); load light+dark theme CSS and set the asset base path once at startup; app `styles.css` imported after so its tokens win.
+**Icons**: **`lucide`** (import only used glyphs) or **`lucide-static`** (inline via Lit `unsafeSVG`), `currentColor` + `aria-hidden` — self-hosted, no runtime/CDN fetch, never `lucide-react`.
+**Services**: thin layer over the generated client + retry wrapper; types from `project.d.ts`.
+**State**: URL query params (shareable view state), localStorage (theme). **Styling**: CSS custom-property theme tokens (dark + light); no inline styles except dynamic values.
+**Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
 
-**Hooks**: `use*` prefix, `useCallback`/`useMemo` with deps, return objects.
-**Services**: Named export objects, withRetry wrapper, types from `project.d.ts`.
-**State**: URL (`useSearchParams`), localStorage, Context (theme/user).
-**Styling**: Theme constants + Tailwind. No inline styles except dynamic values.
-**Naming**: camelCase (vars/fns), PascalCase (components/types).
+**Lighthouse (optimize perf/SEO/a11y/best-practices ≥ 90)**: serve, then `pnpm lighthouse` / `:desktop` / `:ci`. Tree-shake Shoelace, self-host icons (`lucide-static`), code-split routes, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
+
+**LLM-friendly SEO (always)**: in `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Use semantic landmarks + heading order + `alt`/ARIA (keep crawlable content in light DOM or pre-render/SSR the SPA shell). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) at the web root — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
 
 ### Testing
 
@@ -482,15 +502,21 @@ GREYCAT_WEBROOT=webroot
 GREYCAT_CACHE=30000
 \`\`\`
 
-**vite.config.ts** (in root):
+**vite.config.ts** (in root) — use the `@greycat/web` plugin; **don't** empty `webroot/` (it holds `webroot/explorer/`):
 \`\`\`ts
+import { defineConfig } from 'vite';
+import greycat from '@greycat/web/vite-plugin';
+
 export default defineConfig({
-  root: 'app',
-  build: { outDir: '../webroot', emptyOutDir: true }
+  base: '',
+  root: 'frontend',
+  plugins: [greycat({ greycat: 'http://127.0.0.1:8080', noDefaultConfig: true })],
+  build: { outDir: '../webroot', emptyOutDir: false },   // preserve webroot/explorer/
+  server: { port: 3000, open: '/' },
 })
 \`\`\`
 
-**tsconfig.json** (in root): `"paths": { "~/*": ["app/*"] }`, `"include": ["app", "project.d.ts"]`.
+**tsconfig.json** (in root): Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"include": ["frontend"]` (add `"paths": { "~/*": ["frontend/*"] }` if using the `~` alias).
 
 ---
 
@@ -533,8 +559,12 @@ export default defineConfig({
 - [ ] `greycat codegen ts` re-run after backend type changes
 - [ ] Re-import path is upsert
 - [ ] New fields on persisted types are nullable OR `gcdata/` reset planned
-- [ ] Frontend: exact versions in package.json
+- [ ] Frontend: exact (latest) versions in package.json — Lit + Shoelace + Lucide (`lucide`/`lucide-static`), no React/MUI/Tailwind/`lucide-react`
 - [ ] Frontend uses `gcRuntime` re-export, not bare `gc.*`
+- [ ] Shoelace imported per-component; icons self-hosted via Lucide (no CDN fetch)
+- [ ] Lighthouse ≥ 90 perf/SEO/a11y/best-practices (`pnpm lighthouse:ci`)
+- [ ] SEO head present (title, meta description, canonical, OG/Twitter, JSON-LD, `lang`)
+- [ ] `robots.txt`, `sitemap.xml`, web manifest, and `llms.txt` shipped to `webroot/`
 - [ ] Tests pass (`rm -rf gcdata && greycat test`)
 
 ---

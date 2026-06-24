@@ -16,12 +16,13 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit
 
 ### Detect features
 \`\`\`bash
-# Frontend: app/ directory or @greycat/web in package.json
+# Frontend: frontend/ (or app/) directory, or lit / @shoelace-style/shoelace / @greycat/web in package.json
 # Tests:    test/ directory
 # Libs:     @library in project.gcl
 # Auth:     @permission / @role in project.gcl
 # MCP:      @tag("mcp") in src/
 # Data:     data/ directory, *.gguf files
+# SEO:      webroot/{robots.txt,sitemap.xml,llms.txt,*.webmanifest}
 \`\`\`
 
 ### Extract info
@@ -36,10 +37,10 @@ grep -rn "@expose" src/ --include="*_api.gcl"            # endpoints
 ### Sections to generate
 
 1. **Title + 1-line description**
-2. **Overview** — tech stack (GreyCat version, frontend if any), key features (counts: N types, M endpoints, auth?, search?, MCP?)
-3. **Quick Start** — prerequisites, `git clone`, `greycat install`, `pnpm install` (if frontend), `greycat serve`, `pnpm dev`, `greycat run import`
+2. **Overview** — tech stack (GreyCat version; frontend stack if any: **Lit + TypeScript + Shoelace + Lucide** on Vite + `@greycat/web`; note i18next/maplibre-gl/Vitest if present), key features (counts: N types, M endpoints, auth?, search?, MCP?)
+3. **Quick Start** — prerequisites, `git clone`, `greycat install`, `pnpm install` (if frontend), `greycat serve`, `pnpm dev`, `greycat run import`. If frontend: `pnpm lighthouse` to audit performance/SEO.
 4. **Architecture** — data model (auto-extracted types), service layer (list services), API endpoints table (`| Endpoint | Permission | Description |`)
-5. **Development** — project structure (see CLAUDE.md template), common commands (`greycat-lang lint/fmt`, `greycat build/test/serve/run/codegen`, `pnpm dev/build/lint/test`), workflow (lint after each change, regen ts after backend types)
+5. **Development** — project structure (see CLAUDE.md template), common commands (`greycat-lang lint/fmt`, `greycat build/test/serve/run/codegen`, `pnpm dev/build/lint/test`, `pnpm gen`, `pnpm lighthouse`), workflow (lint after each change, regen ts after backend types)
 6. **Testing** — `greycat test`, current coverage stats
 7. **Configuration** — `.env` vars, library versions
 8. **Authentication** (if detected) — roles, permissions, `SecurityService` usage
@@ -166,18 +167,54 @@ paths:
 
 ---
 
+## Phase 5: Frontend SEO & LLM-friendly discoverability (if frontend detected)
+
+Generate/refresh machine-readable artifacts so search engines **and LLM agents** can navigate the app. Source generated into `frontend/public/` (or written directly to `webroot/`).
+
+### 5.1 `llms.txt` (LLM-friendly site index — always)
+A concise Markdown map of the app for LLM agents: purpose, key routes, and public `@expose` endpoints (extracted in Phase 2). Optionally also emit `llms-full.txt` with expanded endpoint docs.
+```markdown
+# <Project Name>
+> <one-line description>
+
+## Pages
+- [Overview](/): KPIs and summary
+- [Detail](/detail): per-entity drill-down
+
+## API (POST JSON body = positional args)
+- `/<module>::<fn>` — <description> (permission: <level>)
+```
+
+### 5.2 SEO head (`index.html`)
+Ensure/insert: `<html lang>`, unique `<title>`, `<meta name="description">`, canonical `<link>`, Open Graph + Twitter Card, `theme-color`, `<meta name="color-scheme">`, and JSON-LD (`schema.org`, e.g. `WebApplication` / `SoftwareApplication`).
+
+### 5.3 `robots.txt` + `sitemap.xml` + web manifest
+```
+# robots.txt
+User-agent: *
+Allow: /
+Sitemap: https://<host>/sitemap.xml
+```
+Emit a `sitemap.xml` listing crawlable routes and a `site.webmanifest` (name, icons, theme/background color).
+
+### 5.4 Lighthouse audit doc
+Record how to audit: serve the app, then `pnpm lighthouse` / `:desktop` / `:ci`. Target ≥ 90 in performance/SEO/accessibility/best-practices; note current scores in the README "Performance" subsection.
+
+---
+
 ## Execution
 
-1. Analyze: detect frontend/tests/data/libs/auth/MCP
+1. Analyze: detect frontend/tests/data/libs/auth/MCP/SEO
 2. Generate README.md, API.md, MCP.md (conditional) via Write
-3. Validate: `ls -lh README.md API.md MCP.md`
-4. Report summary
+3. If frontend: generate/refresh `llms.txt`, SEO head, `robots.txt`, `sitemap.xml`, manifest (Phase 5)
+4. Validate: `ls -lh README.md API.md MCP.md` + `ls webroot/{robots.txt,sitemap.xml,llms.txt}`
+5. Report summary
 
 ---
 
 ## Notes
 
-- Regenerate after: new endpoints, model changes, lib upgrades, auth changes
+- Regenerate after: new endpoints, model changes, lib upgrades, auth changes, new routes (refresh `sitemap.xml`/`llms.txt`)
 - Don't regenerate for: bug fixes, internal refactors, doc-only changes
 - Custom content goes AFTER auto-generated sections
-- Markdown only (no HTML)
+- README/API/MCP are Markdown only (no HTML); the SEO head in `index.html` and the `*.xml`/`*.txt`/manifest artifacts are the Phase 5 exception

@@ -6,14 +6,17 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 
 # GreyCat Scaffold Generator
 
-**Purpose**: Generate model + service + API + tests with proper GreyCat structure.
+**Purpose**: Generate model + service + API + tests with proper GreyCat structure — and, when a frontend exists, a matching **Lit + Shoelace + Lucide** UI component.
 
 Generated files:
 - `src/<feature>/<feature>.gcl` — type + indices + service
 - `src/<feature>/<feature>_api.gcl` — `@expose` + `@volatile` views
 - `test/<feature>_test.gcl` — tests
+- `frontend/components/<feature>-table.ts` — Lit component (only if `frontend/` exists)
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
+
+**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), Vite + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO. Never React/MUI/Tailwind/`lucide-react`.
 
 ---
 
@@ -241,11 +244,57 @@ fn delete_{entity}({entity}Id: int) {
 }
 \`\`\`
 
+### D. Frontend component (`frontend/components/{snake}-table.ts`) — only if `frontend/` exists
+
+Generate a small **Lit** element that lists the entity via the generated client, using **Shoelace** for chrome and a **Lucide** icon. Then regenerate the typed client (`pnpm gen`) so `gcRuntime.project.{Entity}View` exists.
+
+\`\`\`ts
+import { LitElement, html, css } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import '@shoelace-style/shoelace/dist/components/card/card.js';
+import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import { gcRuntime } from '~/gc-runtime';        // re-export — never bare `gc.*`
+import { icon } from '~/icons';                  // Lucide (lucide / lucide-static), self-hosted
+
+@customElement('{snake}-table')
+export class {Entity}Table extends LitElement {
+  static styles = css`:host{display:block} table{width:100%;border-collapse:collapse}`;
+  @state() private rows: gcRuntime.project.{Entity}View[] = [];
+  @state() private loading = true;
+
+  async connectedCallback() {
+    super.connectedCallback();
+    // explicit module route from clients (bare alias is fragile)
+    this.rows = await gcRuntime.default.call('{entities}::get_{entities}', []);
+    this.loading = false;
+  }
+
+  render() {
+    if (this.loading) return html`<sl-spinner></sl-spinner>`;
+    return html`
+      <sl-card>
+        <h2 slot="header">${icon('table-2', 18)} {Entity} list</h2>
+        <table>
+          <thead><tr><th scope="col">ID</th>{th_cells}</tr></thead>
+          <tbody>
+            ${this.rows.map(r => html`<tr><td>${r.id}</td>{td_cells}</tr>`)}
+          </tbody>
+        </table>
+      </sl-card>`;
+  }
+}
+declare global { interface HTMLElementTagNameMap { '{snake}-table': {Entity}Table } }
+\`\`\`
+
+Reminders: import Shoelace components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields` where possible; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; run `pnpm lighthouse` after wiring the page.
+
 ---
 
 ## Step 6: Lint
 \`\`\`bash
-greycat-lang lint --fix
+greycat-lang lint --fix     # backend
+# frontend (if generated):
+pnpm gen && pnpm lint       # regenerate client, then typecheck
 \`\`\`
 
 ---
@@ -258,6 +307,7 @@ SCAFFOLD COMPLETE — entity: {Entity}
 ✓ src/{snake}/{snake}.gcl          — type + N indices + service ({methods})
 ✓ src/{snake}/{snake}_api.gcl      — N volatile types + N endpoints
 ✓ test/{snake}_test.gcl            — N test cases
+✓ frontend/components/{snake}-table.ts  — Lit + Shoelace + Lucide (if frontend/)
 
 Lint: ✓ passes
 
@@ -265,6 +315,7 @@ Next:
   1. Customize generated code
   2. greycat test test/{snake}_test.gcl
   3. greycat serve → test endpoints
+  4. (frontend) pnpm gen → mount <{snake}-table> → pnpm lighthouse
 ```
 
 ---

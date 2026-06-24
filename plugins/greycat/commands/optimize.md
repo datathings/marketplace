@@ -185,15 +185,65 @@ Second `System::exec` in non-task HTTP request throws uncatchable `"terminated P
 
 ---
 
-## Step 8: Report + Apply Fixes
+## Phase 8: Frontend Performance & SEO (if `frontend/` or `app/` exists)
+
+Stack baseline: **Lit + TypeScript + Shoelace + Lucide (`lucide`/`lucide-static`)** on Vite + `@greycat/web` (+ Vitest, optional i18next/maplibre-gl). Optimize for **Lighthouse** (performance · SEO · accessibility · best-practices, target ≥ 90) and ship **LLM-friendly SEO**.
+
+### 8.1 Off-stack / heavyweight deps
+\`\`\`bash
+grep -nE '"(react|react-dom|@mui|tailwindcss|lucide-react|moment|lodash)"' package.json
+grep -nE '"\^|"~' package.json   # non-exact pins — pin exact latest
+\`\`\`
+Prefer Lit + Shoelace + Lucide (`lucide`/`lucide-static`); replace heavy/duplicate libs with native/web-component equivalents.
+**Severity**: MEDIUM.
+
+### 8.2 Shoelace whole-bundle import (kills tree-shaking)
+\`\`\`bash
+grep -rn "from '@shoelace-style/shoelace'" frontend/ app/ --include="*.ts" 2>/dev/null
+\`\`\`
+**Fix**: import per-component (`.../dist/components/<x>/<x>.js`).
+**Severity**: HIGH (bundle bloat → slow LCP/TBT).
+
+### 8.3 Runtime/CDN icon or font fetch
+\`\`\`bash
+grep -rnE "lucide-react|cdn|unpkg|googleapis\.com" frontend/ app/ --include="*.ts" --include="*.html" 2>/dev/null
+\`\`\`
+**Fix**: use `lucide`/`lucide-static` (self-hosted/bundled SVG), self-host fonts.
+**Severity**: HIGH (render-blocking, extra RTTs).
+
+### 8.4 No code-splitting / eager chart libs
+Routes and heavy widgets (chart.js, d3) should load via dynamic `import()`; charts destroyed in `disconnectedCallback`. Flag a single monolithic bundle.
+**Severity**: MEDIUM.
+
+### 8.5 Missing SEO / LLM discoverability
+\`\`\`bash
+grep -iLE '<meta name="description"|og:title|application/ld\+json' frontend/index.html app/index.html 2>/dev/null
+for f in robots.txt sitemap.xml llms.txt site.webmanifest; do
+  [ -f "webroot/$f" ] || [ -f "frontend/public/$f" ] || echo "missing: $f"
+done
+\`\`\`
+**Fix**: add SEO head (title, description, canonical, OG/Twitter, JSON-LD, `lang`), semantic landmarks + `alt`/ARIA (pre-render/SSR if content lives in Shadow DOM), and ship `robots.txt` / `sitemap.xml` / web manifest / `llms.txt`. See `/docs` Phase 5.
+**Severity**: HIGH (discoverability).
+
+### 8.6 Lighthouse audit
+\`\`\`bash
+grep -q '"lighthouse"' package.json && echo "ok" || echo "add pnpm lighthouse / :desktop / :ci"
+# serve first (greycat serve), then:
+pnpm lighthouse:ci   # json gate: performance,accessibility,best-practices,seo
+\`\`\`
+Treat any category < 90 as an actionable finding.
+
+---
+
+## Step 9: Report + Apply Fixes
 
 Summary:
 ```
 Analyzed: N files
 CRITICAL: X (persistence, complexity, orphan-factory imports, Array<Job<T>>)
-HIGH:     Y (multi-index, parallel constructors, await in @expose)
-MEDIUM:   Z (natives, string-dedup, batch sizes)
-LOW:      W (wrappers, duplication)
+HIGH:     Y (multi-index, parallel constructors, await in @expose, whole-bundle Shoelace, CDN icons, missing SEO, Lighthouse < 90)
+MEDIUM:   Z (natives, string-dedup, batch sizes, off-stack deps, no code-split)
+LOW:      W (wrappers, duplication, non-pinned versions)
 
 Auto-fixable: N/M
 ```
@@ -212,4 +262,4 @@ Apply Edit operations → `greycat-lang lint --fix` → report success / manual-
 
 - Focus: quick automated wins
 - Only applies changes that don't alter logic
-- Complementary to `/greycat:backend` (full review)
+- Complementary to `/greycat:backend` (full review) and `/greycat:frontend` (Lit + Shoelace + Lighthouse/SEO review)
