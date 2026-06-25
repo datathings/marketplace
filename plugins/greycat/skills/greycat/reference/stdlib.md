@@ -165,6 +165,8 @@ w.min();   w.max();               // each returns Tuple<time, T>?
 
 These types persist across worker restarts. They are the bridge between in-memory logic and the GreyCat graph database.
 
+A value fetched from the graph (`idx.get(k)`, `n.resolve()`, a `for ... in nodeIndex` loop) is a **live node**: mutate its fields in place and the change persists on commit; do NOT `set` it back, which re-attaches an already-attached node and throws `object is already attached to another node`. `set` is for inserting a brand-new node. See [idioms.md](idioms.md), "Working with the graph".
+
 ### node<T>
 
 Singleton, lazily resolved.

@@ -91,12 +91,20 @@ Declares a named role as a set of permissions.
 
 ### `@expose` / `@expose("path")`
 
-Makes a function reachable via HTTP / RPC. Without args, the path is the function's qualified name. With a string arg, the function is exposed at that path.
+Makes a function reachable via HTTP / RPC. Without args, the path is the function's fully-qualified name: `<module>::<fn>` for a free-standing function, or `<module>::<Type>::<fn>` for a static method on a type. With a string arg, the function is exposed at that path.
 
 ```gcl
 @expose
 fn list_users(): Array<User> {}
 // → POST /<module>::list_users
+
+// A static method's path is its full FQN, so it has three segments:
+type Session {
+    @expose
+    static fn current(): Session {}
+}
+// reachable at POST /<module>::Session::current
+// (stdlib examples: /runtime::Identity::current_id, /openid::Openid::providers)
 
 @expose("api/users")
 fn list_users_renamed(): Array<User> {}

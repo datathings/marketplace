@@ -35,6 +35,7 @@ The patterns that keep GreyCat code correct, and the mistakes that an agent fami
 | `obj?.field?.method?.()` JS-style                   | `obj?.field?.method()`                       | Method call doesn't have an extra `?.`. |
 | `} ;` after a fn body                               | `}` (no trailing semicolon)                  | Lint flags this.                        |
 | `private inside_only: int;` thinking "Java private" | See `reference/annotations.md` § `private`   | `private` ≠ hidden.                     |
+| `idx.set(k, n)` where `n = idx.get(k)`              | mutate `n`'s fields in place; `set` only NEW nodes | Re-attaching a live node throws "object is already attached". |
 
 ## Member access — when to use `.` vs `->` vs `::`
 
@@ -397,6 +398,32 @@ fn put(idx: nodeIndex<String, Account>, acc: Account) {
     idx.set("${acc.id}", acc);
 }
 ```
+
+### Mutating a persisted node
+
+A value from `idx.get(k)`, `n.resolve()`, or a `for ... in` over a `nodeIndex` is a
+**live graph node**: assign to its fields and the change persists on commit. `set`
+*inserts* a node under a key; calling it on a node you just fetched re-attaches an
+already-attached node and throws `object is already attached to another node`.
+
+```gcl
+type Counter { hits: int; }
+
+// idx: nodeIndex<String, Counter>
+fn bump(idx: nodeIndex<String, Counter>, k: String) {
+    var existing = idx.get(k);
+    var c = existing ?? Counter { hits: 0 };
+    c.hits = c.hits + 1;             // live node: persists on commit, no set
+    if (existing == null) {
+        idx.set(k, c);               // brand-new node: attach exactly once
+    }
+}
+```
+
+`set` is for a brand-new node, or for replacing a key with a freshly-built object.
+Re-setting a fetched node never fails on the first attach nor on a fresh-process
+`get`->`set` (the node loads detached), so the error stays hidden until the node is
+resident in a long-running server: it surfaces in production, not one-shot local runs.
 
 ## Tests with `Assert`
 

@@ -133,8 +133,9 @@ Started by `greycat serve` / `greycat dev`. Routes:
 
 | Route                         | Purpose                                                                                       |
 | ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `POST /`                      | JSON-RPC 2.0 entrypoint. `method` is `"<module>.<fn>"`. Body: `{jsonrpc, method, params, id}`. |
-| `POST /<module>::<fn>`        | Path-RPC. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type). |
+| `POST /`                      | JSON-RPC 2.0 entrypoint. `method` is the FQN with `.` separators: `"<module>.<fn>"`, or `"<module>.<Type>.<fn>"` for a static method. Body: `{jsonrpc, method, params, id}`. |
+| `POST /<module>::<fn>`        | Path-RPC to a free-standing function. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type). |
+| `POST /<module>::<Type>::<fn>`| Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`. |
 | `GET /files/...`              | Read from `<project>/files/`. Per-user subdirectory + ACL.                                    |
 | `POST/PUT /files/...`         | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.     |
 | `GET /...` (anything else)    | Static assets from `<project>/webroot/`. Unknown paths return 404 — no automatic SPA fallback. |
@@ -219,7 +220,7 @@ If the user explicitly asks for `--user=<id>` for a one-off local test, fine; ne
 The scheduler lives in `Scheduler::*` (stdlib `runtime.gcl`):
 
 ```gcl
-Scheduler::add(my_fn, FixedPeriodicity { every: 5min }, null);
+Scheduler::add(my_fn, FixedPeriodicity { every: 5min }, null);  // null opts => runs now, then every 5min
 Scheduler::list();                           // every scheduled task
 Scheduler::activate(my_fn);                  // resume
 Scheduler::deactivate(my_fn);                // pause without removing
@@ -237,6 +238,15 @@ Periodicities:
 | `YearlyPeriodicity`   | On `DateTuple`s within a year.                                       |
 
 `PeriodicOptions { start, max_duration, ... }` further constrains when a task may run.
+
+**`immediate` defaults to `true`.** Passing `null` options (or `immediate: true`) runs the task once right away, then on the periodicity. `main()` itself runs as a task on `serve` boot, so the common "do the work on boot, then every N min" shape double-fires: if `main` calls the same graph-mutating function directly AND registers it with an immediate run, the two executions race and their writes hit the same nodes -> `concurrent modifications`. Let `main` own the initial run and disable the immediate fire:
+
+```gcl
+fn main() {
+    refresh();   // initial run, inside main's task
+    Scheduler::add(refresh, FixedPeriodicity { every: 15min }, PeriodicOptions { immediate: false });
+}
+```
 
 Inside a task: `Task::id()`, `Task::parentId()`, `Task::expected_steps(n)`, `Task::add_steps(k)`, `Task::no_history(true)` to opt out of the history log.
 
