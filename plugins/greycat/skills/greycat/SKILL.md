@@ -200,8 +200,8 @@ var g = geo { 49.6, 6.1 };        // (lat, lng)
 // Array literal sugar: [..] is sugar for Array<inferred>{..}.
 var xs = [1, 2, 3];               // Array<int>
 
-// Tuple sugar: (a, b) is sugar for Tuple<T, U>{a, b}.
-var pair = (1, "hi");             // Tuple<int, String>
+// Tuple sugar: (a, b) is sugar for Tuple<any?, any?>{a, b}.
+var pair = (1, "hi");             // Tuple<any?, any?>
 
 // Node literals wrap a payload:
 var n = node<User> { User { id: 1, name: "alice", password_hash: "" } };

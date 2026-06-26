@@ -108,10 +108,12 @@ take_ints([1, "x"]);          // analyzer ERROR — literal infers as Array<any?
 ### Tuple literal
 
 ```gcl
-var pair = (1, "hi");               // Tuple<int, String>
-var pair2: Tuple<int, String> = (1, "hi");
+var pair = (1, "hi");               // Tuple<any?, any?>
+var pair2: Tuple<any?, any?> = (1, "hi");
 pair.x;   pair.y;
 ```
+
+Tuple literal are always created as Tuple<any?, any?> and do not infer generic type based on x and y values
 
 ### Node-tag literals
 
