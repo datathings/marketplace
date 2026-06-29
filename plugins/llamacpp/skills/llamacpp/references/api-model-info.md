@@ -51,7 +51,13 @@ Get the output embedding dimension.
 ```c
 int32_t llama_model_n_layer(const struct llama_model * model);
 ```
-Get the number of layers in the model.
+Get the number of effective layers in the model (excludes NextN/MTP layers).
+
+### llama_model_n_layer_nextn
+```c
+int32_t llama_model_n_layer_nextn(const struct llama_model * model);
+```
+Get the number of NextN (Multi-Token Prediction / MTP) layers. These are the speculative next-token prediction layers used by MTP-capable architectures such as DeepSeek V3/V4, GLM, Qwen3.5-MoE, and Step3.5. Returns 0 for models without MTP layers. The total layer count is `llama_model_n_layer()` + this value.
 
 ### llama_model_n_head
 ```c

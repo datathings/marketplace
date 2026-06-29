@@ -66,13 +66,13 @@ For detailed API documentation, the complete API is split across 6 files for eff
 **API Files:**
 
 - **[api-core.md](references/api-core.md)** (310 lines) - Initialization, parameters, model loading, quantization structs
-- **[api-model-info.md](references/api-model-info.md)** (223 lines) - Model properties, architecture detection, metadata enums
+- **[api-model-info.md](references/api-model-info.md)** (229 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (419 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (412 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 196 active functions (b9704) across 6 organized files
+**Total:** 197 active functions (b9840) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,252 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,258 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,16 +157,17 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b9704
+## What's New in b9840
 
-**b9704** is an additive release (from b9246) — no functions added or removed. The public C API gained two `llama_context_params` fields and deprecated one function:
+**b9840** is an additive release (from b9704) — one function added, none removed. The public C API gained a single model-introspection function:
 
-**New `llama_context_params` fields:**
-- `n_outputs_max` (`uint32_t`) — max outputs in a ubatch (0 = `n_batch`). Cap it to reserve less output VRAM when you read only a few logits/embeddings per batch (e.g. one output per sequence during generation).
-- `ctx_other` (`struct llama_context *`) [EXPERIMENTAL] — a source/target/parent context for sharing inference results or `llama_memory` (KV cache) between two contexts; used by MTP setups such as Gemma4 MTP.
+**New function:**
+- `llama_model_n_layer_nextn()` — returns the number of NextN (Multi-Token Prediction / MTP) layers in the model. These speculative next-token prediction layers power MTP-capable architectures such as DeepSeek V3/V4, GLM, Qwen3.5-MoE, and Step3.5. Returns 0 for non-MTP models. The total layer count equals `llama_model_n_layer()` (effective layers) + this value.
 
-**Deprecated:**
-- `llama_set_warmup()` — perform warmup runs manually instead. It changed graph topology with MoE models (causing extra reallocations) and will be removed in a future release.
+**Recent (added in b9704) [EXPERIMENTAL]:**
+- `llama_context_params.n_outputs_max` (`uint32_t`) — max outputs in a ubatch (0 = `n_batch`). Cap it to reserve less output VRAM when you read only a few logits/embeddings per batch (e.g. one output per sequence during generation).
+- `llama_context_params.ctx_other` (`struct llama_context *`) — a source/target/parent context for sharing inference results or `llama_memory` (KV cache) between two contexts; used by MTP setups such as Gemma4 MTP.
+- `llama_set_warmup()` deprecated — perform warmup runs manually instead. It changed graph topology with MoE models (causing extra reallocations) and will be removed in a future release.
 
 **Still recent (added in b9246) [EXPERIMENTAL]:**
 - Multi-Token Prediction: `enum llama_context_type` (`LLAMA_CONTEXT_TYPE_DEFAULT`/`LLAMA_CONTEXT_TYPE_MTP`) + `llama_context_params.ctx_type`
