@@ -133,9 +133,9 @@ typedef struct {
 | `gc_host__global_allocator` | `gc_allocator_t *gc_host__global_allocator()` | Convenience: same as `gc_host__allocator(gc_host__get_global())`. |
 | `gc_host__program` | `const gc_program_t *gc_host__program(const gc_host_t *host)` | Get the program from the host. |
 | `gc_host__scheduler` | `gc_scheduler_t *gc_host__scheduler(gc_host_t *self)` | Get the host's periodic scheduler. |
-| `gc_host__spawn_task` | `bool gc_host__spawn_task(gc_host_t *self, u32_t fn_off, u32_t user_id, u64_t roles_flags, i64_t *created_task_id)` | Spawn a new task (no arguments). Returns `false` when the queue is full. |
+| `gc_host__spawn_task` | `bool gc_host__spawn_task(gc_host_t *self, u32_t fn_off, u32_t user_id, u64_t user_permissions, i64_t *created_task_id)` | Spawn a new task (no arguments). Returns `false` when the queue is full. |
 | `gc_host__spawn_task_with_args` | `bool gc_host__spawn_task_with_args(gc_host_t *self, u32_t fn_off, const char *args_payload, u64_t args_payload_len, gc_format_t args_format, u32_t user_id, u64_t roles_flags, i64_t *created_task_id, gc_buffer_t *extra_buffer)` | Spawn a new task with serialized arguments. |
-| `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, i64_t task_id)` | Cancel a running or queued task. |
+| `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, i64_t task_id, u32_t requester_id, u64_t requester_permissions, gc_task_t *out_task)` | Cancel a running or queued task. Thread-safe. `requester_id`/`requester_permissions` identify the caller (for permission checks); `out_task` is optional and, if non-NULL, receives a copy of the cancelled parent task when found. |
 | `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, i64_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
 
@@ -169,7 +169,7 @@ my_state_t *state = gc_alloc__calloc(galloc, sizeof(my_state_t));
 
 #### Spawning a task with no arguments
 
-`gc_host__spawn_task()` queues a function (identified by its program offset `fn_off`) for execution under a given `user_id` and role flags. It writes the new task id into `created_task_id` and returns `false` when the task queue is full.
+`gc_host__spawn_task()` queues a function (identified by its program offset `fn_off`) for execution under a given `user_id` and permission mask (`user_permissions`). It writes the new task id into `created_task_id` and returns `false` when the task queue is full.
 
 ```c
 gc_host_t *host = gc_host__get_global();
@@ -207,7 +207,7 @@ if (!ok) {
 
 #### Querying and cancelling a task
 
-`gc_host__get_task_status()` fills a `gc_task_status_t` and returns `false` if the task id is unknown. `gc_host__cancel_task()` cancels a queued or running task.
+`gc_host__get_task_status()` fills a `gc_task_status_t` and returns `false` if the task id is unknown. `gc_host__cancel_task()` cancels a queued or running task; it is thread-safe and takes the requester's id + permission mask (for the permission check), plus an optional `gc_task_t *out_task` that receives a copy of the cancelled parent task when found (pass `NULL` to ignore it).
 
 ```c
 gc_host_t *host = gc_host__get_global();
@@ -217,7 +217,8 @@ if (gc_host__get_task_status(host, task_id, &status)) {
     switch (status) {
     case gc_task_status_running:
     case gc_task_status_waiting:
-        gc_host__cancel_task(host, task_id);
+        // 1u = boot/system requester, UINT64_MAX = all permissions, NULL = ignore cancelled task copy
+        gc_host__cancel_task(host, task_id, 1u, UINT64_MAX, NULL);
         break;
     case gc_task_status_ended:
     case gc_task_status_error:

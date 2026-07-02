@@ -41,7 +41,7 @@ typedef struct {
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_array__init` | `void gc_array__init(gc_array_t *self, u32_t capacity, const gc_machine_t *ctx)` | Initialize the array with a given capacity (allocates storage via the call's allocator). |
+| `gc_array__ensure_capacity` | `void gc_array__ensure_capacity(gc_array_t *self, u32_t capacity, const gc_machine_t *ctx)` | Grow the backing storage to hold at least `capacity` slots (rounded up to a power of two, floor `GC_ARRAY_INITIAL_CAPACITY`). No-op if already large enough; never shrinks. On a freshly created array this performs the initial allocation. |
 | `gc_array__add_slot` | `bool gc_array__add_slot(gc_array_t *self, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Append an element to the end. Returns `false` on error. |
 | `gc_array__set_slot` | `bool gc_array__set_slot(gc_array_t *self, u32_t offset, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Set the element at a given index. |
 | `gc_array__get_slot` | `bool gc_array__get_slot(const gc_array_t *self, u32_t offset, gc_slot_t *value, gc_type_t *type)` | Get the element at a given index. Returns `false` if out of bounds. |
@@ -49,14 +49,15 @@ typedef struct {
 | `gc_array__remove_all` | `void gc_array__remove_all(gc_array_t *self, gc_machine_t *ctx)` | Remove all elements from the array. |
 | `gc_array__swap` | `bool gc_array__swap(gc_array_t *self, u32_t i, u32_t j)` | Swap two elements by index. |
 | `gc_array__sort` | `void gc_array__sort(gc_array_t *self, bool asc, gc_slot_tuple_u32_t field, gc_machine_t *ctx)` | Sort the array. `field` specifies a sub-field to sort by (for object arrays). |
+| `gc_array__fill` | `bool gc_array__fill(gc_array_t *self, gc_slot_t value, gc_type_t value_type, u32_t size, gc_machine_t *ctx)` | Clear the array, then fill it with `size` copies of `value` (objects deep-cloned via `gc_object__clone`, primitives copied by value). Returns `false` if a clone/insert fails, leaving the array partially filled. |
 
 ### Usage Examples
 
-**Initialize and append elements** — `gc_array__init` allocates storage using the call's allocator; `gc_array__add_slot` appends with a value + type tag. Pattern from building a numeric array:
+**Initialize and append elements** — `gc_array__ensure_capacity` allocates storage using the call's allocator; `gc_array__add_slot` appends with a value + type tag. Pattern from building a numeric array:
 
 ```c
 // 'arr' is a freshly created Array object (e.g. via gc_machine__create_object)
-gc_array__init(arr, nb, ctx);                 // nb = desired capacity
+gc_array__ensure_capacity(arr, nb, ctx);      // nb = desired capacity
 for (i64_t i = 0; i < nb; i++) {
     gc_array__add_slot(arr,
         (gc_slot_t) {.i64 = some_int_value},  // value as a slot
@@ -133,7 +134,7 @@ gc_array__sort(array_result, true,
 **Overwrite an existing slot** with `gc_array__set_slot` (used when filling a pre-sized array by index rather than appending):
 
 ```c
-gc_array__init(arr, fields_size, ctx);
+gc_array__ensure_capacity(arr, fields_size, ctx);
 for (u32_t i = 0; i < fields_size; i++) {
     gc_unused bool cannot_fail =
         gc_array__set_slot(arr, i, (gc_slot_t) {.tu32 = tu32}, gc_type_field, ctx);
@@ -173,7 +174,7 @@ typedef struct {
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `gc_core_map_INITIAL_CAPACITY` | 16 | Default initial capacity |
+| `GC_MAP_INITIAL_CAPACITY` | 16 | Default initial capacity |
 
 ### Functions
 
@@ -204,7 +205,7 @@ gc_map__set(map,
             ctx);
 ```
 
-When no capacity is known up front, pass `gc_core_map_INITIAL_CAPACITY`; `gc_map__init` also auto-runs on the first `gc_map__set` if `capacity` is still 0.
+When no capacity is known up front, pass `GC_MAP_INITIAL_CAPACITY`; `gc_map__init` also auto-runs on the first `gc_map__set` if `capacity` is still 0.
 
 #### Look up a value and branch on its type
 

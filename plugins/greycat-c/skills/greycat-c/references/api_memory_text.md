@@ -697,6 +697,7 @@ gc_object__field_to_type(field)
 | `gc_object__declare_dirty` | `void gc_object__declare_dirty(gc_object_t *self)` | Mark the object as modified (for persistence layer) |
 | `gc_object__is_instance_of` | `bool gc_object__is_instance_of(const gc_object_t *self, u32_t of_type, gc_machine_t *ctx)` | Check if the object is an instance of a given type (supports inheritance) |
 | `gc_object__finalize` | `void gc_object__finalize(gc_object_t *self, gc_machine_t *ctx)` | Finalize (destroy) the object |
+| `gc_object__clone` | `gc_object_t *gc_object__clone(gc_object_t *self, gc_machine_t *ctx)` | Deep-clone `self`, returning a new (marked) object; the caller owns the mark and must `gc_object__un_mark` it. |
 
 > To create an object, use `gc_machine__create_object(ctx, type_id)` (or `gc_machine__create_return_type_object(ctx)`).
 

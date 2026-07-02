@@ -336,6 +336,7 @@ The `gc_machine_t` is the execution context passed to all native functions. It p
 typedef struct {
     const gc_program_t *prog;
     gc_allocator_t *allocator;  // Per-call allocator (see gc/alloc.h)
+    bool flattening;            // Internal: set while the machine is flattening (serializing) a value graph
 } gc_ctx_t;
 ```
 
@@ -388,7 +389,7 @@ typedef struct {
 |----------|-----------|-------------|
 | `gc_machine__call_function` | `bool gc_machine__call_function(gc_machine_t *ctx, const gc_program_function_t *fn, gc_slot_t self, gc_type_t self_type, const gc_slot_t *params, const gc_type_t *params_type, u32_t nb_params, gc_slot_t *marked_res, gc_type_t *marked_res_type)` | Synchronously invoke `fn` (native or bytecode) from a C context with the given `self` and `params`. Always writes the result through `*marked_res` / `*marked_res_type`; the bool return is the Result<T, E> Ok/Err discriminator. On failure `*marked_res` is an `Error` object (type `gc_core_Error`) and `*marked_res_type` is `gc_type_object`; in both branches `ctx`'s error state is left clean. The caller owns one mark on `*marked_res` when it is an object and must call `gc_object__un_mark` when done. |
 | `gc_machine__push_function` | `void gc_machine__push_function(gc_machine_t *ctx, const gc_program_function_t *fn, gc_slot_t self, gc_type_t self_type, const gc_task_t *task)` | Push a function frame onto the execution stack |
-| `gc_machine__load` | `gc_type_t gc_machine__load(gc_machine_t *ctx, char *data, u32_t len, gc_slot_t *value)` | Deserialize a slot from raw binary data |
+| `gc_machine__load` | `gc_type_t gc_machine__load(const gc_machine_t *ctx, char *data, u32_t len, gc_slot_t *value)` | Deserialize a slot from raw binary data |
 | `gc_machine__lru_add` | `void gc_machine__lru_add(gc_machine_t *ctx, gc_block_t *page)` | Add a block to the LRU cache |
 
 ### Usage Examples
@@ -1009,6 +1010,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_type__get_generic_id(type)` | Get the generic type ID. |
 | `gc_program_type__configure(prog, type_id, header_bytes, native_finalize)` | Configure native type (header size and destructor). |
 | `gc_program_type__abi_type_id(prog, type_id)` | Get the ABI type ID for a program type. |
+| `gc_program__is_type(prog, source_type_id, target_type_id)` | Return `true` if `source_type_id` is (or is a monomorphized form of) `target_type_id`. |
 
 #### Function Introspection
 

@@ -72,7 +72,7 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 197 active functions (b9840) across 6 organized files
+**Total:** 197 active functions (b9859) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -157,9 +157,9 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,613 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b9840
+## What's New in b9859
 
-**b9840** is an additive release (from b9704) — one function added, none removed. The public C API gained a single model-introspection function:
+**b9859** carries an unchanged public C API since **b9840** (b9840→b9859 was backend-only — CUDA/OpenCL/Vulkan/HIP kernels, WebGPU NVFP4, server/UI fixes — no `include/` header changes). The last API addition (in b9840, from b9704) was a single model-introspection function:
 
 **New function:**
 - `llama_model_n_layer_nextn()` — returns the number of NextN (Multi-Token Prediction / MTP) layers in the model. These speculative next-token prediction layers power MTP-capable architectures such as DeepSeek V3/V4, GLM, Qwen3.5-MoE, and Step3.5. Returns 0 for non-MTP models. The total layer count equals `llama_model_n_layer()` (effective layers) + this value.
