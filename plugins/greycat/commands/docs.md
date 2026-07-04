@@ -16,7 +16,7 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit
 
 ### Detect features
 \`\`\`bash
-# Frontend: frontend/ (or app/) directory, or lit / @shoelace-style/shoelace / @greycat/web in package.json
+# Frontend: frontend/ directory, or lit / @shoelace-style/shoelace / @greycat/web in package.json
 # Tests:    test/ directory
 # Libs:     @library in project.gcl
 # Auth:     @permission / @role in project.gcl
@@ -30,24 +30,24 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit
 grep "@library" project.gcl                              # versions
 grep "@permission\|@role" project.gcl                    # auth
 grep -rn "^type [A-Z]" src/ --include="*.gcl"            # models
-grep -rn "^abstract type.*Service" src/ --include="*.gcl"  # services
-grep -rn "@expose" src/ --include="*_api.gcl"            # endpoints
+grep -rnE "^abstract type.*Service|^(static )?fn [a-z_]" src/ --include="*.gcl"  # services (abstract-type OR free fns)
+grep -rn "@expose" src/ --include="*.gcl"                # endpoints (@expose may live in src/api.gcl, not only *_api.gcl)
 \`\`\`
 
 ### Sections to generate
 
 1. **Title + 1-line description**
-2. **Overview** — tech stack (GreyCat version; frontend stack if any: **Lit + TypeScript + Shoelace + Lucide** on Vite + `@greycat/web`; note i18next/maplibre-gl/Vitest if present), key features (counts: N types, M endpoints, auth?, search?, MCP?)
-3. **Quick Start** — prerequisites, `git clone`, `greycat install`, `pnpm install` (if frontend), `greycat serve`, `pnpm dev`, `greycat run import`. If frontend: `pnpm lighthouse` to audit performance/SEO.
+2. **Overview** — tech stack (GreyCat version; frontend stack if any: **Lit + TypeScript + Shoelace + lucide-static** on VitePlus (`vp`) + `@greycat/web`; note i18next/maplibre-gl/Vitest if present), key features (counts: N types, M endpoints, auth?, search?, MCP?)
+3. **Quick Start** — prerequisites, `git clone`, `greycat install`, `pnpm install` (if frontend), `greycat serve` (or `greycat dev` to also run the frontend watcher), `greycat run import`. If frontend: `pnpm lighthouse` to audit performance/SEO.
 4. **Architecture** — data model (auto-extracted types), service layer (list services), API endpoints table (`| Endpoint | Permission | Description |`)
-5. **Development** — project structure (see CLAUDE.md template), common commands (`greycat-lang lint/fmt`, `greycat build/test/serve/run/codegen`, `pnpm dev/build/lint/test`, `pnpm gen`, `pnpm lighthouse`), workflow (lint after each change, regen ts after backend types)
+5. **Development** — project structure (see CLAUDE.md template), common commands (`greycat-lang lint/fmt`, `greycat build/test/serve/run/codegen`, `greycat dev`, `greycat codegen ts`, `pnpm lighthouse`), workflow (lint after each change, `greycat codegen ts` after backend types)
 6. **Testing** — `greycat test`, current coverage stats
 7. **Configuration** — `.env` vars, library versions
 8. **Authentication** (if detected) — roles, permissions, `SecurityService` usage
 9. **API Documentation** — link to API.md
 10. **MCP Server** (if detected) — link to MCP.md
 11. **Database** — dev reset (`rm -rf gcdata && greycat run import`), backup (`tar -czf gcdata-backup.tar.gz gcdata/`)
-12. **Troubleshooting** — lint errors (missing imports, type mismatch), server won't start (port, gcdata integrity), frontend API errors (`greycat codegen ts`, vite proxy)
+12. **Troubleshooting** — lint errors (missing imports, type mismatch), server won't start (port, gcdata integrity), frontend API errors (regenerate the client with `greycat codegen ts`; a stale ABI returns HTTP 422). `greycat dev` serves API + assets on one origin, so there's no proxy to configure.
 13. **Project Statistics** — auto-generated counts
 
 ### Content rules
@@ -60,7 +60,7 @@ grep -rn "@expose" src/ --include="*_api.gcl"            # endpoints
 
 ### Extract endpoints
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 20
+grep -rn "@expose" src/ --include="*.gcl" -A 20        # @expose may live in src/api.gcl, not only *_api.gcl
 \`\`\`
 
 For each: function name, parameters (with types), return type, `@permission`, description from `///` comments.
@@ -69,27 +69,27 @@ For each: function name, parameters (with types), return type, `@permission`, de
 
 ```markdown
 # API Documentation
-Base URL: `http://localhost:8080/api`
+Base URL: `http://localhost:8080`   (no `/api` prefix — GreyCat serves RPC at the root)
 
 ## Table of Contents
 [Auto-generate per category]
 
 ## [Category]
 ### [Function Name]
-**Endpoint**: `POST /api/<module>::<fn>`
+**Endpoint**: `POST /<module>::<fn>`   (body: JSON array of positional args)
 **Permission**: `<level>`
 **Description**: ...
 **Parameters**: | Name | Type | Required | Description |
 **Returns**: ...
 **Example**:
 \`\`\`typescript
-await axios.post('/api/<module>::<fn>', [param1, param2]);
+await axios.post('/<module>::<fn>', [param1, param2]);
 \`\`\`
 **Error cases**: ...
 ```
 
 ### Type definitions section
-Include all `@volatile` types used in API responses with field tables.
+List the `@volatile` `…View` types returned by the API with field tables.
 
 ### Error handling
 Typed-error envelope (recommended):
@@ -99,16 +99,18 @@ Typed-error envelope (recommended):
 Clients branch on `code`, not `message`.
 
 ### Routing conventions
-- Use explicit `/<module>::<fn>` from clients — bare alias is fragile, disappears on name collision.
-- `@expose static fn` on abstract types: ONLY `/<module>::T::fn`.
+- Path-RPC: `POST /<module>::<fn>` (module = source file basename), body = JSON array of positional args.
+- `@expose static fn` on a type: three segments — `POST /<module>::<Type>::<fn>` (e.g. `/runtime::Identity::current_id`).
+- A custom `@expose("path")` exposes at that exact arbitrary path — document whatever path the code declares.
+- JSON-RPC alternative: `POST /` with `{ "method": "<module>.<fn>", "params": [...] }` (dots, not `::`).
 - `/runtime::` is a module name, not a routing prefix.
 
 ### Long-running / async endpoints
-20s TTL default. For long endpoints, invoke as task:
+20s request TTL (the `--request_ttl` flag) by default. To run a call as a background task, set the `task: true` request header — the server returns the `task_id` immediately:
 \`\`\`bash
-curl -H "task:''" -X POST -d '[]' http://localhost:8080/<module>::<fn>
-curl -X POST -d '[42, "task-uuid"]' http://localhost:8080/runtime::Task::info  # poll
-GET /files/<user_id>/tasks/<task_id>/result.gcb?json                            # result
+curl -H "task: true" -X POST -d '[]' http://localhost:8080/<module>::<fn>   # returns task_id
+# poll status from GCL/RPC via Task::is_running(task_id) / Task::running() / Task::history(offset, max)
+GET /files/<user_id>/tasks/<task_id>/result.gcb?json                        # fetch result once ended
 \`\`\`
 States: `empty → waiting → running → await → ended | error | cancelled | ended_with_errors`.
 
@@ -130,21 +132,19 @@ Model Context Protocol — AI assistants call GreyCat functions as tools.
 
 ## Available Tools
 [For each: name, 1-2 sentence description from ///, parameters with types, returns, example]
+Each tool is a function tagged `@tag("mcp")`. `/// @param <name> <desc>` doc-comment lines surface as the tool's argument schema.
 
 ## Enabling
-- Built-in: `greycat serve --enable-mcp` (stdio: `greycat mcp`, http: `/mcp`)
-- Claude Desktop: add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-  \`\`\`json
-  { "mcpServers": { "<project>": { "command": "greycat", "args": ["mcp"], "cwd": "/path" } } }
-  \`\`\`
+- A served project (`greycat serve` / `greycat dev`) exposes MCP on the same HTTP port — no separate flag or subcommand. `tools/list` returns every `@tag("mcp")` function; `tools/call` invokes one with named arguments matching the function's parameter names.
+- To add a tool, tag the function: `@tag("mcp")` (stack with `@tag("openapi")` to also include it in the OpenAPI spec).
 
 ## Testing
-- `npm install -g @modelcontextprotocol/inspector` → `mcp-inspector greycat mcp`
-- HTTP: `curl -X POST .../mcp/tools/call -d '{"name":"tool","arguments":{...}}'`
+- Call the served MCP endpoint directly with `tools/list` / `tools/call`, or point an MCP client at the running server's URL.
+- Named arguments match the function's parameter names; `@permission` still gates each call.
 
 ## Security
-- MCP tools respect `@permission` decorators
-- Only expose safe read operations as tools
+- MCP tools respect `@permission` decorators (a call is rejected if the caller lacks the permission)
+- Only tag safe read operations with `@tag("mcp")`
 - Log MCP usage for audit
 ```
 
@@ -156,7 +156,7 @@ Generate `openapi.yaml` (OpenAPI 3.0):
 \`\`\`yaml
 openapi: 3.0.0
 info: { title: <name>, version: <ver> }
-servers: [{ url: http://localhost:8080/api }]
+servers: [{ url: http://localhost:8080 }]
 paths:
   /<module>::<fn>:
     post:

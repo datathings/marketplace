@@ -16,30 +16,31 @@ allowed-tools: Bash, Read, Grep, Glob
 
 ### 1.1 Permission decorator
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -B 1 -A 5
+grep -rn "@expose" src/ --include="*.gcl" -B 1 -A 5
+# scan all .gcl — @expose may live in src/api.gcl, not only *_api.gcl
 \`\`\`
 For each `@expose`: verify `@permission` exists, level matches operation, no `"public"` on mutations.
 **Severity**: CRITICAL when missing on sensitive ops.
 
 ### 1.2 Input validation
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 10 | grep "fn.*String"
+grep -rn "@expose" src/ --include="*.gcl" -A 10 | grep "fn.*String"
 \`\`\`
 Verify: length limits, format checks (email/URL), no SQL/cmd injection, no XSS. Throw `ValidationError { code, message, field }` on bad input.
 **Severity**: HIGH for missing checks on String params (DoS / injection risk).
 
 ### 1.3 Sensitive data exposure
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 10 | grep -E "User|Password|Token|Secret|Key"
+grep -rn "@expose" src/ --include="*.gcl" -A 10 | grep -E "User|Password|Token|Secret|Key"
 \`\`\`
 Returning full `User` (incl. `passwordHash`) leaks secrets. Fix: create `@volatile UserView` without sensitive fields.
 **Severity**: CRITICAL.
 
 ### 1.4 Auth bypass on mutations
 \`\`\`bash
-grep -rn '@permission("public")' src/ --include="*_api.gcl" -A 10 | grep -E "fn (create|update|delete|set|modify|remove)"
+grep -rn '@permission("public")' src/ --include="*.gcl" -A 10 | grep -E "fn (create|update|delete|set|modify|remove)"
 \`\`\`
-Mutations with `@permission("public")` are critical bugs. Require `app.user` or higher.
+Mutations with `@permission("public")` are critical bugs. Drop `@permission("public")` so it falls back to the authenticated `api` default, or use `@permission("admin")` for privileged mutations.
 
 ---
 
@@ -52,14 +53,14 @@ Fix: return `Paginated<View>` with `items / total / offset / limit / hasMore`.
 
 ### 2.2 Expensive nested loops
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 50 | grep -E "for.*for"
+grep -rn "@expose" src/ --include="*.gcl" -A 50 | grep -E "for.*for"
 \`\`\`
 O(N*M) loops resolving thousands of nodes will TTL. Fix: cache (compute during import → store node), filter, or move to `PeriodicTask`.
 **Severity**: HIGH.
 
 ### 2.3 N+1 query pattern
 \`\`\`bash
-grep -rn "for.*in.*" src/ --include="*_api.gcl" -A 5 | grep "\.resolve()"
+grep -rn "for.*in.*" src/ --include="*.gcl" -A 5 | grep "\.resolve()"
 \`\`\`
 Resolving related nodes inside a loop = 1 + N queries. Fix: batch resolve, embed in view, or build a deduplicated map first.
 **Severity**: HIGH.
@@ -74,13 +75,13 @@ Every `@expose` must wrap body in `try { } catch (ex) { error(...); throw ex; }`
 
 ### 3.2 Null pointer risks
 \`\`\`bash
-grep -rn "\.resolve()\." src/ --include="*_api.gcl"
+grep -rn "\.resolve()\." src/ --include="*.gcl"
 \`\`\`
 `x.resolve().author.resolve().name` with no checks → cryptic runtime errors. Fix: explicit null checks + typed `NotFoundError`, or optional chaining.
 
 ### 3.3 Untyped (string) throws
 \`\`\`bash
-grep -rnE 'throw\s+"' src/ --include="*_api.gcl"
+grep -rnE 'throw\s+"' src/ --include="*.gcl"
 \`\`\`
 `throw "string"` has no structured shape; clients can't branch on code. Replace with `throw NotFoundError { code, message, id }` from `src/errors.gcl`.
 **Severity**: HIGH.
@@ -94,19 +95,19 @@ grep -rnE 'throw\s+"' src/ --include="*_api.gcl"
 
 ### 4.1 Missing @volatile on response types
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //; s/ {.*//' | sort -u
+grep -rn "@expose" src/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //; s/ {.*//' | sort -u
 \`\`\`
-For each return type used by API: verify type has `@volatile` decorator. Without it, the type gets persisted unnecessarily.
+For each return type used by API: verify type has `@volatile` decorator. Marks the response DTO as transient/non-persistable — a guard so an API-shaped type is never accidentally written into the graph.
 
 ### 4.2 `View` suffix convention
 \`\`\`bash
-grep -rnE '@volatile' src/ --include="*_api.gcl" -A 1 | grep -E 'type [A-Z][a-zA-Z]*[^V][^i][^e][^w]\b' || true
+grep -rnE '@volatile' src/ --include="*.gcl" -A 1 | grep -E 'type [A-Z][a-zA-Z]*[^V][^i][^e][^w]\b' || true
 \`\`\`
 API response types should end in `View` (`DocumentView`, not `DocumentResponse`).
 
 ### 4.3 Loose parameter types
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 10 | grep -E ": Object|: any"
+grep -rn "@expose" src/ --include="*.gcl" -A 10 | grep -E ": Object|: any"
 \`\`\`
 Define specific `@volatile` input types instead of `Object`/`any`.
 
@@ -119,7 +120,7 @@ Verbs only: `getX`, `createX`, `updateX`, `deleteX`, `searchX`, `listX`. No bare
 
 ### 5.2 Parameter naming — avoid bare `id`/`ids`
 \`\`\`bash
-grep -rnE 'fn [a-zA-Z_]+\([^)]*\b(id|ids):\s*' src/ --include="*_api.gcl"
+grep -rnE 'fn [a-zA-Z_]+\([^)]*\b(id|ids):\s*' src/ --include="*.gcl"
 \`\`\`
 Use `documentId`, `partyIds` over bare `id`/`ids` so the generated TS SDK is self-documenting. (Exception: `caseNumber`, `query`, `email` etc. are fine.)
 
@@ -154,11 +155,11 @@ grep -rnE '@permission\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)' src/ --include="*.gcl"
 Argument must be a String: `@permission("public")`.
 **Severity**: CRITICAL — compile error.
 
-### 7.2 `@expose("alias")` ≠ function name
+### 7.2 `@expose("path")` custom route
 \`\`\`bash
-grep -rnE '@expose\("([^"]+)"\)' src/ --include="*_api.gcl" -A 2
+grep -rnE '@expose\("([^"]+)"\)' src/ --include="*.gcl" -A 2
 \`\`\`
-Aliases must match the function name (the TS SDK lookup in `project.d.ts` breaks silently otherwise).
+A custom `@expose("path")` string changes the route/RPC path, so clients and the generated SDK must call that exact path. Flag cases where the code or docs assume the default `<module>::<fn>` path but a custom alias overrides it.
 **Severity**: HIGH.
 
 ### 7.3 Bare-route reliance
@@ -173,9 +174,9 @@ Roles `@role("name", "perm1", ...)` belong in `project.gcl`.
 
 ### 7.5 Long endpoints vs 20s TTL
 \`\`\`bash
-grep -rnE '@expose' src/ --include="*_api.gcl" -A 30 | grep -E "for\s*\(.*in\s+|await\(|System::exec"
+grep -rnE '@expose' src/ --include="*.gcl" -A 30 | grep -E "for\s*\(.*in\s+|await\(|System::exec"
 \`\`\`
-`GREYCAT_REQUEST_TTL` defaults to 20s. Past it, the runtime kills the handler — **`try/catch` does NOT catch it**. Raise the env var, or move to task (`task:''` header + poll `/runtime::Task::info`).
+The request TTL (`--request_ttl` flag, `serve` only) defaults to 20s. Past it, the runtime kills the handler — **`try/catch` does NOT catch it**. Raise `--request_ttl`, or move to task (send the `task: true` header — the server returns the `task_id` immediately; poll status with `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_id>/tasks/<task_id>/result.gcb?json`).
 **Severity**: HIGH if endpoint can exceed 20s.
 
 ---

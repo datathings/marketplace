@@ -17,23 +17,20 @@ allowed-tools: Bash, Read, Grep, Glob, Write
 ⚠ Wipe `gcdata/` before clean runs — stale persistence causes startup failures and false results. Tests in the same module share state across `@test` fns (mutations visible to next within module).
 
 \`\`\`bash
-rm -rf gcdata
+rm -rf gcdata   # ⚠ destroys local graph data — dev only; never on a store you need
 greycat test
 \`\`\`
 
-**Exit codes**:
+**Exit codes** (documented):
 | Code | Meaning |
 |------|---------|
-| 0 | PASS (or no tests found) |
-| 2 | ERROR — compile failure (every test affected) |
-| 5 | FAIL — assertion failed |
-| 124 / 137 | TIMEOUT |
-| 139 | SEGFAULT (one crash kills suite) |
-| 134 | ABORT |
+| 0 | success — tests ran (or no tests found) |
+| 1 | generic CLI error (missing file, bad option) |
+| 2 | compile/load error — program not buildable (every test affected) |
 
-If `!= 0` and `!= 5`, coverage numbers are unreliable.
+If exit code is `2` (compile/load error), every test is affected and coverage numbers are unreliable. A process-level crash or timeout (segfault, killed) obviously invalidates the run too, even though GreyCat exposes no dedicated exit code for it.
 
-**Single test**: `greycat test <module>::<fn>`. **Cross-module helpers**: plain `fn` (not `private`) in `test/test_helpers.gcl`.
+**Single test**: `greycat test <test_fn_name>` — the arg is a `@test` function name (e.g. `greycat test test_echo`), not a `module::fn` path or file; omit to run all. **Cross-module helpers**: plain `fn` (not `private`) in `test/test_helpers.gcl`.
 
 ---
 
@@ -41,8 +38,9 @@ If `!= 0` and `!= 5`, coverage numbers are unreliable.
 
 ### Find code to cover
 \`\`\`bash
-grep -r "^abstract type.*Service" src/ --include="*.gcl"       # services
-grep -r "@expose" src/ --include="*_api.gcl" -A 2              # endpoints
+grep -r "^abstract type.*Service" src/ --include="*.gcl"       # services (abstract type convention)
+grep -rnE "^(static )?fn [a-z_]" src/ --include="*.gcl"        # free top-level fns (service logic may be plain fns, not only abstract type *Service)
+grep -r "@expose" src/ --include="*.gcl" -A 2                  # endpoints (@expose may live in src/api.gcl, not only *_api.gcl)
 grep -r "^type [A-Z]" src/ --include="*.gcl"                   # models
 \`\`\`
 

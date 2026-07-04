@@ -16,12 +16,12 @@ allowed-tools: Write, Read, Bash
 
 1. **Check CLAUDE.md exists** — if yes, ask to backup or cancel
 2. **Detect features**:
-   - Frontend: `frontend/` (or legacy `app/`) exists or `package.json` has `@greycat/web` / `lit` / `@shoelace-style/shoelace`
+   - Frontend: `frontend/` exists or `package.json` has `vite-plus` / `@greycat/web` / `lit` / `@shoelace-style/shoelace`
    - GreyCat version: parse `@library("std", ...)` from `project.gcl`
 3. **Check `.gitignore`** — create or append GreyCat entries if missing
 4. **Write CLAUDE.md** from the template below, customizing:
    - Replace `[One-line project description]`, `[version]`
-   - Remove frontend sections if no frontend (commands, stack, structure, coding style, testing, env, `gcRuntime` checklist line)
+   - Remove frontend sections if no frontend (commands, stack, structure, coding style, testing, env)
    - Keep all backend sections (always present)
 5. **Report**: list created files + next steps (replace placeholders, commit)
 
@@ -85,35 +85,39 @@ Use `Grep` to search for usages before removing types/functions/variables.
 \`\`\`bash
 # Backend
 greycat-lang lint              # Lint (after EVERY change!)
-greycat-lang fmt -p project.gcl  # Format all
+greycat-lang fmt               # Format (default write mode; --mode=check for a CI gate)
 greycat build/test/serve       # Build/test/serve (port 8080)
 greycat run [function]         # Run function (default: main)
 greycat codegen ts             # Generate project.d.ts
 greycat install                # Install libraries
 
-# Frontend (if exists) — Lit + Shoelace + lucide-static
-pnpm install/dev/build/lint/test
-pnpm gen                       # greycat codegen ts (after backend type/@expose changes)
-pnpm lighthouse                # audit served app; also :desktop / :ci
+# Frontend (if exists) — VitePlus + Lit + Shoelace + lucide-static
+vp install                     # install frontend deps (rolldown-based)
+vp build                       # build frontend/ -> webroot/ (add --watch for dev)
+greycat dev                    # build watcher + serve API and assets on one origin (:8080)
+greycat codegen ts             # regenerate project.d.ts after backend type/@expose changes
 \`\`\`
+
+> `vp` and pnpm are different layers, not alternatives: **pnpm** is the package manager (fetches deps), **`vp`** (VitePlus, rolldown/oxc) is the build toolchain that bundles `frontend/` → `webroot/`; `vp install` delegates to pnpm. Install `vp` once: `curl -fsSL https://vite.plus | bash`. Lighthouse: run the CLI against the served app (`greycat dev` first); add a script only if the project wants a CI gate.
 
 ---
 
 ## Stack
 
 - **Backend**: GreyCat [version] (GCL)
-- **Frontend** (if exists) — preferred stack, pin **exact latest** (no `^`/`~`):
-  - **Lit** (web components) — one `LitElement` per file, `@customElement`
+- **Frontend** (if exists) — the one prescribed stack:
+  - **VitePlus** (`vp` CLI + `vite-plus`) — toolchain; explicit `vite.config.ts`, no plugin. **MPA**: each route is a real page under `frontend/routes/`, URL == file path, no SPA router
+  - **Lit** in **light DOM** — one root `LitElement` per route, a component only for views reused across routes; `@customElement('app-…')`
   - **TypeScript** (`experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"`)
-  - **Shoelace** (`@shoelace-style/shoelace`) — UI kit (layout, cards, tabs, dialogs, date-picker)
-  - **Lucide** icons — `lucide` (tree-shakable) or `lucide-static` (inline SVG); native + self-hosted (no CDN)
-  - **Vite** + `@greycat/web/vite-plugin`; `@greycat/web` typed client; optional **chart.js** + **d3** (or **maplibre-gl** for maps) for data-viz
-  - **i18next** (+ language detector) if multi-locale; **Vitest** for tests
-  - **Lighthouse** (devDep) — `pnpm lighthouse` audits performance/SEO/accessibility/best-practices
+  - **Shoelace** (`@shoelace-style/shoelace`, `sl-*`) — atomic controls (button, input, dialog, tabs, date-picker)
+  - **`@greycat/web`** (`gui-*`) — rich/GreyCat-aware widgets (tables, charts, maps, `gui-object` forms, sign-in) + the typed SDK for every backend call
+  - **lucide-static** icons — prebuilt SVG strings inlined via Lit `unsafeSVG`; self-hosted, `currentColor` + `aria-hidden`, no CDN fetch
+  - **Theme**: `@greycat/web/greycat.css` (a Shoelace theme, dark by default) + `frontend/theme.css` (the `--app-*` tokens + `--sl-*` re-skin) imported **after** it
+  - **pnpm** as the package manager
 - **Libraries**: `@library("std", "[version]")`, `@library("explorer", "[version]")`
-- **Testing**: backend `@test`, frontend Vitest
+- **Testing**: backend `@test`
 
-**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json), source in `frontend/`, builds to `webroot/` (`emptyOutDir: false` — preserve `webroot/explorer/`). Use exact versions (no `^`/`~`); always check for newer releases when adding/upgrading deps. Optimize with Lighthouse (perf/SEO/a11y ≥ 90) and ship LLM-friendly SEO (see Frontend coding style).
+**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json), source entirely under `frontend/` (`frontend/routes/` pages, `frontend/components/` reused views, `frontend/public/` copied as-is, `frontend/theme.css`), builds to `webroot/` (`emptyOutDir: true`). `~` aliases `frontend/` in both `vite.config.ts` and `tsconfig.json`. `@greycat/web` is **not on npm** — pin it as a registry tarball URL (`https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz`) tracking the project's `std` branch; Shoelace/Lit are ordinary semver deps (Shoelace must satisfy `@greycat/web`'s peer range). Optimize with Lighthouse (perf/SEO/a11y ≥ 90) and ship LLM-friendly SEO (see Frontend coding style).
 
 ---
 
@@ -128,12 +132,15 @@ pnpm lighthouse                # audit served app; also :desktop / :ci
 │   ├── <feature>_reader.gcl   # CSV/JSON readers (optional)
 │   └── <feature>_writer.gcl   # Writers (optional)
 ├── test/<feature>_test.gcl
-├── frontend/                  # Lit + Shoelace + lucide-static source (if exists)
-│   ├── index.html             # SEO head (title, description, OG, JSON-LD, lang)
-│   ├── main.ts                # Shoelace themes + asset base path + mount root
-│   ├── icons.ts               # Lucide glyphs (lucide / lucide-static), no runtime fetch
-│   └── components/ pages/      # one LitElement per file, `app-*` custom elements
+├── frontend/                  # entire frontend (VitePlus + Lit + Shoelace, if exists)
+│   ├── routes/                # MPA pages — path == URL (index.html + index.ts per route)
+│   │   └── index.html         #   SEO head (title, description, OG, JSON-LD, lang); one app-* root
+│   ├── components/            # reusable light-DOM Lit views (imported as ~/components/x)
+│   ├── public/                # copied as-is into webroot/ (robots.txt, icons, llms.txt)
+│   ├── icons.ts               # lucide-static SVG strings, inlined via unsafeSVG (no runtime fetch)
+│   └── theme.css              # --app-* design tokens + Shoelace/GreyCat --sl-* re-skin
 ├── package.json / vite.config.ts / tsconfig.json   # Root level
+├── project.d.ts               # generated by `greycat codegen ts` (ambient gc.* types, gitignored)
 ├── webroot/                   # Built frontend + greycat explorer (gitignored)
 │   ├── robots.txt sitemap.xml site.webmanifest      # SEO discoverability
 │   └── llms.txt               # LLM-friendly Markdown site index
@@ -201,32 +208,33 @@ fn document(id: String): Document {
 
 **Naming**: snake_case fields, camelCase functions, `…View` suffix for `@volatile` API response types.
 
-### Frontend (Lit + Shoelace + lucide-static) — if exists
+### Frontend (VitePlus + Lit + Shoelace + lucide-static) — if exists
 
-Preferred stack: **Lit** + **TypeScript** + **Shoelace** + **Lucide** (`lucide`/`lucide-static`) on **Vite** + `@greycat/web`. Pin **exact latest** versions; check for newer releases when adding/upgrading. `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
+Prescribed stack: **Lit** (light DOM) + **TypeScript** + **Shoelace** (`sl-*`) + **`@greycat/web`** (`gui-*` widgets + typed SDK) on **VitePlus** (`vp`), **MPA** under `frontend/routes/`. `@greycat/web`'s own widgets are Lit, so the whole UI is web-components. Managed with **pnpm**.
 
-**⚠️ `gc` namespace shadow**: `@greycat/web`'s `gc` is shadowed by `@types/node`'s `var gc`. Use re-export:
+**⚠️ Init/login gate**: `gc.sdk.init()` loads the ABI over an authenticated endpoint — call it (no args) in the route root's `connectedCallback`; on throw, render a login form and call `gc.sdk.init({ auth: { username, password } })`. Only after it resolves are `gc.<module>.*` calls and `gui-*` tags usable.
 \`\`\`ts
-// frontend/gc-runtime.ts
-import * as gcRuntime from '@greycat/web';
-export { gcRuntime };
-// elsewhere:
-import { gcRuntime } from '~/gc-runtime';
-gcRuntime.project.MyType.create(...);
+// frontend/routes/index.ts
+import '@greycat/web/sdk';            // gc global, init, typed bindings — import gui-* components individually, not umbrella '@greycat/web'
+import '@greycat/web/greycat.css';    // the theme (dark by default)
+import '~/theme.css';                 // app --app-* tokens + --sl-* re-skin — AFTER greycat.css
+await gc.sdk.init();                  // then gc.project.* and gui-* are live
 \`\`\`
 
-**Codegen discipline**: re-run `greycat codegen ts` (`pnpm gen`) after every backend type/`@expose` change. Never hand-edit `project.d.ts`. Derive backend strings from codegen via `$fields` — never hard-code.
+**Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`; a stale ABI gets HTTP 422. Derive backend strings from the SDK (`gc.project.Status.active`, `.key`) — never hard-code.
 
-**Components (Lit)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. `@property()` for public inputs, `@state()` for internal state, `static styles = css\`…\``, `html\`…\`` templates. Charts (chart.js): create in `firstUpdated`, **destroy in `disconnectedCallback`**.
-**Shoelace**: import components **individually** (tree-shaking); load light+dark theme CSS and set the asset base path once at startup; app `styles.css` imported after so its tokens win.
-**Icons**: **`lucide`** (import only used glyphs) or **`lucide-static`** (inline via Lit `unsafeSVG`), `currentColor` + `aria-hidden` — native + self-hosted, no runtime/CDN fetch.
-**Services**: thin layer over the generated client + retry wrapper; types from `project.d.ts`.
-**State**: URL query params (shareable view state), localStorage (theme). **Styling**: CSS custom-property theme tokens (dark + light); no inline styles except dynamic values.
+**Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, `html\`…\`` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
+**Shoelace**: import components **individually** (tree-shaking). Do **not** import Shoelace's own `themes/*.css` — `greycat.css` is the theme; light mode is the `sl-theme-light` class on `<html>`.
+**Icons**: **`lucide-static`** (inline SVG via Lit `unsafeSVG`), `stroke="currentColor"` + `aria-hidden` — self-hosted, no runtime/CDN fetch.
+**Services**: thin layer over the generated SDK client; types from `project.d.ts`.
+**State**: URL query params (shareable view state), localStorage (theme). **Styling**: `--app-*` tokens in `frontend/theme.css` (dark + light); no hardcoded colors/sizes, no inline styles except dynamic values.
 **Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
 
-**Lighthouse (optimize perf/SEO/a11y/best-practices ≥ 90)**: serve, then `pnpm lighthouse` / `:desktop` / `:ci`. Tree-shake Shoelace, self-host icons (`lucide-static`), code-split routes, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
+**Lighthouse (optimize perf/SEO/a11y/best-practices ≥ 90 on BOTH mobile and desktop)**: `greycat dev` to serve, then run Lighthouse against the origin for each form factor — default is mobile (throttled, the harder gate), add `--preset=desktop`. Tree-shake Shoelace, self-host icons (`lucide-static`), lazy-load heavy widgets, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
 
-**LLM-friendly SEO (always)**: in `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Use semantic landmarks + heading order + `alt`/ARIA (keep crawlable content in light DOM or pre-render/SSR the SPA shell). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) at the web root — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
+**Responsive (always)**: `<meta name="viewport" content="width=device-width, initial-scale=1">`; fluid layout (grids / `clamp()` / media queries, no fixed-px page widths), tap targets ≥ 24–48px, no horizontal scroll at 360px.
+
+**LLM-friendly SEO (always)**: in each route's `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Semantic landmarks + heading order + `alt`/ARIA (light DOM keeps content crawlable). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) via `frontend/public/` — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
 
 ### Testing
 
@@ -243,14 +251,14 @@ gcRuntime.project.MyType.create(...);
 - Tests in same module share state across `@test` fns (mutations visible to next; NOT persisted to disk).
 - `greycat test` runs whole project in one process — SEGFAULT/compile error poisons all.
 - **Wipe `gcdata/` for clean runs**: `rm -rf gcdata && greycat test`.
-- Single test: `greycat test <module>::<fn>`. Module: `greycat test <dir>`.
+- Single test: `greycat test <test_fn_name>` (a bare `@test` function name, e.g. `greycat test test_echo`; omit to run all). It is NOT a file path or directory.
 - Cross-module helpers in `test/test_helpers.gcl` must be plain `fn` (not `private`).
 
-**Exit codes**: 0=pass · 2=compile error (all fail) · 5=assertion fail · 124/137=timeout · 139=segfault · 134=abort.
+**Exit codes**: `0`=success · `1`=generic CLI error (missing file / bad option) · `2`=compile/load error (all tests affected). A crash/timeout (segfault, killed) obviously invalidates the run.
 
 **Test isolation patterns**: `EmailService::disable()` kill switches, redirect writes via `Uuid::v4()` scratch paths, `skipHeavyImportersForTests()` flag, `cleanTearDir()` teardown.
 
-**Frontend**: Nested `describe`, fixtures for mocks, `render()` + `expect(screen.getByText(...))`.
+**Frontend**: no test framework is prescribed — rely on `greycat-lang`/`tsc` type-checking and the Lighthouse audit. Add a runner (e.g. Vitest) only if the project needs one.
 
 ---
 
@@ -311,14 +319,14 @@ Concrete methods on `abstract type` CANNOT be overridden — declare `abstract` 
 
 ## Concurrency & Tasks
 
-**Parallel `await` only fires inside a task context.** Plain `curl POST` runs serially. To fan out:
+**`await` fans out inside a task context.** An `@expose` HTTP call is already enqueued as a task, so `await(jobs)` fans out over an HTTP POST. The serial case is a one-shot `greycat run` script. To dispatch a long HTTP call as a *background* task (return `task_id` immediately, poll later), set the `task: true` header:
 \`\`\`bash
-curl -H "task:''" -X POST -d '[]' http://localhost:8080/module::compute  # task header
-./bin/greycat run compute                                                 # CLI task
+curl -H "task: true" -X POST -d '[]' http://localhost:8080/module::compute  # background task, returns task_id
+./bin/greycat run compute                                                    # one-shot CLI run (jobs run serially)
 \`\`\`
 **Don't** "fix" non-parallel HTTP via `System::exec` + `&; wait` — the second `System::exec` in a non-task HTTP request throws uncatchable `"terminated PID X"`.
 
-**Request TTL kills + try/catch does NOT fire** — `GREYCAT_REQUEST_TTL` defaults to 20s. Past that the runtime tears down the handler; no exception. For long endpoints, raise the env var or move to task.
+**Request TTL kills + try/catch does NOT fire** — the request TTL (`--request_ttl` flag, `serve` only) defaults to 20s. Past that the runtime tears down the handler; no exception. For long endpoints, raise `--request_ttl` or move to a background task.
 
 **Fork-join**:
 \`\`\`gcl
@@ -346,7 +354,7 @@ Scheduler::add(
 \`\`\`
 
 **Task lifecycle**: `empty → waiting → running → await → ended | error | cancelled | ended_with_errors`.
-- Status: `POST /runtime::Task::info` with `[user_id, task_id]`.
+- Status: `Task::is_running(task_id)` / `Task::running()` / `Task::history(offset, max)` (there is no `Task::info` RPC).
 - Result: `GET /files/<user_id>/tasks/<task_id>/result.gcb?json`.
 
 **Atomicity**: Each `fn` invocation is one atomic transaction — uncaught throw rolls back all graph mutations.
@@ -355,17 +363,17 @@ Scheduler::add(
 
 ## API Routing (@expose)
 
-| Route shape | Always works | Drops when... |
-|-------------|--------------|---------------|
-| `POST /<module>::<fn>` | ✅ always | — |
-| `POST /<fn>` (bare alias) | ✅ when unique project-wide | any other fn shares the bare name |
-| `POST /<module>::<Type>::<fn>` | ✅ static fn on abstract type | (no bare alias, no `/runtime::` synonym) |
+| Route shape | Reachable at | Notes |
+|-------------|--------------|-------|
+| `POST /<module>::<fn>` | free-standing `@expose` fn | module = source file basename; body = JSON array of positional args |
+| `POST /<module>::<Type>::<fn>` | `@expose` static fn on a type | three segments (full FQN), e.g. `/runtime::Identity::current_id` |
+| `POST /` (JSON-RPC) | any `@expose` fn | `{ "method": "<module>.<fn>", "params": [...] }` — dots, not `::` |
 
 **Rules**:
-- Prefer explicit `/<module>::<fn>` from clients — bare alias is fragile.
+- Call the explicit `/<module>::<fn>` (or the JSON-RPC method) from clients — there is no bare `/<fn>` route.
 - `/runtime::Identity::logout` works because `runtime` is a module name — there is NO literal `/runtime::` routing namespace.
-- `@expose("alias")` must match the function name (mismatched aliases break the TS SDK lookup).
-- `@permission(public)` is invalid (identifier); use `@permission("public")` (quoted).
+- `@expose("path")` exposes the function at that exact arbitrary path (e.g. `@expose("api/users")`); it need NOT match the fn name. Whatever path you declare is what clients and the generated SDK must call.
+- `@permission(public)` is invalid (identifier); use `@permission("public")` (quoted). A bare `@expose` already requires `api` (authenticated) — that's the recommended default.
 - Declare roles in `project.gcl`: `@role("user", "public", "api");`.
 
 ---
@@ -427,7 +435,7 @@ for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 | @expose without try/catch | Always wrap + `error(...)` |
 | Bare-name route | `/<module>::<fn>` |
 | `@permission(public)` ident | `@permission("public")` quoted |
-| `@expose("renamed")` ≠ fn | Keep alias = fn name (TS SDK) |
+| Assuming `@expose("path")` = default route | Custom path overrides `<module>::<fn>` — call the declared path |
 | Bare `id`/`ids` params | `documentId`/`partyIds` |
 | Anonymous return structs | Named `@volatile` type |
 | Override concrete on abstract | Make abstract from day 1 |
@@ -438,8 +446,8 @@ for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 | `time::new(n, seconds)` on raw epoch | Magnitude-route first |
 | `x as T? ?? "default"` | `(x as T?) ?? "default"` |
 | `Array<Job<T>>` | `Array<Job>` + cast `.result() as T` |
-| `await` from plain POST | `task:''` header or `./bin/greycat run` |
-| Catching the 20s TTL kill | You can't — raise TTL or move to task |
+| Background dispatch header `task:''` | `task: true` (truthy) header |
+| Catching the 20s TTL kill | You can't — raise `--request_ttl` or move to task |
 | Functions without `///` docs | Document ALL functions |
 
 ---
@@ -502,21 +510,27 @@ GREYCAT_WEBROOT=webroot
 GREYCAT_CACHE=30000
 \`\`\`
 
-**vite.config.ts** (in root) — use the `@greycat/web` plugin; **don't** empty `webroot/` (it holds `webroot/explorer/`):
+**vite.config.ts** (in root) — explicit VitePlus config, **no plugin**. `greycat dev` serves API + assets on one origin, so nothing to proxy. MPA: `root: 'frontend/routes'` makes each page's path its URL; one `rollupOptions.input` entry per route:
 \`\`\`ts
-import { defineConfig } from 'vite';
-import greycat from '@greycat/web/vite-plugin';
+import { defineConfig } from 'vite-plus';
+import { resolve } from 'node:path';
 
 export default defineConfig({
-  base: '',
-  root: 'frontend',
-  plugins: [greycat({ greycat: 'http://127.0.0.1:8080', noDefaultConfig: true })],
-  build: { outDir: '../webroot', emptyOutDir: false },   // preserve webroot/explorer/
-  server: { port: 3000, open: '/' },
-})
+  root: 'frontend/routes',              // frontend/routes/**/index.html -> a page at that URL
+  base: './',                           // relative asset URLs so nested pages resolve under webroot/
+  appType: 'mpa',                       // no SPA history fallback
+  publicDir: resolve('frontend/public'),
+  resolve: { alias: { '~': resolve('frontend') } },
+  build: {
+    outDir: resolve('webroot'),
+    emptyOutDir: true,
+    target: 'esnext',
+    rollupOptions: { input: [resolve('frontend/routes/index.html')] },  // add one per route
+  },
+});
 \`\`\`
 
-**tsconfig.json** (in root): Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"include": ["frontend"]` (add `"paths": { "~/*": ["frontend/*"] }` if using the `~` alias).
+**tsconfig.json** (in root): Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"paths": { "~/*": ["frontend/*"] }`, and `"include": ["frontend", "project.d.ts"]`.
 
 ---
 
@@ -538,17 +552,17 @@ export default defineConfig({
 
 1. Use `/greycat` skill for backend
 2. `greycat-lang lint` after EVERY change (0 errors required)
-3. `greycat-lang fmt -p project.gcl` to format
+3. `greycat-lang fmt` to format
 4. `Grep` before deleting
 5. `greycat codegen ts` after backend type changes
-6. Test: `greycat test` / `pnpm test`
+6. Test: `greycat test` (backend); `vp build` + Lighthouse for frontend
 
 ---
 
 ## Consistency Checklist
 
 - [ ] `greycat-lang lint` shows 0 errors
-- [ ] `greycat-lang fmt -p project.gcl` applied
+- [ ] `greycat-lang fmt` applied
 - [ ] All `@expose` have try/catch + `error()` log
 - [ ] All thrown errors are typed
 - [ ] All functions/types have `///` docs
@@ -559,10 +573,13 @@ export default defineConfig({
 - [ ] `greycat codegen ts` re-run after backend type changes
 - [ ] Re-import path is upsert
 - [ ] New fields on persisted types are nullable OR `gcdata/` reset planned
-- [ ] Frontend: exact (latest) versions in package.json — Lit + Shoelace + Lucide (`lucide`/`lucide-static`), native packages only
-- [ ] Frontend uses `gcRuntime` re-export, not bare `gc.*`
-- [ ] Shoelace imported per-component; icons self-hosted via Lucide (no CDN fetch)
-- [ ] Lighthouse ≥ 90 perf/SEO/a11y/best-practices (`pnpm lighthouse:ci`)
+- [ ] Frontend on VitePlus (`vite-plus`) — Lit (light DOM) + Shoelace + `@greycat/web`; `@greycat/web` pinned as a registry tarball tracking `std`'s branch (managed with pnpm)
+- [ ] Route root gates on `gc.sdk.init()` before any `gc.<module>.*` / `gui-*`; `import '@greycat/web/sdk'` (not umbrella `@greycat/web`)
+- [ ] `greycat.css` imported, then `frontend/theme.css` after it — Shoelace's own `themes/*.css` NOT imported
+- [ ] App components render to light DOM (`createRenderRoot(){return this}`); no hardcoded colors/sizes (use `--app-*` tokens)
+- [ ] Shoelace imported per-component; icons self-hosted via lucide-static (no CDN fetch)
+- [ ] Lighthouse ≥ 90 perf/SEO/a11y/best-practices on BOTH mobile (default) and desktop (`--preset=desktop`)
+- [ ] Responsive: `viewport` meta, fluid layout, no horizontal scroll at 360px, adequate tap targets
 - [ ] SEO head present (title, meta description, canonical, OG/Twitter, JSON-LD, `lang`)
 - [ ] `robots.txt`, `sitemap.xml`, web manifest, and `llms.txt` shipped to `webroot/`
 - [ ] Tests pass (`rm -rf gcdata && greycat test`)

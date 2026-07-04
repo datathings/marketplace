@@ -15,18 +15,22 @@ allowed-tools: Bash(*), Read, Edit, Grep
 ## Libraries
 
 **Core**: `std` (required), `explorer` (dev UI)
-**Pro (shared version)**: `ai`, `algebra`, `kafka`, `sql`, `s3`, `finance`, `powerflow`, `opcua`, `useragent`
+**Other published libraries**: `ai`, `algebra`, `kafka`, `mqtt`, `opcua`, `ftp`, `ssh`, `osm`, `useragent`, `finance`, `powerflow`, `powergrid` (successor to `powerflow`), `text_search`, `fcs`, and Pro-licensed `ifc`, `sql`, `openid`.
+
+> `s3` is **not** a library — S3 access is part of `std` (IO). Don't add `@library("s3", ...)`.
+> Don't assume a single shared version — resolve each library from **its own** endpoint (below). The only name quirk is `std`, whose URL path is `core`.
 
 ---
 
 ## Step 1: Fetch latest versions
 
+Resolve each library from **its own** endpoint — the URL path-name equals the `@library` name, except `std` → `core`:
 \`\`\`bash
-STD_VERSION=$(curl -s "https://get.greycat.io/files/core/dev/latest" | cut -d'/' -f2)
-EXPLORER_VERSION=$(curl -s "https://get.greycat.io/files/explorer/dev/latest" | cut -d'/' -f2)
-PRO_VERSION=$(curl -s "https://get.greycat.io/files/algebra/dev/latest" | cut -d'/' -f2)
+latest_version() {           # $1 = @library name
+  local path="$1"; [ "$1" = "std" ] && path="core"     # std's URL path is 'core'
+  curl -s "https://get.greycat.io/files/${path}/dev/latest" | cut -d'/' -f2
+}
 \`\`\`
-Note: all pro libraries share the same version — fetch one endpoint.
 
 ---
 
@@ -44,12 +48,8 @@ CURRENT_LIBS=$(grep -o '@library("[^"]*"' project.gcl | sed 's/@library("//;s/"/
 For each `lib in $CURRENT_LIBS`:
 \`\`\`bash
 CURRENT_VERSION=$(grep "@library(\"$lib\"" project.gcl | sed -n "s/.*@library(\"$lib\", \"\([^\"]*\)\").*/\1/p")
-case "$lib" in
-  std) LATEST_VERSION="$STD_VERSION" ;;
-  explorer) LATEST_VERSION="$EXPLORER_VERSION" ;;
-  ai|algebra|kafka|sql|s3|finance|powerflow|opcua|useragent) LATEST_VERSION="$PRO_VERSION" ;;
-  *) echo "  WARN: unknown lib '$lib' — skipping"; continue ;;
-esac
+LATEST_VERSION=$(latest_version "$lib")            # resolves each lib from its own endpoint
+[ -z "$LATEST_VERSION" ] && { echo "  WARN: no published version for '$lib' — skipping"; continue; }
 
 [ "$CURRENT_VERSION" = "$LATEST_VERSION" ] && echo "  ✓ $lib $CURRENT_VERSION (up-to-date)" \
     || { echo "  ↑ $lib $CURRENT_VERSION → $LATEST_VERSION"; UPDATES_NEEDED=true; }
@@ -74,7 +74,8 @@ For "Show changes" → display before/after `@library` lines, then re-ask.
 
 \`\`\`bash
 for lib in $CURRENT_LIBS; do
-  # determine $LATEST_VERSION (same case as Step 3)
+  LATEST_VERSION=$(latest_version "$lib")           # per-lib endpoint (see Step 1)
+  [ -z "$LATEST_VERSION" ] && continue
   sed -i "s/@library(\"$lib\", \"[^\"]*\")/@library(\"$lib\", \"$LATEST_VERSION\")/" project.gcl
 done
 \`\`\`
@@ -113,17 +114,17 @@ See `/migrate` Operation A and D for full safe-rollback flow.
 
 ---
 
-## Frontend dependencies (Lit + Shoelace + Lucide stack)
+## Frontend dependencies (VitePlus + Lit + Shoelace + lucide-static stack)
 
-If `frontend/` (or `app/`) exists, keep the **preferred stack** current too — pin **exact latest** published versions (no `^`/`~`):
+If `frontend/` exists, keep the **prescribed stack** current too — pin **exact latest** published versions (no `^`/`~`):
 
 | Package | Role |
 |---------|------|
 | `lit` | web components |
-| `@shoelace-style/shoelace` | UI kit |
-| `lucide` / `lucide-static` | icons (native, self-hosted) |
-| `@greycat/web` | typed client (dev SDK tarball) |
-| `vite` | build |
+| `@shoelace-style/shoelace` | UI kit (must satisfy `@greycat/web`'s peer range) |
+| `lucide-static` | icons (native, self-hosted SVG) |
+| `@greycat/web` | typed client + `gui-*` widgets (registry tarball, not npm) |
+| `vite-plus` | build toolchain (`vp`) |
 | `typescript` | language |
 | `vitest` | frontend tests |
 | `lighthouse` | perf/SEO/a11y audits |
@@ -133,13 +134,14 @@ If `frontend/` (or `app/`) exists, keep the **preferred stack** current too — 
 \`\`\`bash
 # Inspect current vs latest, then pin exact
 pnpm outdated
-pnpm up --latest lit @shoelace-style/shoelace lucide vite typescript vitest lighthouse
+pnpm up --latest lit @shoelace-style/shoelace lucide-static vite-plus typescript vitest lighthouse
 # then re-pin to exact versions in package.json (drop ^/~) and reinstall
 \`\`\`
+> `@greycat/web` is not on npm — bump it by re-pinning its registry tarball URL to track the project's `std` branch/version (see the frontend stack notes), not via `pnpm up`.
 
-**pnpm release-age gate**: pnpm 11 may reject just-published packages (and ignores `minimumReleaseAgeExclude` for that audit). To ship trusted just-released tooling (e.g. Vite), set `minimumReleaseAge: 0` (or add exact exclusions) in `pnpm-workspace.yaml`.
+**pnpm release-age gate**: pnpm 11 may reject just-published packages (and ignores `minimumReleaseAgeExclude` for that audit). To ship trusted just-released tooling, set `minimumReleaseAge: 0` (or add exact exclusions) in `pnpm-workspace.yaml`.
 
-**After upgrading**: `pnpm gen` (regen client) → `pnpm lint` (typecheck) → `pnpm build` → serve → `pnpm lighthouse:ci` (confirm perf/SEO/a11y/best-practices ≥ 90). Note Shoelace/Lit major bumps can change component APIs — check their changelogs like you would GreyCat's.
+**After upgrading**: `greycat codegen ts` (regen client) → `pnpm lint` (typecheck) → `vp build` → serve (`greycat dev`) → `pnpm lighthouse:ci` (confirm perf/SEO/a11y/best-practices ≥ 90). Note Shoelace/Lit major bumps can change component APIs — check their changelogs like you would GreyCat's.
 
 ---
 
@@ -168,7 +170,7 @@ This command uses **dev** by default.
 ### Fetch fails
 \`\`\`bash
 ping get.greycat.io
-curl -v "https://get.greycat.io/files/std/dev/latest"
+curl -v "https://get.greycat.io/files/core/dev/latest"   # std's URL path is 'core'
 \`\`\`
 
 ### Install fails
@@ -208,11 +210,11 @@ Breaking changes:
 ## Notes
 
 - **No code changes**: this command only updates library versions (backend `@library` + optional frontend deps)
-- **Frontend deps**: keep Lit + Shoelace + Lucide + Vite + TS + Vitest + Lighthouse on exact latest; re-audit with `pnpm lighthouse:ci`
+- **Frontend deps**: keep Lit + Shoelace + lucide-static + VitePlus (`vp`) + TS + Vitest + Lighthouse on exact latest; re-audit with `pnpm lighthouse:ci`
 - **gcdata NOT auto-migrated** on schema drift — see "Persisted schema check" above
 - **Rollback**: `git checkout project.gcl` for code; for prod data, rely on `gcdata_bk_*` rotation
 - **`greycat --version` = `0.0.0`** on dev builds — not a bug, treat as "latest"
-- **Pro libs share version** — all stay in lockstep
+- **Resolve each lib from its own endpoint** — don't assume one shared version across libraries
 
 ---
 

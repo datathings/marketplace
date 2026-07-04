@@ -54,7 +54,7 @@ Ask (AskUserQuestion):
 
 ## Module 1: Basics (20m)
 
-**Concept**: statically-typed, non-null by default, no C-style for, no ternary.
+**Concept**: statically-typed, non-null by default, no ternary (use if/else).
 
 Primitives: `int`, `float`, `bool`, `String`, `char`, `time`.
 
@@ -92,7 +92,7 @@ Persistent:     var n = node<User>{ User { ... } };        // gcdata/
 Use node<T>:
   ✓ Module-level vars (global data)
   ✓ Type fields (relationships)
-  ✗ Local variables
+  ✗ Local variables that only need to be transient (use plain objects / `Array` / `Map` for scratch data)
   ✗ Function parameters/returns (except passing persisted refs)
 ```
 
@@ -173,13 +173,13 @@ abstract type XxxService {
 - `@volatile` for request/response types
 - Never return `nodeList`/`nodeIndex` from APIs — use `Array<XxxView>`
 - `@expose` makes function available via HTTP
-- `@permission` for access control
+- A bare `@expose` already requires the `api` permission (authenticated) — that's the default you want; add `@permission("public")` only to allow anonymous callers, `@permission("admin")` for privileged ops
 - API files: `src/<feature>/<feature>_api.gcl`
 
 \`\`\`gcl
 @volatile type UserView { ... }
-@expose @permission("public")
-fn get_users(): Array<UserView> { ... }
+@expose
+fn get_users(): Array<UserView> { ... }   // bare @expose ⇒ requires `api` (authenticated)
 \`\`\`
 
 **Exercise**: REST API for blog system (Module 4).
@@ -196,7 +196,8 @@ fn get_users(): Array<UserView> { ... }
     var found = UserService::find("a@b.com");
     // Assert
     Assert::isNotNull(found);
-    Assert::equals(found->email, "a@b.com");
+    var f = found!!;                     // narrow node<User>? → node<User>
+    Assert::equals(f->email, "a@b.com");
 }
 \`\`\`
 
@@ -216,7 +217,7 @@ await(jobs, MergeStrategy::strict);                  // 2nd arg required
 for (i, job in jobs) { var result = job.result() as ResultType; }
 \`\`\`
 
-⚠ Use `Array<Job>` not `Array<Job<T>>` (crashes at runtime). Cast `.result()` at collection. Batch ~120 jobs. Call via `task:''` header from HTTP, or via CLI.
+⚠ Use `Array<Job>` not `Array<Job<T>>` (crashes at runtime). Cast `.result()` at collection. Batch ~120 jobs. An `@expose` HTTP call already runs as a task (so `await` fans out); a one-shot `greycat run` runs jobs serially. To dispatch a long HTTP call as a background task, add the `task: true` header.
 
 **Exercise**: parallelize processing of 1000 items.
 
@@ -263,31 +264,32 @@ Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abs
 
 ## Module 11: Frontend (Lit + Shoelace + Lucide) (35m)
 
-**Concept**: the preferred GreyCat frontend is **web components** — **Lit** + **TypeScript** + **Shoelace** (UI kit) + **Lucide** icons (`lucide`/`lucide-static`), built with **Vite** and the typed **`@greycat/web`** client. Pin exact latest versions; use the native packages above.
+**Concept**: the preferred GreyCat frontend is **web components** — **Lit** + **TypeScript** + **Shoelace** (UI kit) + **Lucide** icons (`lucide`/`lucide-static`), built with **VitePlus** (`vp`) and the typed **`@greycat/web`** client. Pin exact latest versions; use the native packages above.
 
 **Setup** (configs in root, source in `frontend/`, builds to `webroot/`):
 \`\`\`bash
 pnpm install
-pnpm gen            # greycat codegen ts → project.d.ts (typed client)
-pnpm dev            # Vite dev server
+greycat codegen ts   # → project.d.ts (typed client)
+greycat dev          # VitePlus build watcher + serve API/assets on :8080
 \`\`\`
 
 **A Lit component** consuming an `@expose` endpoint (from Module 6):
 \`\`\`ts
-import { LitElement, html, css } from 'lit';
+import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import '@shoelace-style/shoelace/dist/components/card/card.js';   // per-component (tree-shaking)
-import { gcRuntime } from '~/gc-runtime';     // re-export — never bare `gc.*` (@types/node shadow)
+import '@greycat/web/sdk';                     // `gc` global + typed bindings
 import { icon } from '~/icons';               // Lucide, self-hosted (no CDN)
 
 @customElement('app-products')
 export class AppProducts extends LitElement {
-  static styles = css`:host{display:block}`;
-  @state() private rows: gcRuntime.project.ProductView[] = [];
+  createRenderRoot() { return this; }          // light DOM: theme.css cascades, content is crawlable
+  @state() private rows: gc.project.ProductView[] = [];
 
   async connectedCallback() {
     super.connectedCallback();
-    this.rows = await gcRuntime.default.call('products::get_products', []);
+    // `gc.<module>.*` only works after `gc.sdk.init()` has resolved (the route root gates on init)
+    this.rows = await gc.products_api.get_products();   // module = api file basename
   }
   render() {
     return html`<sl-card><h2 slot="header">${icon('boxes', 18)} Products</h2>

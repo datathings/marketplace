@@ -15,16 +15,17 @@ allowed-tools: Bash, Read, Grep, Glob
 ## Phase 1: @volatile on API response types
 
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //; s/ {.*//' | sort -u
+grep -rn "@expose" src/ --include="*.gcl" -A 5 | grep "fn.*:" | sed 's/.*: //; s/ {.*//' | sort -u
 \`\`\`
+Note: `@expose` may live in `src/api.gcl`, not only `*_api.gcl` — scan all `*.gcl`.
 
 For each return type:
 - Basic (`int`/`String`/`bool`/`float`) → OK
 - `Array<X>`/`Map<K,V>` → check element type
-- Custom → verify type has `@volatile` decorator
+- Custom `…View` response DTO → recommended to mark `@volatile`
 
-Missing `@volatile` → DB bloat, persistence overhead.
-**Severity**: MEDIUM.
+`@volatile` guards the DTO against ever being written into the graph; it is a recommendation for API-shaped types, not a persistence fix (returning a type from `@expose` does not persist it).
+**Severity**: LOW.
 
 ---
 
@@ -76,16 +77,17 @@ Also flag **redundant `!!`** on receivers already narrowed by `if (x != null) { 
 \`\`\`bash
 grep -rn "^\s*[a-z_]*:\s*\(Array\|Map\|nodeList\|nodeIndex\)" src/ --include="*.gcl"
 \`\`\`
-Non-nullable collection FIELDS must be initialized in object literal (`Document { chunks: nodeList<node<Chunk>>{} }`) or declared nullable.
+Non-nullable collection FIELDS must be initialized in object literal (`Document { chunks: nodeList<Chunk>{} }`) or declared nullable.
 **Severity**: HIGH (runtime error).
 
 ### 4.2 Node storage
 \`\`\`bash
-grep -rn "nodeList<[^n]" src/ --include="*.gcl"
-grep -rn "nodeIndex<.*,\s*[^n]" src/ --include="*.gcl"
+grep -rn "node<" src/ --include="*.gcl"
 \`\`\`
-Persistent collections must store node refs: `nodeList<node<Item>>`, not `nodeList<Item>`. Note: `greycat-analyzer` does NOT currently flag this — review by hand.
-**Severity**: MEDIUM (style; not lint-enforced).
+Node tags store their payload value **directly** — `nodeList<float>`, `nodeIndex<String, User>`, `nodeGeo<Station>` are all correct and idiomatic. The plain `nodeList<Item>` / `nodeIndex<K, V>` form is the default; it is NOT an error.
+
+Wrapping the element in an extra `node<…>` (`nodeIndex<K, node<V>>`, `nodeList<node<Item>>`) is VALID but only warranted when the **same node must be shared across multiple indices** — then the shared `node<V>` ref is the right tool. Flag only that case (an element that must be shared but isn't a ref, or a gratuitous `node<…>` wrapper with no sharing). Review by hand; `greycat-lang lint` does not enforce this.
+**Severity**: LOW (style; not lint-enforced).
 
 ---
 
@@ -140,7 +142,7 @@ Module-level `var` must be a node-tag type (`node<T?>`, `nodeIndex<K,V>`, `nodeL
 
 ## Phase 7: Frontend type safety (Lit + TypeScript) — if `frontend/` exists
 
-Stack: **Lit + TypeScript + Shoelace + Lucide** on Vite + `@greycat/web`. Beyond `tsc --noEmit` (`pnpm lint`):
+Stack: **Lit + TypeScript + Shoelace + Lucide** on VitePlus (`vp`) + `@greycat/web`. Beyond `tsc --noEmit` (`pnpm lint`):
 
 ### 7.1 tsconfig for Lit decorators
 \`\`\`bash
@@ -148,14 +150,14 @@ grep -E 'experimentalDecorators|useDefineForClassFields|moduleResolution' tsconf
 \`\`\`
 Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"strict": true`. Missing these → `@property`/`@customElement` mistype or runtime field-init bugs.
 
-### 7.2 `gc` namespace shadow
+### 7.2 SDK init/login gate before any `gc.<module>.*`
 \`\`\`bash
-grep -rnE '\bgc\.' frontend/ --include="*.ts" | grep -v "gc-runtime.ts"
+grep -rnE '\bgc\.(project|core|[a-z_]+)\.' frontend/ --include="*.ts"
 \`\`\`
-`@greycat/web`'s `gc` is shadowed by `@types/node`'s `var gc`. Use the `gcRuntime` re-export, never bare `gc.*`.
+Import the SDK runtime once (`import '@greycat/web/sdk'`) and call bare `gc.*` — `gc.sdk.init()`, then typed `gc.<module>.<fn>()` / `gc.project.*` / `gc.core.*`. `gc.<module>.*` calls and `gui-*` tags only work AFTER `gc.sdk.init()` resolves (the route root gates on it); touching `gc.<module>.*` at import/module-eval time (enum statics are built during init) is a bug.
 
 ### 7.3 Stale codegen / hard-coded strings
-`project.d.ts` must be regenerated (`pnpm gen`) after backend type/`@expose` changes; never hand-edit it. Derive endpoint/field strings from `$fields`, not string literals. **No `any`** — use `gc.core.*` / `gc.project.*` types.
+`project.d.ts` must be regenerated (`greycat codegen ts`) after backend type/`@expose` changes; never hand-edit it. Derive endpoint/field strings from `$fields`, not string literals. **No `any`** — use `gc.core.*` / `gc.project.*` types.
 
 ### 7.4 Custom element typing
 Each `@customElement` must extend `HTMLElementTagNameMap` so templates and `document.createElement` are typed.
@@ -185,7 +187,7 @@ greycat-lang lint   # must pass
 greycat test        # run tests
 greycat build       # build
 # frontend (if exists):
-pnpm gen && pnpm lint   # regenerate client, then tsc --noEmit
+greycat codegen ts && pnpm lint   # regenerate client, then tsc --noEmit
 \`\`\`
 
 ---

@@ -26,7 +26,7 @@ grep -rn "^type [A-Z]" src/ --include="*.gcl" | grep -v "@volatile"
 \`\`\`bash
 grep -rn "static fn [a-z_]" src/ --include="*.gcl"     # services
 grep -rn "^\s*fn [a-z_]" src/ --include="*.gcl"        # methods
-grep -rn "@expose" src/ --include="*_api.gcl" -A 1
+grep -rn "@expose" src/ --include="*.gcl" -A 1        # @expose may live in src/api.gcl, not only *_api.gcl
 \`\`\`
 For each: `grep -r "FuncName(" src/ --include="*.gcl"`. Keep: `@expose`, `main`, `@test`.
 
@@ -78,23 +78,22 @@ Identical 5+ line sequences in 3+ files (error handling especially). Extract to 
 \`\`\`bash
 grep -rn "var.*= nodeList\|var.*= nodeIndex" src/ --include="*.gcl"
 \`\`\`
-Inside `fn` body → wrong. Use `Array<T>`/`Map<K,V>`. Note: `greycat-analyzer` does NOT currently flag this — review by hand.
+Inside `fn` body → wrong. Use `Array<T>`/`Map<K,V>`. Note: `greycat-lang lint` does NOT currently flag this — review by hand.
 **Priority**: MEDIUM (style; not lint-enforced).
 
-### 3.2 Missing @volatile on API response
+### 3.2 `@volatile` on API response types (recommended)
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 5
+grep -rn "@expose" src/ --include="*.gcl" -A 5
 \`\`\`
-Return type must have `@volatile` decorator.
-**Priority**: MEDIUM.
+Mark slim `…View` response DTOs `@volatile` — it guards the type against ever being written into the graph. It is a recommendation for API-shaped types, not a persistence fix: returning a plain type from `@expose` does NOT persist it (persistence happens only on write into a `node<T>` / graph attribute).
+**Priority**: LOW.
 
-### 3.3 Object storage in node collections
+### 3.3 Node-collection element type
 \`\`\`bash
-grep -rn "nodeList<[^n].*>" src/ --include="*.gcl"
-grep -rn "nodeIndex<.*,\s*[^n].*>" src/ --include="*.gcl"
+grep -rn "nodeList<\|nodeIndex<" src/ --include="*.gcl"
 \`\`\`
-`nodeList<Item>` should be `nodeList<node<Item>>` (persistence model). Note: `greycat-analyzer` does NOT currently flag this — review by hand.
-**Priority**: MEDIUM (style; not lint-enforced).
+Node tags store their payload value **directly** — `nodeList<Item>`, `nodeIndex<String, User>`, `nodeGeo<Station>` are all correct and idiomatic. Wrapping the element in an extra `node<...>` (`nodeIndex<K, node<V>>`) is valid but only needed when the **same node must be shared across multiple indices** (store one `node<V>` ref in each). Flag only that sharing case — don't "fix" plain `nodeList<Item>`.
+**Priority**: LOW (design; not lint-enforced).
 
 ### 3.4 Uninitialized non-nullable collection fields
 \`\`\`bash
@@ -123,11 +122,11 @@ grep -rnE 'throw\s+"' src/ --include="*.gcl"
 Define typed errors in `src/errors.gcl` (`AppError`/`NotFoundError`/`ValidationError`) and `throw NotFoundError { code, message, id }`. Always re-throw after `error(...)` log.
 **Priority**: HIGH.
 
-### 3.8 `await(...)` in plain @expose
+### 3.8 `await(...)` where the entry path isn't task-backed
 \`\`\`bash
-grep -rn "await(" src/ --include="*_api.gcl"
+grep -rn "await(" src/ --include="*.gcl"
 \`\`\`
-Parallel `await` only fans out in task context. From plain `curl POST`, only foreground worker fires. Document `task:''` header invocation, or move to CLI fn / `PeriodicTask`.
+An `@expose` HTTP call is already enqueued as a task, so `await(jobs)` **does** fan out over an HTTP POST. The genuinely serial case is a one-shot `./bin/greycat run <fn>` script — there jobs run serially. Flag `await(jobs)` in a function only ever invoked via one-shot `greycat run` (or move that work to a task / `PeriodicTask`).
 
 Related:
 - Prefer `Array<Job>` + cast `.result() as T` at the call site. (Parameterised `Array<Job<T>>` compiles and lints clean; runtime correctness depends on per-job result-type discipline.)
@@ -137,9 +136,9 @@ Related:
 
 ### 3.9 TTL-exceeding endpoint w/o task fallback
 \`\`\`bash
-grep -rn "@expose" src/ --include="*_api.gcl" -A 30 | grep -E "for\s*\(.*in\s+|import|System::exec"
+grep -rn "@expose" src/ --include="*.gcl" -A 30 | grep -E "for\s*\(.*in\s+|import|System::exec"
 \`\`\`
-`GREYCAT_REQUEST_TTL` defaults to 20s. Past it the runtime kills the handler — `try/catch` does NOT catch. Raise env var, document `task:''`, or factor into scheduled task.
+The request-TTL knob is the `--request_ttl` flag (default `20s`, `serve` only) — there is no `GREYCAT_REQUEST_TTL` env var. Past the TTL the runtime kills the handler — `try/catch` does NOT catch. Raise `--request_ttl`, dispatch as a background task (`task: true` request header), or factor into a scheduled task.
 **Priority**: HIGH.
 
 ### 3.10 `!!` overuse
@@ -187,7 +186,7 @@ Local vars / function returns using persistent types → use `Array`/`Map`.
 \`\`\`bash
 grep -rn "fn [a-z_]*sort\|fn find_\(max\|min\)\|fn [a-z_]*join" src --include="*.gcl"
 \`\`\`
-Custom sort → `.sort_by(...)`. Custom join → `.join(sep)`. Custom min/max → `Math::` or tensor ops.
+Custom sort → `.sort_by(...)`. Custom join → `.join(sep)`. Custom min/max → the global `min(x, y)` / `max(x, y)` (no `Math::` namespace) or tensor ops.
 
 ### 4.7 Useless one-line wrappers
 \`\`\`bash
@@ -208,11 +207,11 @@ Nested loops with conditional id-match → add `nodeIndex<id, ...>` for O(1) loo
 
 ## Phase 5: Best-Practice Checks
 
-- **Services**: business logic in `abstract type XxxService` with static methods. None in API layer.
-- **Global index order**: declare `var xxx_by_id: nodeIndex<...>` BEFORE types that reference them in the same file.
-- **@permission**: every `@expose` has one (CRITICAL when missing).
+- **Services**: business logic lives in a service layer (commonly an `abstract type XxxService` with static methods, or plain top-level `fn`s), not in the `@expose` API layer.
+- **Cross-module refs resolve via the project graph** — declaration order within a file does not matter; every loaded module sees every other (modulo the `private` FQN rule). Don't flag "index declared after the type that uses it".
+- **@permission**: a bare `@expose` already requires the `api` permission (authenticated) — that's the recommended default, so a *missing* `@permission` is NOT an error. Flag instead: `@permission("public")` on mutations (anonymous write), or a privileged op that should be `@permission("admin")`.
 - **Try/catch on @expose**: every body wrapped.
-- **Lean `…View` types for the frontend**: `@expose` returns feed the **Lit + Shoelace + Lucide** frontend via the generated `@greycat/web` client — return slim `@volatile …View` types (not full domain types) so payloads stay small (helps Lighthouse) and codegen→TS stays clean. After any backend type/`@expose` change, regenerate the client (`pnpm gen`). For full frontend review (Lit patterns, Shoelace tree-shaking, Lighthouse/SEO), use `/greycat:frontend`.
+- **Lean `…View` types for the frontend**: `@expose` returns feed the **Lit + Shoelace + lucide-static** frontend via the generated `@greycat/web` client — return slim `@volatile …View` types (not full domain types) so payloads stay small (helps Lighthouse) and codegen→TS stays clean. After any backend type/`@expose` change, regenerate the client (`greycat codegen ts`). For full frontend review (Lit patterns, Shoelace tree-shaking, Lighthouse/SEO), use `/greycat:frontend`.
 
 ---
 

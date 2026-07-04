@@ -1,147 +1,156 @@
 ---
 name: frontend
-description: Review frontend codebase for code quality, performance, Lighthouse/SEO, and best practices using the Lit + Shoelace + Lucide stack
+description: Review frontend codebase for code quality, performance, Lighthouse/SEO, and best practices using the VitePlus + Lit + Shoelace + @greycat/web stack
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # Frontend Review
 
-**Purpose**: Review the GreyCat frontend for correctness, the preferred stack, Lighthouse performance, LLM-friendly SEO, and common pitfalls.
+**Purpose**: Review the GreyCat frontend for correctness, the one prescribed stack, Lighthouse performance, LLM-friendly SEO, and common pitfalls.
 
-Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for `@greycat/web` bundling/integration context.
+Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full prescribed toolchain, layout, and integration contract — this review checks against exactly that, with one deviation: **the frontend source dir is `frontend/`, not `app/`** (the `~` alias maps to `frontend/`).
 
 ---
 
-## Preferred Stack (the baseline this review checks against)
+## Prescribed Stack (the baseline this review checks against)
 
-Pin **exact latest** published versions (no `^`/`~`); re-check for newer releases on every review/upgrade.
+Every GreyCat webapp uses the same toolchain, layout, and design tokens. Deviate only when a project has a concrete reason to.
 
 | Concern | Choice |
 |---------|--------|
-| Components | **Lit** (web components) — one `LitElement` per file, `@customElement('app-…')` |
+| Toolchain | **VitePlus** — global `vp` CLI + local `vite-plus` package; explicit `vite.config.ts`, **no plugin** |
+| Pages | **MPA** — each route is a real HTML page under `frontend/routes/`; URL == file path, no SPA router |
+| Components | **Lit** in **light DOM** — one root element per route, a component only for views reused across routes; `@customElement('app-…')` |
 | Language | **TypeScript** — `experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"` |
-| UI kit | **Shoelace** (`@shoelace-style/shoelace`) — layout, cards, tabs, dialogs, date-picker |
-| Icons | **Lucide** — `lucide` (tree-shakable icon factory) or `lucide-static` (prebuilt SVG strings, inlined via Lit `unsafeSVG`). Native/self-hosted, `currentColor` + `aria-hidden`. |
-| Client | `@greycat/web` (typed SDK + `gui-*` widgets, e.g. virtualized `gui-table`) |
-| Build | **Vite** + `@greycat/web/vite-plugin` (`root: 'frontend'`, `outDir: '../webroot'`, `emptyOutDir: false`) |
-| i18n (if multi-locale) | **i18next** (+ `i18next-browser-languagedetector`) — drives `hreflang`/`lang` + translated meta |
-| Data-viz (optional) | **chart.js** + **d3**; **maplibre-gl** for maps |
-| Tests | **Vitest** |
-| Audits | **Lighthouse** (devDep) — `pnpm lighthouse` / `:desktop` / `:ci` |
+| UI kit (atomics) | **Shoelace** (`sl-*`) — button, input, dialog, tabs, tooltip, date-picker |
+| UI kit (rich) | **`@greycat/web`** (`gui-*`) — tables, charts, maps, `gui-object` form generator, sign-in |
+| Theme | **`greycat.css`** (a Shoelace theme, dark by default) + **`frontend/theme.css`** (the `--app-*` tokens + `--sl-*` re-skin), imported **after** `greycat.css` |
+| Client | **`@greycat/web` SDK** for every backend call → `greycat codegen ts` is mandatory (`project.d.ts`) |
+| Icons | **lucide-static** — prebuilt SVG strings inlined via Lit `unsafeSVG`; self-hosted, `currentColor` + `aria-hidden`, no CDN fetch |
+| Package manager | **pnpm** |
 
-> Larger apps split shared web components into per-module-export packages (e.g. a `core` / `ui` / `map` workspace) so consumers tree-shake to just the icons/components they import.
+> **`vp` and pnpm are different layers, not alternatives.** pnpm is the *package manager* (fetches deps into `node_modules`); `vp` (VitePlus, rolldown/oxc-based) is the *build toolchain* that bundles `frontend/` → `webroot/`, replacing plain Vite. `vp install` delegates to the package manager, so they work together.
+
+> `@greycat/web` is **not on npm** — it ships as a tarball URL from GreyCat's registry, tracking the same branch (`dev`/`stable`) and version as the project's `std`. Shoelace and Lit are ordinary semver deps; Shoelace must satisfy `@greycat/web`'s peer range.
 
 ```bash
-# Confirm the preferred stack is present and versions are pinned
-grep -nE '"(lit|@shoelace-style/shoelace|lucide|lucide-static|@greycat/web|vite|vitest|typescript|lighthouse)"' package.json
-grep -nE '"\^|"~' package.json && echo "⚠ non-exact version range — pin the exact latest"
+# Confirm the prescribed stack is present
+grep -nE '"(vite-plus|lit|@shoelace-style/shoelace|@greycat/web)"' package.json
+grep -q 'get.greycat.io/files/sdk/web' package.json || echo "⚠ @greycat/web not pinned to a registry tarball URL"
+grep -q '"vite-plus"' package.json || echo "⚠ not on VitePlus — expected the vp toolchain"
 ```
 
 ---
 
 ## Checklist
 
-Scan `.ts` under `frontend/` (source) for:
+Scan `.ts` under `frontend/` (source; `~` aliases `frontend/`) for:
 
-### 1. Initialization order
-- `import '@greycat/web'` before any `gui-*` or client usage
-- `gc.sdk.init()` completes before creating `gui-*` elements or `gc.project.*` calls
-- Shoelace theme CSS imported at startup (`@shoelace-style/shoelace/dist/themes/light.css` + `dark.css`); app `styles.css` imported **after** so its bridge tokens win
-- Shoelace asset base path set once at startup
+### 1. Layout & config
+- Frontend lives entirely under `frontend/` (`frontend/routes/` pages, `frontend/components/` reused views, `frontend/public/` copied as-is, `frontend/theme.css`). `src/` is the backend and is never renamed; `frontend/` is never in a GreyCat pragma (`@include("frontend")` breaks)
+- `~` alias declared in **both** `vite.config.ts` and `tsconfig.json`; imports use `~/components/x`, never `../../`
+- `vite.config.ts`: `root: 'frontend/routes'`, `base: './'`, `appType: 'mpa'`, `publicDir: frontend/public`, `outDir: webroot`, `emptyOutDir: true`
+- Every route's `index.html` is listed in `build.rollupOptions.input` — Vite does not auto-discover extra HTML pages
+```bash
+grep -q "root: 'frontend/routes'" vite.config.ts || echo "⚠ root should be frontend/routes (MPA)"
+grep -q "appType: 'mpa'" vite.config.ts || echo "⚠ missing appType: 'mpa' — MPA has no SPA fallback"
+```
 
 ### 2. TypeScript quality
+- `experimentalDecorators: true` **and** `useDefineForClassFields: false` in `tsconfig.json` — both load-bearing for Lit; vite-plus (rolldown/oxc) silently drops `@property` / emits unparseable `@customElement` otherwise (`vp build` still reports success, page loads blank)
+- `moduleResolution: "bundler"`, `~` in `paths`, `project.d.ts` in `include`
 - No `any` — use `gc.core.*` / `gc.project.*` types
 - `project.d.ts` not manually edited
-- Custom components declare `HTMLElementTagNameMap` (and `GreyCat.JSX.IntrinsicElements` if JSX is used)
-
-### 2b. `gc` namespace shadow (CRITICAL)
-
-`@greycat/web` exposes `gc`. **It's shadowed by `@types/node`'s `var gc`** (global GC trigger) at type-resolution time. Direct `gc.X.Y` resolves against the Node global — silent breakage.
-
-**Required**: re-export pattern.
-```ts
-// frontend/gc-runtime.ts
-import * as gcRuntime from '@greycat/web';
-export { gcRuntime };
-
-// elsewhere
-import { gcRuntime } from '~/gc-runtime';
-gcRuntime.sdk.init({ url: '/' });
-gcRuntime.project.MyType.create(/* ... */);
-```
 ```bash
-grep -rnE '\bgc\.' frontend/ --include="*.ts" | grep -v "frontend/gc-runtime.ts"
+grep -q '"experimentalDecorators": true' tsconfig.json || echo "⚠ missing experimentalDecorators — Lit decorators break silently"
+grep -q '"useDefineForClassFields": false' tsconfig.json || echo "⚠ missing useDefineForClassFields:false — @property shadowed by native field"
 ```
 
-### 2c. Codegen freshness
-Backend type / `@expose` changes require `greycat codegen ts` (script: `pnpm gen`). Frontend type checker lies otherwise.
+### 2b. Codegen freshness
+Backend type / `@expose` changes require `greycat codegen ts` (regenerates `project.d.ts`). A client built against a stale ABI gets **HTTP 422** at runtime; the frontend type checker lies until regen.
 
-### 2d. Derive backend strings from `$fields`, never hard-code
+### 2c. Derive backend strings from the SDK, never hard-code
 ```ts
-// ❌ const key = "MyEnum.RED";
-// ✅ const key = gcRuntime.project.MyEnum.$fields.red;
+// ❌ const key = "active";
+// ✅ const s = gc.project.Status.active;  s.key === "active"   // enum static from the ABI
+```
+Enum entries are class statics built during `gc.sdk.init()` — don't touch `gc.<module>.*` at import/module-eval time, only after init resolves.
+
+### 3. Component patterns (Lit, light DOM)
+- One `LitElement` per file, `@customElement('app-…')` with a consistent kebab prefix
+- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Shoelace/GreyCat styles cascade in. Shadow DOM (`static styles = css\`…\``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
+- The route's **root element owns the init/login gate** (see §4) — `gc.sdk.init()` must resolve before any typed call or `gui-*` element works
+- `@property()` for public inputs, `@state()` for internal state; update reactive props, don't recreate DOM
+- Charts (`gui-*` or chart.js): instantiate after init, destroy in `disconnectedCallback`
+```bash
+grep -rn 'createRenderRoot' frontend/ --include="*.ts" | grep -q 'return this' || echo "⚠ app components must render to light DOM (createRenderRoot(){return this})"
 ```
 
-### 3. Component patterns (Lit)
-- One `LitElement` per file, `@customElement('app-…')` with a consistent kebab prefix
-- `@property()` for public inputs, `@state()` for internal state
-- `static styles = css\`…\`` for styles; `html\`…\`` for templates — don't recreate DOM, update reactive props
-- Charts: instantiate in `firstUpdated`, **destroy in `disconnectedCallback`** (chart.js leaks otherwise)
-- `@greycat/web` `GuiElement` / `GuiValueElement`: `static override styles` + `css()`; call `this._internalUpdate()` in value setters
-- Events: `GuiChangeEvent` / `GuiInputEvent` (bubble + composed)
-- Cleanup: `addDisposable()` / `abortSignal()` (or Lit `disconnectedCallback`), never manual `removeEventListener`
-
-### 3b. Shoelace usage
+### 3b. Shoelace usage (`sl-*` atomics)
 - Import components **individually** for tree-shaking (`import '@shoelace-style/shoelace/dist/components/button/button.js'`), never the whole bundle
-- Use Shoelace for layout/cards/tabs/dialogs/date-picker; reserve custom Lit components for data-viz widgets
+- Use Shoelace for atomic controls (button, input, dialog, tabs, tooltip); use `@greycat/web` `gui-*` for rich/GreyCat-aware widgets
 ```bash
 grep -rn "from '@shoelace-style/shoelace'" frontend/ --include="*.ts" && echo "⚠ whole-bundle import — switch to per-component imports"
 ```
 
-### 3c. Icons (Lucide — `lucide` or `lucide-static`)
-- Use the framework-agnostic **`lucide`** (import only the glyphs you use) or **`lucide-static`** (SVG strings inlined via Lit `unsafeSVG`). Self-hosted/bundled — **no runtime icon fetch**
-- Render with `fill="none" stroke="currentColor"` + `aria-hidden="true"`; decorative icons must be `aria-hidden`, meaningful ones need an accessible label
+### 3c. Theming (`greycat.css` + `frontend/theme.css`)
+- Import `@greycat/web/greycat.css` (the theme, dark by default), then `~/theme.css` **after** it so the re-skin wins the cascade
+- **Never** import Shoelace's own `themes/light.css` / `dark.css` — `greycat.css` replaces them; importing them double-defines `--sl-*` and fights the re-skin
+- Light theme is the `sl-theme-light` class on `<html>` (flips both `greycat.css` and the app tokens together)
+- No hardcoded colors/sizes in components — every value comes from an `--app-*` token in `theme.css`
 ```bash
-grep -rnE "cdn|unpkg|googleapis\.com/.*icon" frontend/ --include="*.ts" --include="*.html" && echo "⚠ runtime/CDN icon fetch — use lucide / lucide-static instead"
+grep -rnE "shoelace/dist/themes/(light|dark)\.css" frontend/ --include="*.ts" && echo "⚠ importing Shoelace's own theme — greycat.css IS the theme, remove these"
+grep -rnE "#[0-9a-fA-F]{3,6}\b" frontend/ --include="*.ts" | grep -v theme.css && echo "⚠ raw hex outside theme.css — use --app-* tokens"
 ```
 
-### 4. Common pitfalls
-- `className` in JSX (if used): each token a single class name (no spaces in strings)
-- No `dangerouslySetInnerHTML` / raw `innerHTML` — use DOM API, Lit templates, or vetted `unsafeSVG` for trusted icon data only
-- MPA: no client-side routing — use `<a href>` / `window.location`. SPA: keep crawlable content discoverable (see SEO below)
-- Don't `emptyOutDir` the whole `webroot/` — it holds `webroot/explorer/` from `greycat install` (`emptyOutDir: false`)
+### 3d. Icons (lucide-static)
+- Use **`lucide-static`** — prebuilt SVG strings inlined via Lit `unsafeSVG`. Self-hosted/bundled, **no runtime icon fetch**
+- Render with `stroke="currentColor"` + `aria-hidden="true"`; decorative icons must be `aria-hidden`, meaningful ones need an accessible label
+- Shoelace's own built-in UI icons (chevrons in `sl-select`, etc.) still work out of the box — those need Shoelace's icon assets copied into `frontend/public/` with `setBasePath` only if you use `<sl-icon>` directly
+```bash
+grep -rnE "cdn|unpkg|jsdelivr|googleapis\.com/.*icon" frontend/ --include="*.ts" --include="*.html" && echo "⚠ runtime/CDN icon fetch — use lucide-static (inlined SVG) instead"
+```
+
+### 4. Init / login gate (CRITICAL ordering)
+`gc.sdk.init()` loads the ABI over an authenticated endpoint, so it needs a session. The route's root element must:
+1. `import '@greycat/web/sdk'` (the runtime: `gc` global, `init`, typed bindings) — import once; import `gui-*` components individually, not the umbrella `@greycat/web`
+2. Call `gc.sdk.init()` with no args in `connectedCallback` — succeeds if a prior-login session cookie exists
+3. On throw, render a login form → `gc.sdk.init({ auth: { username, password } })` (or `{ token }`)
+4. Only after init resolves are `gc.<module>.*` calls and `gui-*` tags usable
+- Don't add `@permission("public")` to endpoints just to skip login in dev — that exposes them to anonymous callers
+```bash
+grep -rq "@greycat/web/sdk" frontend/ || echo "⚠ SDK runtime not imported — expected import '@greycat/web/sdk'"
+grep -rn "from '@greycat/web'\b" frontend/ --include="*.ts" && echo "⚠ umbrella import registers every component — import gui-* individually + '@greycat/web/sdk'"
+```
 
 ### 5. Performance (feeds Lighthouse)
 - Update reactive properties instead of recreating DOM trees; batch imperative attribute sets
 - Use `gui-table` (virtualized) for large datasets, not manual DOM loops
-- Code-split routes / lazy-load heavy widgets (charts) with dynamic `import()`
-- Tree-shake Shoelace (per-component imports); self-host icons via `lucide-static` (no CDN)
-- Defer non-critical JS, inline critical CSS, preconnect to the API origin, long-cache hashed assets, reserve element sizes to avoid layout shift (CLS)
+- Code-split routes are natural in MPA; lazy-load heavy widgets (charts) with dynamic `import()`
+- Tree-shake Shoelace (per-component imports); self-host icon assets (no CDN)
+- Defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve element sizes to avoid layout shift (CLS)
 
 ### 6. Lighthouse audit (performance · SEO · accessibility · best-practices)
-Target **≥ 90** in every category. Serve first (`greycat serve`), then:
+Target **≥ 90** in every category, on **both form factors**. Lighthouse defaults to **mobile** (emulated device + throttled CPU/network), so a single run only covers mobile — audit **desktop too** (`--preset=desktop`); mobile is the harder gate and easy to miss. Serve first (`greycat dev` or `greycat serve`), then run against the served origin for each:
 ```bash
-pnpm lighthouse          # full audit (html + json), opens report
-pnpm lighthouse:desktop  # desktop preset
-pnpm lighthouse:ci       # json, --only-categories=performance,accessibility,best-practices,seo (CI gate)
-```
-Flag a missing audit setup:
-```bash
-grep -q '"lighthouse"' package.json || echo "⚠ no lighthouse script — add pnpm lighthouse / :desktop / :ci"
+# mobile (default) + desktop; ≥ 90 in every category on both
+lighthouse http://localhost:8080 --only-categories=performance,accessibility,best-practices,seo
+lighthouse http://localhost:8080 --preset=desktop --only-categories=performance,accessibility,best-practices,seo
+grep -q '"lighthouse"' package.json || echo "ℹ no lighthouse script — add mobile + :desktop scripts (pnpm), or run the lighthouse CLI as above"
 ```
 
 ### 7. SEO + LLM-friendly SEO (always)
-Check `frontend/index.html` and the built `webroot/`:
-- **Head**: `<html lang>`, unique `<title>`, `<meta name="description">`, canonical `<link rel="canonical">`, Open Graph + Twitter Card tags, `theme-color`, `<meta name="color-scheme">`, `viewport`
-- **i18n** (if multi-locale via i18next): emit `<link rel="alternate" hreflang="…">` per locale, keep `<html lang>` in sync with the active locale, and translate `<title>`/description per route
-- **Semantics**: landmark elements (`header`/`nav`/`main`/`article`/`footer`), correct heading order, `alt` text, ARIA labels. Lit Shadow DOM can hide text from some crawlers — keep primary content in light DOM or **pre-render/SSR the shell**
+Check the route `index.html` files and the built `webroot/`:
+- **Head**: `<html lang>`, unique `<title>`, `<meta name="description">`, canonical `<link rel="canonical">`, Open Graph + Twitter Card tags, `theme-color`, `<meta name="color-scheme">`, `viewport` (`width=device-width, initial-scale=1`)
+- **Responsive / mobile usability**: layout adapts from mobile to desktop (fluid grids / `clamp()` / media queries, no fixed-px page widths); tap targets ≥ 24–48px, no horizontal scroll at 360px, text readable without zoom. This is a Lighthouse SEO + best-practices signal and the mobile audit surfaces it
+- **Semantics**: landmark elements (`header`/`nav`/`main`/`article`/`footer`), correct heading order, `alt` text, ARIA labels. Light DOM (already prescribed) keeps content crawlable — good
 - **Structured data**: JSON-LD (`schema.org`) in `<head>`
-- **Machine-readable for crawlers AND LLMs**: `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) at the web root — a concise Markdown index of the app's purpose, key routes, and public endpoints so LLM agents can navigate it
-- Descriptive link text, stable URLs, per-route `<title>`/description
+- **Machine-readable for crawlers AND LLMs**: `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) — a concise Markdown index of the app's purpose, key routes, and public endpoints. Ship them via `frontend/public/` (copied to `webroot/`)
+- Descriptive link text, stable URLs (MPA gives real per-route URLs), per-route `<title>`/description
 ```bash
-grep -iqE '<meta name="description"' frontend/index.html || echo "⚠ no meta description"
-grep -iqE 'og:title|twitter:card'      frontend/index.html || echo "⚠ no Open Graph / Twitter Card tags"
-grep -iqE 'application/ld\+json'        frontend/index.html || echo "⚠ no JSON-LD structured data"
+grep -iqrE '<meta name="description"' frontend/routes/ || echo "⚠ no meta description"
+grep -iqrE 'og:title|twitter:card'      frontend/routes/ || echo "⚠ no Open Graph / Twitter Card tags"
+grep -iqrE 'application/ld\+json'        frontend/routes/ || echo "⚠ no JSON-LD structured data"
 for f in robots.txt sitemap.xml llms.txt site.webmanifest manifest.webmanifest; do
   [ -f "webroot/$f" ] || [ -f "frontend/public/$f" ] || echo "⚠ missing $f (SEO/LLM discoverability)"
 done
@@ -152,7 +161,7 @@ done
 ## Output
 
 Group by severity:
-- **CRITICAL**: missing `gc.sdk.init()`, missing Shoelace theme CSS, security (raw `innerHTML`), an off-stack UI framework when Lit + Shoelace is the standard
-- **HIGH**: bad component registration, broken event typing, whole-bundle Shoelace import, runtime/CDN icon fetch, Lighthouse category < 90, missing meta description / structured data
-- **MEDIUM**: `any` usage, missing cleanup, unbatched updates, missing `llms.txt` / sitemap / manifest
-- **LOW**: style inconsistency, missing type casts, non-pinned versions
+- **CRITICAL**: missing init/login gate (touching `gc.<module>.*` / `gui-*` before `gc.sdk.init()` resolves), importing Shoelace's own `themes/*.css`, Shadow DOM in app components, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + Shoelace is the standard
+- **HIGH**: `theme.css` imported before `greycat.css`, umbrella `@greycat/web` import, whole-bundle Shoelace import, missing route entries in `rollupOptions.input`, `@greycat/web` not pinned to a registry tarball, Lighthouse category < 90 on **mobile or desktop**, non-responsive layout, missing meta description / structured data
+- **MEDIUM**: `any` usage, hardcoded colors/sizes instead of `--app-*` tokens, stale `project.d.ts` (codegen not re-run), relative imports instead of `~`, missing `llms.txt` / sitemap / manifest, runtime/CDN asset fetch
+- **LOW**: style inconsistency, `emptyOutDir` mismatch, missing type casts

@@ -37,17 +37,21 @@ For each file: extract `type Name { ... }` definitions and field lists.
 ### A.3 Add field — safety analysis
 
 ```
-⚠ Adding non-nullable field to persisted type with existing data FAILS OUTRIGHT.
-No automatic migration — gcdata/ must be reset (dev) OR field added nullable first.
+The runtime diffs the new program against the stored ABI on rebuild and auto-migrates compatible changes:
+  • Add a NULLABLE attribute            → auto-migrates (existing instances read it as null).
+  • Add a NON-NULL attribute WITH a default → auto-migrates (existing instances get the default).
+  • Add a NON-NULL attribute WITHOUT a default → load FAILS — provide a default or write a migration.
+  • Remove an attribute → auto (dropped on next save). Rename → NOT auto (looks like remove + add).
 ```
 
 Options:
 - **A) Nullable (Recommended)**: add `field: T?;` — no data touched, safe
-- **B) Nullable → backfill → tighten**: safe for production
-- **C) Dev reset**: `rm -rf gcdata` (destructive, dev only)
-- **D) Cancel**
+- **B) Non-null with a default**: add `field: T = <default>;` — auto-migrates existing instances to the default
+- **C) Nullable → backfill → tighten**: for a computed (non-constant) backfill, safe for production
+- **D) Dev reset**: `rm -rf gcdata` (destructive, dev only)
+- **E) Cancel**
 
-For Option B, generate migration:
+For Option C (computed backfill), generate migration:
 \`\`\`gcl
 // src/migration/migrate_YYYYMMDD_<desc>.gcl
 fn migrate_add_device_priority() {
@@ -105,9 +109,9 @@ fn migrate_transform_user_names() {
 }
 \`\`\`
 
-Execute:
+Execute (back up first — `greycat run` mutations are irreversible):
 \`\`\`bash
-tar -czf gcdata-backup-$(date +%Y%m%d-%H%M%S).tar.gz gcdata/
+greycat backup                 # snapshot before mutating (restore with `greycat restore`)
 greycat run migrate_transform_user_names
 \`\`\`
 
@@ -121,20 +125,22 @@ Analyze CSV: detect delimiter (`;`/`\t`/`,`), row count, header.
 
 Ask target type via AskUserQuestion (list detected models).
 
-Generate importer:
+Generate importer with the typed `CsvReader<T>` (there is NO `CSV::parse` / `csv.rows`). Define a `@volatile` row type whose attribute order matches the CSV columns, then stream rows:
 \`\`\`gcl
 // src/import/import_devices_csv.gcl
+
+// Row shape — attribute ORDER matches CSV column order. `geo` consumes two columns (lat, lng).
+@volatile type DeviceRow { name: String; location: geo; status: String?; }
+
 fn import_devices_from_csv() {
   info("Start CSV import");
-  var csv = CSV::parse("/path/to/devices.csv", true);
+  var fmt = CsvFormat { header_lines: 1, separator: ',' };   // separator is a CHAR: ',' not ","
+  var reader = CsvReader<DeviceRow> { path: "/path/to/devices.csv", format: fmt };
   var count = 0; var errors = 0;
-  for (row in csv.rows) {
+  while (reader.can_read()) {
     try {
-      var name   = row.get("name")   as String;
-      var lat    = row.get("latitude") as float;
-      var lng    = row.get("longitude") as float;
-      var status = row.get("status") as String?;
-      DeviceService::create(name, lat, lng, status);
+      var row = reader.read();
+      DeviceService::create(row.name, row.location, row.status);
       count = count + 1;
       if (count % 100 == 0) info("Imported ${count}...");
     } catch (ex) { error("Row failed: ${ex}"); errors = errors + 1; }
@@ -142,6 +148,7 @@ fn import_devices_from_csv() {
   info("Done: ${count} imported, ${errors} errors");
 }
 \`\`\`
+(For schema inference on an unfamiliar file, use `Csv::analyze([path], fmt)` → `Csv::generate(stats)`, or `Csv::sample([path], fmt, 1000)` to peek the first rows into a `Table`.)
 
 ### C.1b ⚠ Re-Import discipline — UPSERT, never duplicate
 
@@ -149,22 +156,22 @@ Re-runnable importers MUST reuse prior `node<T>` per key. Constructing fresh `no
 
 \`\`\`gcl
 // ❌ Orphan factory
-fn import_devices() {
+fn import_devices(rows: Array<DeviceRow>) {
   devices_by_id = nodeIndex<int, node<Device>>{};
-  for (row in csv.rows) devices_by_id.set(row.id, node<Device>{ ... });  // new node every run
+  for (i, row in rows) devices_by_id.set(row.id, node<Device>{ ... });  // new node every run
 }
 
-// ✅ Upsert
-fn import_devices() {
+// ✅ Upsert — reuse the prior node<T> per key
+fn import_devices(rows: Array<DeviceRow>) {
   var prev = devices_by_id;
   devices_by_id = nodeIndex<int, node<Device>>{};
-  for (row in csv.rows) {
+  for (i, row in rows) {
     var existing = prev.get(row.id);
     if (existing != null) {
-      existing->name = row.name; existing->lat = row.lat;
-      devices_by_id.set(row.id, existing);
+      existing->name = row.name; existing->lat = row.lat;   // mutate the resolved payload in place
+      devices_by_id.set(row.id, existing);                  // re-point the fresh index at the same node
     } else {
-      devices_by_id.set(row.id, node<Item>{ ... });
+      devices_by_id.set(row.id, node<Device>{ ... });
     }
   }
 }
@@ -175,21 +182,22 @@ When `DeviceService::create` is the only construction path, refactor it to accep
 ### C.2 Export CSV
 
 \`\`\`gcl
+// Row shape written out — attribute order = column order.
+@volatile type DeviceOut { id: int; name: String; location: geo; status: String?; created_at: time; }
+
 fn export_devices_to_csv() {
   info("Start CSV export");
-  var rows = Array<Array<String>> {};
-  rows.add(Array<String> { "id", "name", "lat", "lng", "status", "created_at" });
+  var fmt = CsvFormat { header_lines: 1, separator: ',' };
+  var writer = CsvWriter<DeviceOut> { path: "exports/devices_export.csv", format: fmt };
   var count = 0;
   for (id: int, device in devices_by_id) {
-    rows.add(Array<String> {
-      device->id.toString(), device->name,
-      device->location.lat.toString(), device->location.lng.toString(),
-      device->status ?? "", device->created_at.toString()
+    writer.write(DeviceOut {
+      id: device->id, name: device->name, location: device->location,
+      status: device->status, created_at: device->created_at
     });
     count = count + 1;
   }
-  var csv = CSV::write(rows);
-  File::create("exports/devices_export_${time::now()}.csv").write(csv);
+  writer.flush();
   info("Exported ${count}");
 }
 \`\`\`
@@ -209,11 +217,12 @@ du -sh gcdata/
 \`\`\`
 
 ### D.2 Backup
+Prefer the built-in backup/restore (consistent snapshot of a live store) over raw `tar`:
 \`\`\`bash
-BACKUP=gcdata-backup-$(date +%Y%m%d-%H%M%S).tar.gz
-tar -czf "$BACKUP" gcdata/
-# restore: rm -rf gcdata && tar -xzf $BACKUP
+greycat backup                 # snapshot into GREYCAT_BACKUP_PATH (default backup/)
+greycat restore <archive>      # stop the server first, then restore
 \`\`\`
+In-process equivalents: `Runtime::backup_full()` / `Runtime::backup_delta()`. `GREYCAT_MAX_BACKUP_FILES` (default 3) caps retention. A raw `tar -czf snap.tgz gcdata/` only produces a consistent archive when the server is stopped.
 
 ### D.3 Diagnostics
 \`\`\`bash
@@ -267,4 +276,4 @@ systemctl start greycat
 - Always backup before risky ops
 - Batch large migrations + log progress every N rows
 - Dev: can delete gcdata; Prod: must migrate (rotate, not delete)
-- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration, run `pnpm gen` (regenerate `project.d.ts`) and rebuild the **Lit + Shoelace + Lucide** frontend so types stay in sync; re-audit with `pnpm lighthouse:ci` if payload shapes changed.
+- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration, run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the **Lit + Shoelace + lucide-static** frontend so types stay in sync; re-audit with `pnpm lighthouse:ci` if payload shapes changed.

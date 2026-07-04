@@ -32,7 +32,7 @@ grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*node\(List\|Index\|Time\|Geo\)<" src --includ
 grep -rn "fn [a-z_][a-zA-Z0-9_]*(.*).*: node\(List\|Index\)" src --include="*.gcl"
 \`\`\`
 
-**Auto-fix**: `nodeList<node<T>>` → `Array<T>`; `nodeIndex<K, node<V>>` → `Map<K, V>`; `node<T>{obj}` → `obj` (local scope). Note: `greycat-analyzer` does NOT currently flag persistent collections used as locals — review by hand.
+**Auto-fix**: `nodeList<node<T>>` → `Array<T>`; `nodeIndex<K, node<V>>` → `Map<K, V>`; `node<T>{obj}` → `obj` (local scope). Note: `greycat-lang lint` does NOT currently flag persistent collections used as locals — review by hand.
 **Severity**: MEDIUM (style; not lint-enforced).
 
 ---
@@ -149,13 +149,13 @@ Even with upsert, large reshuffles benefit from `./bin/greycat defrag` to reclai
 
 ## Phase 7: Concurrency Anti-Patterns
 
-### 7.1 `await(jobs)` in plain @expose
+### 7.1 `await(jobs)` without a task-backed entry path
 \`\`\`bash
 grep -rnE 'await\s*\(' src --include="*_api.gcl"
 \`\`\`
-Parallel `await` only fires inside task context. Plain `curl POST` runs serially. Either:
-- Spawn endpoint as task: `task:''` HTTP header
-- Move to CLI fn: `./bin/greycat run compute`
+Parallel `await` only fans out inside task context. Anti-pattern: `await(jobs)` in a function only ever invoked via one-shot `greycat run` (runs serially), OR relying on fan-out without confirming the entry path is task-backed. Note:
+- An HTTP `@expose` call is already enqueued as a task, so `await(jobs)` DOES fan out over an HTTP POST (`task: true` header not required for this).
+- A one-shot `./bin/greycat run compute` runs jobs serially — for guaranteed parallel batch work, invoke via a task / scheduled task.
 **Severity**: HIGH.
 
 ### 7.2 `Array<Job<T>>` typed jobs
@@ -180,14 +180,14 @@ Inside parallel jobs: only WRITE to pre-existing nodes. No `node<T>{...}` constr
 \`\`\`bash
 grep -rnE 'System::exec' src --include="*.gcl"
 \`\`\`
-Second `System::exec` in non-task HTTP request throws uncatchable `"terminated PID X"`. Use `task:''` header pattern instead.
+Second `System::exec` in non-task HTTP request throws uncatchable `"terminated PID X"`. Use `task: true` header pattern instead.
 **Severity**: HIGH.
 
 ---
 
-## Phase 8: Frontend Performance & SEO (if `frontend/` or `app/` exists)
+## Phase 8: Frontend Performance & SEO (if `frontend/` exists)
 
-Stack baseline: **Lit + TypeScript + Shoelace + Lucide (`lucide`/`lucide-static`)** on Vite + `@greycat/web` (+ Vitest, optional i18next/maplibre-gl). Optimize for **Lighthouse** (performance · SEO · accessibility · best-practices, target ≥ 90) and ship **LLM-friendly SEO**.
+Stack baseline: **Lit + TypeScript + Shoelace + Lucide (`lucide`/`lucide-static`)** on VitePlus (`vp`) + `@greycat/web` (+ Vitest, optional i18next/maplibre-gl). Optimize for **Lighthouse** (performance · SEO · accessibility · best-practices, target ≥ 90) and ship **LLM-friendly SEO**.
 
 ### 8.1 Off-stack / heavyweight deps
 \`\`\`bash
@@ -199,14 +199,14 @@ Prefer Lit + Shoelace + Lucide (`lucide`/`lucide-static`); replace heavy/duplica
 
 ### 8.2 Shoelace whole-bundle import (kills tree-shaking)
 \`\`\`bash
-grep -rn "from '@shoelace-style/shoelace'" frontend/ app/ --include="*.ts" 2>/dev/null
+grep -rn "from '@shoelace-style/shoelace'" frontend/ --include="*.ts" 2>/dev/null
 \`\`\`
 **Fix**: import per-component (`.../dist/components/<x>/<x>.js`).
 **Severity**: HIGH (bundle bloat → slow LCP/TBT).
 
 ### 8.3 Runtime/CDN icon or font fetch
 \`\`\`bash
-grep -rnE "cdn|unpkg|googleapis\.com" frontend/ app/ --include="*.ts" --include="*.html" 2>/dev/null
+grep -rnE "cdn|unpkg|googleapis\.com" frontend/ --include="*.ts" --include="*.html" 2>/dev/null
 \`\`\`
 **Fix**: use `lucide`/`lucide-static` (self-hosted/bundled SVG), self-host fonts.
 **Severity**: HIGH (render-blocking, extra RTTs).
@@ -217,7 +217,7 @@ Routes and heavy widgets (chart.js, d3) should load via dynamic `import()`; char
 
 ### 8.5 Missing SEO / LLM discoverability
 \`\`\`bash
-grep -iLE '<meta name="description"|og:title|application/ld\+json' frontend/index.html app/index.html 2>/dev/null
+grep -riLE '<meta name="description"|og:title|application/ld\+json' frontend/routes/ --include="index.html" 2>/dev/null
 for f in robots.txt sitemap.xml llms.txt site.webmanifest; do
   [ -f "webroot/$f" ] || [ -f "frontend/public/$f" ] || echo "missing: $f"
 done

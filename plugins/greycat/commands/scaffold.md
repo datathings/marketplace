@@ -16,7 +16,7 @@ Generated files:
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
-**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), Vite + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO.
+**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), VitePlus (`vp`) + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO.
 
 ---
 
@@ -56,7 +56,7 @@ mkdir -p src test
 \`\`\`bash
 find src -name "*.gcl" | head -3   # check existing patterns
 \`\`\`
-Match: indentation, line width (from `@format_line_width` in project.gcl), error handling style.
+Match existing style by inspecting sibling `.gcl` files (indentation, error handling style); run `greycat-lang fmt` — the formatter owns width/layout.
 
 ---
 
@@ -100,7 +100,7 @@ abstract type {Entity}Service {
         {entity}_id_counter.set(id);
 
         var {entity} = node<{Entity}>{ {Entity} {
-            id: id, {field_assignments}, created_at: Time::now()
+            id: id, {field_assignments}, created_at: time::now()
         }};
 
         {entities}_by_id.set(id, {entity});
@@ -139,10 +139,11 @@ abstract type {Entity}Service {
 @volatile type {Entity}Create { {fields_without_id_created_at} }
 @volatile type {Entity}Update { {updatable_fields_as_nullable} }
 
-// Use explicit module routes from clients: POST /{entities}::get_{entity}_by_id
+// Use explicit module routes from clients: POST /{snake}_api::get_{entity}_by_id
+// The route module is the file basename (`{snake}_api`), not the entity name.
 // Every @expose body wraps in try/catch + error() + re-throw.
 
-@expose @permission("public")
+@expose
 fn get_{entities}(): Array<{Entity}View> {
     try {
         var views = Array<{Entity}View> {};
@@ -152,7 +153,7 @@ fn get_{entities}(): Array<{Entity}View> {
     } catch (ex) { error("get_{entities}() failed: ${ex}"); throw ex; }
 }
 
-@expose @permission("public")
+@expose
 fn get_{entity}_by_id({entity}Id: int): {Entity}View {
     try {
         var {entity} = {Entity}Service::find_by_id({entity}Id);
@@ -246,26 +247,26 @@ fn delete_{entity}({entity}Id: int) {
 
 ### D. Frontend component (`frontend/components/{snake}-table.ts`) — only if `frontend/` exists
 
-Generate a small **Lit** element that lists the entity via the generated client, using **Shoelace** for chrome and a **Lucide** icon. Then regenerate the typed client (`pnpm gen`) so `gcRuntime.project.{Entity}View` exists.
+Generate a small **Lit** element that lists the entity via the generated client, using **Shoelace** for chrome and a **Lucide** icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.project.{Entity}View` exists.
 
 \`\`\`ts
-import { LitElement, html, css } from 'lit';
+import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import '@greycat/web/sdk';                        // runtime: `gc` global, init, typed bindings
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import { gcRuntime } from '~/gc-runtime';        // re-export — never bare `gc.*`
 import { icon } from '~/icons';                  // Lucide (lucide / lucide-static), self-hosted
 
 @customElement('{snake}-table')
 export class {Entity}Table extends LitElement {
-  static styles = css`:host{display:block} table{width:100%;border-collapse:collapse}`;
-  @state() private rows: gcRuntime.project.{Entity}View[] = [];
+  createRenderRoot() { return this; }            // light DOM — let theme.css cascade
+  @state() private rows: gc.project.{Entity}View[] = [];
   @state() private loading = true;
 
   async connectedCallback() {
     super.connectedCallback();
-    // explicit module route from clients (bare alias is fragile)
-    this.rows = await gcRuntime.default.call('{entities}::get_{entities}', []);
+    // typed call through the SDK (module = file basename `{snake}_api`)
+    this.rows = await gc.{snake}_api.get_{entities}();
     this.loading = false;
   }
 
@@ -294,7 +295,7 @@ Reminders: import Shoelace components **per-component** (tree-shaking); derive e
 \`\`\`bash
 greycat-lang lint --fix     # backend
 # frontend (if generated):
-pnpm gen && pnpm lint       # regenerate client, then typecheck
+greycat codegen ts && pnpm lint   # regenerate client, then typecheck
 \`\`\`
 
 ---
@@ -315,7 +316,7 @@ Next:
   1. Customize generated code
   2. greycat test test/{snake}_test.gcl
   3. greycat serve → test endpoints
-  4. (frontend) pnpm gen → mount <{snake}-table> → pnpm lighthouse
+  4. (frontend) greycat codegen ts → mount <{snake}-table> → pnpm lighthouse
 ```
 
 ---
@@ -363,5 +364,5 @@ static fn get_city_with_streets(city: node<City>): CityWithStreetsView {
 - Generated code is a starting point — customize as needed
 - Maintains index consistency across all CRUD ops
 - Includes duplicate-check validation for unique fields
-- `@permission("public")` for reads, `"admin"` for writes
+- reads default to `api` (bare `@expose`, no decorator); writes use `@permission("admin")`; add `@permission("public")` ONLY for intentionally anonymous endpoints
 - Throws typed errors (`NotFoundError`, `ConflictError`) on failures
