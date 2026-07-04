@@ -385,10 +385,10 @@ High-performance multi-dimensional arrays supporting up to 8 dimensions and mult
 ```c
 typedef struct {
     gc_object_t header;                        // Object header
-    gc_core_tensor_descriptor_t descriptor;    // Shape, type, and size metadata
+    gc_tensor_descriptor_t descriptor;    // Shape, type, and size metadata
     gc_object_t *proxy_owner;                  // Proxy object that owns the data (NULL if self-owned)
     char *data;                                // Raw data pointer
-} gc_core_tensor_t;
+} gc_tensor_t;
 ```
 
 ### Descriptor
@@ -402,7 +402,7 @@ typedef struct {
     u8_t nature;                         // Tensor nature/category
     i64_t size;                          // Total number of elements
     i64_t capacity;                      // Allocated capacity in bytes
-} gc_core_tensor_descriptor_t;
+} gc_tensor_descriptor_t;
 ```
 
 ### Constants
@@ -543,7 +543,7 @@ void my_make_matrix(gc_machine_t *ctx) {
     i64_t rows = gc_machine__this(ctx).i64; // example dimension source
     i64_t cols = 4;
 
-    gc_core_tensor_t *t = gc_core_tensor__create(ctx);
+    gc_tensor_t *t = gc_core_tensor__create(ctx);
     gc_core_tensor__init_2d(t, rows, cols, gc_core_TensorType_f64, ctx);
     if (gc_machine__error(ctx)) {
         gc_object__un_mark((gc_object_t *) t, ctx);
@@ -566,7 +566,7 @@ void my_make_matrix(gc_machine_t *ctx) {
 **1-D vectors via `init_xd` and element write** — `init_1d`/`init_2d`/`init_3d`/`init_4d`/`init_5d` are thin wrappers over `init_xd`, which takes an explicit dimension count and a `shape[]` array (length up to `GC_CORE_TENSOR_DIM_MAX`). Use `init_xd` when the rank is dynamic:
 
 ```c
-gc_core_tensor_t *vec = gc_core_tensor__create(ctx);
+gc_tensor_t *vec = gc_core_tensor__create(ctx);
 i64_t shape[1] = { values->size };
 gc_core_tensor__init_xd(vec, 1, shape, gc_core_TensorType_f64, ctx);
 for (i64_t i = 0; i < values->size; i++) {
@@ -587,7 +587,7 @@ gc_core_tensor__set_nd_f32(t, 4, pos, pixel * 0.5f, ctx);
 **Reading the descriptor and raw data** — `gc_core_tensor__get_descriptor` returns a pointer into the tensor (no copy); `gc_core_tensor__get_data` returns the raw byte buffer. Combine with `gc_core_tensor_descriptor__type_size` (bytes per element) to walk memory directly, the same way the runtime hashes/compares tensors:
 
 ```c
-gc_core_tensor_descriptor_t *d = gc_core_tensor__get_descriptor(t);
+gc_tensor_descriptor_t *d = gc_core_tensor__get_descriptor(t);
 u8_t elem_size = gc_core_tensor_descriptor__type_size(d->type);
 char *raw = gc_core_tensor__get_data(t);
 u64_t byte_len = (u64_t) d->size * elem_size;
@@ -597,8 +597,8 @@ u64_t byte_len = (u64_t) d->size * elem_size;
 **Validating two tensors before an element-wise op** — `check_type` and `check_dim` set a runtime error and return false on mismatch, so they double as guards. This mirrors the distance/diff implementations:
 
 ```c
-gc_core_tensor_t *x = /* ... */;
-gc_core_tensor_t *y = /* ... */;
+gc_tensor_t *x = /* ... */;
+gc_tensor_t *y = /* ... */;
 if (!gc_core_tensor_descriptor__check_type(&x->descriptor, &y->descriptor, ctx)) {
     return; // GC_ERROR_TENSOR_DIFFERENT_TYPE already set
 }
@@ -624,14 +624,14 @@ if (!gc_core_tensor_descriptor__default_check(&a->descriptor, &b->descriptor, ct
 **Wrapping an externally-owned buffer** — `gc_machine__init_tensor` builds a tensor over a pre-existing `data` pointer owned by another object (`proxy`). It marks the proxy so the buffer stays alive; do not free `data` through this tensor:
 
 ```c
-gc_core_tensor_descriptor_t desc = {0};
+gc_tensor_descriptor_t desc = {0};
 desc.nb_dim = 2;
 desc.dim[0] = rows;
 desc.dim[1] = cols;
 desc.batch_dim = -1;
 desc.type = gc_core_TensorType_f32;
 gc_core_tensor_descriptor__update_size(&desc, ctx); // recompute desc.size from dim[]/nb_dim
-gc_core_tensor_t *view = gc_machine__init_tensor(desc, owner_obj, owner_buffer, ctx);
+gc_tensor_t *view = gc_machine__init_tensor(desc, owner_obj, owner_buffer, ctx);
 ```
 
 **Validating a GCL-supplied shape** — `gc_core_tensor__check_shape` validates an `array<int>` shape (rank ≤ 8, non-negative entries, no overflow) and writes the total element count through `tot_size`. Pass `skip_zero = false` to reject empty dims:
@@ -648,12 +648,12 @@ if (!gc_core_tensor__check_shape(new_shape, &new_size, false)) {
 **Matrix-multiply descriptor planning** — before allocating a result tensor for a (possibly batched, possibly transposed) matmul, validate the operand shapes with `tensor_mult_check`, then derive the result size with `tensor_mult_size` (which fills `result->dim[]`/`size`). `tensor_mult_check_result` verifies a caller-provided result descriptor instead. `matrix_count` and `leading_dim` are the building blocks these use:
 
 ```c
-gc_core_tensor_descriptor_t *a = &lhs->descriptor;
-gc_core_tensor_descriptor_t *b = &rhs->descriptor;
+gc_tensor_descriptor_t *a = &lhs->descriptor;
+gc_tensor_descriptor_t *b = &rhs->descriptor;
 if (!gc_core_tensor_descriptor__tensor_mult_check(a, /*trans_a*/ false, b, /*trans_b*/ false, ctx)) {
     return; // GC_ERROR_TENSOR_MATMUL or dimension mismatch already set
 }
-gc_core_tensor_descriptor_t out = {0};
+gc_tensor_descriptor_t out = {0};
 out.type = a->type;
 if (!gc_core_tensor_descriptor__tensor_mult_size(a, false, b, false, &out, ctx)) {
     return;
@@ -664,13 +664,13 @@ i64_t matrices = gc_core_tensor_descriptor__matrix_count(a); // product of all d
 **Sum-reduce and bias-add planning** — `sum_size` computes the result descriptor for reducing over `dim`; `add_bias_size` computes the broadcast result for adding a bias tensor `b` to `a`. The `*_check_result` siblings validate a result descriptor you already built:
 
 ```c
-gc_core_tensor_descriptor_t reduced = {0};
+gc_tensor_descriptor_t reduced = {0};
 reduced.type = src->descriptor.type;
 if (!gc_core_tensor_descriptor__sum_size(&src->descriptor, /*dim*/ 0, &reduced, ctx)) {
     return;
 }
 
-gc_core_tensor_descriptor_t biased = {0};
+gc_tensor_descriptor_t biased = {0};
 biased.type = src->descriptor.type;
 if (!gc_core_tensor_descriptor__add_bias_size(&src->descriptor, &bias->descriptor, &biased, ctx)) {
     return;
@@ -680,7 +680,7 @@ if (!gc_core_tensor_descriptor__add_bias_size(&src->descriptor, &bias->descripto
 **Iterating an arbitrary-rank tensor by multi-index** — `increment_index` advances a `nb_dim`-length index (row-major, returns false when it wraps past the end), and `index_to_offset` converts that index to a flat element offset. `nb_arrays` gives the number of trailing 1-D rows:
 
 ```c
-gc_core_tensor_descriptor_t *d = &t->descriptor;
+gc_tensor_descriptor_t *d = &t->descriptor;
 i64_t index[GC_CORE_TENSOR_DIM_MAX] = {0};
 do {
     i64_t off = gc_core_tensor_descriptor__index_to_offset(d->nb_dim, d->dim, index);

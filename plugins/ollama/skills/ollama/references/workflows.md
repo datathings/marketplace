@@ -386,7 +386,7 @@ The response will include a `thinking` field with the reasoning steps:
 }
 ```
 
-You can also use think levels: `"think": "high"`, `"think": "medium"`, `"think": "low"`.
+You can also use think levels: `"think": "high"`, `"think": "medium"`, `"think": "low"`, or `"think": "max"`.
 
 ## Model Loading and Memory Management
 

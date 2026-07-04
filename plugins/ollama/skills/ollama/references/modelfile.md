@@ -70,6 +70,7 @@ PARAMETER <parameter> <value>
 | `seed` | int | 0 | Random seed for reproducibility |
 | `stop` | string | (none) | Stop sequence (use multiple PARAMETER lines for multiple stops) |
 | `num_predict` | int | -1 | Max tokens to generate (-1=infinite) |
+| `draft_num_predict` | int | 4 | Speculative draft tokens per step when a draft model is available (0=disable) |
 | `top_k` | int | 40 | Top-K sampling (higher=more diverse) |
 | `top_p` | float | 0.9 | Nucleus sampling threshold |
 | `min_p` | float | 0.0 | Minimum probability relative to most likely token |

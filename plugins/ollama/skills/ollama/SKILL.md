@@ -3,7 +3,7 @@ name: ollama
 description: "Run and manage local LLMs via Ollama REST API — text generation, chat completions, embeddings, tool calling, structured output, and model management. Use when code imports ollama, references localhost:11434, or user asks about local LLM inference."
 ---
 
-# Ollama API Reference (v0.20.7)
+# Ollama API Reference (v0.31.1)
 
 Ollama runs large language models locally. It exposes a REST API on `http://localhost:11434` for text generation, chat, embeddings, model management, and more.
 
@@ -14,10 +14,14 @@ Ollama runs large language models locally. It exposes a REST API on `http://loca
 - **Durations** are returned in nanoseconds.
 - **Tokens/sec** = `eval_count / eval_duration * 10^9`.
 - **keep_alive** controls how long a model stays loaded in memory (default `5m`). Set to `0` to unload immediately, `-1` to keep loaded indefinitely.
-- **Thinking models** support `"think": true` (or `"high"`, `"medium"`, `"low"`) to enable chain-of-thought reasoning.
+- **Thinking models** support `"think": true` (or `"high"`, `"medium"`, `"low"`, `"max"`) to enable chain-of-thought reasoning. Reasoning text is returned separately in the `thinking` field.
 - **Structured output** via `"format"` parameter: set to `"json"` for JSON mode, or pass a JSON Schema object.
-- **Tool calling** is supported in `/api/chat` by providing a `tools` array.
-- **Modelfile** is a blueprint for creating custom models (FROM, PARAMETER, TEMPLATE, SYSTEM, ADAPTER, LICENSE, MESSAGE instructions).
+- **Tool calling** is supported in `/api/chat` by providing a `tools` array (and in `/api/generate`; tool calls come back in `tool_calls`).
+- **Model capabilities** — `/api/tags` and `/api/show` return a `capabilities` array (e.g. `completion`, `tools`, `vision`, `thinking`, `insert`, `embedding`).
+- **Speculative decoding** — the `draft_num_predict` option controls draft tokens per step; `/api/create` accepts `draft_files`/`draft_quantize` for draft models.
+- **Logprobs** — set `"logprobs": true` (and optional `"top_logprobs"`, 0-20) on generate/chat to return token log probabilities.
+- **Modelfile** is a blueprint for creating custom models (FROM, PARAMETER, TEMPLATE, SYSTEM, ADAPTER, LICENSE, MESSAGE, REQUIRES instructions).
+- **Compat endpoints** — OpenAI-compatible `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`, `/v1/responses` and Anthropic-compatible `/v1/messages` are also served (native `/api/*` is preferred and documented here).
 
 ## API Endpoints
 
@@ -38,6 +42,11 @@ Ollama runs large language models locally. It exposes a REST API on `http://loca
 | `HEAD` | `/api/blobs/:digest` | Check if a blob exists |
 | `POST` | `/api/blobs/:digest` | Upload a blob (for GGUF/safetensors creation) |
 | `GET` | `/api/version` | Get Ollama server version |
+| `GET` | `/api/experimental/model-recommendations` | Recommended models for this host (experimental) |
+| `POST` | `/api/web_search` | Web search via Ollama cloud (experimental, needs `OLLAMA_API_KEY`) |
+| `POST` | `/api/web_fetch` | Fetch a web page via Ollama cloud (experimental, needs `OLLAMA_API_KEY`) |
+
+Cloud-account endpoints (`GET /api/status`, `POST /api/me`, `POST /api/signout`) exist for Ollama cloud sign-in but are not needed for local inference.
 
 ## Quick Start
 
@@ -72,12 +81,13 @@ These runtime parameters can be passed in the `options` object of generate/chat/
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `num_ctx` | int | 2048 | Context window size |
+| `num_ctx` | int | auto | Context window size (default auto: 4K/32K/256K by VRAM) |
 | `num_batch` | int | 512 | Batch size for prompt processing |
 | `num_gpu` | int | -1 (auto) | Number of layers to offload to GPU |
-| `main_gpu` | int | 0 | Main GPU index |
+| `main_gpu` | int | 0 (null) | Main GPU index (nullable) |
 | `use_mmap` | bool | (auto) | Use memory-mapped files |
 | `num_thread` | int | 0 (auto) | Number of threads |
+| `draft_num_predict` | int | 4 | Speculative draft tokens per step (0=disable; for draft/MTP models) |
 | `num_keep` | int | 4 | Number of tokens to keep from initial prompt |
 | `seed` | int | -1 | Random seed (-1 = random) |
 | `num_predict` | int | -1 | Max tokens to generate (-1 = infinite) |

@@ -5,8 +5,8 @@ description: "OpenCL SDK (Khronos Group) for cross-platform GPU/CPU parallel com
 
 # OpenCL SDK
 
-**Version:** v2025.07.23 (Khronos Group OpenCL-SDK)
-**Language:** C (OpenCL 1.0–3.0) / C++ (opencl.hpp wrapper)
+**Version:** v2026.05.29 (Khronos Group OpenCL-SDK)
+**Language:** C (OpenCL 1.0–3.1) / C++ (opencl.hpp wrapper)
 **License:** Apache-2.0
 **Repo:** https://github.com/KhronosGroup/OpenCL-SDK
 
@@ -46,7 +46,7 @@ cl_command_queue q = clCreateCommandQueueWithProperties(ctx, dev, NULL, &err);
 
 ```cpp
 #define CL_HPP_ENABLE_EXCEPTIONS
-#define CL_HPP_TARGET_OPENCL_VERSION 200
+#define CL_HPP_TARGET_OPENCL_VERSION 300   // default is now 310 (OpenCL 3.1); minimum 200
 #include <CL/opencl.hpp>
 
 cl::Context ctx{CL_DEVICE_TYPE_DEFAULT};
@@ -74,10 +74,10 @@ saxpy(cl::EnqueueArgs{queue, cl::NDRange{N}}, a, buf_x, buf_y);
 
 | Domain | Reference File | Key Functions / Types |
 |---|---|---|
-| Platform & Device | `references/api-platform-device.md` | `clGetPlatformIDs`, `clGetDeviceIDs`, `clGetDeviceInfo`, `clCreateSubDevices`, timer APIs |
+| Platform & Device | `references/api-platform-device.md` | `clGetPlatformIDs`, `clGetDeviceIDs`, `clGetDeviceInfo`, `clCreateSubDevices`, UUID/LUID & SPIR-V queries (3.1), timer APIs |
 | Context & Queue | `references/api-context-queue.md` | `clCreateContext`, `clCreateCommandQueueWithProperties`, `clFlush`, `clFinish`, destructor callbacks |
 | Memory Objects | `references/api-memory.md` | `clCreateBuffer`, `clCreateImage`, enqueue read/write/copy/fill, map/unmap, pipes, samplers, SVM |
-| Programs & Kernels | `references/api-program-kernel.md` | `clCreateProgramWithSource`, `clBuildProgram`, `clCompileProgram`, `clLinkProgram`, `clCreateKernel`, sub-group queries |
+| Programs & Kernels | `references/api-program-kernel.md` | `clCreateProgramWithSource`, `clBuildProgram`, `clCompileProgram`, `clLinkProgram`, `clCreateKernel`, `clGetKernelSuggestedLocalWorkSize` (3.1), sub-group queries |
 | Execution & Events | `references/api-execution.md` | `clEnqueueNDRangeKernel`, `clWaitForEvents`, `clSetEventCallback`, profiling, extension access |
 | C++ Wrapper | `references/api-cpp-wrapper.md` | `cl::Context`, `cl::Buffer`, `cl::Pipe`, `cl::Sampler`, `cl::KernelFunctor`, `cl::SVMAllocator`, exceptions |
 | Workflows | `references/workflows.md` | Quick-start, vector add, image blur, async events, binary caching, error handling |
@@ -124,6 +124,8 @@ SDK Library (samples only, not installed): `<CL/SDK/CLI.h>`, `<CL/SDK/Random.h>`
 
 **C++ exceptions:** Enable with `#define CL_HPP_ENABLE_EXCEPTIONS` before including `<CL/opencl.hpp>`. Without it, check `cl_int` error parameters manually.
 
-**OpenCL version targeting:** Set `CL_HPP_TARGET_OPENCL_VERSION` (e.g., `300`, `200`, `120`) to control which API surface is available in the C++ wrapper. OpenCL 1.x deprecated `clCreateCommandQueue`; use `clCreateCommandQueueWithProperties` for 2.0+.
+**OpenCL version targeting:** Set `CL_HPP_TARGET_OPENCL_VERSION` (e.g., `310`, `300`, `200`, `120`) to control which API surface is available in the C++ wrapper. As of this SDK the default is `310` (OpenCL 3.1) and the minimum is `200`; the C headers default `CL_TARGET_OPENCL_VERSION` to `310` too. OpenCL 1.x deprecated `clCreateCommandQueue`; use `clCreateCommandQueueWithProperties` for 2.0+.
+
+**OpenCL 3.1 additions:** `clGetKernelSuggestedLocalWorkSize` (query the runtime's optimal local size for an NDRange) is now core, along with device queries `CL_DEVICE_UUID` / `CL_DRIVER_UUID`, `CL_DEVICE_LUID` / `CL_DEVICE_LUID_VALID` / `CL_DEVICE_NODE_MASK`, integer dot-product capabilities, and SPIR-V extension/capability queries — all previously KHR extensions. In C++, use `queue.getKernelSuggestedLocalWorkSize(...)` and `#define CL_HPP_CUSTOM_EXCEPTION_TYPE` to plug your own exception class. `CL_DEVICE_MAX_WORK_ITEM_SIZES` is now spelled `CL_DEVICE_MAX_WORK_GROUP_SIZES` (same value; old name deprecated).
 
 **SVM requires OpenCL 2.0+:** Shared Virtual Memory (`clSVMAlloc`) requires device support for `CL_DEVICE_SVM_CAPABILITIES`. Check before use.

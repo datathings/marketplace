@@ -23,7 +23,7 @@ Every GreyCat project has a single entrypoint named `project.gcl` at the project
 @include("models");
 ```
 
-The runtime / analyzer starts loading from the entrypoint. It parses the file, walks every `@library` / `@include` pragma, loads each module in the closure, and recursively follows pragmas in loaded modules. Cycle protection is built in — loading the same path twice is a no-op.
+The runtime / lang starts loading from the entrypoint. It parses the file, walks every `@library` / `@include` pragma, loads each module in the closure, and recursively follows pragmas in loaded modules. Cycle protection is built in — loading the same path twice is a no-op.
 
 **Never flat-walk a directory for `.gcl` files.** If a file is not reachable from the entrypoint's pragma closure, it is not part of the project. The CLI and LSP both refuse to analyze unreachable files (the LSP reports them as `orphan-module` advisories).
 
@@ -36,7 +36,7 @@ Declares a dependency on a library named `name` at version `version`. Resolution
 
 Inside `<project>/lib/<name>/`, the loader looks for a `project.gcl` (the library's own entrypoint) and recursively follows its pragmas. So libraries can themselves have `@library` / `@include` pragmas — the closure is whole-graph.
 
-The version string is recorded but not used for resolution-time conflict detection — the loader trusts whatever lives at the resolved path. Mismatches surface as analyzer errors at use sites (missing types, signature drift).
+The version string is recorded but not used for resolution-time conflict detection — the loader trusts whatever lives at the resolved path. Mismatches surface as lang errors at use sites (missing types, signature drift).
 
 `@library` pragmas **must** appear in `project.gcl`. Placing them in any other module is a hard error.
 
@@ -106,7 +106,7 @@ fn current(): User {                            // bare-name reference works
 }
 ```
 
-When two modules declare the same bare name, the analyzer reports an ambiguous-reference error and requires you to disambiguate via FQN.
+When two modules declare the same bare name, the lang reports an ambiguous-reference error and requires you to disambiguate via FQN.
 
 ### `private` declarations
 
@@ -144,11 +144,11 @@ Type::static_method()
 Color::red                       // enum field
 ```
 
-Both uses share the `::` operator. The analyzer disambiguates by context (does the LHS resolve as a module name or as a type?).
+Both uses share the `::` operator. The lang disambiguates by context (does the LHS resolve as a module name or as a type?).
 
 ## Multi-project workspaces
 
-A single workspace folder can host multiple independent projects, each with its own `project.gcl`. The analyzer treats each as a separate closure:
+A single workspace folder can host multiple independent projects, each with its own `project.gcl`. The lang treats each as a separate closure:
 
 ```
 workspace/
@@ -166,8 +166,8 @@ Each `project.gcl` defines its own analyzed module set. **Cross-project navigati
 The LSP picks the nearest `project.gcl` walking up from any opened `.gcl` file. The CLI takes the entrypoint as an explicit argument:
 
 ```sh
-greycat-analyzer lint server
-greycat-analyzer fmt client
+greycat-lang lint server
+greycat-lang fmt client
 ```
 
 ## Practical layout

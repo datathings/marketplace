@@ -20,7 +20,7 @@ Generate a response for a given prompt. Streams by default.
 | `keep_alive` | string or number | No | How long to keep model loaded (default: `"5m"`) |
 | `images` | string[] | No | Base64-encoded images for multimodal models |
 | `options` | object | No | Runtime model parameters (temperature, top_k, etc.) |
-| `think` | bool or string | No | Enable thinking: `true`/`false` or `"high"`/`"medium"`/`"low"` |
+| `think` | bool or string | No | Enable thinking: `true`/`false` or `"high"`/`"medium"`/`"low"`/`"max"` |
 | `truncate` | bool | No | Truncate prompt if it exceeds context length |
 | `shift` | bool | No | Shift context window instead of erroring on overflow |
 | `logprobs` | bool | No | Return log probabilities of output tokens |
@@ -239,7 +239,7 @@ Generate the next message in a chat conversation. Streams by default.
 | `model` | string | Yes | Model name |
 | `messages` | Message[] | Yes | Conversation messages |
 | `tools` | Tool[] | No | Available tools for the model |
-| `think` | bool or string | No | Enable thinking: `true`/`false` or `"high"`/`"medium"`/`"low"` |
+| `think` | bool or string | No | Enable thinking: `true`/`false` or `"high"`/`"medium"`/`"low"`/`"max"` |
 | `format` | string or object | No | `"json"` or JSON Schema for structured output |
 | `options` | object | No | Runtime model parameters |
 | `stream` | bool | No | Stream response (default: `true`) |

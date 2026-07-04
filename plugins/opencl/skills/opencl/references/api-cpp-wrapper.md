@@ -23,10 +23,14 @@ The C++ wrapper (`#include <CL/opencl.hpp>`) provides RAII types, range-based it
 #define CL_HPP_ENABLE_EXCEPTIONS
 
 // Target OpenCL version (affects available APIs)
-#define CL_HPP_TARGET_OPENCL_VERSION 300  // 300, 200, 120, 110
+#define CL_HPP_TARGET_OPENCL_VERSION 300  // 310, 300, 200, 120, 110
 
 #include <CL/opencl.hpp>
 ```
+
+Since this SDK, `CL_HPP_TARGET_OPENCL_VERSION` **defaults to `310`** (OpenCL 3.1) and the minimum
+supported value is `200`; invalid values fall back to `310`. Set it explicitly to pin the API
+surface you compile against.
 
 All wrapper objects manage their underlying C handle via reference counting. Copies are shallow (shared ownership); use `cl::detail::Wrapper` copy semantics.
 
@@ -99,6 +103,12 @@ cl::CommandQueue queue{ctx, device,
 // Synchronization
 queue.flush();
 queue.finish();
+
+// Suggested local work size (OpenCL 3.1, CL_HPP_TARGET_OPENCL_VERSION >= 310)
+// Wraps clGetKernelSuggestedLocalWorkSize; returns an NDRange to feed to enqueueNDRangeKernel.
+cl::NDRange local = queue.getKernelSuggestedLocalWorkSize(
+    kernel, cl::NullRange /*offset*/, cl::NDRange{N} /*global*/);
+queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange{N}, local);
 ```
 
 **DeviceCommandQueue (OpenCL 2.0+):**
@@ -319,6 +329,24 @@ try {
 ```
 
 Without exceptions, check return codes from methods that accept an `cl_int* err` parameter.
+
+**Custom exception type (newer SDK):** define `CL_HPP_CUSTOM_EXCEPTION_TYPE` before including the
+header to have the wrapper throw your own class instead of `cl::Error`. The type must be
+constructible from `(cl_int err, const char* what)` and expose `err()` / `what()`:
+```cpp
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_CUSTOM_EXCEPTION_TYPE MyClError   // cl::Error becomes an alias for MyClError
+#include <CL/opencl.hpp>
+```
+
+**OpenCL 3.1 device traits.** `device.getInfo<...>()` gains the promoted identity/SPIR-V queries,
+still exposed under their `*_KHR` trait spellings:
+```cpp
+auto uuid = device.getInfo<CL_DEVICE_UUID_KHR>();          // cl::array<cl_uchar, CL_UUID_SIZE>
+auto luid = device.getInfo<CL_DEVICE_LUID_KHR>();          // cl::array<cl_uchar, CL_LUID_SIZE>
+cl_uint node = device.getInfo<CL_DEVICE_NODE_MASK_KHR>();
+auto spirvExts = device.getInfo<CL_DEVICE_SPIRV_EXTENSIONS_KHR>();  // cl::vector<const char*>
+```
 
 ---
 

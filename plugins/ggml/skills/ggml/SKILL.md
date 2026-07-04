@@ -15,7 +15,7 @@ ggml is a minimalistic C tensor computation library powering llama.cpp and many 
 - Automatic differentiation and AdamW/SGD optimizers
 - Zero runtime allocations — all memory is pre-reserved
 
-**Version:** v0.15.1
+**Version:** v0.15.3
 **Language:** C (C++ optional)
 **License:** MIT
 **Repo:** https://github.com/ggml-org/ggml

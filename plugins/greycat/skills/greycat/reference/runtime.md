@@ -30,15 +30,15 @@ Everything is in-process. There is no separate database, queue, or web server to
 
 `gcdata/` is the on-disk graph database. Created on first `serve`/`run`. Contents:
 
-| Entry                       | Meaning                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `data_<N>.bin`              | Zone files (numbered; one per worker / shard).                                   |
-| `meta.bin`, `meta.bin-lock` | Index of zones and live transactions.                                            |
-| `program`                   | The compiled program. Updated on each compatible rebuild.                        |
-| `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds.     |
-| `history/`                  | Task history (recent task records — for the `Task::history` API).                |
-| `security/`                 | LMDB-backed user / role / grant database, plus the server's private key.         |
-| `lock`                      | Process lock — prevents two workers from opening the same store simultaneously.  |
+| Entry                       | Meaning                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `data_<N>.bin`              | Zone files (numbered; one per worker / shard).                                  |
+| `meta.bin`, `meta.bin-lock` | Index of zones and live transactions.                                           |
+| `program`                   | The compiled program. Updated on each compatible rebuild.                       |
+| `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds.    |
+| `history/`                  | Task history (recent task records — for the `Task::history` API).               |
+| `security/`                 | LMDB-backed user / role / grant database, plus the server's private key.        |
+| `lock`                      | Process lock — prevents two workers from opening the same store simultaneously. |
 
 **`gcdata/` is the durable state of the application.** Back it up; do not check it into git. Deleting it resets the project to a blank graph.
 
@@ -76,11 +76,11 @@ try {
 
 `MergeStrategy` controls how node-write conflicts between parallel jobs are resolved when their writes merge back into the parent task:
 
-| Strategy      | Behavior                                                                              |
-| ------------- | ------------------------------------------------------------------------------------- |
-| `strict`      | Default. Any concurrent write to the same node throws. Use when correctness > throughput. |
-| `first_wins`  | Conflicts resolved in favor of the previously committed value.                        |
-| `last_wins`   | Conflicts resolved in favor of the current job's value.                               |
+| Strategy     | Behavior                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| `strict`     | Default. Any concurrent write to the same node throws. Use when correctness > throughput. |
+| `first_wins` | Conflicts resolved in favor of the previously committed value.                            |
+| `last_wins`  | Conflicts resolved in favor of the current job's value.                                   |
 
 **Two gotchas:**
 
@@ -97,17 +97,17 @@ Worker pool sizes:
 
 `Task::running()` lists currently executing tasks; `Task::history(offset, max)` reads the recent-task log. `Task::cancel(task_id)` requests cancellation. `TaskStatus` is one of:
 
-| State                | Meaning                                                                  |
-| -------------------- | ------------------------------------------------------------------------ |
-| `empty`              | Allocated but not yet enqueued.                                          |
-| `waiting`            | Queued, waiting for a worker.                                            |
-| `running`            | Executing on a worker.                                                   |
-| `await`              | Blocked on `await(...)` for child jobs.                                  |
-| `cancelled`          | Cancelled before completion.                                             |
-| `error`              | Threw an uncaught exception.                                             |
-| `ended`              | Completed successfully.                                                  |
-| `ended_with_errors`  | Completed, but some child jobs failed.                                   |
-| `breakpoint`         | Paused at a debugger breakpoint.                                         |
+| State               | Meaning                                 |
+| ------------------- | --------------------------------------- |
+| `empty`             | Allocated but not yet enqueued.         |
+| `waiting`           | Queued, waiting for a worker.           |
+| `running`           | Executing on a worker.                  |
+| `await`             | Blocked on `await(...)` for child jobs. |
+| `cancelled`         | Cancelled before completion.            |
+| `error`             | Threw an uncaught exception.            |
+| `ended`             | Completed successfully.                 |
+| `ended_with_errors` | Completed, but some child jobs failed.  |
+| `breakpoint`        | Paused at a debugger breakpoint.        |
 
 ### Transactions and rollback
 
@@ -131,15 +131,15 @@ Jobs spawned via `await` join the parent task's transaction by default, so a thr
 
 Started by `greycat serve` / `greycat dev`. Routes:
 
-| Route                         | Purpose                                                                                       |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `POST /`                      | JSON-RPC 2.0 entrypoint. `method` is the FQN with `.` separators: `"<module>.<fn>"`, or `"<module>.<Type>.<fn>"` for a static method. Body: `{jsonrpc, method, params, id}`. |
-| `POST /<module>::<fn>`        | Path-RPC to a free-standing function. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type). |
-| `POST /<module>::<Type>::<fn>`| Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`. |
-| `GET /files/...`              | Read from `<project>/files/`. Per-user subdirectory + ACL.                                    |
-| `POST/PUT /files/...`         | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.     |
-| `GET /...` (anything else)    | Static assets from `<project>/webroot/`. Unknown paths return 404 — no automatic SPA fallback. |
-| `GET /` with no path          | Serves `webroot/index.html` if present, else a built-in placeholder.                          |
+| Route                          | Purpose                                                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /`                       | JSON-RPC 2.0 entrypoint. `method` is the FQN with `.` separators: `"<module>.<fn>"`, or `"<module>.<Type>.<fn>"` for a static method. Body: `{jsonrpc, method, params, id}`. |
+| `POST /<module>::<fn>`         | Path-RPC to a free-standing function. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type).                                               |
+| `POST /<module>::<Type>::<fn>` | Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`.               |
+| `GET /files/...`               | Read from `<project>/files/`. Per-user subdirectory + ACL.                                                                                                                   |
+| `POST/PUT /files/...`          | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.                                                                                    |
+| `GET /...` (anything else)     | Static assets from `<project>/webroot/`. Unknown paths return 404 — no automatic SPA fallback.                                                                               |
+| `GET /` with no path           | Serves `webroot/index.html` if present, else a built-in placeholder.                                                                                                         |
 
 ### Authentication
 
@@ -170,20 +170,20 @@ The security model is **users × roles × permissions × grants**:
 
 Built-in permissions live in `lib/std/runtime.gcl`:
 
-| Permission | What it grants                                              |
-| ---------- | ----------------------------------------------------------- |
-| `public`   | Anonymous access. Default for an anonymous caller.          |
-| `api`      | Call `@expose`d functions and read `webroot`.               |
-| `admin`    | Full administrative access.                                 |
-| `debug`    | Low-level graph manipulation.                               |
+| Permission | What it grants                                     |
+| ---------- | -------------------------------------------------- |
+| `public`   | Anonymous access. Default for an anonymous caller. |
+| `api`      | Call `@expose`d functions and read `webroot`.      |
+| `admin`    | Full administrative access.                        |
+| `debug`    | Low-level graph manipulation.                      |
 
 Built-in roles:
 
-| Role     | Grants                              |
-| -------- | ----------------------------------- |
-| `public` | `public`                            |
-| `user`   | `public`, `api`                     |
-| `admin`  | `public`, `admin`, `api`, `debug`   |
+| Role     | Grants                            |
+| -------- | --------------------------------- |
+| `public` | `public`                          |
+| `user`   | `public`, `api`                   |
+| `admin`  | `public`, `admin`, `api`, `debug` |
 
 `@permission("name")` on a function gates it on that permission. With no `@permission`, an `@expose`d function defaults to requiring `api` — that is the recommended default. Reserve `@permission("public")` for endpoints that genuinely must serve anonymous callers (the `login` endpoint itself, an unauthenticated health probe); never add it to a write-capable endpoint just to avoid wiring up login.
 
@@ -229,13 +229,13 @@ Scheduler::find(my_fn);                      // PeriodicTask?
 
 Periodicities:
 
-| Type                  | Triggers                                                             |
-| --------------------- | -------------------------------------------------------------------- |
-| `FixedPeriodicity`    | Every `every` duration.                                              |
-| `DailyPeriodicity`    | At a wall-clock time-of-day; honors `timezone`.                      |
-| `WeeklyPeriodicity`   | On selected `days`, optionally combined with a `DailyPeriodicity`.   |
-| `MonthlyPeriodicity`  | On selected days of the month (`-1` = last day).                     |
-| `YearlyPeriodicity`   | On `DateTuple`s within a year.                                       |
+| Type                 | Triggers                                                           |
+| -------------------- | ------------------------------------------------------------------ |
+| `FixedPeriodicity`   | Every `every` duration.                                            |
+| `DailyPeriodicity`   | At a wall-clock time-of-day; honors `timezone`.                    |
+| `WeeklyPeriodicity`  | On selected `days`, optionally combined with a `DailyPeriodicity`. |
+| `MonthlyPeriodicity` | On selected days of the month (`-1` = last day).                   |
+| `YearlyPeriodicity`  | On `DateTuple`s within a year.                                     |
 
 `PeriodicOptions { start, max_duration, ... }` further constrains when a task may run.
 
@@ -307,12 +307,12 @@ Output goes to stdout. `--logfile` also mirrors to a file next to `gcdata/`.
 
 ## When something goes wrong
 
-| Symptom                                          | First thing to check                                                      |
-| ------------------------------------------------ | ------------------------------------------------------------------------- |
-| Compile error, then "no program found"           | `greycat build` to see the analyzer errors.                                |
-| `serve` boots but 403 on every call              | Token missing/expired, or the function needs a stronger permission.       |
-| 422 Unprocessable                                | Client SDK is built against an older ABI — regenerate with `greycat codegen`. |
-| Storage grows continuously                       | Check `--defrag_ratio` and run `greycat defrag` manually.                  |
-| `serve` won't start: "lock held"                 | Another GreyCat process owns `gcdata/lock`. Stop it or remove the lock.   |
-| `install` fails to fetch                         | Check version pin in `project.gcl`; verify network access to `get.greycat.io`. |
-| `Identity::current()` throws on a public call    | Function lacks `@permission("public")`; anonymous callers fail it.        |
+| Symptom                                       | First thing to check                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------ |
+| Compile error, then "no program found"        | `greycat build` to see the errors.                                             |
+| `serve` boots but 403 on every call           | Token missing/expired, or the user needs a stronger permission.                |
+| 422 Unprocessable                             | Client SDK is built against an older ABI — regenerate with `greycat codegen`.  |
+| Storage grows continuously                    | Check `--defrag_ratio` and run `greycat defrag` manually.                      |
+| `serve` won't start: "lock held"              | Another GreyCat process owns `gcdata/lock`. Stop it.                           |
+| `install` fails to fetch                      | Check version pin in `project.gcl`; verify network access to `get.greycat.io`. |
+| `Identity::current()` throws on a public call | Function is not `@permission("public")`; anonymous callers fail it.            |

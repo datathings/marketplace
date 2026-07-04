@@ -7,8 +7,9 @@
 4. [Image Processing (Blur)](#image-processing-blur)
 5. [Asynchronous Execution with Events](#asynchronous-execution-with-events)
 6. [Program Binary Caching](#program-binary-caching)
-7. [Error Handling Patterns](#error-handling-patterns)
-8. [Build System Integration](#build-system-integration)
+7. [Suggested Local Work Size (OpenCL 3.1)](#suggested-local-work-size-opencl-31)
+8. [Error Handling Patterns](#error-handling-patterns)
+9. [Build System Integration](#build-system-integration)
 
 ---
 
@@ -279,6 +280,41 @@ if (err == CL_SUCCESS) {
 } else {
     // Fall back to source compilation
 }
+```
+
+---
+
+## Suggested Local Work Size (OpenCL 3.1)
+
+Let the runtime pick a local work-group size for a kernel + global NDRange instead of hard-coding
+one. Requires OpenCL 3.1 (`CL_TARGET_OPENCL_VERSION 310` / `CL_HPP_TARGET_OPENCL_VERSION 310`);
+set the kernel's arguments **before** calling.
+
+### C
+```c
+size_t global = 1 << 20;
+size_t local  = 0;   // filled in by the query
+
+clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_a);
+clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_b);
+clSetKernelArg(kernel, 2, sizeof(cl_mem), &d_c);
+
+cl_int err = clGetKernelSuggestedLocalWorkSize(
+    queue, kernel, 1, /*offset*/ NULL, &global, &local);
+if (err != CL_SUCCESS) local = 0;   // fall back: let clEnqueueNDRangeKernel choose (NULL)
+
+clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &global,
+                       local ? &local : NULL, 0, NULL, NULL);
+```
+
+### C++
+```cpp
+auto add = cl::Kernel(prog, "add");
+add.setArg(0, d_a); add.setArg(1, d_b); add.setArg(2, d_c);
+
+cl::NDRange global{1 << 20};
+cl::NDRange local = queue.getKernelSuggestedLocalWorkSize(add, cl::NullRange, global);
+queue.enqueueNDRangeKernel(add, cl::NullRange, global, local);
 ```
 
 ---

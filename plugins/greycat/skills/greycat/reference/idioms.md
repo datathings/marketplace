@@ -96,13 +96,13 @@ var grid = [[1, 2], [3, 4]];  // Array<Array<int>>  (inferred when no `null`)
 var empty = Array<float> {};  // empty: must construct explicitly — no element to infer from
 ```
 
-**Caveat — annotation enforcement on `var`.** The runtime currently drops the type decorator on `var` declarations, so a mismatched annotation like `var x: Array<int> = ["a"];` will not be rejected at runtime. The analyzer is stricter but is not yet wired into the runtime. To get reliable type checking on collections, prefer **function parameters** (where the analyzer always enforces):
+**Caveat — annotation enforcement on `var`.** The runtime currently drops the type decorator on `var` declarations, so a mismatched annotation like `var x: Array<int> = ["a"];` will not be rejected at runtime. The lang is stricter but is not yet wired into the runtime. To get reliable type checking on collections, prefer **function parameters** (where the lang always enforces):
 
 ```gcl
 fn take_ints(_: Array<int>) {}
 
 take_ints([1, 2, 3]);         // OK
-take_ints([1, "x"]);          // analyzer ERROR — literal infers as Array<any?>, not Array<int>
+take_ints([1, "x"]);          // lang ERROR — literal infers as Array<any?>, not Array<int>
 ```
 
 ### Tuple literal
@@ -517,11 +517,11 @@ Production code should use the logging functions (`info`, `warn`, `error`, etc.)
 
 The most common reasons GreyCat code "looks wrong":
 
-1. The analyzer complains about `.` on a node tag — use `->` instead, or `.resolve()`.
-2. The analyzer complains about `null` flowing into a non-null type — narrow with `if (x != null) { ... }`, or coalesce with `??`, or force with `!!`.
+1. The lang complains about `.` on a node tag — use `->` instead, or `.resolve()`.
+2. The lang complains about `null` flowing into a non-null type — narrow with `if (x != null) { ... }`, or coalesce with `??`, or force with `!!`.
 3. A function returns `any?` and the next call doesn't compile — cast (`(result as int) + 1`).
 4. `Array<int>` won't flow into a `Array<int?>` parameter — declare the local as `Array<int?>` upfront.
 5. A method exists in stdlib but the bare name doesn't resolve — the type is private to its module; use FQN (`std::core::SomeType`).
 6. Construction looks "wrong" because you reflexively wrote `Type::new(...)` — use `Type { ... }`.
 
-When the analyzer / runtime disagree with this skill, trust the runtime. Run `greycat run` against a minimal `project.gcl` to settle disputes.
+When the lang / runtime disagree with this skill, trust the runtime. Run `greycat run` against a minimal `project.gcl` to settle disputes.

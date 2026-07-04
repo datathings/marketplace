@@ -64,7 +64,7 @@ fn use(maybe: int?) {
 
 ### Operations that require non-null receivers
 
-These operators throw at runtime if the receiver is null AND error statically when the analyzer can't prove non-null:
+These operators throw at runtime if the receiver is null AND error statically when the lang can't prove non-null:
 
 - `.field`, `.method()` (use `?.` to propagate null)
 - `->field`, `->method()` (use `?->` to propagate null)
@@ -75,7 +75,7 @@ These operators throw at runtime if the receiver is null AND error statically wh
 
 ## Null-flow narrowing
 
-The analyzer tracks null possibility across control flow. After these checks, the value's type is locally narrowed to its non-null counterpart:
+The lang tracks null possibility across control flow. After these checks, the value's type is locally narrowed to its non-null counterpart:
 
 ```gcl
 if (x == null) { /*...*/ } else {   // x: T  here
@@ -94,7 +94,7 @@ use(x);                          // safe
 x = something_not_null();        // x: T after this assignment
 ```
 
-Reassignment to a nullable value re-introduces null possibility. The analyzer joins narrows across `if`/`else` paths.
+Reassignment to a nullable value re-introduces null possibility. The lang joins narrows across `if`/`else` paths.
 
 ### `??` and `!!`
 
@@ -211,7 +211,7 @@ fn describe(x: any?) {
 - `is T` accepts the same `T` syntax as a declaration (including generics, nullability, FQN).
 - It returns `bool`.
 - In the then-branch, the LHS value's type is narrowed to `T`.
-- Type tests on generic-parametric subtypes (`x is Box<int>`) work at the analyzer level; the runtime performs an erasure-style check.
+- Type tests on generic-parametric subtypes (`x is Box<int>`) work at the lang level; the runtime performs an erasure-style check.
 
 ## The `as` operator
 
@@ -219,17 +219,17 @@ fn describe(x: any?) {
 
 ```gcl
 fn handle(raw: any?) {
-    var s = raw as String;     // analyzer accepts; runtime does not verify
+    var s = raw as String;     // lang accepts; runtime does not verify
     println(s.size());          // if raw was not a String, behavior is undefined
 }
 ```
 
 Use `as` to:
 
-- Re-type a value the analyzer cannot infer.
+- Re-type a value the lang cannot infer.
 - Downcast (`Shape` → `Circle`) after a parallel `is` check.
 
-The analyzer rejects `as` casts between unrelated types. Use `is` first when you want a checked downcast.
+The lang rejects `as` casts between unrelated types. Use `is` first when you want a checked downcast.
 
 ## The `function` type
 
@@ -255,7 +255,7 @@ Once a value flows into a `function`-typed slot (e.g. a `function` parameter), t
 
 ```gcl
 fn run(callback: function) {
-    callback(); // analyzer accepts; runtime throws if `callback` expects args
+    callback(); // lang accepts; runtime throws if `callback` expects args
 }
 ```
 
@@ -310,4 +310,4 @@ some_type.nb_enum_values()   // enum entry count
 | `Array<int>` → `Array<any>`    | **Allowed.** Generics are invariant BUT `any` is an exception. |
 | `nodeTime<float>` → `nodeTime` | Allowed because `nodeTime` is sugar for `nodeTime<any?>`.      |
 
-When in doubt, run the program through `greycat run` — the runtime is the oracle for assignability decisions, especially where the TS-style analyzer and the C-runtime disagree (the runtime wins).
+When in doubt, run the program through `greycat run` — the runtime is the oracle for assignability decisions, especially where the TS-style lang and the C-runtime disagree (the runtime wins).

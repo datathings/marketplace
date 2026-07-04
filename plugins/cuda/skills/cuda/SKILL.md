@@ -9,10 +9,12 @@ description: "NVIDIA CUDA parallel computing platform — use when writing .cu k
 
 CUDA is NVIDIA's parallel computing platform and programming model for GPU-accelerated applications. It provides direct access to the GPU's virtual instruction set and parallel compute elements for executing kernels in C, C++, and Fortran.
 
-**cuda-samples version:** v13.2 (CUDA Toolkit 13.2)
-**CUDALibrarySamples:** main (April 2026)
+**cuda-samples version:** v13.3 (CUDA Toolkit 13.3)
+**CUDALibrarySamples:** main (July 2026)
 **Language:** C/C++ (.cu files)
 **Licenses:** BSD-3-Clause (cuda-samples), Apache-2.0 (CUDALibrarySamples)
+
+> **v13.3 layout note:** cuda-samples renamed its top-level `Samples/` directory to `cpp/` (Python samples now live under `python/`). C++ samples are grouped under `cpp/0_Introduction`, `cpp/4_CUDA_Libraries`, `cpp/6_Performance`, plus new `cpp/9_CUDA_Tile` (CUDA Tile C++) and CCCL 3.3 feature samples (`cubDeviceFind`, `cubDeviceSegmentedScan`, `cubDeviceTransform`, `libcuxxRandom`, `libcuxxMdspan`) under `cpp/4_CUDA_Libraries/`.
 
 ## Quick Start
 

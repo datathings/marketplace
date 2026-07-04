@@ -1149,6 +1149,8 @@ void handle_model(struct llama_model * model) {
     printf("Embedding dimension: %d\n", llama_model_n_embd(model));
     printf("Layers: %d\n", llama_model_n_layer(model));
     printf("Training context: %d tokens\n", llama_model_n_ctx_train(model));
+    // Quantization (b9870): map the ftype enum to a display string
+    printf("Quantization: %s\n", llama_ftype_name(llama_model_ftype(model)));
 }
 
 int main() {

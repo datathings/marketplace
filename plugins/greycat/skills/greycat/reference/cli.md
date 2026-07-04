@@ -4,7 +4,7 @@ The `greycat` binary is one executable that compiles, runs, serves, and administ
 
 This reference is what the agent reaches for when the user says "build it", "serve it", "install the deps", "back it up", "generate the client", etc.
 
-For static analysis (`lint`, `fmt`, LSP), see the sibling [`greycat-analyzer`](analyzer.md) — a separate binary, not bundled into `bin/`.
+For static analysis (`lint`, `fmt`, LSP), see the sibling [`greycat-lang`](lang.md) — a separate binary, not bundled into `bin/`.
 
 ## Contents
 
@@ -37,12 +37,13 @@ This is how a project pins a specific runtime version: `@library("std", "1.2.3")
 
 ### `greycat run [function]`
 
-Builds the project, then executes `function` (defaults to `main`). Extra arguments after `function` are passed as its `Array<String>` argv. Used for one-off scripts, data processing, migrations.
+Builds the project, then executes `function` (defaults to `main`). Each argument after `function` is JSON-parsed and bound to the matching parameter, coerced best-effort to its declared type, so primitives and complex objects both pass through. Used for one-off scripts, data processing, migrations.
+
+Given `type Person { name: String; }` and `fn foo(a: int, b: String, p: Person) {}`:
 
 ```sh
-greycat run                    # runs main()
-greycat run my_fn              # runs my_fn()
-greycat run my_fn arg1 arg2    # my_fn receives ["arg1", "arg2"]
+greycat run                                  # runs main()
+greycat run foo 42 "hello" '{"name":"John"}' # foo(42, "hello", Person { name: "John" })
 ```
 
 ### `greycat serve`
@@ -61,7 +62,7 @@ Like `serve`, but auto-detects and spawns a frontend build tool in watch mode al
 
 If the watched build process exits non-zero, `greycat dev` stops the server.
 
-See [webapp.md](webapp.md) for the recommended project layout (`app/` sources, `vite.config.ts` at the project root, bundle into `webroot/`).
+See [webapp.md](webapp.md) for the one prescribed webapp stack (VitePlus + MPA + Lit + Shoelace/GreyCat components, `@greycat/web` SDK): `app/` sources, `vite.config.ts` at the project root, bundle into `webroot/`.
 
 ### `greycat build`
 
@@ -89,7 +90,7 @@ Pretty-prints the content of a `.gcb` (GreyCat Binary) file. `--format=json` for
 
 ### `greycat bytecode`
 
-Builds the project and dumps its compiled bytecode to stdout. Diagnostic tool — useful for inspecting analyzer / compiler output.
+Builds the project and dumps its compiled bytecode to stdout. Diagnostic tool — useful for inspecting compiler output.
 
 ### `greycat defrag`
 
@@ -122,6 +123,8 @@ greycat user revoke <name> r|w|rw <target>     remove a previously-granted acces
 ```
 
 Built-in users: `id=0` (`public`, anonymous), `id=1` (`root`, role `admin`). Built-in roles live in `lib/std/runtime.gcl`: `public`, `user`, `admin`.
+
+These subcommands operate on the security DB, which is created on the first `serve`/`run`. On a brand-new project they fail with `failed to open users database` until the runtime has booted once. To create the first user in one step, use `greycat run runtime::Identity::create <name> <role>`, which boots the runtime and creates the DB (see [workflow.md](workflow.md) "Creating users").
 
 ### `greycat stats`
 

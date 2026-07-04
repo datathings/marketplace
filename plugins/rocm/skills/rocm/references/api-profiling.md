@@ -182,6 +182,10 @@ hipcc -shared -fPIC client.cpp -o libmy_profiler.so -lrocprofiler-sdk
 ROCPROFILER_PRELOAD=./libmy_profiler.so ./my_app
 ```
 
+**CMake builds (ROCm 7.2.4):** rocProfiler-SDK example executables must link the threading
+library explicitly — add `find_package(Threads REQUIRED)` and put `Threads::Threads` in
+`target_link_libraries` alongside the client library, otherwise linking fails.
+
 ---
 
 ## rocprof CLI Tool

@@ -347,8 +347,8 @@ self_test()  # runs a minimal sanity check; raises PowerGridError on failure
 
 ```python
 import power_grid_model
-power_grid_model.__version__   # e.g. "1.13.93" — the C++ core version string (PGM_version)
+power_grid_model.__version__   # e.g. "1.13.106" — the C++ core version string (PGM_version)
 ```
 
-Available since v1.13.78. The value is read from the native core at import time, so it
+Available since v1.13.70. The value is read from the native core at import time, so it
 reflects the actually-loaded binary rather than the Python package metadata.

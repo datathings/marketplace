@@ -169,6 +169,18 @@ int32_t llama_model_desc(
 ```
 Get a string describing the model type.
 
+### llama_model_ftype
+```c
+enum llama_ftype llama_model_ftype(const struct llama_model * model);
+```
+Get the model file type (quantization), e.g. `LLAMA_FTYPE_MOSTLY_Q8_0`. Added in b9870.
+
+### llama_ftype_name
+```c
+const char * llama_ftype_name(enum llama_ftype ftype);
+```
+Get the model file type (quantization) as a human-readable string, e.g. `"Q8_0"` or `"Q4_K - Medium"`. Pair with `llama_model_ftype()` to display a loaded model's quantization. Added in b9870.
+
 ### llama_model_size
 ```c
 uint64_t llama_model_size(const struct llama_model * model);

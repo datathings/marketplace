@@ -5,7 +5,7 @@ description: "AMD ROCm GPU computing stack for HIP kernel development and GPU-ac
 
 # ROCm GPU Development
 
-**Version:** rocm-7.2.2
+**Version:** rocm-7.2.4
 **Language:** C/C++ with HIP (`.hip` or `.cpp` files)
 **License:** MIT (examples and most libraries); some components Apache-2.0
 **Docs:** https://rocm.docs.amd.com

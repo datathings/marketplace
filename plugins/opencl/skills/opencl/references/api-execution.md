@@ -45,6 +45,7 @@ clEnqueueNDRangeKernel(queue, kernel, 2,
 - Must evenly divide `global_work_size` in each dimension (or use `CL_KERNEL_WORK_GROUP_SIZE` query)
 - Query `CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE` for optimal granularity
 - NULL lets the runtime choose (portable but may not be optimal)
+- OpenCL 3.1: `clGetKernelSuggestedLocalWorkSize(queue, kernel, work_dim, offset, global, out_local)` returns the runtime's own suggestion for the given global size — set kernel args first, then feed the result to this call (see `api-program-kernel.md`)
 
 ---
 

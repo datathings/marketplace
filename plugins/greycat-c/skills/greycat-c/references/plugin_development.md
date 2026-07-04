@@ -704,7 +704,7 @@ Create with `gc_string__create_from(data, length, ctx)` (trailing `ctx` required
 
 ## Working with Tensors
 
-`gc/tensor.h` (full reference + examples in **api_collections.md**). Plugin pattern: `gc_core_tensor__create(ctx)` → `gc_core_tensor__init_1d(tensor, n, tensor_type, ctx)`, fill element-wise with `gc_core_tensor__set_1d_f32`, then `set_result` + `gc_object__un_mark`. Note: the `tensor_type` argument to `gc_core_tensor__init_1d`/`_xd` is a plain `u8_t` element-type code, NOT the GCL `TensorType` enum object — `TensorType` is `gc_core_TensorType` on the GCL side, and when received as a native-function parameter it arrives as `gc_type_static_field` (read the ordinal from `.tu32.right`, per the enum caveat above), which you then pass through as the `u8_t` element-type code. For hot loops, get the raw pointer via `gc_core_tensor__get_data(tensor)` and the shape via `gc_core_tensor__get_descriptor(tensor)` (`gc_core_tensor_descriptor_t`, with `desc->size`) and write the buffer directly. The Complete Example below unboxes an input `Tensor` this way.
+`gc/tensor.h` (full reference + examples in **api_collections.md**). Plugin pattern: `gc_core_tensor__create(ctx)` → `gc_core_tensor__init_1d(tensor, n, tensor_type, ctx)`, fill element-wise with `gc_core_tensor__set_1d_f32`, then `set_result` + `gc_object__un_mark`. Note: the `tensor_type` argument to `gc_core_tensor__init_1d`/`_xd` is a plain `u8_t` element-type code, NOT the GCL `TensorType` enum object — `TensorType` is `gc_core_TensorType` on the GCL side, and when received as a native-function parameter it arrives as `gc_type_static_field` (read the ordinal from `.tu32.right`, per the enum caveat above), which you then pass through as the `u8_t` element-type code. For hot loops, get the raw pointer via `gc_core_tensor__get_data(tensor)` and the shape via `gc_core_tensor__get_descriptor(tensor)` (`gc_tensor_descriptor_t`, with `desc->size`) and write the buffer directly. The Complete Example below unboxes an input `Tensor` this way.
 
 ## Working with Buffers
 
@@ -919,11 +919,11 @@ void gc_mymod_Processor__create(gc_machine_t *ctx) {
 
 void gc_mymod_Processor__process(gc_machine_t *ctx) {
     gc_mymod_processor_t *self = (gc_mymod_processor_t *)gc_machine__this(ctx).object;
-    gc_core_tensor_t *input = (gc_core_tensor_t *)gc_machine__get_param(ctx, 0).object;
+    gc_tensor_t *input = (gc_tensor_t *)gc_machine__get_param(ctx, 0).object;
 
     // Get tensor data
     f32_t *data = (f32_t *)gc_core_tensor__get_data(input);
-    gc_core_tensor_descriptor_t *desc = gc_core_tensor__get_descriptor(input);
+    gc_tensor_descriptor_t *desc = gc_core_tensor__get_descriptor(input);
 
     // Process...
     f64_t score = 0.95;

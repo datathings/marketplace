@@ -119,7 +119,7 @@ free(name);
 | `CL_DRIVER_VERSION` | `char[]` | Driver version |
 | `CL_DEVICE_MAX_COMPUTE_UNITS` | `cl_uint` | Number of compute units |
 | `CL_DEVICE_MAX_WORK_GROUP_SIZE` | `size_t` | Max work-items per work-group |
-| `CL_DEVICE_MAX_WORK_ITEM_SIZES` | `size_t[3]` | Max per-dimension sizes |
+| `CL_DEVICE_MAX_WORK_GROUP_SIZES` | `size_t[3]` | Max per-dimension sizes (3.1 spelling; replaces `CL_DEVICE_MAX_WORK_ITEM_SIZES`, same enum value `0x1005`) |
 | `CL_DEVICE_GLOBAL_MEM_SIZE` | `cl_ulong` | Global memory in bytes |
 | `CL_DEVICE_LOCAL_MEM_SIZE` | `cl_ulong` | Local (shared) memory per CU |
 | `CL_DEVICE_MAX_MEM_ALLOC_SIZE` | `cl_ulong` | Max single buffer allocation |
@@ -142,12 +142,39 @@ free(name);
 | `CL_DEVICE_NON_UNIFORM_WORK_GROUP_SUPPORT` | `cl_bool` | Non-uniform work-groups (3.0+) |
 | `CL_DEVICE_IL_VERSION` | `char[]` | Supported IL version string (2.1+) |
 | `CL_DEVICE_MAX_NUM_SUB_GROUPS` | `cl_uint` | Max sub-groups per work-group (2.1+) |
+| `CL_DEVICE_UUID` | `cl_uchar[CL_UUID_SIZE]` | 16-byte device UUID (3.1; was `cl_khr_device_uuid`) |
+| `CL_DRIVER_UUID` | `cl_uchar[CL_UUID_SIZE]` | 16-byte driver UUID (3.1) |
+| `CL_DEVICE_LUID_VALID` | `cl_bool` | Whether `CL_DEVICE_LUID` / `CL_DEVICE_NODE_MASK` are valid (3.1) |
+| `CL_DEVICE_LUID` | `cl_uchar[CL_LUID_SIZE]` | 8-byte locally-unique identifier for OS/API interop (3.1) |
+| `CL_DEVICE_NODE_MASK` | `cl_uint` | Node mask identifying the physical device in a multi-node LUID (3.1) |
+| `CL_DEVICE_INTEGER_DOT_PRODUCT_CAPABILITIES` | `cl_device_integer_dot_product_capabilities` | Supported dot-product input formats: `..._INPUT_4x8BIT`, `..._INPUT_4x8BIT_PACKED` (3.1) |
+| `CL_DEVICE_INTEGER_DOT_PRODUCT_ACCELERATION_PROPERTIES_8BIT` | `cl_device_integer_dot_product_acceleration_properties` | Per-signedness acceleration flags for 8-bit dot product (3.1) |
+| `CL_DEVICE_INTEGER_DOT_PRODUCT_ACCELERATION_PROPERTIES_4x8BIT_PACKED` | `cl_device_integer_dot_product_acceleration_properties` | Acceleration flags for packed 4×8-bit dot product (3.1) |
+| `CL_DEVICE_SPIRV_EXTENDED_INSTRUCTION_SETS` | `char[]` (space-separated) | SPIR-V extended instruction sets the device supports (3.1) |
+| `CL_DEVICE_SPIRV_EXTENSIONS` | `char[]` (space-separated) | SPIR-V extensions the device supports (3.1) |
+| `CL_DEVICE_SPIRV_CAPABILITIES` | `cl_uint[]` | SPIR-V capabilities (enum values) the device supports (3.1) |
+
+> **OpenCL 3.1 device identity/SPIR-V queries.** The UUID/LUID, integer dot-product, and SPIR-V
+> rows above were promoted to core in OpenCL 3.1 (headers guard them under `CL_VERSION_3_1`). They
+> mirror the older `cl_khr_device_uuid`, `cl_khr_integer_dot_product`, and `cl_khr_spirv_queries`
+> extensions; the C++ wrapper still exposes them via the `*_KHR` trait names. Size constants:
+> `CL_UUID_SIZE == 16`, `CL_LUID_SIZE == 8`. UUID/LUID are stable identifiers for correlating a
+> device with Vulkan/D3D or other APIs.
 
 **Example:**
 ```c
 cl_ulong mem;
 clGetDeviceInfo(dev, CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(mem), &mem, NULL);
 printf("Global memory: %llu MB\n", (unsigned long long)mem / (1024*1024));
+```
+
+**Device UUID (OpenCL 3.1, `#define CL_TARGET_OPENCL_VERSION 310`):**
+```c
+cl_uchar uuid[CL_UUID_SIZE];
+if (clGetDeviceInfo(dev, CL_DEVICE_UUID, sizeof(uuid), uuid, NULL) == CL_SUCCESS) {
+    for (int i = 0; i < CL_UUID_SIZE; ++i) printf("%02x", uuid[i]);
+    printf("\n");
+}
 ```
 
 ---

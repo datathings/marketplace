@@ -217,6 +217,107 @@ cublasLtMatrixLayoutDestroy(Adesc); /* etc. */
 cublasLtDestroy(ltHandle);
 ```
 
+### Grouped GEMM with device-side dimensions
+
+The grouped cuBLASLt path runs `batchCount` GEMMs whose per-group `M, N, K` and leading
+dimensions live **on the device** (as arrays), so the shapes need not be known at launch time
+(MoE / variable-length batching). Layouts are built with `cublasLtGroupedMatrixLayoutCreate`
+instead of `cublasLtMatrixLayoutCreate`.
+
+### `cublasLtGroupedMatrixLayoutCreate(cublasLtMatrixLayout_t *matLayout, cudaDataType type, int batchCount, const void *rowsArrayDev, const void *colsArrayDev, const void *ldArrayDev) -> cublasStatus_t`
+**Description:** Grouped matrix layout. `rowsArrayDev`, `colsArrayDev`, `ldArrayDev` are **device**
+pointers to `int64_t[batchCount]` arrays of row counts, column counts, and leading dimensions.
+Rows/cols are swapped per-operand based on transpose, e.g. for A:
+`rows = (transa==CUBLAS_OP_N ? mArrayDev : kArrayDev)`, `cols = (transa==CUBLAS_OP_N ? kArrayDev : mArrayDev)`.
+
+**Because M/N/K are on the device, supply averages to the heuristic via preference attributes:**
+- `CUBLASLT_MATMUL_PREF_GROUPED_DESC_D_AVERAGE_ROWS` — average M (`int64_t`)
+- `CUBLASLT_MATMUL_PREF_GROUPED_DESC_D_AVERAGE_COLS` — average N (`int64_t`)
+- `CUBLASLT_MATMUL_PREF_GROUPED_AVERAGE_REDUCTION_DIM` — average K (`int64_t`)
+
+**Pointer mode.** Default (host) pointer mode shares one `alpha`/`beta` scalar across all groups.
+To give each group its own device-resident `alpha`/`beta` (as in the H/S/H sample), set:
+```cpp
+cublasLtPointerMode_t pm = CUBLASLT_POINTER_MODE_DEVICE;
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_POINTER_MODE, &pm, sizeof(pm));
+int64_t stride = 1;
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_ALPHA_BATCH_STRIDE, &stride, sizeof(stride));
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_BETA_BATCH_STRIDE,  &stride, sizeof(stride));
+```
+Then `alpha`/`beta` passed to `cublasLtMatmul` are `const float *const *` device pointer arrays.
+The A/B/C/D pointers are always device arrays of per-matrix pointers; `cublasLtMatmul` is called
+once with them and a stream (or `0`), e.g.:
+```cpp
+cublasLtMatmul(ltHandle, op, alpha, A, Adesc, B, Bdesc, beta, C, Cdesc,
+               (void *)D, Ddesc, &heur.algo, workspace, workspaceSize, /*stream*/ 0);
+```
+> These grouped GEMM entry points are marked **EXPERIMENTAL** in the samples and may change.
+> Samples: `CUDALibrarySamples/cuBLASLt/LtHSHgemmGroupedSimple/` (FP16 in/out, FP32 compute,
+> device alpha/beta), `LtFp8gemmGroupedSimple/`.
+
+### FP8 / MXFP8 / NVFP4 block-scaled grouped GEMM
+
+Low-precision grouped GEMMs use the same flow but add per-operand scale factors. Set the scale
+**mode** and scale **pointer** on the matmul descriptor for A and B:
+```cpp
+cublasLtMatmulMatrixScale_t aMode = /* see table */, bMode = /* see table */;
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_A_SCALE_MODE, &aMode, sizeof(aMode));
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_B_SCALE_MODE, &bMode, sizeof(bMode));
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_A_SCALE_POINTER, &a_scale, sizeof(a_scale));
+cublasLtMatmulDescSetAttribute(op, CUBLASLT_MATMUL_DESC_B_SCALE_POINTER, &b_scale, sizeof(b_scale));
+```
+`a_scale`/`b_scale` are `const <scaleT> *const *` device pointer arrays (one scale buffer per group).
+All four variants create the operation descriptor with `CUBLAS_COMPUTE_32F` + scale type `CUDA_R_32F`,
+use `__nv_bfloat16` (`CUDA_R_16BF`) C/D, host `alpha`/`beta`, and pick the layout element type by
+operand precision.
+
+| Sample | A/B element type (layout) | Scale mode (A, B) | Scale buffer element type |
+|--------|---------------------------|-------------------|---------------------------|
+| `LtFp8gemmGroupedSimple` | `CUDA_R_8F_E4M3` (`__nv_fp8_e4m3`) | `CUBLASLT_MATMUL_MATRIX_SCALE_PER_BATCH_SCALAR_32F` (both) | `float` |
+| `LtBlk128x128Fp8gemmGroupedSimple` | `CUDA_R_8F_E4M3` | A: `CUBLASLT_MATMUL_MATRIX_SCALE_VEC128_32F`, B: `CUBLASLT_MATMUL_MATRIX_SCALE_BLK128x128_32F` | `float` |
+| `LtMxfp8gemmGroupedSimple` | `CUDA_R_8F_E4M3` | `CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0` (both) | `__nv_fp8_e8m0` |
+| `LtNvfp4gemmGroupedSimple` | `CUDA_R_4F_E2M1` (`__nv_fp4_e2m1`) | `CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3` (both) | `__nv_fp8_e4m3` |
+
+Notes:
+- `PER_BATCH_SCALAR_32F` = one `float` scalar per group; `VEC128`/`BLK128x128` = block scaling
+  (128-element vector for A, 128×128 tile for B); `VEC32_UE8M0` = MXFP8 (32-element E8M0 blocks);
+  `VEC16_UE4M3` = NVFP4 (16-element E4M3 blocks).
+- Only A and B are scaled here (C/D are bf16). `cublasLtMatmulAlgoGetHeuristic` returning 0 results
+  means the (mode, shapes, arch) combination is unsupported — the samples raise `CUBLAS_STATUS_NOT_SUPPORTED`.
+
+### Green-context GEMM (`cublasLtMatmulAlgoGetHeuristicForStream`)
+
+To confine a matmul to a subset of SMs, run it on a stream created from a CUDA **green context** and
+let cuBLASLt pick an algorithm sized for that context via the stream-aware heuristic.
+
+### `cublasLtMatmulAlgoGetHeuristicForStream(cublasLtHandle_t lightHandle, cublasLtMatmulDesc_t operationDesc, cublasLtMatrixLayout_t Adesc, cublasLtMatrixLayout_t Bdesc, cublasLtMatrixLayout_t Cdesc, cublasLtMatrixLayout_t Ddesc, cublasLtMatmulPreference_t preference, int requestedAlgoCount, cublasLtMatmulHeuristicResult_t *heuristicResultsArray, int *returnAlgoCount, cudaStream_t stream) -> cublasStatus_t`
+**Description:** Like `cublasLtMatmulAlgoGetHeuristic`, but the returned algorithms account for the
+SM resources of the green context bound to `stream`. Pass the **same** `stream` to `cublasLtMatmul`.
+
+**Green context creation (CUDA runtime API, from `LtSgemmGreenContext`):**
+```cpp
+cudaExecutionContext_t greenCtx = 0;   // runtime green context handle
+cudaStream_t stream = 0;
+cudaDevResource input, smPartition;
+cudaDevResourceDesc_t smPartitionDesc;
+unsigned int nbGroups = 1;
+cudaDeviceGetDevResource(device, &input, cudaDevResourceTypeSm);
+cudaDevSmResourceSplitByCount(&smPartition, &nbGroups, &input, NULL, 0, minGreenContextSmCount);
+cudaDevResourceGenerateDesc(&smPartitionDesc, &smPartition, 1);
+cudaGreenCtxCreate(&greenCtx, smPartitionDesc, device, 0);
+cudaExecutionCtxStreamCreate(&stream, greenCtx, 0, 0);  // non-blocking stream on green ctx
+// sync from the primary-context stream via an event before enqueuing work
+...
+cublasLtMatmulAlgoGetHeuristicForStream(ltHandle, op, Adesc, Bdesc, Cdesc, Cdesc,
+                                        preference, 1, &heur, &returnedResults, stream);
+cublasLtMatmul(ltHandle, op, alpha, A, Adesc, B, Bdesc, beta, C, Cdesc, C, Cdesc,
+               &heur.algo, workspace, workspaceSize, stream);
+cudaStreamSynchronize(stream);
+// cleanup: cudaStreamDestroy(stream); cudaExecutionCtxDestroy(greenCtx);
+```
+Streams created on a green context are non-blocking and require explicit event synchronization with
+the primary context's stream. Sample: `CUDALibrarySamples/cuBLASLt/LtSgemmGreenContext/`.
+
 ---
 
 ## Error Handling

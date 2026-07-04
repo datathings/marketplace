@@ -11,6 +11,8 @@
 8. [Fancy Iterators](#fancy-iterators)
 9. [Tuple Types (cuda::std)](#tuple-types-cudastd)
 10. [Interoperability with Raw CUDA Pointers](#interoperability-with-raw-cuda-pointers)
+11. [CUB Device Algorithms (CCCL 3.3)](#cub-device-algorithms-cccl-33)
+12. [libcu++ Random and mdspan (CCCL 3.3)](#libcu-random-and-mdspan-cccl-33)
 
 ---
 
@@ -287,3 +289,93 @@ myCustomKernel<<<grid, block>>>(raw, N);
 ```
 
 **Header:** `#include <thrust/*.h>` — included with CUDA Toolkit, no separate linking.
+
+---
+
+## CUB Device Algorithms (CCCL 3.3)
+
+CCCL 3.3 (CUDA Toolkit 13.3) adds three device-wide CUB algorithm families. `DeviceFind` and
+`DeviceSegmentedScan` follow CUB's **two-call temp-storage** convention (first call with
+`d_temp_storage = nullptr` reports `temp_storage_bytes`; second call does the work). `DeviceTransform`
+allocates no temp storage and is called once. Iterators are typically `thrust::device_vector<T>::begin()`
+or raw device pointers.
+
+### `cub::DeviceFind::FindIf(void *d_temp, size_t &temp_bytes, InputIt d_in, OutputIt d_out, Predicate op, NumItemsT num_items) -> cudaError_t`
+**Header:** `#include <cub/device/device_find.cuh>`. Writes the **index** of the first element
+satisfying `op` into `d_out[0]` (== `num_items` if none). `op` is a `__host__ __device__` functor.
+```cpp
+cub::DeviceFind::FindIf(nullptr, temp_bytes, d_in.begin(), d_out.begin(), predicate, num_items);
+thrust::device_vector<char> temp(temp_bytes);
+cub::DeviceFind::FindIf(thrust::raw_pointer_cast(temp.data()), temp_bytes,
+                        d_in.begin(), d_out.begin(), predicate, num_items);
+```
+
+### `cub::DeviceFind::LowerBound(void *d_temp, size_t &temp_bytes, HaystackIt d_range, OffsetT num_range, NeedlesIt d_values, OffsetT num_values, OutputIt d_out, CompareOp compare_op) -> cudaError_t`
+### `cub::DeviceFind::UpperBound(...)` — identical signature
+**Description:** Parallel binary search of every value in `d_values` against the sorted range `d_range`;
+writes insertion indices to `d_out`. `compare_op` is usually `cuda::std::less{}` (`<cuda/std/functional>`).
+`LowerBound`/`UpperBound` differ only for values present in the range (lower = first, upper = past-last).
+```cpp
+cub::DeviceFind::LowerBound(nullptr, temp_bytes, d_range.begin(), (int)d_range.size(),
+                            d_values.begin(), (int)d_values.size(), d_out.begin(), cuda::std::less{});
+```
+
+### `cub::DeviceSegmentedScan::ExclusiveSegmentedSum(void *d_temp, size_t &temp_bytes, InputIt d_in, OutputIt d_out, BeginOffsetIt d_begin_offsets, EndOffsetIt d_end_offsets, NumSegmentsT num_segments) -> cudaError_t`
+### `cub::DeviceSegmentedScan::InclusiveSegmentedScan(void *d_temp, size_t &temp_bytes, InputIt d_in, OutputIt d_out, BeginOffsetIt d_begin_offsets, EndOffsetIt d_end_offsets, NumSegmentsT num_segments, ScanOp scan_op) -> cudaError_t`
+**Header:** `#include <cub/device/device_segmented_scan.cuh>`. Runs an independent scan per segment.
+Segment `s` spans `[d_begin_offsets[s], d_end_offsets[s])`; the common idiom uses one offsets array
+with `begin = offsets.begin()` and `end = offsets.begin() + 1` (num_segments = offsets.size() - 1).
+`ExclusiveSegmentedSum` is a fixed `+` exclusive scan; `InclusiveSegmentedScan` takes a custom
+associative `scan_op` (e.g. `cuda::maximum<>{}` from `<cuda/functional>` for a running max).
+```cpp
+auto begin_offsets = d_offsets.begin();
+auto end_offsets   = d_offsets.begin() + 1;
+cub::DeviceSegmentedScan::ExclusiveSegmentedSum(nullptr, temp_bytes, d_in.begin(), d_out.begin(),
+                                                begin_offsets, end_offsets, num_segments);
+```
+
+### `cub::DeviceTransform::Transform(InputTuple d_in, OutputIt d_out, NumItemsT num_items, TransformOp op) -> cudaError_t`  (N inputs → 1 output)
+### `cub::DeviceTransform::Transform(InputTuple d_in, OutputTuple d_out, NumItemsT num_items, TransformOp op) -> cudaError_t`  (N inputs → M outputs)
+**Header:** `#include <cub/device/device_transform.cuh>`. No temp storage — one call. Inputs (and, in
+the N→M form, outputs) are passed as a `cuda::std::tuple` of iterators; any iterator type works,
+including `cuda::counting_iterator<int>{100}` (`<cuda/iterator>`). For N→M, `op` returns a
+`cuda::std::tuple` of M values.
+```cpp
+// N=3 -> 1 : result[i] = (a[i] + b[i]) * c[i]
+auto op1 = [] __host__ __device__(int x, float y, int z) -> int { return int((x + y) * z); };
+cub::DeviceTransform::Transform(cuda::std::tuple{a.begin(), b.begin(), counting},
+                                result.begin(), a.size(), op1);
+// N=2 -> M=2 : (sum, diff) in one pass
+auto op2 = [] __host__ __device__(int x, int y) -> cuda::std::tuple<int,int> { return {x+y, x-y}; };
+cub::DeviceTransform::Transform(cuda::std::tuple{a.begin(), b.begin()},
+                                cuda::std::tuple{sum.begin(), diff.begin()}, a.size(), op2);
+```
+
+---
+
+## libcu++ Random and mdspan (CCCL 3.3)
+
+**`<cuda/std/random>`** provides host- and device-compatible standard C++ distributions and, new in
+CCCL 3.3, the C++26 counter-based Philox engines. **`<cuda/random>`** adds `cuda::pcg64` (the
+NumPy-default generator) as an NVIDIA extension. Engines and distributions are used inside kernels
+exactly like `<random>`: `dist(engine)`.
+```cpp
+#include <cuda/random>        // cuda::pcg64
+#include <cuda/std/random>    // engines + distributions
+__global__ void k(unsigned long long seed, float *u, float *g, int *p, int *b) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    cuda::pcg64 rng(seed + tid);
+    cuda::std::philox4x32 philox((cuda::std::uint32_t)(seed + tid));
+    cuda::std::uniform_real_distribution<float> uni(0.0f, 1.0f);
+    cuda::std::normal_distribution<float>       nrm(0.0f, 1.0f);
+    cuda::std::poisson_distribution<int>        poi(4.0);
+    cuda::std::bernoulli_distribution           ber(0.25);
+    u[tid] = uni(rng); g[tid] = nrm(rng); p[tid] = poi(rng); b[tid] = ber(philox);
+}
+```
+
+**`<cuda/std/mdspan>`** provides `cuda::std::mdspan` / `cuda::std::dextents<IndexT, Rank>`
+multi-dimensional views. **`<cuda/mdspan>`** adds device-side extensions: `cuda::device_mdspan`,
+`cuda::to_device_mdspan<T, Rank>(DLTensor)` and `cuda::to_dlpack_tensor(...)` for DLPack interchange
+(PyTorch/JAX/CuPy), and `cuda::shared_memory_mdspan` for shared-memory tiles with address-space-checked
+load/store accessors. Sample: `cuda-samples/cpp/4_CUDA_Libraries/libcuxxMdspan/`.

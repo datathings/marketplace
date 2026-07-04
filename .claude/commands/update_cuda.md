@@ -57,7 +57,7 @@ cd ../../..
 **Dispatch a `general-purpose` subagent** via the `Task` tool for the analysis and documentation rewrite. This keeps the large sample code out of the main context.
 
 Provide the subagent with:
-- Path to cuda-samples: `plugins/cuda/cuda-samples/Samples/`
+- Path to cuda-samples: `plugins/cuda/cuda-samples/cpp/` (C++ samples; the top-level `Samples/` dir was renamed to `cpp/` in v13.3, with Python samples now under `python/`)
 - Path to CUDALibrarySamples: `plugins/cuda/CUDALibrarySamples/`
 - Path to skill references: `plugins/cuda/skills/cuda/references/`
 - Old and new versions (from Step 1 output)
@@ -72,14 +72,14 @@ The subagent should:
 - New CUDA Toolkit version features (e.g., new cooperative groups APIs, new memory types)
 
 **Source of truth for each domain:**
-- **CUDA Runtime**: `cuda-samples/Samples/0_Introduction/` and `cuda-samples/Samples/6_Performance/`
+- **CUDA Runtime**: `cuda-samples/cpp/0_Introduction/` and `cuda-samples/cpp/6_Performance/`
 - **cuBLAS**: `CUDALibrarySamples/cuBLAS/` — read the `.cpp`/`.cu` files and `README.md`
 - **cuFFT**: `CUDALibrarySamples/cuFFT/` — same
 - **cuSPARSE**: `CUDALibrarySamples/cuSPARSE/` — same
 - **cuRAND**: `CUDALibrarySamples/cuRAND/` — same
 - **cuSolver**: `CUDALibrarySamples/cuSolver/` — same
-- **Thrust**: `cuda-samples/Samples/` (search for Thrust usage)
-- **Cooperative Groups**: `cuda-samples/Samples/` (search for cooperative_groups)
+- **Thrust**: `cuda-samples/cpp/` (search for Thrust usage; CCCL/CUB samples under `cpp/4_CUDA_Libraries/`)
+- **Cooperative Groups**: `cuda-samples/cpp/` (search for cooperative_groups)
 
 **Update Skill Documentation Files** in `skills/cuda/references/`:
 - **`api-runtime.md`** — CUDA Runtime: device management, memory, streams, events, kernel launch, error handling

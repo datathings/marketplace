@@ -11,7 +11,7 @@ Every annotation, every modifier, with semantics and where each one is valid.
 - Modifiers (`private`, `static`, `abstract`, `native`)
 - `private` semantics in depth — the most-misused modifier
 
-`@deref` and `@iterable` are not documented here on purpose: they are tooling hints attached to the stdlib node tags (`node<T>`, `Array<T>`, etc.) so the analyzer can document the runtime-hardcoded `->` and `for-in` behavior. **Adding them to a user type does not grant those semantics** — the runtime ignores the tags and only treats its hard-coded set of types as iterable / dereferenceable.
+`@deref` and `@iterable` are not documented here on purpose: they are tooling hints attached to the stdlib node tags (`node<T>`, `Array<T>`, etc.) so the lang can document the runtime-hardcoded `->` and `for-in` behavior. **Adding them to a user type does not grant those semantics** — the runtime ignores the tags and only treats its hard-coded set of types as iterable / dereferenceable.
 
 ## Syntax
 
@@ -262,7 +262,7 @@ type Row {
 }
 ```
 
-Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch milliseconds. Used on stdlib types like `McpTask.pollInterval`. Custom formats may be analyzer-version-dependent.
+Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch milliseconds. Used on stdlib types like `McpTask.pollInterval`. Custom formats may be lang-version-dependent.
 
 ## Modifiers
 
@@ -408,4 +408,4 @@ Several lint rules are tied to annotations:
 - `@expose` keeps a decl alive — the `unused-fn` lint doesn't fire on exposed functions.
 - `@permission("name")` without a corresponding `@permission(...)` module pragma declaring that name fires an unknown-permission lint.
 
-Run `greycat-analyzer lint --list-rules` to see the current set.
+Run `greycat-lang lint --list-rules` to see the current set.

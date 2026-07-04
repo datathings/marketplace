@@ -30,6 +30,7 @@ Each model entry:
 | `size` | int64 | Model size in bytes |
 | `digest` | string | SHA256 digest |
 | `details` | ModelDetails | Model metadata |
+| `capabilities` | string[] | Model capabilities, e.g. `["completion", "tools", "vision"]` |
 
 ModelDetails:
 
@@ -41,6 +42,8 @@ ModelDetails:
 | `families` | string[] | All model families |
 | `parameter_size` | string | Parameter count (e.g., `"7.6B"`) |
 | `quantization_level` | string | Quantization (e.g., `"Q4_K_M"`) |
+| `context_length` | int | Model's native context length (if known) |
+| `embedding_length` | int | Embedding dimension (if known) |
 
 ### Example Response
 
@@ -170,6 +173,7 @@ Create a model from another model, a safetensors directory, or a GGUF file. Stre
 | `from` | string | No | Source model name |
 | `remote_host` | string | No | URL of the upstream Ollama API for the model |
 | `files` | object | No | Map of filenames to SHA256 digests (for GGUF/safetensors) |
+| `draft_files` | object | No | Map of filenames to SHA256 digests for a draft model (speculative decoding) |
 | `adapters` | object | No | Map of filenames to SHA256 digests for LoRA adapters |
 | `template` | string | No | Prompt template |
 | `license` | string or string[] | No | License text(s) |
@@ -182,6 +186,7 @@ Create a model from another model, a safetensors directory, or a GGUF file. Stre
 | `info` | object | No | Additional information for the model |
 | `stream` | bool | No | Stream response (default: `true`) |
 | `quantize` | string | No | Quantization type (`"q4_K_M"`, `"q4_K_S"`, `"q8_0"`) |
+| `draft_quantize` | string | No | Quantization type for the draft model |
 
 ### Response (streaming)
 
@@ -470,3 +475,67 @@ curl http://localhost:11434/api/version
   "version": "0.5.1"
 }
 ```
+
+`HEAD /api/version` is also accepted (returns the same body).
+
+---
+
+## GET /api/experimental/model-recommendations -- Recommended Models (Experimental)
+
+Return a cached list of models recommended for this host (sized by available VRAM). Experimental; the response shape may change.
+
+```bash
+curl http://localhost:11434/api/experimental/model-recommendations
+```
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `recommendations` | ModelRecommendation[] | Recommended models |
+
+Each ModelRecommendation:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | string | Model name |
+| `description` | string | Short description |
+| `context_length` | int | Suggested context length |
+| `max_output_tokens` | int | Suggested max output tokens |
+| `vram_bytes` | int64 | Approximate VRAM required |
+| `required_plan` | string | Cloud plan required (if any) |
+
+---
+
+## Web Search / Fetch (Experimental, Cloud)
+
+`POST /api/web_search` and `POST /api/web_fetch` proxy to Ollama's hosted service. They require an API key (`OLLAMA_API_KEY`, or an `Authorization: Bearer <key>` header) and are also exposed under `/api/experimental/web_search` and `/api/experimental/web_fetch`.
+
+Web search -- request `{"query": "...", "max_results": 3}`, response `{"results": [{"title", "url", "content"}, ...]}`:
+
+```bash
+curl http://localhost:11434/api/web_search \
+  -H "Authorization: Bearer $OLLAMA_API_KEY" \
+  -d '{"query": "what is ollama?", "max_results": 3}'
+```
+
+Web fetch -- request `{"url": "..."}`, response `{"title", "content", "links": [...]}`:
+
+```bash
+curl http://localhost:11434/api/web_fetch \
+  -H "Authorization: Bearer $OLLAMA_API_KEY" \
+  -d '{"url": "ollama.com"}'
+```
+
+---
+
+## Cloud Account Endpoints
+
+These support Ollama cloud sign-in and are not required for local inference:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/status` | Cloud status (`{"cloud": {"disabled": bool, "source": string}}`) |
+| `POST` | `/api/me` | Signed-in user info (id, email, name, plan, ...) |
+| `POST` | `/api/signout` | Sign out of Ollama cloud |
+| `DELETE` | `/api/user/keys/:encodedKey` | Remove a stored user key |

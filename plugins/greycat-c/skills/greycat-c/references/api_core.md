@@ -1354,7 +1354,7 @@ if (gc_log__is_tty(host)) {
 
 ### Naming Conventions
 
-- **Types:** `gc_{module}_{name}_t` (e.g., `gc_buffer_t`, `gc_core_tensor_t`)
+- **Types:** `gc_{module}_{name}_t` (e.g., `gc_buffer_t`, `gc_tensor_t`)
 - **Functions:** `gc_{module}__{verb}` (e.g., `gc_buffer__add_str`, `gc_object__get_at`)
 - **Constants/Macros:** `GC_{MODULE}_{NAME}` (e.g., `GC_CORE_TENSOR_DIM_MAX`)
 - **Well-known type globals:** `gc_core_{TypeName}` (e.g., `gc_core_Array`)

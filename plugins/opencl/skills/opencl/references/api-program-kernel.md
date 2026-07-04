@@ -208,6 +208,18 @@ Provide hints: `CL_KERNEL_EXEC_INFO_SVM_PTRS`, `CL_KERNEL_EXEC_INFO_SVM_FINE_GRA
 | `CL_KERNEL_COMPILE_WORK_GROUP_SIZE` | `size_t[3]` | From `__attribute__((reqd_work_group_size(...)))` |
 | `CL_KERNEL_GLOBAL_WORK_SIZE` | `size_t[3]` | Required global work-size for built-in kernels (1.2+) |
 
+### `clGetKernelSuggestedLocalWorkSize(command_queue, kernel, work_dim, global_work_offset, global_work_size, suggested_local_work_size) -> cl_int`
+Ask the runtime for a good local work-group size for a given global NDRange (OpenCL 3.1; promoted from `clGetKernelSuggestedLocalWorkSizeKHR`). The kernel's arguments must already be set. Returns the suggestion in `suggested_local_work_size` (an array of `work_dim` `size_t`); pass that straight to `clEnqueueNDRangeKernel`.
+- `global_work_offset` — same offset you will enqueue with; NULL means all zeros
+- `global_work_size` / `work_dim` — the global NDRange you intend to launch
+
+```c
+size_t global = 1024 * 1024, local = 0;
+clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf);          // args must be set first
+clGetKernelSuggestedLocalWorkSize(queue, kernel, 1, NULL, &global, &local);
+clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+```
+
 ### `clGetKernelSubGroupInfo(kernel, device, param_name, input_value_size, input_value, param_value_size, param_value, param_value_size_ret) -> cl_int`
 Query sub-group information for a kernel (OpenCL 2.1+).
 

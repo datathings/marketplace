@@ -444,7 +444,7 @@ from power_grid_model import (
 | `branch3_1` | 6 | Branch3 terminal 1 |
 | `branch3_2` | 7 | Branch3 terminal 2 |
 | `branch3_3` | 8 | Branch3 terminal 3 |
-| `node` | 9 | **[DEPRECATED v1.13.69]** Total power injection at node — emits `DeprecationWarning`; will be removed in a future release. Not a physical terminal; prefer appliance/branch terminal types. |
+| `node` | 9 | **[DEPRECATED v1.13.65]** Total power injection at node — emits `DeprecationWarning`; will be removed in a future release. Not a physical terminal; prefer appliance/branch terminal types. |
 
 ### FaultType (IntEnum)
 | Name | Value |

@@ -23,7 +23,7 @@ Complete syntax reference. Reach for this when a construct in `SKILL.md` needs t
 /// (multiple /// lines are joined as one doc block)
 ```
 
-`///` is **not** a generic line comment — it is captured as documentation by the analyzer and shown in hover / completion. Place it directly above a `type`, `enum`, `fn`, `var`, attribute, or method. Internal `//` and `/* */` are stripped by the lexer.
+`///` is **not** a generic line comment — it is captured as documentation by the lang and shown in hover / completion. Place it directly above a `type`, `enum`, `fn`, `var`, attribute, or method. Internal `//` and `/* */` are stripped by the lexer.
 
 ## Identifiers and keywords
 
@@ -148,6 +148,7 @@ for (var i: int = 0; i < n; i = i + 1) { ... }  // with explicit iterator type
 for (i, v in arr) { ... }                       // Array iteration (i = index, v = value) — 2-param form required
 for (i: int, v: int in arr) { ... }             // with annotations
 for (k, v in map) { ... }                       // unpack key, value
+for (_, v in map) { ... }                       // `_` discards an unused key/index (silences unused-local)
 for (t, v in series[from..to]) { ... }          // range slice
 for (t, v in series[from..to] sampling expr limit n skip m) { ... }
 
@@ -273,7 +274,7 @@ Gotchas:
 3day_4hour_5min_6s  // compound duration (any chain)
 ```
 
-The lexer accepts any letter sequence as a suffix; the analyzer validates whether it names a real unit or typed-suffix kind. Bogus `42xyz` parses but errors semantically.
+The lexer accepts any letter sequence as a suffix; the lang validates whether it names a real unit or typed-suffix kind. Bogus `42xyz` parses but errors semantically.
 
 ### Strings
 
@@ -341,7 +342,7 @@ var x = add(40, 2); // x: int
 
 A lambda has the same parameter / return-type shape as a `fn` declaration but no name. The resulting value carries its structural signature, displayed as `fn(P0, P1): R` (or `fn(P0, P1)` when no return is declared or inferable). See [types.md](types.md) for how this interacts with the nominal `function` slot.
 
-**Lambdas have a closed scope — there are no closures.** A lambda body can reference its own parameters, locals declared inside the body, and module-scope decls. References to *enclosing* locals, params, or `this` are rejected by the analyzer (`lambda-capture`) and would fail at runtime (`unresolved identifier`, or segfault for `this`). Pass anything the lambda needs as an explicit parameter:
+**Lambdas have a closed scope — there are no closures.** A lambda body can reference its own parameters, locals declared inside the body, and module-scope decls. References to *enclosing* locals, params, or `this` are rejected by the lang (`lambda-capture`) and would fail at runtime (`unresolved identifier`, or segfault for `this`). Pass anything the lambda needs as an explicit parameter:
 
 ```gcl
 fn main() {
