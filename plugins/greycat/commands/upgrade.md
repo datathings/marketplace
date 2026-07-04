@@ -1,12 +1,15 @@
 ---
 name: upgrade
-description: Update GreyCat libraries to latest available versions
+description: Upgrade GreyCat libraries AND frontend package.json to latest, then lint + test and fix all issues in back and front
 allowed-tools: Bash(*), Read, Edit, Grep
 ---
 
-# Update GreyCat Libraries
+# Upgrade GreyCat + Frontend
 
-**Purpose**: Upgrade GreyCat libraries to latest versions from get.greycat.io.
+**Purpose**: Upgrade **both** ends to the latest available versions, then lint + test and **fix every issue** the upgrade surfaces:
+1. **Backend** — GreyCat libraries (`@library` in `project.gcl`) to latest from get.greycat.io.
+2. **Frontend** — every `frontend/package.json` dependency to its latest published version.
+3. **Verify + fix** — run `greycat-lang lint` + `greycat test` (backend) and `pnpm lint` + `pnpm test` (frontend), then fix all lint/type/test failures the upgrade introduced in **both** back and front until everything is green.
 
 **Run When**: Monthly maintenance, before major releases, on announced breaking changes.
 
@@ -82,12 +85,16 @@ done
 
 ---
 
-## Step 6: Install + verify
+## Step 6: Install + verify + fix (backend)
 
 \`\`\`bash
 greycat install
+greycat-lang fmt --mode=check
 greycat-lang lint
+greycat test
 \`\`\`
+
+**Fix loop**: the upgrade CAN break backend code (renamed/removed fns, changed signatures, deprecated decorators). Don't stop at reporting — **fix every lint/test failure** the upgrade introduced, re-running `greycat-lang lint && greycat test` after each fix until both pass. See "Migration of breaking changes" and "Troubleshooting" below for common patterns and how to roll back a single lib if a break is too large to fix cleanly.
 
 ---
 
@@ -114,9 +121,9 @@ See `/migrate` Operation A and D for full safe-rollback flow.
 
 ---
 
-## Frontend dependencies (VitePlus + Lit + Shoelace + lucide-static stack)
+## Step 8: Frontend package.json upgrade + fix (VitePlus + Lit + Shoelace + lucide-static stack)
 
-If `frontend/` exists, keep the **prescribed stack** current too — pin **exact latest** published versions (no `^`/`~`):
+If `frontend/` exists, upgrade **every** dependency in `frontend/package.json` to its latest published version — not just the prescribed stack below. Pin **exact latest** (no `^`/`~`). The prescribed stack is what MUST stay present and current:
 
 | Package | Role |
 |---------|------|
@@ -132,16 +139,26 @@ If `frontend/` exists, keep the **prescribed stack** current too — pin **exact
 | `maplibre-gl` / `chart.js` / `d3` | maps & data-viz, if used |
 
 \`\`\`bash
-# Inspect current vs latest, then pin exact
+cd frontend
+# Inspect current vs latest for ALL deps, then upgrade everything to latest
 pnpm outdated
-pnpm up --latest lit @shoelace-style/shoelace lucide-static vite-plus typescript vitest lighthouse
+pnpm up --latest        # bumps every dep (deps + devDeps) to latest
 # then re-pin to exact versions in package.json (drop ^/~) and reinstall
+pnpm install
 \`\`\`
 > `@greycat/web` is not on npm — bump it by re-pinning its registry tarball URL to track the project's `std` branch/version (see the frontend stack notes), not via `pnpm up`.
 
 **pnpm release-age gate**: pnpm 11 may reject just-published packages (and ignores `minimumReleaseAgeExclude` for that audit). To ship trusted just-released tooling, set `minimumReleaseAge: 0` (or add exact exclusions) in `pnpm-workspace.yaml`.
 
-**After upgrading**: `greycat codegen ts` (regen client) → `pnpm lint` (typecheck) → `vp build` → serve (`greycat dev`) → `pnpm lighthouse:ci` (confirm perf/SEO/a11y/best-practices ≥ 90). Note Shoelace/Lit major bumps can change component APIs — check their changelogs like you would GreyCat's.
+**After upgrading — verify + fix (frontend)**:
+\`\`\`bash
+greycat codegen ts        # regen typed client against upgraded backend
+cd frontend
+pnpm lint                 # typecheck
+pnpm test                 # vitest
+vp build                  # production build
+\`\`\`
+**Fix loop**: major bumps (Shoelace/Lit/TypeScript/Vite-Plus) can change component APIs, types, and build config — check their changelogs. Don't stop at reporting: **fix every `pnpm lint` / `pnpm test` / `vp build` failure** the upgrade introduced, re-running the three commands after each fix until all pass. Then serve (`greycat dev`) and run `pnpm lighthouse:ci` (confirm perf/SEO/a11y/best-practices ≥ 90).
 
 ---
 
@@ -209,8 +226,8 @@ Breaking changes:
 
 ## Notes
 
-- **No code changes**: this command only updates library versions (backend `@library` + optional frontend deps)
-- **Frontend deps**: keep Lit + Shoelace + lucide-static + VitePlus (`vp`) + TS + Vitest + Lighthouse on exact latest; re-audit with `pnpm lighthouse:ci`
+- **Version bumps FIRST, then fixes**: the bumps themselves are mechanical (backend `@library` + entire `frontend/package.json`); but this command does **not** stop there — it then lints, tests, and **fixes all resulting breakage** in both back and front until green.
+- **Frontend deps**: upgrade the **whole** `package.json` to exact latest (drop `^`/`~`); the prescribed stack (Lit + Shoelace + lucide-static + VitePlus (`vp`) + TS + Vitest + Lighthouse) must stay present; re-audit with `pnpm lighthouse:ci`
 - **gcdata NOT auto-migrated** on schema drift — see "Persisted schema check" above
 - **Rollback**: `git checkout project.gcl` for code; for prod data, rely on `gcdata_bk_*` rotation
 - **`greycat --version` = `0.0.0`** on dev builds — not a bug, treat as "latest"
@@ -218,12 +235,26 @@ Breaking changes:
 
 ---
 
-## Verify
+## Verify (both ends green)
 
+**Backend**:
 \`\`\`bash
-grep '@library(' project.gcl   # versions
+grep '@library(' project.gcl   # versions bumped
 ls -la lib/                    # installed
-greycat-lang lint              # syntax
+greycat-lang fmt --mode=check  # formatting
+greycat-lang lint              # syntax/types
 greycat test                   # tests
 greycat serve                  # runtime
 \`\`\`
+
+**Frontend** (if `frontend/` exists):
+\`\`\`bash
+cd frontend
+grep -E '"(lit|@shoelace-style/shoelace|typescript|vite-plus|vitest)"' package.json  # exact-pinned, no ^/~
+pnpm lint                      # typecheck
+pnpm test                      # vitest
+vp build                       # production build
+pnpm lighthouse:ci             # perf/SEO/a11y/best-practices ≥ 90
+\`\`\`
+
+**Definition of done**: both `greycat-lang lint && greycat test` and `pnpm lint && pnpm test && vp build` pass with no upgrade-introduced failures remaining.
