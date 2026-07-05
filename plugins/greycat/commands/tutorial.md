@@ -6,9 +6,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 
 # GreyCat Interactive Tutorial
 
-**Purpose**: Progressive hands-on learning of GreyCat with code examples + validation.
-
-11 sequential modules (~4.5 hours total):
+**Purpose**: progressive hands-on learning of GreyCat — theory + runnable code + validation. 11 sequential modules (each builds on the prior), ~4.5 hours total.
 
 | # | Module | Time | Topic |
 |---|--------|------|-------|
@@ -22,7 +20,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 | 8 | Parallelization | 25m | Jobs, await |
 | 9 | Time & Geo | 30m | nodeTime, nodeGeo |
 | 10 | Advanced | 30m | Inheritance, polymorphism |
-| 11 | Frontend | 35m | Lit + Shoelace + Lucide, Lighthouse, LLM-friendly SEO |
+| 11 | Frontend | 35m | Lit + Shoelace + lucide-static, Lighthouse, LLM-friendly SEO |
 
 ---
 
@@ -54,19 +52,17 @@ Ask (AskUserQuestion):
 
 ## Module 1: Basics (20m)
 
-**Concept**: statically-typed, non-null by default, no ternary (use if/else).
+**Concept**: statically-typed, non-null by default, no ternary (use if/else). Primitives: `int`, `float`, `bool`, `String`, `char`, `time`.
 
-Primitives: `int`, `float`, `bool`, `String`, `char`, `time`.
-
-\`\`\`gcl
+```gcl
 fn greet(name: String?): String {
     if (name == null) return "Hello, stranger!";
     return "Hello, ${name}!";
 }
-\`\`\`
+```
 
 **Exercise** (`tutorial/module1_basics.gcl`):
-\`\`\`gcl
+```gcl
 fn calculate_age(birth_year: int, current_year: int): int {
     return 0;  // TODO
 }
@@ -75,9 +71,9 @@ fn calculate_age(birth_year: int, current_year: int): int {
     Assert::equals(calculate_age(1990, 2024), 34);
     Assert::equals(calculate_age(2000, 2024), 24);
 }
-\`\`\`
+```
 
-Validate: `greycat test tutorial/module1_basics.gcl`. Hint: `current_year - birth_year`.
+Validate: `greycat test test_calculate_age` (a `@test` function name, NOT a file path). Hint: `current_year - birth_year`.
 
 ---
 
@@ -96,7 +92,7 @@ Use node<T>:
   ✗ Function parameters/returns (except passing persisted refs)
 ```
 
-\`\`\`gcl
+```gcl
 type Country { name: String; code: String; }
 var countries_by_code: nodeIndex<String, node<Country>>;
 
@@ -105,7 +101,7 @@ fn create_country(name: String, code: String): node<Country> {
     countries_by_code.set(code, c);
     return c;
 }
-\`\`\`
+```
 
 **Exercise**: implement `Product` persistence with `products_by_id: nodeIndex<int, node<Product>>`, `create_product()`, `find_product()`.
 
@@ -120,7 +116,7 @@ fn create_country(name: String, code: String): node<Country> {
 | `nodeTime<T>` | time | — |
 | `nodeGeo<node<T>>` | geo | — |
 
-\`\`\`gcl
+```gcl
 type City { name: String; streets: nodeList<node<Street>>; }
 type Street { name: String; }
 var cities_by_name: nodeIndex<String, node<City>>;
@@ -130,7 +126,7 @@ fn create_city(name: String, pop: int): node<City> {
     cities_by_name.set(name, c);
     return c;
 }
-\`\`\`
+```
 
 **Exercise**: school system — Student/Course with many-to-many via two indices.
 
@@ -151,7 +147,7 @@ fn create_city(name: String, pop: int): node<City> {
 ## Module 5: Services & Business Logic (20m)
 
 **Pattern** (in `src/<feature>/<feature>.gcl`):
-\`\`\`gcl
+```gcl
 type Xxx { ... }
 var xxx_by_id: nodeIndex<int, node<Xxx>>;
 
@@ -161,7 +157,7 @@ abstract type XxxService {
     static fn update(...) { }
     static fn delete(...) { }
 }
-\`\`\`
+```
 
 **Exercise**: `UserService` with email-uniqueness validation.
 
@@ -173,14 +169,14 @@ abstract type XxxService {
 - `@volatile` for request/response types
 - Never return `nodeList`/`nodeIndex` from APIs — use `Array<XxxView>`
 - `@expose` makes function available via HTTP
-- A bare `@expose` already requires the `api` permission (authenticated) — that's the default you want; add `@permission("public")` only to allow anonymous callers, `@permission("admin")` for privileged ops
-- API files: `src/<feature>/<feature>_api.gcl`
+- A bare `@expose` already requires the `api` permission (authenticated) — that's the default you want; add `@permission("public")` only to allow anonymous callers (never on mutations, quoted), `@permission("admin")` for privileged ops
+- API files: `src/<feature>/<feature>_api.gcl` (@expose can also live in `src/api.gcl`)
 
-\`\`\`gcl
+```gcl
 @volatile type UserView { ... }
 @expose
 fn get_users(): Array<UserView> { ... }   // bare @expose ⇒ requires `api` (authenticated)
-\`\`\`
+```
 
 **Exercise**: REST API for blog system (Module 4).
 
@@ -188,7 +184,7 @@ fn get_users(): Array<UserView> { ... }   // bare @expose ⇒ requires `api` (au
 
 ## Module 7: Testing (20m)
 
-\`\`\`gcl
+```gcl
 @test fn test_name() {
     // Arrange
     var u = UserService::create("a@b.com");
@@ -199,7 +195,7 @@ fn get_users(): Array<UserView> { ... }   // bare @expose ⇒ requires `api` (au
     var f = found!!;                     // narrow node<User>? → node<User>
     Assert::equals(f->email, "a@b.com");
 }
-\`\`\`
+```
 
 Assertions: `equals`, `isTrue`, `isFalse`, `isNull`, `isNotNull`.
 Lifecycle: `fn setup()` / `fn teardown()`.
@@ -210,12 +206,12 @@ Lifecycle: `fn setup()` / `fn teardown()`.
 
 ## Module 8: Parallelization (25m)
 
-\`\`\`gcl
+```gcl
 var jobs = Array<Job> {};
 for (i, item in items) jobs.add(Job { function: process_fn, arguments: [item] });
 await(jobs, MergeStrategy::strict);                  // 2nd arg required
 for (i, job in jobs) { var result = job.result() as ResultType; }
-\`\`\`
+```
 
 ⚠ Use `Array<Job>` not `Array<Job<T>>` (crashes at runtime). Cast `.result()` at collection. Batch ~120 jobs. An `@expose` HTTP call already runs as a task (so `await` fans out); a one-shot `greycat run` runs jobs serially. To dispatch a long HTTP call as a background task, add the `task: true` header.
 
@@ -225,7 +221,7 @@ for (i, job in jobs) { var result = job.result() as ResultType; }
 
 ## Module 9: Time-Series & Geo (30m)
 
-\`\`\`gcl
+```gcl
 var temps: nodeTime<float>;
 temps.setAt(timestamp, value);
 for (t: time, v: float in temps[start..end]) { /* ... */ }
@@ -235,7 +231,7 @@ devices.set(geo{lat, lng}, device);
 // nodeGeo has no `.filter()` method; iterate then test bbox.contains(pos):
 var bbox = GeoBox { sw: geo{south, west}, ne: geo{north, east} };
 for (pos: geo, d in devices) { if (bbox.contains(pos)) { /* ... */ } }
-\`\`\`
+```
 
 **Exercise**: temperature monitoring with sensor readings over time.
 
@@ -243,7 +239,7 @@ for (pos: geo, d in devices) { if (bbox.contains(pos)) { /* ... */ } }
 
 ## Module 10: Advanced (30m)
 
-\`\`\`gcl
+```gcl
 abstract type Animal {
     name: String;
     abstract fn makeSound(): String;  // abstract from day 1!
@@ -254,7 +250,7 @@ type Cat extends Animal { fn makeSound(): String { return "Meow!"; } }
 var animals: nodeIndex<String, node<Animal>>;
 animals.set("d", node<Animal>{ Dog { name: "Rex" } });
 animals.get("d")?->makeSound();      // dispatches to Dog::makeSound
-\`\`\`
+```
 
 Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abstract` from day 1.
 
@@ -262,24 +258,24 @@ Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abs
 
 ---
 
-## Module 11: Frontend (Lit + Shoelace + Lucide) (35m)
+## Module 11: Frontend (Lit + Shoelace + lucide-static) (35m)
 
-**Concept**: the preferred GreyCat frontend is **web components** — **Lit** + **TypeScript** + **Shoelace** (UI kit) + **Lucide** icons (`lucide`/`lucide-static`), built with **VitePlus** (`vp`) and the typed **`@greycat/web`** client. Pin exact latest versions; use the native packages above.
+**Concept**: preferred GreyCat frontend = web components — **VitePlus** (`vp`) + **Lit** (light DOM) + **TypeScript** + **Shoelace** (UI kit) + typed **`@greycat/web`** client + **lucide-static** icons (self-hosted inline SVG, no CDN), **pnpm**. Pin exact latest versions; use these native packages.
 
 **Setup** (configs in root, source in `frontend/`, builds to `webroot/`):
-\`\`\`bash
+```bash
 pnpm install
 greycat codegen ts   # → project.d.ts (typed client)
 greycat dev          # VitePlus build watcher + serve API/assets on :8080
-\`\`\`
+```
 
 **A Lit component** consuming an `@expose` endpoint (from Module 6):
-\`\`\`ts
+```ts
 import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import '@shoelace-style/shoelace/dist/components/card/card.js';   // per-component (tree-shaking)
 import '@greycat/web/sdk';                     // `gc` global + typed bindings
-import { icon } from '~/icons';               // Lucide, self-hosted (no CDN)
+import { icon } from '~/icons';               // lucide-static, self-hosted (no CDN)
 
 @customElement('app-products')
 export class AppProducts extends LitElement {
@@ -296,18 +292,18 @@ export class AppProducts extends LitElement {
       <ul>${this.rows.map(r => html`<li>${r.name}</li>`)}</ul></sl-card>`;
   }
 }
-\`\`\`
+```
 
-**Optimize with Lighthouse** (target ≥ 90 in performance / accessibility / best-practices / SEO):
-\`\`\`bash
+**Optimize with Lighthouse** (optional tooling; target ≥ 90 in performance / accessibility / best-practices / SEO):
+```bash
 greycat serve            # serve the built app first
-pnpm lighthouse          # full report; also :desktop / :ci
-\`\`\`
-Levers: per-component Shoelace imports, self-hosted Lucide icons (no CDN), code-split routes, defer non-critical JS, reserve element sizes (avoid layout shift).
+pnpm lighthouse          # if a lighthouse script is defined (also :desktop / :ci); else the `lighthouse` CLI
+```
+Levers: per-component Shoelace imports, self-hosted lucide-static icons (no CDN), code-split routes, defer non-critical JS, reserve element sizes (avoid layout shift).
 
 **LLM-friendly SEO** (always): in `index.html` set `<html lang>`, a unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, and JSON-LD (`schema.org`). Use semantic landmarks + `alt`/ARIA (pre-render/SSR if content is in Shadow DOM). Ship `robots.txt`, `sitemap.xml`, a web manifest, and **`llms.txt`** (a Markdown index of pages + endpoints) to `webroot/`.
 
-**Exercise**: build an `<app-products>` page for the Module 4 blog/catalog, wire it to your `@expose` endpoint, then run `pnpm lighthouse` and get every category ≥ 90.
+**Exercise**: build an `<app-products>` page for the Module 4 blog/catalog, wire it to your `@expose` endpoint, then run Lighthouse (the `pnpm lighthouse` script if present, else the `lighthouse` CLI) and get every category ≥ 90.
 
 ---
 
@@ -324,7 +320,7 @@ Update progress file after each completion.
 
 ## Completion
 
-After Module 11: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project with a Lit + Shoelace + Lucide frontend, use `/scaffold` / `/migrate` / `/frontend`, audit with `pnpm lighthouse`, read references, https://greycat.io/community).
+After Module 11: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project with a Lit + Shoelace + lucide-static frontend; use `/greycat:scaffold` / `/greycat:migrate` / `/greycat:frontend`; audit with Lighthouse — `pnpm lighthouse` script if present, else the `lighthouse` CLI; read references; https://greycat.io/community).
 
 ---
 
@@ -342,15 +338,7 @@ tutorial/
 ├── module8_parallelization.gcl
 ├── module9_timeseries_geo.gcl
 ├── module10_advanced.gcl
-└── module11_frontend/             # Lit + Shoelace + Lucide (app-products.ts, index.html, llms.txt)
+└── module11_frontend/             # Lit + Shoelace + lucide-static (app-products.ts, index.html, llms.txt)
 ```
 
----
-
-## Notes
-
-- Each module: theory + hands-on
-- Progressive (each builds on prior)
-- Real runnable code
-- Tests validate understanding
-- Self-paced
+Each module = theory + hands-on runnable code; tests validate understanding; progressive (each builds on prior); self-paced.

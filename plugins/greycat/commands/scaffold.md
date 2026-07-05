@@ -1,12 +1,12 @@
 ---
 name: scaffold
 description: Generate models, services, APIs, and tests with proper GreyCat structure
-allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
+allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob, Task
 ---
 
 # GreyCat Scaffold Generator
 
-**Purpose**: Generate model + service + API + tests with proper GreyCat structure — and, when a frontend exists, a matching **Lit + Shoelace + Lucide** UI component.
+**Purpose**: Generate model + service + API + tests for an entity — plus a matching Lit UI component when `frontend/` exists.
 
 Generated files:
 - `src/<feature>/<feature>.gcl` — type + indices + service
@@ -16,7 +16,9 @@ Generated files:
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
-**Frontend stack** (when scaffolding UI): **Lit** + **TypeScript** + **Shoelace** (`@shoelace-style/shoelace`) + **Lucide** (`lucide`/`lucide-static`), VitePlus (`vp`) + `@greycat/web`. Pin exact latest versions; optimize with Lighthouse and ship LLM-friendly SEO.
+**Frontend stack** (for the UI component): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Shoelace (`@shoelace-style/shoelace`) + `@greycat/web` + lucide-static (self-hosted inline SVG), pnpm. Pin exact latest versions; keep content accessible for LLM-friendly SEO. Lighthouse tuning is optional.
+
+**One entity = sequential** (model → api → test → frontend; each step depends on the prior file) — this is the default flow. To scaffold **several entities at once**, fan out one subagent (Task) per entity — they are independent.
 
 ---
 
@@ -31,10 +33,10 @@ Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom
 
 ## Step 2: Detect project structure
 
-\`\`\`bash
+```bash
 [ ! -f "project.gcl" ] && { echo "ERROR: not a GreyCat project root"; exit 1; }
 mkdir -p src test
-\`\`\`
+```
 
 ---
 
@@ -53,10 +55,10 @@ mkdir -p src test
 
 ## Step 4: Detect project style
 
-\`\`\`bash
+```bash
 find src -name "*.gcl" | head -3   # check existing patterns
-\`\`\`
-Match existing style by inspecting sibling `.gcl` files (indentation, error handling style); run `greycat-lang fmt` — the formatter owns width/layout.
+```
+Match sibling `.gcl` files (indentation, error-handling style); run `greycat-lang fmt` — the formatter owns width/layout.
 
 ---
 
@@ -69,17 +71,17 @@ Match existing style by inspecting sibling `.gcl` files (indentation, error hand
 - `test/<feature>_test.gcl` — tests
 
 **Typed error hierarchy** (one-time setup, scaffold creates `src/errors.gcl` if absent):
-\`\`\`gcl
+```gcl
 @volatile abstract type AppError { code: String; message: String; }
 @volatile type NotFoundError   extends AppError { id: String; }
 @volatile type ValidationError extends AppError { field: String; }
 @volatile type ConflictError   extends AppError {}
 @volatile type AuthError       extends AppError {}
-\`\`\`
+```
 
 ### A. Feature file (`src/{snake}/{snake}.gcl`)
 
-\`\`\`gcl
+```gcl
 // {Entity} model + indices + service
 
 type {Entity} {
@@ -130,11 +132,11 @@ abstract type {Entity}Service {
         {additional_index_removals}
     }
 }
-\`\`\`
+```
 
 ### B. API file (`src/{snake}/{snake}_api.gcl`)
 
-\`\`\`gcl
+```gcl
 @volatile type {Entity}View   { id: int; {fields}; created_at: time; }
 @volatile type {Entity}Create { {fields_without_id_created_at} }
 @volatile type {Entity}Update { {updatable_fields_as_nullable} }
@@ -194,11 +196,11 @@ fn delete_{entity}({entity}Id: int) {
         {Entity}Service::delete({entity});
     } catch (ex) { error("delete_{entity}(${{entity}Id}) failed: ${ex}"); throw ex; }
 }
-\`\`\`
+```
 
 ### C. Test file (`test/{snake}_test.gcl`)
 
-\`\`\`gcl
+```gcl
 @test fn test_{entity}_create() {
     var e = {Entity}Service::create({test_params});
     Assert::isNotNull(e);
@@ -243,24 +245,24 @@ fn delete_{entity}({entity}Id: int) {
     try { {Entity}Service::create({test_params}); } catch (ex) { failed = true; }
     Assert::isTrue(failed);
 }
-\`\`\`
+```
 
 ### D. Frontend component (`frontend/components/{snake}-table.ts`) — only if `frontend/` exists
 
-Generate a small **Lit** element that lists the entity via the generated client, using **Shoelace** for chrome and a **Lucide** icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.project.{Entity}View` exists.
+Small **Lit** element listing the entity via the generated client, Shoelace chrome + a lucide-static icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.{snake}_api.{Entity}View` exists — codegen namespaces types by **module** (the `{snake}_api` file basename), not the entity name, same as the call on line ~269.
 
-\`\`\`ts
+```ts
 import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import '@greycat/web/sdk';                        // runtime: `gc` global, init, typed bindings
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
-import { icon } from '~/icons';                  // Lucide (lucide / lucide-static), self-hosted
+import { icon } from '~/icons';                  // lucide-static (self-hosted inline SVG, no CDN)
 
 @customElement('{snake}-table')
 export class {Entity}Table extends LitElement {
   createRenderRoot() { return this; }            // light DOM — let theme.css cascade
-  @state() private rows: gc.project.{Entity}View[] = [];
+  @state() private rows: gc.{snake}_api.{Entity}View[] = [];   // module = file basename, matches the call below
   @state() private loading = true;
 
   async connectedCallback() {
@@ -285,18 +287,18 @@ export class {Entity}Table extends LitElement {
   }
 }
 declare global { interface HTMLElementTagNameMap { '{snake}-table': {Entity}Table } }
-\`\`\`
+```
 
-Reminders: import Shoelace components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields` where possible; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; run `pnpm lighthouse` after wiring the page.
+Reminders: import Shoelace components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields`; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; optionally run Lighthouse after wiring the page (`pnpm lighthouse` if that script exists, else the `lighthouse` CLI).
 
 ---
 
 ## Step 6: Lint
-\`\`\`bash
+```bash
 greycat-lang lint --fix     # backend
 # frontend (if generated):
 greycat codegen ts && pnpm lint   # regenerate client, then typecheck
-\`\`\`
+```
 
 ---
 
@@ -308,15 +310,15 @@ SCAFFOLD COMPLETE — entity: {Entity}
 ✓ src/{snake}/{snake}.gcl          — type + N indices + service ({methods})
 ✓ src/{snake}/{snake}_api.gcl      — N volatile types + N endpoints
 ✓ test/{snake}_test.gcl            — N test cases
-✓ frontend/components/{snake}-table.ts  — Lit + Shoelace + Lucide (if frontend/)
+✓ frontend/components/{snake}-table.ts  — Lit + Shoelace + lucide-static (if frontend/)
 
 Lint: ✓ passes
 
 Next:
   1. Customize generated code
-  2. greycat test test/{snake}_test.gcl
+  2. greycat test test_{entity}_create   # a @test function name, NOT a file path (omit to run all)
   3. greycat serve → test endpoints
-  4. (frontend) greycat codegen ts → mount <{snake}-table> → pnpm lighthouse
+  4. (frontend) greycat codegen ts → mount <{snake}-table> → Lighthouse (optional): pnpm lighthouse or lighthouse CLI
 ```
 
 ---
@@ -324,7 +326,7 @@ Next:
 ## Template Variations
 
 ### Time-series Collector
-\`\`\`gcl
+```gcl
 type Sensor { id: String; location: geo; readings: nodeTime<float>; }
 var sensors_by_id: nodeIndex<String, node<Sensor>>;
 
@@ -342,10 +344,10 @@ static fn get_average(s: node<Sensor>, start: time, end: time): float {
     for (t: time, v: float in s->readings[start..end]) { sum = sum + v; n = n + 1; }
     if (n > 0) { return sum / n; } else { return 0.0; }
 }
-\`\`\`
+```
 
 ### Graph Traversal
-\`\`\`gcl
+```gcl
 type City   { id: int; name: String; country: node<Country>; streets: nodeList<node<Street>>; }
 type Street { id: int; name: String; city: node<City>;       buildings: nodeList<node<Building>>; }
 
@@ -355,14 +357,11 @@ static fn get_city_with_streets(city: node<City>): CityWithStreetsView {
     for (i, s in city->streets) sv.add(StreetView { id: s->id, name: s->name });
     return CityWithStreetsView { id: city->id, name: city->name, streets: sv };
 }
-\`\`\`
+```
 
 ---
 
 ## Notes
 
-- Generated code is a starting point — customize as needed
-- Maintains index consistency across all CRUD ops
-- Includes duplicate-check validation for unique fields
+- Generated code is a starting point — customize as needed. Maintains index consistency across all CRUD ops; includes duplicate-check validation for unique fields; throws typed errors (`NotFoundError`, `ConflictError`) on failures.
 - reads default to `api` (bare `@expose`, no decorator); writes use `@permission("admin")`; add `@permission("public")` ONLY for intentionally anonymous endpoints
-- Throws typed errors (`NotFoundError`, `ConflictError`) on failures

@@ -8,11 +8,12 @@ allowed-tools: AskUserQuestion, Read, Write, Edit, Bash, Grep, Glob
 
 **Purpose**: Schema changes, data transformations, bulk import/export, storage maintenance.
 
+⚠ These ops are **sequential, interactive, and destructive** — do them one at a time, never in parallel, and back up before anything risky.
+
 ---
 
 ## Step 1: Choose Operation (AskUserQuestion)
 
-Options:
 - **A. Schema Evolution** — add/remove fields, detect breaking changes
 - **B. Data Migration** — transform existing data
 - **C. Import/Export** — bulk CSV/JSON ops
@@ -23,21 +24,18 @@ Options:
 ## Operation A: Schema Evolution
 
 ### A.1 Scan models
-\`\`\`bash
+```bash
 find src -name "*.gcl" -not -name "*_api.gcl" -not -name "*_reader.gcl" -not -name "*_writer.gcl"
-\`\`\`
-For each file: extract `type Name { ... }` definitions and field lists.
+```
+Per file: extract `type Name { ... }` definitions + field lists.
 
 ### A.2 Ask change type (AskUserQuestion)
-- Add new field
-- Remove field
-- Change field type
-- Rename field (requires migration)
+Add field · Remove field · Change field type · Rename field (requires migration).
 
 ### A.3 Add field — safety analysis
 
-```
 The runtime diffs the new program against the stored ABI on rebuild and auto-migrates compatible changes:
+```
   • Add a NULLABLE attribute            → auto-migrates (existing instances read it as null).
   • Add a NON-NULL attribute WITH a default → auto-migrates (existing instances get the default).
   • Add a NON-NULL attribute WITHOUT a default → load FAILS — provide a default or write a migration.
@@ -45,14 +43,14 @@ The runtime diffs the new program against the stored ABI on rebuild and auto-mig
 ```
 
 Options:
-- **A) Nullable (Recommended)**: add `field: T?;` — no data touched, safe
-- **B) Non-null with a default**: add `field: T = <default>;` — auto-migrates existing instances to the default
+- **A) Nullable (Recommended)**: `field: T?;` — no data touched, safe
+- **B) Non-null with default**: `field: T = <default>;` — auto-migrates existing instances to the default
 - **C) Nullable → backfill → tighten**: for a computed (non-constant) backfill, safe for production
 - **D) Dev reset**: `rm -rf gcdata` (destructive, dev only)
 - **E) Cancel**
 
-For Option C (computed backfill), generate migration:
-\`\`\`gcl
+Option C (computed backfill) — generate migration:
+```gcl
 // src/migration/migrate_YYYYMMDD_<desc>.gcl
 fn migrate_add_device_priority() {
   info("Start: add Device.priority");
@@ -66,14 +64,14 @@ fn migrate_add_device_priority() {
   }
   info("Done: ${count} updated, ${errors} errors");
 }
-\`\`\`
-Then: `greycat run migrate_add_device_priority` → update type to non-nullable → `greycat-lang lint`.
+```
+Then: `greycat run migrate_add_device_priority` → set type non-nullable → `greycat-lang lint`.
 
 ### A.4 Remove field
-1. Grep for usage: `grep -r "entity->field" src/ --include="*.gcl"` — abort if found
-2. Edit type definition to remove field line
+1. Grep usage: `grep -r "entity->field" src/ --include="*.gcl"` — abort if found
+2. Edit type to remove the field line
 3. `greycat-lang lint`
-4. Note: existing nodes still contain old data — harmless but wastes space; consider `greycat defrag` or full reset
+4. Existing nodes still hold old data — harmless but wastes space; consider `greycat defrag` or full reset
 
 ---
 
@@ -82,7 +80,7 @@ Then: `greycat run migrate_add_device_priority` → update type to non-nullable 
 Use when schema changes need data transformation (split name → first/last, compute derived fields, fix data quality).
 
 ### Template
-\`\`\`gcl
+```gcl
 // src/migration/migrate_YYYYMMDD_<desc>.gcl
 fn migrate_transform_user_names() {
   info("Start: transform user names");
@@ -107,13 +105,13 @@ fn migrate_transform_user_names() {
   }
   info("Done: ${count} updated, ${skipped} skipped, ${errors} errors");
 }
-\`\`\`
+```
 
 Execute (back up first — `greycat run` mutations are irreversible):
-\`\`\`bash
+```bash
 greycat backup                 # snapshot before mutating (restore with `greycat restore`)
 greycat run migrate_transform_user_names
-\`\`\`
+```
 
 ---
 
@@ -121,12 +119,10 @@ greycat run migrate_transform_user_names
 
 ### C.1 Import CSV
 
-Analyze CSV: detect delimiter (`;`/`\t`/`,`), row count, header.
-
-Ask target type via AskUserQuestion (list detected models).
+Analyze CSV: detect delimiter (`;`/`\t`/`,`), row count, header. Ask target type via AskUserQuestion (list detected models).
 
 Generate importer with the typed `CsvReader<T>` (there is NO `CSV::parse` / `csv.rows`). Define a `@volatile` row type whose attribute order matches the CSV columns, then stream rows:
-\`\`\`gcl
+```gcl
 // src/import/import_devices_csv.gcl
 
 // Row shape — attribute ORDER matches CSV column order. `geo` consumes two columns (lat, lng).
@@ -147,14 +143,14 @@ fn import_devices_from_csv() {
   }
   info("Done: ${count} imported, ${errors} errors");
 }
-\`\`\`
-(For schema inference on an unfamiliar file, use `Csv::analyze([path], fmt)` → `Csv::generate(stats)`, or `Csv::sample([path], fmt, 1000)` to peek the first rows into a `Table`.)
+```
+(Schema inference on an unfamiliar file: `Csv::analyze([path], fmt)` → `Csv::generate(stats)`, or `Csv::sample([path], fmt, 1000)` to peek the first rows into a `Table`.)
 
 ### C.1b ⚠ Re-Import discipline — UPSERT, never duplicate
 
-Re-runnable importers MUST reuse prior `node<T>` per key. Constructing fresh `node<T>{...}` every run orphans previous nodes and bloats `gcdata/` unboundedly.
+Re-runnable importers MUST reuse the prior `node<T>` per key. Constructing fresh `node<T>{...}` every run orphans previous nodes and bloats `gcdata/` unboundedly.
 
-\`\`\`gcl
+```gcl
 // ❌ Orphan factory
 fn import_devices(rows: Array<DeviceRow>) {
   devices_by_id = nodeIndex<int, node<Device>>{};
@@ -175,13 +171,13 @@ fn import_devices(rows: Array<DeviceRow>) {
     }
   }
 }
-\`\`\`
+```
 
 When `DeviceService::create` is the only construction path, refactor it to accept `existing: node<Device>?` and branch internally. Run `greycat defrag` after large reshuffles.
 
 ### C.2 Export CSV
 
-\`\`\`gcl
+```gcl
 // Row shape written out — attribute order = column order.
 @volatile type DeviceOut { id: int; name: String; location: geo; status: String?; created_at: time; }
 
@@ -200,49 +196,49 @@ fn export_devices_to_csv() {
   writer.flush();
   info("Exported ${count}");
 }
-\`\`\`
-\`\`\`bash
+```
+```bash
 mkdir -p exports && greycat run export_devices_to_csv
-\`\`\`
+```
 
 ---
 
 ## Operation D: Storage Health
 
 ### D.1 Defrag
-\`\`\`bash
+```bash
 du -sh gcdata/
 greycat defrag
 du -sh gcdata/
-\`\`\`
+```
 
 ### D.2 Backup
-Prefer the built-in backup/restore (consistent snapshot of a live store) over raw `tar`:
-\`\`\`bash
+Prefer built-in backup/restore (consistent snapshot of a live store) over raw `tar`:
+```bash
 greycat backup                 # snapshot into GREYCAT_BACKUP_PATH (default backup/)
 greycat restore <archive>      # stop the server first, then restore
-\`\`\`
-In-process equivalents: `Runtime::backup_full()` / `Runtime::backup_delta()`. `GREYCAT_MAX_BACKUP_FILES` (default 3) caps retention. A raw `tar -czf snap.tgz gcdata/` only produces a consistent archive when the server is stopped.
+```
+In-process equivalents: `Runtime::backup_full()` / `Runtime::backup_delta()`. `GREYCAT_MAX_BACKUP_FILES` (default 3) caps retention. A raw `tar -czf snap.tgz gcdata/` is only consistent when the server is stopped.
 
 ### D.3 Diagnostics
-\`\`\`bash
+```bash
 du -sh gcdata/
 find gcdata/ -type f | wc -l
 find gcdata/ -type f -exec du -h {} \; | sort -rh | head -10
 # Avg file size < 1KB suggests fragmentation — consider defrag
-\`\`\`
+```
 
 ### D.4 Dev reset (destructive)
-\`\`\`bash
+```bash
 # Prompt user first.
 rm -rf gcdata && greycat run import
-\`\`\`
+```
 
 ### D.5 Production deploy with safe rollback
 
 ROTATE `gcdata/` rather than deleting it — that's your one-command rollback.
 
-\`\`\`bash
+```bash
 # Pre-deploy
 systemctl stop greycat
 mv gcdata gcdata_bk_$(date +%Y%m%d-%H%M%S)
@@ -257,7 +253,7 @@ systemctl stop greycat
 rm -rf gcdata
 mv gcdata_bk_<timestamp> gcdata
 systemctl start greycat
-\`\`\`
+```
 
 **Reminders**:
 - Use project-local `./bin/greycat` in systemd `ExecStart` — host-wide `~/.greycat/bin/greycat` has been observed stale at `0.0.0`.
@@ -273,7 +269,6 @@ systemctl start greycat
 
 ## Notes
 
-- Always backup before risky ops
-- Batch large migrations + log progress every N rows
-- Dev: can delete gcdata; Prod: must migrate (rotate, not delete)
-- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration, run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the **Lit + Shoelace + lucide-static** frontend so types stay in sync; re-audit with `pnpm lighthouse:ci` if payload shapes changed.
+- Backup before risky ops; batch large migrations and log progress every N rows.
+- Dev: may delete `gcdata`; Prod: rotate `gcdata`, never delete (see D.5).
+- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the frontend (VitePlus (vp) + Lit (light DOM) + TypeScript + Shoelace + @greycat/web + lucide-static, pnpm) so types stay in sync; if payload shapes changed, re-audit with `pnpm lighthouse:ci` (that script if present, else the `lighthouse` CLI).

@@ -1,14 +1,29 @@
 ---
 name: frontend
-description: Review frontend codebase for code quality, performance, Lighthouse/SEO, and best practices using the VitePlus + Lit + Shoelace + @greycat/web stack
-allowed-tools: Bash, Read, Grep, Glob
+description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Shoelace + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
+allowed-tools: Bash, Read, Grep, Glob, Task
 ---
 
 # Frontend Review
 
-**Purpose**: Review the GreyCat frontend for correctness, the one prescribed stack, Lighthouse performance, LLM-friendly SEO, and common pitfalls.
+**Purpose**: The single hub for GreyCat web-UI quality — correctness, the one prescribed stack, TypeScript/Lit type safety, Lighthouse performance, LLM-friendly SEO, testing, and common pitfalls. (It absorbs the frontend phases that used to live in the separate `typecheck` / `optimize` / `coverage` commands.)
+
+**Companion**: for GCL backend quality use `/greycat:backend`.
 
 Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full prescribed toolchain, layout, and integration contract — this review checks against exactly that, with one deviation: **the frontend source dir is `frontend/`, not `app/`** (the `~` alias maps to `frontend/`).
+
+---
+
+## How to run this review — ultrathink + ultracode
+
+**Ultrathink (always).** Reason deeply about *why* each rule exists (why light DOM, why the init gate, why per-component Shoelace imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
+
+**Ultracode (when available).** If multi-agent orchestration is on, run this as a **Workflow** — the checklist below splits cleanly into independent lenses:
+1. **Fan out** — one agent per lens: *(a)* layout & config + TypeScript, *(b)* Lit/Shoelace/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
+2. **Verify** — for CRITICAL/HIGH findings, a second agent confirms it against the served app or the actual config, not just a grep hit.
+3. **Synthesize** — one severity-grouped report.
+
+If ultracode is **not** available, walk the checklist yourself as one deep pass.
 
 ---
 
@@ -58,9 +73,10 @@ grep -q "appType: 'mpa'" vite.config.ts || echo "⚠ missing appType: 'mpa' — 
 
 ### 2. TypeScript quality
 - `experimentalDecorators: true` **and** `useDefineForClassFields: false` in `tsconfig.json` — both load-bearing for Lit; vite-plus (rolldown/oxc) silently drops `@property` / emits unparseable `@customElement` otherwise (`vp build` still reports success, page loads blank)
-- `moduleResolution: "bundler"`, `~` in `paths`, `project.d.ts` in `include`
+- `moduleResolution: "bundler"`, `"strict": true`, `~` in `paths`, `project.d.ts` in `include`
 - No `any` — use `gc.core.*` / `gc.project.*` types
 - `project.d.ts` not manually edited
+- Each `@customElement` extends `HTMLElementTagNameMap` (`declare global { interface HTMLElementTagNameMap { 'app-x': AppX } }`) so templates and `document.createElement` are typed
 ```bash
 grep -q '"experimentalDecorators": true' tsconfig.json || echo "⚠ missing experimentalDecorators — Lit decorators break silently"
 grep -q '"useDefineForClassFields": false' tsconfig.json || echo "⚠ missing useDefineForClassFields:false — @property shadowed by native field"
@@ -111,6 +127,14 @@ grep -rnE "#[0-9a-fA-F]{3,6}\b" frontend/ --include="*.ts" | grep -v theme.css &
 grep -rnE "cdn|unpkg|jsdelivr|googleapis\.com/.*icon" frontend/ --include="*.ts" --include="*.html" && echo "⚠ runtime/CDN icon fetch — use lucide-static (inlined SVG) instead"
 ```
 
+### 3e. Dependencies (on-stack + exact pins)
+- The prescribed stack (`lit`, `@shoelace-style/shoelace`, `lucide-static`, `@greycat/web`, `vite-plus`, `typescript`) must be present and current. Heavy/duplicate libs (`moment`, `lodash`, `jquery`) should be replaced with native / web-component equivalents — they bloat the bundle and hurt LCP/TBT
+- Pin **exact** versions (no `^`/`~`) so builds are reproducible; `@greycat/web` is a registry tarball URL, not npm
+```bash
+grep -nE '"(moment|lodash|jquery)"' package.json && echo "⚠ heavyweight dep — prefer native / web-component equivalent"
+grep -nE '"[~^]' package.json && echo "ℹ non-exact pins — pin exact latest for reproducible builds"
+```
+
 ### 4. Init / login gate (CRITICAL ordering)
 `gc.sdk.init()` loads the ABI over an authenticated endpoint, so it needs a session. The route's root element must:
 1. `import '@greycat/web/sdk'` (the runtime: `gc` global, `init`, typed bindings) — import once; import `gui-*` components individually, not the umbrella `@greycat/web`
@@ -155,6 +179,14 @@ for f in robots.txt sitemap.xml llms.txt site.webmanifest manifest.webmanifest; 
   [ -f "webroot/$f" ] || [ -f "frontend/public/$f" ] || echo "⚠ missing $f (SEO/LLM discoverability)"
 done
 ```
+
+### 8. Testing (type-check always · Vitest optional · Lighthouse as a gate)
+No frontend test framework is *prescribed* — `greycat codegen ts && pnpm lint` (`tsc --noEmit`) plus the Lighthouse audit are the baseline gates. **Vitest** is the recommended runner **if the project has one** (jsdom for Lit component rendering + data-transform helpers); don't flag its absence, but if present treat untested components / formatters / error+loading states as gaps.
+```bash
+find frontend -name "*.test.ts" -o -name "*.spec.ts"     # inventory (empty is fine — Vitest is optional)
+grep -q '"vitest"' package.json && pnpm test              # run only if the project uses Vitest
+```
+Treat any **Lighthouse category < 90** (on mobile *or* desktop) as an open coverage item, same weight as a missing unit test.
 
 ---
 

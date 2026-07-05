@@ -7,23 +7,19 @@ allowed-tools: Write, Read, Bash
 # Initialize GreyCat Project Documentation
 
 **Purpose**: Generate CLAUDE.md with generic GreyCat best practices.
-
-**Run When**: New GreyCat project, setting up Claude Code integration.
+**Run When**: New GreyCat project, or setting up Claude Code integration.
 
 ---
 
 ## Steps
 
-1. **Check CLAUDE.md exists** — if yes, ask to backup or cancel
+1. **Check CLAUDE.md exists** — if yes, ask to backup or cancel.
 2. **Detect features**:
-   - Frontend: `frontend/` exists or `package.json` has `vite-plus` / `@greycat/web` / `lit` / `@shoelace-style/shoelace`
-   - GreyCat version: parse `@library("std", ...)` from `project.gcl`
-3. **Check `.gitignore`** — create or append GreyCat entries if missing
-4. **Write CLAUDE.md** from the template below, customizing:
-   - Replace `[One-line project description]`, `[version]`
-   - Remove frontend sections if no frontend (commands, stack, structure, coding style, testing, env)
-   - Keep all backend sections (always present)
-5. **Report**: list created files + next steps (replace placeholders, commit)
+   - Frontend: `frontend/` exists, or `package.json` has `vite-plus` / `@greycat/web` / `lit` / `@shoelace-style/shoelace`.
+   - GreyCat version: parse `@library("std", ...)` from `project.gcl`.
+3. **Check `.gitignore`** — create or append GreyCat entries if missing.
+4. **Write CLAUDE.md** from the template below: replace `[One-line project description]` / `[version]`; drop the frontend sections (commands, stack, structure, coding style, testing, env) if there is no frontend; keep all backend sections.
+5. **Report**: created files + next steps (replace placeholders, commit).
 
 ---
 
@@ -36,15 +32,15 @@ allowed-tools: Write, Read, Bash
 
 ## Behavioral Guidelines
 
-Bias toward caution over speed. For trivial edits use judgment; for `.gcl`, persistence, or `@expose` endpoints follow these strictly.
+Bias toward caution over speed. Use judgment for trivial edits; for `.gcl`, persistence, or `@expose` endpoints follow these strictly.
 
 **1. Think Before Coding** — State assumptions explicitly. If multiple interpretations exist (`nodeIndex` vs `Map`, persisted vs `@volatile`), present them. Read `lib/std/*.gcl` for real examples — don't guess by analogy to Java/TypeScript.
 
-**2. Simplicity First** — Minimum code that solves the problem. No speculative features, no abstractions for single-use code, no `@volatile` "for later", no `try/catch` on internal helpers, no unused generics.
+**2. Simplicity First** — Minimum code that solves the problem. No speculative features, single-use abstractions, `@volatile` "for later", `try/catch` on internal helpers, or unused generics.
 
-**3. Surgical Changes** — Touch only what's needed. Match existing style (snake_case fields, camelCase functions). `Grep` before deleting any type/function/field. Remove orphans your changes created. Regenerate (don't hand-edit) `project.d.ts`.
+**3. Surgical Changes** — Touch only what's needed; match existing style (snake_case fields, camelCase functions). `Grep` before deleting any type/function/field; remove orphans your changes create. Regenerate (never hand-edit) `project.d.ts`.
 
-**4. Goal-Driven Execution** — Define verifiable success: lint clean, `greycat test` green, endpoint returns expected shape. For multi-step tasks, state a brief plan with verification per step.
+**4. Goal-Driven Execution** — Define verifiable success: lint clean, `greycat test` green, endpoint returns expected shape. For multi-step tasks, state a brief plan with per-step verification.
 
 ---
 
@@ -56,27 +52,15 @@ greycat-lang lint  # Verify 0 errors after ANY change
 \`\`\`
 
 ### 2. VERIFY BEFORE DELETING
-Use `Grep` to search for usages before removing types/functions/variables.
+`Grep` for usages before removing any type/function/variable.
 
-### 3. GREYCAT GOTCHAS
-\`\`\`gcl
-// String: ❌ substring()      ✅ slice(from, to)
-// String: ❌ split(" ")       ✅ split(' ')          // char, not String
-// String: ❌ get(i)           ✅ .chars() or Buffer
-// Math:   ❌ x.log()/x.sqrt() ✅ log(x)/sqrt(x)      // globals
-// Static: ❌ static fn f<T>() ✅ remove static OR generics
-// Coll:   ❌ Array<T>::new()  ✅ Array<T> {}
-// Coll:   ❌ nodeList<T> local var  ✅ Array<T> for non-persistent
-// Coll:   ❌ nodeIndex.add()  ✅ nodeIndex.set(k,v) / .get(k)
-// Type:   ❌ fn(): {x:int}    ✅ named @volatile type
-// OOP:    ❌ override concrete on abstract  ✅ make abstract from day 1
-// Data:   ❌ add non-nullable to persisted  ✅ add as T? — or reset gcdata/
-// Resv:   ❌ var limit: int   ✅ var k: int           // limit is reserved
-// Gen:    ❌ Array<Wrapper<T>> return       ✅ non-generic + value:any + cast
-\`\`\`
+### 3. GOTCHAS
+Don't write GCL by analogy to another language — check the **Common Pitfalls** table below first: String `slice`/`split(' ')`/`.chars()`, global `log(x)`/`sqrt(x)`, no `static fn <T>`, `Array<T> {}` (not `::new()`), `nodeIndex.set` (not `.add`), named `@volatile` returns, `abstract` from day 1, `T?` on persisted types, reserved words (`limit`/`skip`), generic-return erasure.
 
-### 4. USE GREYCAT SKILL
-**Mandatory** for GCL backend work: use `/greycat` skill.
+### 4. USE GREYCAT SKILL & REVIEW COMMANDS
+**Mandatory** for GCL backend work: use the `/greycat` skill. Before releases / after refactors, run the two review hubs:
+- **`/greycat:backend`** — dead code, anti-patterns, type safety, performance & concurrency, `@expose` API security, test coverage.
+- **`/greycat:frontend`** — the VitePlus + Lit + Shoelace + `@greycat/web` stack, performance, Lighthouse/SEO, type safety, testing (only if a `frontend/` exists).
 
 ---
 
@@ -98,7 +82,7 @@ greycat dev                    # build watcher + serve API and assets on one ori
 greycat codegen ts             # regenerate project.d.ts after backend type/@expose changes
 \`\`\`
 
-> `vp` and pnpm are different layers, not alternatives: **pnpm** is the package manager (fetches deps), **`vp`** (VitePlus, rolldown/oxc) is the build toolchain that bundles `frontend/` → `webroot/`; `vp install` delegates to pnpm. Install `vp` once: `curl -fsSL https://vite.plus | bash`. Lighthouse: run the CLI against the served app (`greycat dev` first); add a script only if the project wants a CI gate.
+> `vp` and pnpm are different layers, not alternatives: **pnpm** is the package manager (fetches deps); **`vp`** (VitePlus, rolldown/oxc) is the build toolchain that bundles `frontend/` → `webroot/`, and `vp install` delegates to pnpm. Install `vp` once: `curl -fsSL https://vite.plus | bash`. Lighthouse: run the CLI against the served app (`greycat dev` first); add a script only if the project wants a CI gate.
 
 ---
 
@@ -117,7 +101,7 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 - **Libraries**: `@library("std", "[version]")`, `@library("explorer", "[version]")`
 - **Testing**: backend `@test`
 
-**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json), source entirely under `frontend/` (`frontend/routes/` pages, `frontend/components/` reused views, `frontend/public/` copied as-is, `frontend/theme.css`), builds to `webroot/` (`emptyOutDir: true`). `~` aliases `frontend/` in both `vite.config.ts` and `tsconfig.json`. `@greycat/web` is **not on npm** — pin it as a registry tarball URL (`https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz`) tracking the project's `std` branch; Shoelace/Lit are ordinary semver deps (Shoelace must satisfy `@greycat/web`'s peer range). Optimize with Lighthouse (perf/SEO/a11y ≥ 90) and ship LLM-friendly SEO (see Frontend coding style).
+**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json); source entirely under `frontend/` (`routes/` pages, `components/` reused views, `public/` copied as-is, `theme.css`); builds to `webroot/` (`emptyOutDir: true`). `~` aliases `frontend/` in both `vite.config.ts` and `tsconfig.json`. `@greycat/web` is **not on npm** — pin it as a registry tarball URL (`https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz`) tracking the project's `std` branch; Shoelace/Lit are ordinary semver deps (Shoelace must satisfy `@greycat/web`'s peer range). Optimize with Lighthouse (perf/SEO/a11y ≥ 90); ship LLM-friendly SEO (see Frontend coding style).
 
 ---
 
@@ -149,7 +133,7 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 └── CLAUDE.md
 \`\`\`
 
-**⚠️ Filename = module name.** Two `.gcl` files with same basename collide at lint, regardless of folder. Convention: `src/orders/orders.gcl` (model + service), everything else gets a suffix (`orders_api.gcl`, `orders_reader.gcl`, etc.). On `Unknown type T` lint errors, disambiguate with FQN: `mod::T`.
+**⚠️ Filename = module name.** Two `.gcl` files with the same basename collide at lint, regardless of folder. Convention: `src/orders/orders.gcl` (model + service), everything else gets a suffix (`orders_api.gcl`, `orders_reader.gcl`, …). On `Unknown type T` lint errors, disambiguate with FQN: `mod::T`.
 
 ---
 
@@ -174,11 +158,12 @@ npm-debug.log* yarn-*.log* pnpm-debug.log*
 
 ### Backend (GCL)
 
-**Documentation (REQUIRED)**: `///` for ALL functions/types with `@param`/`@return`/`@throws`/`@example`. Section headers via `// ===`.
-
-**Services**: Abstract types + static methods. `@volatile` for transient types. Null-safe with `?`.
-
-**Error Handling (MANDATORY)**: try/catch on ALL `@expose`, typed errors only (no `throw "string"`), `error()` log + re-throw.
+- **Documentation (REQUIRED)**: `///` on ALL functions/types with `@param`/`@return`/`@throws`/`@example`; section headers via `// ===`.
+- **Services**: abstract types + static methods; `@volatile` for transient types; null-safe with `?`.
+- **Error Handling (MANDATORY)**: try/catch on ALL `@expose`; typed errors only (no `throw "string"`); `error()` log + re-throw.
+- **Invariants via `private`**: read-public, write-private — mutations only through methods on the type.
+- **Collections**: `Array<T> {}`, `Map<K,V> {}`, `nodeIndex<K, node<V>>`. Initialize non-nullable collection fields in the object literal, or declare them nullable.
+- **Naming**: snake_case fields, camelCase functions, `…View` suffix for `@volatile` API response types.
 
 \`\`\`gcl
 // Typed error hierarchy — src/errors.gcl
@@ -202,15 +187,9 @@ fn document(id: String): Document {
 }
 \`\`\`
 
-**Invariants via `private`**: read-public, write-private — mutations only through methods on the type.
-
-**Collections**: `Array<T> {}`, `Map<K,V> {}`, `nodeIndex<K, node<V>>`. Initialize non-nullable collection fields in object literal, or declare them nullable.
-
-**Naming**: snake_case fields, camelCase functions, `…View` suffix for `@volatile` API response types.
-
 ### Frontend (VitePlus + Lit + Shoelace + lucide-static) — if exists
 
-Prescribed stack: **Lit** (light DOM) + **TypeScript** + **Shoelace** (`sl-*`) + **`@greycat/web`** (`gui-*` widgets + typed SDK) on **VitePlus** (`vp`), **MPA** under `frontend/routes/`. `@greycat/web`'s own widgets are Lit, so the whole UI is web-components. Managed with **pnpm**.
+Stack as listed above (Lit light-DOM + Shoelace `sl-*` + `@greycat/web` `gui-*` + typed SDK on VitePlus, MPA under `frontend/routes/`, pnpm). `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
 
 **⚠️ Init/login gate**: `gc.sdk.init()` loads the ABI over an authenticated endpoint — call it (no args) in the route root's `connectedCallback`; on throw, render a login form and call `gc.sdk.init({ auth: { username, password } })`. Only after it resolves are `gc.<module>.*` calls and `gui-*` tags usable.
 \`\`\`ts
@@ -221,24 +200,20 @@ import '~/theme.css';                 // app --app-* tokens + --sl-* re-skin —
 await gc.sdk.init();                  // then gc.project.* and gui-* are live
 \`\`\`
 
-**Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`; a stale ABI gets HTTP 422. Derive backend strings from the SDK (`gc.project.Status.active`, `.key`) — never hard-code.
-
-**Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, `html\`…\`` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
-**Shoelace**: import components **individually** (tree-shaking). Do **not** import Shoelace's own `themes/*.css` — `greycat.css` is the theme; light mode is the `sl-theme-light` class on `<html>`.
-**Icons**: **`lucide-static`** (inline SVG via Lit `unsafeSVG`), `stroke="currentColor"` + `aria-hidden` — self-hosted, no runtime/CDN fetch.
-**Services**: thin layer over the generated SDK client; types from `project.d.ts`.
-**State**: URL query params (shareable view state), localStorage (theme). **Styling**: `--app-*` tokens in `frontend/theme.css` (dark + light); no hardcoded colors/sizes, no inline styles except dynamic values.
-**Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
-
-**Lighthouse (optimize perf/SEO/a11y/best-practices ≥ 90 on BOTH mobile and desktop)**: `greycat dev` to serve, then run Lighthouse against the origin for each form factor — default is mobile (throttled, the harder gate), add `--preset=desktop`. Tree-shake Shoelace, self-host icons (`lucide-static`), lazy-load heavy widgets, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
-
-**Responsive (always)**: `<meta name="viewport" content="width=device-width, initial-scale=1">`; fluid layout (grids / `clamp()` / media queries, no fixed-px page widths), tap targets ≥ 24–48px, no horizontal scroll at 360px.
-
-**LLM-friendly SEO (always)**: in each route's `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Semantic landmarks + heading order + `alt`/ARIA (light DOM keeps content crawlable). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) via `frontend/public/` — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
+- **Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`; a stale ABI gets HTTP 422. Derive backend strings from the SDK (`gc.project.Status.active`, `.key`) — never hard-code.
+- **Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, `html\`…\`` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
+- **Shoelace**: import components **individually** (tree-shaking). Do **not** import Shoelace's own `themes/*.css` — `greycat.css` is the theme; light mode is the `sl-theme-light` class on `<html>`.
+- **Icons**: **`lucide-static`** (inline SVG via Lit `unsafeSVG`), `stroke="currentColor"` + `aria-hidden` — self-hosted, no runtime/CDN fetch.
+- **Services**: thin layer over the generated SDK client; types from `project.d.ts`.
+- **State**: URL query params (shareable view state), localStorage (theme). **Styling**: `--app-*` tokens in `frontend/theme.css` (dark + light); no hardcoded colors/sizes, no inline styles except dynamic values.
+- **Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
+- **Lighthouse (perf/SEO/a11y/best-practices ≥ 90 on BOTH mobile and desktop)**: `greycat dev` to serve, then run Lighthouse per form factor — default is mobile (throttled, the harder gate), add `--preset=desktop`. Tree-shake Shoelace, self-host icons (`lucide-static`), lazy-load heavy widgets, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
+- **Responsive (always)**: `<meta name="viewport" content="width=device-width, initial-scale=1">`; fluid layout (grids / `clamp()` / media queries, no fixed-px page widths); tap targets ≥ 24–48px; no horizontal scroll at 360px.
+- **LLM-friendly SEO (always)**: in each route's `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Semantic landmarks + heading order + `alt`/ARIA (light DOM keeps content crawlable). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) via `frontend/public/` — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
 
 ### Testing
 
-**Backend**: `@test` annotation, `test_function_scenario` naming. Use `Assert::`.
+**Backend**: `@test` annotation, `test_function_scenario` naming, `Assert::`.
 \`\`\`gcl
 @test fn test_search_validQuery() {
   var results = SearchService::search("test");
@@ -248,8 +223,8 @@ await gc.sdk.init();                  // then gc.project.* and gui-* are live
 \`\`\`
 
 **Runner semantics**:
-- Tests in same module share state across `@test` fns (mutations visible to next; NOT persisted to disk).
-- `greycat test` runs whole project in one process — SEGFAULT/compile error poisons all.
+- Tests in the same module share state across `@test` fns (mutations visible to the next; NOT persisted to disk).
+- `greycat test` runs the whole project in one process — a SEGFAULT/compile error poisons all tests.
 - **Wipe `gcdata/` for clean runs**: `rm -rf gcdata && greycat test`.
 - Single test: `greycat test <test_fn_name>` (a bare `@test` function name, e.g. `greycat test test_echo`; omit to run all). It is NOT a file path or directory.
 - Cross-module helpers in `test/test_helpers.gcl` must be plain `fn` (not `private`).
@@ -292,7 +267,7 @@ by_id.set(1, item);     // both indices point at
 by_name.set("x", item); //   the same persistent node
 \`\`\`
 
-**String dedup**: use `node<String>` instead of `String` when same value is repeated across many objects.
+**String dedup**: use `node<String>` instead of `String` when the same value repeats across many objects.
 
 **Lazy init** for nullable collection attrs: `this.entries ?= nodeIndex<String, node<V>>{};`
 
@@ -326,7 +301,7 @@ curl -H "task: true" -X POST -d '[]' http://localhost:8080/module::compute  # ba
 \`\`\`
 **Don't** "fix" non-parallel HTTP via `System::exec` + `&; wait` — the second `System::exec` in a non-task HTTP request throws uncatchable `"terminated PID X"`.
 
-**Request TTL kills + try/catch does NOT fire** — the request TTL (`--request_ttl` flag, `serve` only) defaults to 20s. Past that the runtime tears down the handler; no exception. For long endpoints, raise `--request_ttl` or move to a background task.
+**Request TTL kills + try/catch does NOT fire** — the request TTL (`--request_ttl` flag, `serve` only) defaults to 20s. Past that the runtime tears down the handler with no exception. For long endpoints, raise `--request_ttl` or move to a background task.
 
 **Fork-join**:
 \`\`\`gcl
@@ -341,8 +316,8 @@ var first = jobs[0].result() as int;                      // cast at collection 
 **"Stale await state" error** — if a call-frame variable holds a node-backed value (resolved node, time, Array of payloads) when `await` runs, you get `"wrong state before await..."`. Fix: isolate `await` in its own helper and build the result Array AFTER it returns.
 
 **Batch discipline**:
-- Batch `await` jobs in **~120**, never full worker count. Leave ≥8 threads for OS. No nested `await`.
-- Pre-allocate shards in a sequential phase. Inside parallel jobs: only WRITE to existing nodes — no `node<T>{...}` constructors, no `nodeIndex` instantiation, no edges to shared parents. Global indices read-only during parallel phases.
+- Batch `await` jobs in **~120**, never full worker count. Leave ≥8 threads for the OS. No nested `await`.
+- Pre-allocate shards in a sequential phase. Inside parallel jobs: only WRITE to existing nodes — no `node<T>{...}` constructors, no `nodeIndex` instantiation, no edges to shared parents. Global indices are read-only during parallel phases.
 
 **Recurring tasks**:
 \`\`\`gcl
@@ -357,7 +332,7 @@ Scheduler::add(
 - Status: `Task::is_running(task_id)` / `Task::running()` / `Task::history(offset, max)` (there is no `Task::info` RPC).
 - Result: `GET /files/<user_id>/tasks/<task_id>/result.gcb?json`.
 
-**Atomicity**: Each `fn` invocation is one atomic transaction — uncaught throw rolls back all graph mutations.
+**Atomicity**: each `fn` invocation is one atomic transaction — an uncaught throw rolls back all graph mutations.
 
 ---
 
@@ -373,7 +348,7 @@ Scheduler::add(
 - Call the explicit `/<module>::<fn>` (or the JSON-RPC method) from clients — there is no bare `/<fn>` route.
 - `/runtime::Identity::logout` works because `runtime` is a module name — there is NO literal `/runtime::` routing namespace.
 - `@expose("path")` exposes the function at that exact arbitrary path (e.g. `@expose("api/users")`); it need NOT match the fn name. Whatever path you declare is what clients and the generated SDK must call.
-- `@permission(public)` is invalid (identifier); use `@permission("public")` (quoted). A bare `@expose` already requires `api` (authenticated) — that's the recommended default.
+- `@permission(public)` is invalid (identifier); use `@permission("public")` (quoted). A bare `@expose` already requires `api` (authenticated) — the recommended default.
 - Declare roles in `project.gcl`: `@role("user", "public", "api");`.
 
 ---
@@ -409,9 +384,7 @@ if (box.contains(geo{49.6, 6.1})) { /* ... */ }
 for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 \`\`\`
 
-**Iterate nullable collection**: `for (i, v in maybe_list?) { /* ... */ }` (`?` propagates null through head).
-
-**Lazy init**: `this.entries ?= nodeIndex<String, node<Entry>>{};`
+**Iterate nullable collection**: `for (i, v in maybe_list?) { /* ... */ }` (`?` propagates null through the head).
 
 ---
 
@@ -446,6 +419,8 @@ for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 | `time::new(n, seconds)` on raw epoch | Magnitude-route first |
 | `x as T? ?? "default"` | `(x as T?) ?? "default"` |
 | `Array<Job<T>>` | `Array<Job>` + cast `.result() as T` |
+| `Array<Wrapper<T>>` generic return (erased at runtime) | Non-generic type + `value: any` + cast at call site |
+| `var limit: int` (reserved word) | rename (e.g. `var k`) — `limit` / `skip` are reserved (sampling clause) |
 | Background dispatch header `task:''` | `task: true` (truthy) header |
 | Catching the 20s TTL kill | You can't — raise `--request_ttl` or move to task |
 | Functions without `///` docs | Document ALL functions |
@@ -454,9 +429,7 @@ for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 
 ## Database
 
-**No migrations.** Adding a non-nullable field to a persisted type with existing data **fails outright** — add as nullable (`T?`) until backfilled. Removing/renaming also requires reset.
-
-**Dev reset**: `rm -rf gcdata && greycat run import`
+**No migrations.** Adding a non-nullable field **without a default** to a persisted type with existing data **fails to load** — add it as nullable (`T?`) until backfilled, or give it a default (a non-null field WITH a default auto-migrates). Removing a field auto-migrates (dropped on next save); **renaming** requires a reset (looks like remove + add). Dev reset: `rm -rf gcdata && greycat run import`.
 
 **Production safe-rollback deploy**:
 \`\`\`bash
@@ -493,11 +466,9 @@ fn epochToTime(n: int): time {
 
 ## Production & Operations
 
-**Logs** — `info/warn/error` are **silently swallowed under non-TTY** (systemd, docker without `-t`). Backend writes every log line to **`files/root/log.csv`**: `tail -f files/root/log.csv`.
-
-**Security & rate limiting** — `std::Scheduler` has no throttle primitive. `@permission("public")` auth endpoints have NO in-process rate limiting. Mitigate externally: bind to loopback, front with nginx `limit_req_zone` keyed on `$binary_remote_addr`.
-
-**systemd** — use **project-local `./bin/greycat`** in `ExecStart` (host-wide `~/.greycat/bin/greycat` has been observed stale at `0.0.0`). Dev builds report `0.0.0` from `--version` — treat as "latest".
+- **Logs** — `info/warn/error` are **silently swallowed under non-TTY** (systemd, docker without `-t`). The backend writes every log line to **`files/root/log.csv`**: `tail -f files/root/log.csv`.
+- **Security & rate limiting** — `std::Scheduler` has no throttle primitive; `@permission("public")` auth endpoints have NO in-process rate limiting. Mitigate externally: bind to loopback, front with nginx `limit_req_zone` keyed on `$binary_remote_addr`.
+- **systemd** — use **project-local `./bin/greycat`** in `ExecStart` (host-wide `~/.greycat/bin/greycat` has been observed stale at `0.0.0`). Dev builds report `0.0.0` from `--version` — treat as "latest".
 
 ---
 
@@ -550,21 +521,18 @@ export default defineConfig({
 
 ## Development Workflow
 
-1. Use `/greycat` skill for backend
-2. `greycat-lang lint` after EVERY change (0 errors required)
-3. `greycat-lang fmt` to format
-4. `Grep` before deleting
-5. `greycat codegen ts` after backend type changes
-6. Test: `greycat test` (backend); `vp build` + Lighthouse for frontend
+1. Use the `/greycat` skill for backend work.
+2. `greycat-lang lint` after EVERY change (0 errors required); `greycat-lang fmt` to format.
+3. `Grep` before deleting; `greycat codegen ts` after backend type changes.
+4. Test: `greycat test` (backend); `vp build` + Lighthouse for frontend.
+5. Before releases: `/greycat:backend` (full backend review) and, if a `frontend/` exists, `/greycat:frontend`.
 
 ---
 
 ## Consistency Checklist
 
-- [ ] `greycat-lang lint` shows 0 errors
-- [ ] `greycat-lang fmt` applied
-- [ ] All `@expose` have try/catch + `error()` log
-- [ ] All thrown errors are typed
+- [ ] `greycat-lang lint` shows 0 errors; `greycat-lang fmt` applied
+- [ ] All `@expose` have try/catch + `error()` log; all thrown errors are typed
 - [ ] All functions/types have `///` docs
 - [ ] Transient/API types are `@volatile` (`…View` suffix)
 - [ ] Non-nullable collection fields initialized in literal
