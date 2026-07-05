@@ -47,9 +47,9 @@ Bias toward caution over speed. Use judgment for trivial edits; for `.gcl`, pers
 ## ⚠️ CRITICAL RULES
 
 ### 1. ALWAYS LINT AFTER EACH CHANGE
-\`\`\`bash
+```bash
 greycat-lang lint  # Verify 0 errors after ANY change
-\`\`\`
+```
 
 ### 2. VERIFY BEFORE DELETING
 `Grep` for usages before removing any type/function/variable.
@@ -66,7 +66,7 @@ Don't write GCL by analogy to another language — check the **Common Pitfalls**
 
 ## Commands
 
-\`\`\`bash
+```bash
 # Backend
 greycat-lang lint              # Lint (after EVERY change!)
 greycat-lang fmt               # Format (default write mode; --mode=check for a CI gate)
@@ -80,7 +80,7 @@ vp install                     # install frontend deps (rolldown-based)
 vp build                       # build frontend/ -> webroot/ (add --watch for dev)
 greycat dev                    # build watcher + serve API and assets on one origin (:8080)
 greycat codegen ts             # regenerate project.d.ts after backend type/@expose changes
-\`\`\`
+```
 
 > `vp` and pnpm are different layers, not alternatives: **pnpm** is the package manager (fetches deps); **`vp`** (VitePlus, rolldown/oxc) is the build toolchain that bundles `frontend/` → `webroot/`, and `vp install` delegates to pnpm. Install `vp` once: `curl -fsSL https://vite.plus | bash`. Lighthouse: run the CLI against the served app (`greycat dev` first); add a script only if the project wants a CI gate.
 
@@ -107,7 +107,7 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 
 ## Project Structure
 
-\`\`\`
+```
 .
 ├── project.gcl                # Entry point, libraries, permissions
 ├── src/<feature>/
@@ -131,7 +131,7 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 ├── lib/                       # Installed libs (gitignored)
 ├── gcdata/                    # DB storage (gitignored)
 └── CLAUDE.md
-\`\`\`
+```
 
 **⚠️ Filename = module name.** Two `.gcl` files with the same basename collide at lint, regardless of folder. Convention: `src/orders/orders.gcl` (model + service), everything else gets a suffix (`orders_api.gcl`, `orders_reader.gcl`, …). On `Unknown type T` lint errors, disambiguate with FQN: `mod::T`.
 
@@ -139,7 +139,7 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 
 ## .gitignore Essentials
 
-\`\`\`gitignore
+```gitignore
 /gcdata /lib /webroot
 project.d.ts project.gcp /project_types
 /node_modules /.pnp .pnp.js
@@ -150,7 +150,7 @@ project.d.ts project.gcp /project_types
 __pycache__/ *.pyc *.pyo
 npm-debug.log* yarn-*.log* pnpm-debug.log*
 .playwright-mcp/
-\`\`\`
+```
 
 ---
 
@@ -165,7 +165,7 @@ npm-debug.log* yarn-*.log* pnpm-debug.log*
 - **Collections**: `Array<T> {}`, `Map<K,V> {}`, `nodeIndex<K, node<V>>`. Initialize non-nullable collection fields in the object literal, or declare them nullable.
 - **Naming**: snake_case fields, camelCase functions, `…View` suffix for `@volatile` API response types.
 
-\`\`\`gcl
+```gcl
 // Typed error hierarchy — src/errors.gcl
 @volatile abstract type AppError { code: String; message: String; }
 @volatile type NotFoundError   extends AppError { id: String; }
@@ -185,23 +185,23 @@ fn document(id: String): Document {
     throw ex;
   }
 }
-\`\`\`
+```
 
 ### Frontend (VitePlus + Lit + Shoelace + lucide-static) — if exists
 
 Stack as listed above (Lit light-DOM + Shoelace `sl-*` + `@greycat/web` `gui-*` + typed SDK on VitePlus, MPA under `frontend/routes/`, pnpm). `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
 
 **⚠️ Init/login gate**: `gc.sdk.init()` loads the ABI over an authenticated endpoint — call it (no args) in the route root's `connectedCallback`; on throw, render a login form and call `gc.sdk.init({ auth: { username, password } })`. Only after it resolves are `gc.<module>.*` calls and `gui-*` tags usable.
-\`\`\`ts
+```ts
 // frontend/routes/index.ts
 import '@greycat/web/sdk';            // gc global, init, typed bindings — import gui-* components individually, not umbrella '@greycat/web'
 import '@greycat/web/greycat.css';    // the theme (dark by default)
 import '~/theme.css';                 // app --app-* tokens + --sl-* re-skin — AFTER greycat.css
 await gc.sdk.init();                  // then gc.project.* and gui-* are live
-\`\`\`
+```
 
 - **Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`; a stale ABI gets HTTP 422. Derive backend strings from the SDK (`gc.project.Status.active`, `.key`) — never hard-code.
-- **Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, `html\`…\`` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
+- **Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, ``html`…` `` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
 - **Shoelace**: import components **individually** (tree-shaking). Do **not** import Shoelace's own `themes/*.css` — `greycat.css` is the theme; light mode is the `sl-theme-light` class on `<html>`.
 - **Icons**: **`lucide-static`** (inline SVG via Lit `unsafeSVG`), `stroke="currentColor"` + `aria-hidden` — self-hosted, no runtime/CDN fetch.
 - **Services**: thin layer over the generated SDK client; types from `project.d.ts`.
@@ -214,13 +214,13 @@ await gc.sdk.init();                  // then gc.project.* and gui-* are live
 ### Testing
 
 **Backend**: `@test` annotation, `test_function_scenario` naming, `Assert::`.
-\`\`\`gcl
+```gcl
 @test fn test_search_validQuery() {
   var results = SearchService::search("test");
   Assert::notNull(results);
 }
 // Optional lifecycle: fn setup() / fn teardown() (detected by name, no annotation)
-\`\`\`
+```
 
 **Runner semantics**:
 - Tests in the same module share state across `@test` fns (mutations visible to the next; NOT persisted to disk).
@@ -240,44 +240,44 @@ await gc.sdk.init();                  // then gc.project.* and gui-* are live
 ## GreyCat Language Patterns
 
 ### Nullability
-\`\`\`gcl
+```gcl
 var city: City?;                       // nullable
 city?.name?.size();                    // optional chaining
 city?.name ?? "Unknown";               // nullish coalescing
 (answer as String?) ?? "default"       // ⚠️ parens for cast + coalescing
 if (country == null) { return null; }
 return country->name;                  // ✅ no !! after null check
-\`\`\`
+```
 **⚠️ NO TERNARY** — use if/else.
 
 ### Nodes (Persistence)
-\`\`\`gcl
+```gcl
 type Country { name: String; code: int; }
 var n = node<Country>{ Country { name: "LU", code: 352 }};
 n->name;              // arrow: deref + field (read/write)
 n.resolve();          // payload (or null)
 *n;                   // unary deref
 n.set(v);             // rebind primitive node (node<int>{0}.set(5))
-\`\`\`
+```
 
 **Node ownership** — an object belongs to exactly ONE node. To index by multiple keys, store the SAME `node<T>` ref:
-\`\`\`gcl
+```gcl
 var item = node<Item>{ Item { id: 1, name: "x" } };
 by_id.set(1, item);     // both indices point at
 by_name.set("x", item); //   the same persistent node
-\`\`\`
+```
 
 **String dedup**: use `node<String>` instead of `String` when the same value repeats across many objects.
 
 **Lazy init** for nullable collection attrs: `this.entries ?= nodeIndex<String, node<V>>{};`
 
 **Polymorphism** works through node-wrapped values + abstract methods:
-\`\`\`gcl
+```gcl
 abstract type Animal { abstract fn speak(): String; }
 type Dog extends Animal { fn speak(): String { return "woof"; } }
 animals.set("d", node<Animal>{ Dog {} });
 animals.get("d")?->speak();             // dispatches to Dog
-\`\`\`
+```
 Concrete methods on `abstract type` CANNOT be overridden — declare `abstract` from day 1 if subtypes need different behavior.
 
 ### Indexed Collections
@@ -295,23 +295,23 @@ Concrete methods on `abstract type` CANNOT be overridden — declare `abstract` 
 ## Concurrency & Tasks
 
 **`await` fans out inside a task context.** An `@expose` HTTP call is already enqueued as a task, so `await(jobs)` fans out over an HTTP POST. The serial case is a one-shot `greycat run` script. To dispatch a long HTTP call as a *background* task (return `task_id` immediately, poll later), set the `task: true` header:
-\`\`\`bash
+```bash
 curl -H "task: true" -X POST -d '[]' http://localhost:8080/module::compute  # background task, returns task_id
 ./bin/greycat run compute                                                    # one-shot CLI run (jobs run serially)
-\`\`\`
+```
 **Don't** "fix" non-parallel HTTP via `System::exec` + `&; wait` — the second `System::exec` in a non-task HTTP request throws uncatchable `"terminated PID X"`.
 
 **Request TTL kills + try/catch does NOT fire** — the request TTL (`--request_ttl` flag, `serve` only) defaults to 20s. Past that the runtime tears down the handler with no exception. For long endpoints, raise `--request_ttl` or move to a background task.
 
 **Fork-join**:
-\`\`\`gcl
+```gcl
 // Prefer `Array<Job>` over `Array<Job<T>>`; cast each `.result()` at the call site.
 var jobs = Array<Job> {
   Job { function: jobs::compute, arguments: [100] },     // use real <module>::<fn>
 };
 await(jobs, MergeStrategy::strict);                       // 2nd arg required
 var first = jobs[0].result() as int;                      // cast at collection time
-\`\`\`
+```
 
 **"Stale await state" error** — if a call-frame variable holds a node-backed value (resolved node, time, Array of payloads) when `await` runs, you get `"wrong state before await..."`. Fix: isolate `await` in its own helper and build the result Array AFTER it returns.
 
@@ -320,13 +320,13 @@ var first = jobs[0].result() as int;                      // cast at collection 
 - Pre-allocate shards in a sequential phase. Inside parallel jobs: only WRITE to existing nodes — no `node<T>{...}` constructors, no `nodeIndex` instantiation, no edges to shared parents. Global indices are read-only during parallel phases.
 
 **Recurring tasks**:
-\`\`\`gcl
+```gcl
 Scheduler::add(
   jobs::nightly_job,                                                // <module>::<fn>
   DailyPeriodicity { hour: 2, minute: 0, second: 0, timezone: TimeZone::UTC },
   PeriodicOptions { start: time::now(), max_duration: 1_hour }
 );
-\`\`\`
+```
 
 **Task lifecycle**: `empty → waiting → running → await → ended | error | cancelled | ended_with_errors`.
 - Status: `Task::is_running(task_id)` / `Task::running()` / `Task::history(offset, max)` (there is no `Task::info` RPC).
@@ -358,31 +358,31 @@ Scheduler::add(
 **Logging**: `info()/warn()/error()` for structured logs (CSV under non-TTY). `println()` for stdout. `pprint(obj)` to dump typed objects.
 
 **Sort**: field-reference (no comparator lambdas):
-\`\`\`gcl
+```gcl
 entries.sort_by(LeaderboardEntry::balance, SortOrder::desc);
-\`\`\`
+```
 
 **Downsampling** (modes: fixed, fixed_reg, adaptative, dense):
-\`\`\`gcl
+```gcl
 var pts: Table<any?> = nodeTime::sample([series], start, end, 1000, SamplingMode::adaptative, null, null);
 // Returns a Table; pivot to typed (time, float) pairs yourself if needed.
-\`\`\`
+```
 
 **Typed CSV**:
-\`\`\`gcl
+```gcl
 // Use the Csv:: module (CsvFormat is non-generic). See reference/stdlib.md for full surface.
 var fmt = CsvFormat {};                                  // configure separator, quote, header, etc.
 var stats = Csv::analyze(["./data.csv"], fmt);           // schema inference
 var table = Csv::sample(["./data.csv"], fmt, 1000);      // first 1000 rows into a Table
-\`\`\`
+```
 
 **Geo**:
-\`\`\`gcl
+```gcl
 var box = GeoBox { sw: geo{49.0, 5.9}, ne: geo{50.2, 6.5} };
 if (box.contains(geo{49.6, 6.1})) { /* ... */ }
 // Iterate then test (nodeGeo has no `.filter()` method):
 for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
-\`\`\`
+```
 
 **Iterate nullable collection**: `for (i, v in maybe_list?) { /* ... */ }` (`?` propagates null through the head).
 
@@ -432,17 +432,17 @@ for (pos: geo, s in sensors) { if (box.contains(pos)) { /* ... */ } }
 **No migrations.** Adding a non-nullable field **without a default** to a persisted type with existing data **fails to load** — add it as nullable (`T?`) until backfilled, or give it a default (a non-null field WITH a default auto-migrates). Removing a field auto-migrates (dropped on next save); **renaming** requires a reset (looks like remove + add). Dev reset: `rm -rf gcdata && greycat run import`.
 
 **Production safe-rollback deploy**:
-\`\`\`bash
+```bash
 systemctl stop greycat
 mv gcdata gcdata_bk           # rotate, don't delete
 greycat run import            # replay importers
 ./bin/greycat defrag          # reclaim storage
 systemctl start greycat
 # rollback: rm -rf gcdata && mv gcdata_bk gcdata && systemctl restart greycat
-\`\`\`
+```
 
 **Upsert, never duplicate** on re-import. An importer that wipes a `nodeIndex`/`nodeTime`/`nodeGeo`/`nodeList` MUST reuse the prior `node<T>` per key:
-\`\`\`gcl
+```gcl
 var prev = items;
 items = nodeIndex<String, node<Item>>{};
 for (i, row in rows) {                                  // Array iteration requires 2 params
@@ -450,17 +450,17 @@ for (i, row in rows) {                                  // Array iteration requi
   if (existing != null) { existing->name = row.name; items.set(row.id, existing); }
   else { items.set(row.id, node<Item>{ Item { id: row.id, name: row.name } }); }
 }
-\`\`\`
+```
 
 **Time ingest**: never `time::new(n, seconds)` blindly — feeds mix units. Magnitude-route:
-\`\`\`gcl
+```gcl
 fn epochToTime(n: int): time {
   if (n < 100_000_000_000) return time::new(n, DurationUnit::seconds);        // <1e11
   else if (n < 100_000_000_000_000) return time::new(n, DurationUnit::milliseconds);  // <1e14
   else return time::new(n, DurationUnit::microseconds);
 }
 // Note: DurationUnit has no `nanoseconds` — caller must downscale.
-\`\`\`
+```
 
 ---
 
@@ -474,15 +474,15 @@ fn epochToTime(n: int): time {
 
 ## Environment
 
-\`\`\`bash
+```bash
 # Backend (.env)
 GREYCAT_PORT=8080
 GREYCAT_WEBROOT=webroot
 GREYCAT_CACHE=30000
-\`\`\`
+```
 
 **vite.config.ts** (in root) — explicit VitePlus config, **no plugin**. `greycat dev` serves API + assets on one origin, so nothing to proxy. MPA: `root: 'frontend/routes'` makes each page's path its URL; one `rollupOptions.input` entry per route:
-\`\`\`ts
+```ts
 import { defineConfig } from 'vite-plus';
 import { resolve } from 'node:path';
 
@@ -499,7 +499,7 @@ export default defineConfig({
     rollupOptions: { input: [resolve('frontend/routes/index.html')] },  // add one per route
   },
 });
-\`\`\`
+```
 
 **tsconfig.json** (in root): Lit needs `"experimentalDecorators": true`, `"useDefineForClassFields": false`, `"moduleResolution": "bundler"`, `"paths": { "~/*": ["frontend/*"] }`, and `"include": ["frontend", "project.d.ts"]`.
 
@@ -508,12 +508,12 @@ export default defineConfig({
 ## Auth & Permissions
 
 **project.gcl**:
-\`\`\`gcl
+```gcl
 @permission("app.admin", "admin permission");
 @permission("app.user",  "user permission");
 @role("admin", "app.admin", "app.user", "public", "admin", "api");
 @role("user",  "app.user", "public", "api");
-\`\`\`
+```
 
 **Usage**: `@permission("app.user")`, `SecurityService::getLoggedUser()`.
 

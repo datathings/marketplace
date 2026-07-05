@@ -94,7 +94,7 @@ Enum entries are class statics built during `gc.sdk.init()` — don't touch `gc.
 
 ### 3. Component patterns (Lit, light DOM)
 - One `LitElement` per file, `@customElement('app-…')` with a consistent kebab prefix
-- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Shoelace/GreyCat styles cascade in. Shadow DOM (`static styles = css\`…\``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
+- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Shoelace/GreyCat styles cascade in. Shadow DOM (``static styles = css`…` ``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
 - The route's **root element owns the init/login gate** (see §4) — `gc.sdk.init()` must resolve before any typed call or `gui-*` element works
 - `@property()` for public inputs, `@state()` for internal state; update reactive props, don't recreate DOM
 - Charts (`gui-*` or chart.js): instantiate after init, destroy in `disconnectedCallback`

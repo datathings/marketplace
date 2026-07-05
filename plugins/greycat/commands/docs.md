@@ -87,9 +87,9 @@ Base URL: `http://localhost:8080`   (no `/api` prefix — GreyCat serves RPC at 
 **Parameters**: | Name | Type | Required | Description |
 **Returns**: ...
 **Example**:
-\`\`\`typescript
+```typescript
 await axios.post('/<module>::<fn>', [param1, param2]);
-\`\`\`
+```
 **Error cases**: ...
 ```
 
