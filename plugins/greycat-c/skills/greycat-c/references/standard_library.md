@@ -477,7 +477,9 @@ type Task {
   //   running(): Array<Task>             (@expose @reserved)
   //   history(offset, max): Array<Task>  (@expose @reserved)
   //   cancel(task_id): bool              (@expose @reserved)
-  //   is_running(task_id): bool          (@expose @reserved)
+  //   is_running(task_id): bool          (@expose)
+  //   live(ids): Array<bool>             (@expose; one bool per id, false for unknown/inaccessible)
+  //   tasks(ids): Array<Task?>           (@expose; null entries for unknown/inaccessible tasks)
 }
 ```
 
@@ -664,15 +666,15 @@ var spec = OpenApi::v3();
 
 ### Model Context Protocol (MCP)
 
-`@expose`d module-level handlers implement an MCP server endpoint:
+`@expose`d module-level handlers implement an MCP server endpoint. All are `@permission("public")` (no auth required):
 ```gcl
-@expose("initialize")  native fn mcp_initialize(params: McpInitializeParams): McpInitializeResult;
-@expose("tools/list")  native fn mcp_tools_list(params: McpToolsListParams?): McpToolsListResult;
-@expose("tools/call")  native fn mcp_tools_call(params: McpToolsCallParams): any;
-@expose("tasks/get")    native fn mcp_tasks_get(params: McpTasksGetParams): any;
-@expose("tasks/result") native fn mcp_tasks_result(params: McpTasksResultParams): McpToolsCallResult;
-@expose("tasks/list")   native fn mcp_tasks_list(params: McpTasksListParams?): McpTasksListResult;
-@expose("tasks/cancel") native fn mcp_tasks_cancel(params: McpTasksCancelParams): McpTask;
+@expose("initialize")  @permission("public") native fn mcp_initialize(params: McpInitializeParams): McpInitializeResult;
+@expose("tools/list")  @permission("public") native fn mcp_tools_list(params: McpToolsListParams?): McpToolsListResult;
+@expose("tools/call")  @permission("public") native fn mcp_tools_call(params: McpToolsCallParams): any;
+@expose("tasks/get")    @permission("public") native fn mcp_tasks_get(params: McpTasksGetParams): any;
+@expose("tasks/result") @permission("public") native fn mcp_tasks_result(params: McpTasksResultParams): McpToolsCallResult;
+@expose("tasks/list")   @permission("public") native fn mcp_tasks_list(params: McpTasksListParams?): McpTasksListResult;
+@expose("tasks/cancel") @permission("public") native fn mcp_tasks_cancel(params: McpTasksCancelParams): McpTask;
 ```
 Supporting `@volatile` types include: `McpInitializeParams` / `McpInitializeResult`, `McpClientCapabilities` / `McpServerCapabilities` (with prompts/resources/tools/tasks sub-capabilities), `McpImplementation`, `McpTool` (+ `McpToolExecution`), `McpToolsCallResult`, content blocks `McpTextContent` / `McpImageContent` / `McpAudioContent` / `McpResourceContent`, and task types `McpTask` / `McpTaskCreateParams` / the `McpTasks*Params`/`*Result` family. Enums: `McpContentType` (text, image, audio, resource_link, resource), `McpRole` (user, assistant), `McpPriority` (MostImportant(1), LeastImportant(0)), `McpTaskSupport` (forbidden, required, optional), `McpTaskStatus` (working, input_required, completed, failed, cancelled).
 
@@ -866,6 +868,8 @@ type HttpRequest {
   headers: Map<String, String>?;
   body: String?;
   timeout: duration?;
+  max_response_size: int?;   // max response body bytes; null/0 = unlimited. Guards
+                              // unbounded chunked / no-Content-Length responses.
 }
 
 type HttpResponse<T> {
@@ -1144,19 +1148,26 @@ Assert::isNotNull(value);
 ```
 
 #### ProgressTracker
+Reports overall performance (speed, ETA) measured since `start`, plus a `speed_smoothed` that reacts to the recent pace between updates.
 ```gcl
 type ProgressTracker {
+  static DEFAULT_SMOOTHING: float = 0.1;  // used when `smoothing` is null; lower = steadier ETA
+
   start: time;
-  total: int?;
-  counter: int?;
-  duration: duration?;
+  total: int?;             // max expected count
+  counter: int?;           // current step count, as last set by update() (absolute, not a running sum)
+  duration: duration?;     // overall duration since `start`
   progress: float?;        // 0.0 .. 1.0
-  speed: float?;           // counter per second
-  remaining: duration?;
-  // native fn update(nb: int)
+  speed: float?;           // overall speed since `start`, in counter per second
+  remaining: duration?;    // estimated from speed_smoothed
+  speed_smoothed: float?;  // EMA of the per-update (lap) speed, counter per second
+  smoothing: float?;       // EMA weight in [0.0, 1.0] for the latest lap (0=overall avg, 1=last lap only);
+                           // DEFAULT_SMOOTHING is used when null
+  // native fn update(nb: int)   -- sets the counter to `nb` (absolute, NOT incremental);
+                                  // recomputes duration/speed/speed_smoothed/progress/remaining
 }
 var tracker = ProgressTracker { start: time::now(), total: 10000 };
-tracker.update(2500);
+tracker.update(2500);       // sets counter to 2500 (not +2500)
 println("Progress: ${tracker.progress}");      // 0.25
 ```
 

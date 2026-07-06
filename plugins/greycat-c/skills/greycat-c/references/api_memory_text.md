@@ -243,7 +243,7 @@ typedef struct {
 |----------|-----------|-------------|
 | `gc_buffer__create` | `gc_buffer_t *gc_buffer__create(gc_allocator_t *allocator)` | Allocate and initialize a new buffer bound to `allocator`. |
 | `gc_buffer__finalize` | `void gc_buffer__finalize(gc_buffer_t *self)` | Release the buffer's data (keeps the buffer header). |
-| `gc_buffer__finalize_ex` | `void gc_buffer__finalize_ex(gc_buffer_t *self)` | Extended finalize variant (releases any extra/embedded resources). |
+| `gc_buffer__finalize_ex` | `void gc_buffer__finalize_ex(const gc_buffer_t *self)` | Extended finalize variant (releases any extra/embedded resources). |
 | `gc_buffer__clear` | `void gc_buffer__clear(gc_buffer_t *self)` | Reset size to 0 (keeps allocation). |
 | `gc_buffer__clear_secure` | `void gc_buffer__clear_secure(gc_buffer_t *self)` | Reset and zero-fill the whole allocation (for secrets). |
 | `gc_buffer__prepare` | `void gc_buffer__prepare(gc_buffer_t *self, u64_t needed)` | Ensure at least `needed` extra bytes of capacity. |
