@@ -1,6 +1,7 @@
 ---
 name: backend
 description: Comprehensive GreyCat backend review — dead code, anti-patterns, type safety, performance/concurrency, @expose API security, and test coverage — then interactive cleanup
+argument-hint: "[dimension ...] | help"
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, Task
 ---
 
@@ -14,13 +15,38 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, Task
 
 ---
 
+## Scope — arguments: `$ARGUMENTS`
+
+Default = **everything**. No upfront questions — resolve the scope from the arguments above and go. The only interactive moments are the `gcdata`-wipe confirm (Dimension 6) and the Cleanup menu at the end.
+
+- **Empty** → run all seven dimensions.
+- **`help`** → print the dimension table below (keyword + what it covers) and **stop** — do not run the review.
+- **One or more keywords** → run only those dimensions.
+- **Unknown keyword** → print the dimension table, point out the bad keyword, and stop.
+
+| Keyword | Dimension |
+|---------|-----------|
+| `dead-code` | 1 — Dead code & duplication |
+| `antipatterns` | 2 — Anti-patterns (correctness & safety) |
+| `types` | 3 — Type safety beyond lint |
+| `perf` | 4 — Performance & concurrency |
+| `api` | 5 — `@expose` API (security · performance · design) |
+| `tests` | 6 — Test coverage (always confirms before wiping `gcdata`) |
+| `practices` | 7 — Best-practice gaps |
+
+Example: `/greycat:backend api tests` runs only Dimensions 5 + 6.
+
+Any dimension not run — out of scope or a declined prerequisite — must appear in the Output as `SKIPPED: <reason>`, never silently omitted (a silent skip reads as "clean").
+
+---
+
 ## How to run this review — ultrathink + ultracode
 
 **Ultrathink (always).** Reason deeply. State assumptions explicitly; when two readings exist (`nodeIndex` vs `Map`, persisted vs `@volatile`, plain `fn` service vs `abstract type`), name both and pick with a reason. Read `lib/std/*.gcl` for real examples instead of guessing by analogy. A finding you cannot tie to a concrete failure or a canonical rule is not a finding.
 
 **Ultracode (when available).** If multi-agent orchestration is on, run this as a **Workflow**, because the seven dimensions are independent:
 
-1. **Fan out** — one agent per Dimension below, each returning structured findings (`file`, `line`, `severity`, `problem`, `fix`).
+1. **Fan out** — one agent per **in-scope** Dimension (see Scope above), each returning structured findings (`file`, `line`, `severity`, `problem`, `fix`).
 2. **Adversarially verify** — for every CRITICAL/HIGH finding, a second agent tries to *refute* it (re-reads the code, checks it isn't a false positive from a grep); default to dropping the finding if the refutation is plausible. Persistence/concurrency claims especially need a second look.
 3. **Synthesize** — dedup across dimensions (the same `file:line` surfaces in several), then emit one severity-grouped report.
 
@@ -251,8 +277,9 @@ These endpoints feed the **Lit + Shoelace + `@greycat/web`** frontend via the ge
 GreyCat ships no `--coverage` flag — coverage is by inventory + cross-reference, not instrumented runs.
 
 ### 6.1 Run the suite
+**Always confirm before wiping** — even in a full default run. `rm -rf gcdata` destroys the local graph; ask first (AskUserQuestion: wipe & run / run without wiping / skip the suite). If the user declines the wipe-and-run, still do the inventory-based gap analysis (6.2–6.3, which needs no run) and mark the suite `SKIPPED: gcdata wipe declined` in the Output.
 ```bash
-rm -rf gcdata   # ⚠ destroys local graph data — dev only, never on a store you need
+rm -rf gcdata   # ⚠ destroys local graph data — dev only, never on a store you need — CONFIRM FIRST
 greycat test
 ```
 Stale persistence causes startup failures and false results; wipe first. Tests in one module **share state** across `@test` fns (mutations visible to the next, not persisted). **Exit codes**: `0` success · `1` generic CLI error · `2` compile/load error (every test affected — coverage numbers unreliable). A segfault/kill invalidates the run even though there's no dedicated exit code.
@@ -283,7 +310,7 @@ Per gap: file, function names, ready template, priority, rationale. Templates us
   Assert::isTrue(failed);
 }
 ```
-Write templates to `test/<feature>_test.gcl` with `TODO:` markers, then `greycat-lang lint` + `greycat test` to confirm they compile. (Frontend/Vitest + Lighthouse coverage lives in `/greycat:frontend`.)
+**Propose templates in the report only** — never write test files during analysis. Writing `test/<feature>_test.gcl` (with `TODO:` markers, then `greycat-lang lint` + `greycat test` to confirm they compile) happens only if the user opts in during Cleanup. (Frontend/Vitest + Lighthouse coverage lives in `/greycat:frontend`.)
 
 ---
 
@@ -306,6 +333,8 @@ After analysis, present the summary and offer options (AskUserQuestion):
 - **D) Custom per-category**
 - **E) Cancel**
 
+If Dimension 6 found coverage gaps, follow up with a **separate yes/no question**: write the 6.3 test templates to `test/<feature>_test.gcl`? Never write test files without this explicit opt-in.
+
 For each applied fix:
 1. Verify git status is clean (or make a checkpoint branch).
 2. Apply Edits — **only changes that don't alter logic**.
@@ -316,6 +345,8 @@ For each applied fix:
 ---
 
 ## Output
+
+Start with a one-line scope recap: dimensions run, and every dimension **not** run as `SKIPPED: <reason>` (argument scope, declined gcdata wipe, …).
 
 Group by severity. Per issue: `📍 file:line` + problem + fix snippet + estimated effort.
 

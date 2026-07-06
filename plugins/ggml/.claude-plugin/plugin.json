@@ -1,6 +1,6 @@
 {
   "name": "ggml",
-  "version": "2.8.1",
+  "version": "2.8.2",
   "description": "ggml v0.15.3 C tensor library skill — 650+ functions and 98 ops for graph computation, GGUF I/O, multi-backend inference, GLU activations, SSM/RWKV ops, and ML training",
   "author": {
     "name": "Datathings",

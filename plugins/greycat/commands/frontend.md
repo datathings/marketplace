@@ -1,6 +1,7 @@
 ---
 name: frontend
 description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Shoelace + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
+argument-hint: "[lens ...] | help"
 allowed-tools: Bash, Read, Grep, Glob, Task
 ---
 
@@ -9,6 +10,32 @@ allowed-tools: Bash, Read, Grep, Glob, Task
 **Purpose**: The single hub for GreyCat web-UI quality — correctness, the one prescribed stack, TypeScript/Lit type safety, Lighthouse performance, LLM-friendly SEO, testing, and common pitfalls. (It absorbs the frontend phases that used to live in the separate `typecheck` / `optimize` / `coverage` commands.)
 
 **Companion**: for GCL backend quality use `/greycat:backend`.
+
+---
+
+## Scope — arguments: `$ARGUMENTS`
+
+Default = **everything**. No upfront questions — resolve the scope from the arguments above and go.
+
+- **Empty** → run every lens (the full checklist below).
+- **`help`** → print the lens table below (keyword + what it covers) and **stop** — do not run the review.
+- **One or more lens keywords** → run only those checklist sections.
+- **Unknown keyword** → print the lens table, point out the bad keyword, and stop.
+
+| Keyword | Lens (checklist §) |
+|---------|--------------------|
+| `layout` | §1 Layout & config + prescribed-stack presence |
+| `ts` | §2–2c TypeScript quality, codegen freshness, SDK-derived strings |
+| `components` | §3–3e Lit patterns, Shoelace, theming, icons, dependencies |
+| `init` | §4 Init / login gate |
+| `perf` | §5 Performance |
+| `lighthouse` | §6 Lighthouse audit (auto-skips if prerequisites are missing — see §6) |
+| `seo` | §7 SEO + LLM discoverability |
+| `testing` | §8 Type-check / Vitest / coverage gates |
+
+Example: `/greycat:frontend lighthouse seo` audits only §6 + §7.
+
+Any lens not run — out of scope or unmet prerequisites — must appear in the Output as `SKIPPED: <reason>`, never silently omitted (a silent skip reads as "passed").
 
 Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full prescribed toolchain, layout, and integration contract — this review checks against exactly that, with one deviation: **the frontend source dir is `frontend/`, not `app/`** (the `~` alias maps to `frontend/`).
 
@@ -19,7 +46,7 @@ Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full p
 **Ultrathink (always).** Reason deeply about *why* each rule exists (why light DOM, why the init gate, why per-component Shoelace imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
 
 **Ultracode (when available).** If multi-agent orchestration is on, run this as a **Workflow** — the checklist below splits cleanly into independent lenses:
-1. **Fan out** — one agent per lens: *(a)* layout & config + TypeScript, *(b)* Lit/Shoelace/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
+1. **Fan out** — one agent per **in-scope** lens (see Scope above): *(a)* layout & config + TypeScript, *(b)* Lit/Shoelace/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
 2. **Verify** — for CRITICAL/HIGH findings, a second agent confirms it against the served app or the actual config, not just a grep hit.
 3. **Synthesize** — one severity-grouped report.
 
@@ -155,6 +182,8 @@ grep -rn "from '@greycat/web'\b" frontend/ --include="*.ts" && echo "⚠ umbrell
 - Defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve element sizes to avoid layout shift (CLS)
 
 ### 6. Lighthouse audit (performance · SEO · accessibility · best-practices)
+**Prerequisites (auto-skip, never fail):** this lens needs the `lighthouse` CLI on PATH **and** a served app. If `which lighthouse` is empty, or nothing answers on the served origin and you cannot start `greycat dev`/`greycat serve`, do **not** fail the review and do **not** silently drop the lens — report it as `SKIPPED: <missing prerequisite>` in the Output and move on.
+
 Target **≥ 90** in every category, on **both form factors**. Lighthouse defaults to **mobile** (emulated device + throttled CPU/network), so a single run only covers mobile — audit **desktop too** (`--preset=desktop`); mobile is the harder gate and easy to miss. Serve first (`greycat dev` or `greycat serve`), then run against the served origin for each:
 ```bash
 # mobile (default) + desktop; ≥ 90 in every category on both
@@ -191,6 +220,8 @@ Treat any **Lighthouse category < 90** (on mobile *or* desktop) as an open cover
 ---
 
 ## Output
+
+Start with a one-line scope recap: lenses run, and every lens **not** run as `SKIPPED: <reason>` (argument scope, missing `lighthouse` CLI, app not served, …).
 
 Group by severity:
 - **CRITICAL**: missing init/login gate (touching `gc.<module>.*` / `gui-*` before `gc.sdk.init()` resolves), importing Shoelace's own `themes/*.css`, Shadow DOM in app components, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + Shoelace is the standard
