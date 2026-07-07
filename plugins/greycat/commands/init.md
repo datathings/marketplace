@@ -15,7 +15,7 @@ allowed-tools: Write, Read, Bash
 
 1. **Check CLAUDE.md exists** — if yes, ask to backup or cancel.
 2. **Detect features**:
-   - Frontend: `frontend/` exists, or `package.json` has `vite-plus` / `@greycat/web` / `lit` / `@shoelace-style/shoelace`.
+   - Frontend: `frontend/` exists, or `package.json` has `vite-plus` / `@greycat/web` / `lit` / `@awesome.me/webawesome`.
    - GreyCat version: parse `@library("std", ...)` from `project.gcl`.
 3. **Check `.gitignore`** — create or append GreyCat entries if missing.
 4. **Write CLAUDE.md** from the template below: replace `[One-line project description]` / `[version]`; drop the frontend sections (commands, stack, structure, coding style, testing, env) if there is no frontend; keep all backend sections.
@@ -60,7 +60,7 @@ Don't write GCL by analogy to another language — check the **Common Pitfalls**
 ### 4. USE GREYCAT SKILL & REVIEW COMMANDS
 **Mandatory** for GCL backend work: use the `/greycat` skill. Before releases / after refactors, run the two review hubs:
 - **`/greycat:backend`** — dead code, anti-patterns, type safety, performance & concurrency, `@expose` API security, test coverage.
-- **`/greycat:frontend`** — the VitePlus + Lit + Shoelace + `@greycat/web` stack, performance, Lighthouse/SEO, type safety, testing (only if a `frontend/` exists).
+- **`/greycat:frontend`** — the VitePlus + Lit + Web Awesome + `@greycat/web` stack, performance, Lighthouse/SEO, type safety, testing (only if a `frontend/` exists).
 
 ---
 
@@ -75,7 +75,7 @@ greycat run [function]         # Run function (default: main)
 greycat codegen ts             # Generate project.d.ts
 greycat install                # Install libraries
 
-# Frontend (if exists) — VitePlus + Lit + Shoelace + lucide-static
+# Frontend (if exists) — VitePlus + Lit + Web Awesome + lucide-static
 vp install                     # install frontend deps (rolldown-based)
 vp build                       # build frontend/ -> webroot/ (add --watch for dev)
 greycat dev                    # build watcher + serve API and assets on one origin (:8080)
@@ -93,15 +93,15 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
   - **VitePlus** (`vp` CLI + `vite-plus`) — toolchain; explicit `vite.config.ts`, no plugin. **MPA**: each route is a real page under `frontend/routes/`, URL == file path, no SPA router
   - **Lit** in **light DOM** — one root `LitElement` per route, a component only for views reused across routes; `@customElement('app-…')`
   - **TypeScript** (`experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"`)
-  - **Shoelace** (`@shoelace-style/shoelace`, `sl-*`) — atomic controls (button, input, dialog, tabs, date-picker)
+  - **Web Awesome** (`@awesome.me/webawesome`, `wa-*`) — atomic controls (button, input, dialog, tabs, date-picker)
   - **`@greycat/web`** (`gui-*`) — rich/GreyCat-aware widgets (tables, charts, maps, `gui-object` forms, sign-in) + the typed SDK for every backend call
   - **lucide-static** icons — prebuilt SVG strings inlined via Lit `unsafeSVG`; self-hosted, `currentColor` + `aria-hidden`, no CDN fetch
-  - **Theme**: `@greycat/web/greycat.css` (a Shoelace theme, dark by default) + `frontend/theme.css` (the `--app-*` tokens + `--sl-*` re-skin) imported **after** it
+  - **Theme**: `@greycat/web/greycat.css` (a Web Awesome theme, dark by default) + `frontend/theme.css` (the `--app-*` tokens + `--wa-*` re-skin) imported **after** it
   - **pnpm** as the package manager
 - **Libraries**: `@library("std", "[version]")`, `@library("explorer", "[version]")`
 - **Testing**: backend `@test`
 
-**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json); source entirely under `frontend/` (`routes/` pages, `components/` reused views, `public/` copied as-is, `theme.css`); builds to `webroot/` (`emptyOutDir: true`). `~` aliases `frontend/` in both `vite.config.ts` and `tsconfig.json`. `@greycat/web` is **not on npm** — pin it as a registry tarball URL (`https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz`) tracking the project's `std` branch; Shoelace/Lit are ordinary semver deps (Shoelace must satisfy `@greycat/web`'s peer range). Optimize with Lighthouse (perf/SEO/a11y ≥ 90); ship LLM-friendly SEO (see Frontend coding style).
+**Frontend Setup**: Configs in root (package.json, vite.config.ts, tsconfig.json); source entirely under `frontend/` (`routes/` pages, `components/` reused views, `public/` copied as-is, `theme.css`); builds to `webroot/` (`emptyOutDir: true`). `~` aliases `frontend/` in both `vite.config.ts` and `tsconfig.json`. `@greycat/web` is **not on npm** — pin it as a registry tarball URL (`https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz`) tracking the project's `std` branch; Web Awesome/Lit are ordinary semver deps (Web Awesome must satisfy `@greycat/web`'s peer range). Optimize with Lighthouse (perf/SEO/a11y ≥ 90); ship LLM-friendly SEO (see Frontend coding style).
 
 ---
 
@@ -116,13 +116,13 @@ greycat codegen ts             # regenerate project.d.ts after backend type/@exp
 │   ├── <feature>_reader.gcl   # CSV/JSON readers (optional)
 │   └── <feature>_writer.gcl   # Writers (optional)
 ├── test/<feature>_test.gcl
-├── frontend/                  # entire frontend (VitePlus + Lit + Shoelace, if exists)
+├── frontend/                  # entire frontend (VitePlus + Lit + Web Awesome, if exists)
 │   ├── routes/                # MPA pages — path == URL (index.html + index.ts per route)
 │   │   └── index.html         #   SEO head (title, description, OG, JSON-LD, lang); one app-* root
 │   ├── components/            # reusable light-DOM Lit views (imported as ~/components/x)
 │   ├── public/                # copied as-is into webroot/ (robots.txt, icons, llms.txt)
 │   ├── icons.ts               # lucide-static SVG strings, inlined via unsafeSVG (no runtime fetch)
-│   └── theme.css              # --app-* design tokens + Shoelace/GreyCat --sl-* re-skin
+│   └── theme.css              # --app-* design tokens + Web Awesome/GreyCat --wa-* re-skin
 ├── package.json / vite.config.ts / tsconfig.json   # Root level
 ├── project.d.ts               # generated by `greycat codegen ts` (ambient gc.* types, gitignored)
 ├── webroot/                   # Built frontend + greycat explorer (gitignored)
@@ -187,27 +187,27 @@ fn document(id: String): Document {
 }
 ```
 
-### Frontend (VitePlus + Lit + Shoelace + lucide-static) — if exists
+### Frontend (VitePlus + Lit + Web Awesome + lucide-static) — if exists
 
-Stack as listed above (Lit light-DOM + Shoelace `sl-*` + `@greycat/web` `gui-*` + typed SDK on VitePlus, MPA under `frontend/routes/`, pnpm). `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
+Stack as listed above (Lit light-DOM + Web Awesome `wa-*` + `@greycat/web` `gui-*` + typed SDK on VitePlus, MPA under `frontend/routes/`, pnpm). `@greycat/web`'s own widgets are Lit, so the whole UI is web-components.
 
 **⚠️ Init/login gate**: `gc.sdk.init()` loads the ABI over an authenticated endpoint — call it (no args) in the route root's `connectedCallback`; on throw, render a login form and call `gc.sdk.init({ auth: { username, password } })`. Only after it resolves are `gc.<module>.*` calls and `gui-*` tags usable.
 ```ts
 // frontend/routes/index.ts
 import '@greycat/web/sdk';            // gc global, init, typed bindings — import gui-* components individually, not umbrella '@greycat/web'
 import '@greycat/web/greycat.css';    // the theme (dark by default)
-import '~/theme.css';                 // app --app-* tokens + --sl-* re-skin — AFTER greycat.css
+import '~/theme.css';                 // app --app-* tokens + --wa-* re-skin — AFTER greycat.css
 await gc.sdk.init();                  // then gc.project.* and gui-* are live
 ```
 
 - **Codegen discipline**: re-run `greycat codegen ts` after every backend type/`@expose` change. Never hand-edit `project.d.ts`; a stale ABI gets HTTP 422. Derive backend strings from the SDK (`gc.project.Status.active`, `.key`) — never hard-code.
 - **Components (Lit, light DOM)**: one `LitElement` per file, `@customElement('app-…')` kebab prefix. **`createRenderRoot() { return this; }`** so `theme.css` cascades in — no Shadow DOM in app views. `@property()` for public inputs, `@state()` for internal state, ``html`…` `` templates. Charts (`gui-*` or chart.js): create after init, **destroy in `disconnectedCallback`**.
-- **Shoelace**: import components **individually** (tree-shaking). Do **not** import Shoelace's own `themes/*.css` — `greycat.css` is the theme; light mode is the `sl-theme-light` class on `<html>`.
+- **Web Awesome**: import components **individually** (tree-shaking). Do **not** import Web Awesome's own `dist/styles/webawesome.css` directly — `greycat.css` bundles and re-skins it; light/dark is the `wa-light`/`wa-dark` class on `<html>`, not a separate theme file.
 - **Icons**: **`lucide-static`** (inline SVG via Lit `unsafeSVG`), `stroke="currentColor"` + `aria-hidden` — self-hosted, no runtime/CDN fetch.
 - **Services**: thin layer over the generated SDK client; types from `project.d.ts`.
 - **State**: URL query params (shareable view state), localStorage (theme). **Styling**: `--app-*` tokens in `frontend/theme.css` (dark + light); no hardcoded colors/sizes, no inline styles except dynamic values.
 - **Naming**: camelCase (vars/fns), PascalCase (TS types/classes), `app-` kebab (custom elements).
-- **Lighthouse (perf/SEO/a11y/best-practices ≥ 90 on BOTH mobile and desktop)**: `greycat dev` to serve, then run Lighthouse per form factor — default is mobile (throttled, the harder gate), add `--preset=desktop`. Tree-shake Shoelace, self-host icons (`lucide-static`), lazy-load heavy widgets, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
+- **Lighthouse (perf/SEO/a11y/best-practices ≥ 90 on BOTH mobile and desktop)**: `greycat dev` to serve, then run Lighthouse per form factor — default is mobile (throttled, the harder gate), add `--preset=desktop`. Tree-shake Web Awesome, self-host icons (`lucide-static`), lazy-load heavy widgets, defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve sizes to avoid layout shift.
 - **Responsive (always)**: `<meta name="viewport" content="width=device-width, initial-scale=1">`; fluid layout (grids / `clamp()` / media queries, no fixed-px page widths); tap targets ≥ 24–48px; no horizontal scroll at 360px.
 - **LLM-friendly SEO (always)**: in each route's `index.html` — `<html lang>`, unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, `theme-color`, JSON-LD (`schema.org`). Semantic landmarks + heading order + `alt`/ARIA (light DOM keeps content crawlable). Ship `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) via `frontend/public/` — a concise Markdown index of purpose, key routes, and public endpoints for LLM agents.
 
@@ -541,11 +541,11 @@ export default defineConfig({
 - [ ] `greycat codegen ts` re-run after backend type changes
 - [ ] Re-import path is upsert
 - [ ] New fields on persisted types are nullable OR `gcdata/` reset planned
-- [ ] Frontend on VitePlus (`vite-plus`) — Lit (light DOM) + Shoelace + `@greycat/web`; `@greycat/web` pinned as a registry tarball tracking `std`'s branch (managed with pnpm)
+- [ ] Frontend on VitePlus (`vite-plus`) — Lit (light DOM) + Web Awesome + `@greycat/web`; `@greycat/web` pinned as a registry tarball tracking `std`'s branch (managed with pnpm)
 - [ ] Route root gates on `gc.sdk.init()` before any `gc.<module>.*` / `gui-*`; `import '@greycat/web/sdk'` (not umbrella `@greycat/web`)
-- [ ] `greycat.css` imported, then `frontend/theme.css` after it — Shoelace's own `themes/*.css` NOT imported
+- [ ] `greycat.css` imported, then `frontend/theme.css` after it — Web Awesome's own `dist/styles/webawesome.css` NOT imported directly
 - [ ] App components render to light DOM (`createRenderRoot(){return this}`); no hardcoded colors/sizes (use `--app-*` tokens)
-- [ ] Shoelace imported per-component; icons self-hosted via lucide-static (no CDN fetch)
+- [ ] Web Awesome imported per-component; icons self-hosted via lucide-static (no CDN fetch)
 - [ ] Lighthouse ≥ 90 perf/SEO/a11y/best-practices on BOTH mobile (default) and desktop (`--preset=desktop`)
 - [ ] Responsive: `viewport` meta, fluid layout, no horizontal scroll at 360px, adequate tap targets
 - [ ] SEO head present (title, meta description, canonical, OG/Twitter, JSON-LD, `lang`)

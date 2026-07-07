@@ -12,7 +12,7 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit, Task
 
 **ultrathink + ultracode** — read the actual code, never emit boilerplate. README.md (feature scan), API.md (`@expose` scan), MCP.md (`@tag("mcp")` scan), and the Phase-5 SEO/`llms.txt` artifacts are INDEPENDENT deliverables: when parallel subagents / ultracode are available, draft them as PARALLEL subagents (one each), then assemble & write. Otherwise generate sequentially.
 
-**Frontend stack** (referred to below as *the frontend stack*): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Shoelace + `@greycat/web` + lucide-static, pnpm; note i18next / maplibre-gl / Vitest (optional) if present.
+**Frontend stack** (referred to below as *the frontend stack*): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome + `@greycat/web` + lucide-static, pnpm; note i18next / maplibre-gl / Vitest (optional) if present.
 
 **Lighthouse** (referred to below): audit both mobile (default) and desktop (`--preset=desktop`), target ≥ 90 per category — via the project's lighthouse script (`:desktop` / `:ci` variants) if present, else the `lighthouse` CLI against the served app (`greycat serve`/`dev` first). Optional tooling.
 
@@ -22,7 +22,7 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit, Task
 
 ### Detect features
 ```bash
-# Frontend: frontend/ directory, or lit / @shoelace-style/shoelace / @greycat/web in package.json
+# Frontend: frontend/ directory, or lit / @awesome.me/webawesome / @greycat/web in package.json
 # Tests:    test/ directory
 # Libs:     @library in project.gcl
 # Auth:     @permission / @role in project.gcl

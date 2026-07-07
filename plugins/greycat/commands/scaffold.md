@@ -16,7 +16,7 @@ Generated files:
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
-**Frontend stack** (for the UI component): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Shoelace (`@shoelace-style/shoelace`) + `@greycat/web` + lucide-static (self-hosted inline SVG), pnpm. Pin exact latest versions; keep content accessible for LLM-friendly SEO. Lighthouse tuning is optional.
+**Frontend stack** (for the UI component): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome (`@awesome.me/webawesome`) + `@greycat/web` + lucide-static (self-hosted inline SVG), pnpm. Pin exact latest versions; keep content accessible for LLM-friendly SEO. Lighthouse tuning is optional.
 
 **One entity = sequential** (model → api → test → frontend; each step depends on the prior file) — this is the default flow. To scaffold **several entities at once**, fan out one subagent (Task) per entity — they are independent.
 
@@ -249,14 +249,14 @@ fn delete_{entity}({entity}Id: int) {
 
 ### D. Frontend component (`frontend/components/{snake}-table.ts`) — only if `frontend/` exists
 
-Small **Lit** element listing the entity via the generated client, Shoelace chrome + a lucide-static icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.{snake}_api.{Entity}View` exists — codegen namespaces types by **module** (the `{snake}_api` file basename), not the entity name, same as the call on line ~269.
+Small **Lit** element listing the entity via the generated client, Web Awesome chrome + a lucide-static icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.{snake}_api.{Entity}View` exists — codegen namespaces types by **module** (the `{snake}_api` file basename), not the entity name, same as the call on line ~269.
 
 ```ts
 import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import '@greycat/web/sdk';                        // runtime: `gc` global, init, typed bindings
-import '@shoelace-style/shoelace/dist/components/card/card.js';
-import '@shoelace-style/shoelace/dist/components/spinner/spinner.js';
+import '@awesome.me/webawesome/dist/components/card/card.js';
+import '@awesome.me/webawesome/dist/components/spinner/spinner.js';
 import { icon } from '~/icons';                  // lucide-static (self-hosted inline SVG, no CDN)
 
 @customElement('{snake}-table')
@@ -273,9 +273,9 @@ export class {Entity}Table extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<sl-spinner></sl-spinner>`;
+    if (this.loading) return html`<wa-spinner></wa-spinner>`;
     return html`
-      <sl-card>
+      <wa-card>
         <h2 slot="header">${icon('table-2', 18)} {Entity} list</h2>
         <table>
           <thead><tr><th scope="col">ID</th>{th_cells}</tr></thead>
@@ -283,13 +283,13 @@ export class {Entity}Table extends LitElement {
             ${this.rows.map(r => html`<tr><td>${r.id}</td>{td_cells}</tr>`)}
           </tbody>
         </table>
-      </sl-card>`;
+      </wa-card>`;
   }
 }
 declare global { interface HTMLElementTagNameMap { '{snake}-table': {Entity}Table } }
 ```
 
-Reminders: import Shoelace components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields`; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; optionally run Lighthouse after wiring the page (`pnpm lighthouse` if that script exists, else the `lighthouse` CLI).
+Reminders: import Web Awesome components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields`; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; optionally run Lighthouse after wiring the page (`pnpm lighthouse` if that script exists, else the `lighthouse` CLI).
 
 ---
 
@@ -310,7 +310,7 @@ SCAFFOLD COMPLETE — entity: {Entity}
 ✓ src/{snake}/{snake}.gcl          — type + N indices + service ({methods})
 ✓ src/{snake}/{snake}_api.gcl      — N volatile types + N endpoints
 ✓ test/{snake}_test.gcl            — N test cases
-✓ frontend/components/{snake}-table.ts  — Lit + Shoelace + lucide-static (if frontend/)
+✓ frontend/components/{snake}-table.ts  — Lit + Web Awesome + lucide-static (if frontend/)
 
 Lint: ✓ passes
 

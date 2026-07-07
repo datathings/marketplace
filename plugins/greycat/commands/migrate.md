@@ -271,4 +271,4 @@ systemctl start greycat
 
 - Backup before risky ops; batch large migrations and log progress every N rows.
 - Dev: may delete `gcdata`; Prod: rotate `gcdata`, never delete (see D.5).
-- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the frontend (VitePlus (vp) + Lit (light DOM) + TypeScript + Shoelace + @greycat/web + lucide-static, pnpm) so types stay in sync; if payload shapes changed, re-audit with `pnpm lighthouse:ci` (that script if present, else the `lighthouse` CLI).
+- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the frontend (VitePlus (vp) + Lit (light DOM) + TypeScript + Web Awesome + @greycat/web + lucide-static, pnpm) so types stay in sync; if payload shapes changed, re-audit with `pnpm lighthouse:ci` (that script if present, else the `lighthouse` CLI).

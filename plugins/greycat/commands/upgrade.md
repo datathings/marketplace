@@ -103,14 +103,14 @@ See `/greycat:migrate` Operation A and D for the full safe-rollback flow.
 
 ## Frontend Step 8: package.json upgrade + fix
 
-Stack: **VitePlus (`vp`) + Lit (light DOM) + TypeScript + Shoelace + @greycat/web + lucide-static, pnpm.**
+Stack: **VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome + @greycat/web + lucide-static, pnpm.**
 
 If `frontend/` exists, upgrade **every** dependency to its latest published version (not just the stack below). Pin **exact latest** (no `^`/`~`). The **core** stack must stay present and current; the tooling rows are upgraded only if the project already uses them:
 
 | Package | Role |
 |---------|------|
 | `lit` | web components |
-| `@shoelace-style/shoelace` | UI kit (must satisfy `@greycat/web`'s peer range) |
+| `@awesome.me/webawesome` | UI kit (must satisfy `@greycat/web`'s peer range) |
 | `lucide-static` | icons (native, self-hosted SVG) |
 | `@greycat/web` | typed client + `gui-*` widgets (registry tarball, not npm) |
 | `vite-plus` | build toolchain (`vp`) |
@@ -139,7 +139,46 @@ pnpm lint                 # typecheck (always)
 pnpm test                 # vitest (only if the project uses it)
 vp build                  # production build (always)
 ```
-**Fix loop**: major bumps (Shoelace/Lit/TypeScript/Vite-Plus) can change component APIs, types, and build config — check changelogs. **Fix every `pnpm lint` / `vp build` failure** (plus `pnpm test` if Vitest is configured), re-running until all pass. Then serve (`greycat dev`) and, if the project has a Lighthouse script/CLI, confirm perf/SEO/a11y/best-practices ≥ 90.
+**Fix loop**: major bumps (Web Awesome/Lit/TypeScript/Vite-Plus) can change component APIs, types, and build config — check changelogs. **Fix every `pnpm lint` / `vp build` failure** (plus `pnpm test` if Vitest is configured), re-running until all pass. Then serve (`greycat dev`) and, if the project has a Lighthouse script/CLI, confirm perf/SEO/a11y/best-practices ≥ 90.
+
+### Migrating an existing project from Shoelace to Web Awesome
+
+Shoelace is sunset (its repo is archived) — Web Awesome is the successor and the only UI kit `/greycat:scaffold` and `/greycat:init` now prescribe. Detect a project still on the old kit:
+```bash
+grep -q '"@shoelace-style/shoelace"' frontend/package.json && echo "⚠ still on Shoelace — migrate to Web Awesome"
+```
+This is a **one-time structural migration**, not a routine bump — do it once, then the Step 8 loop above handles future upgrades normally.
+
+1. **Swap the dependency**: `@shoelace-style/shoelace` → `@awesome.me/webawesome` in `package.json`; `pnpm install`.
+2. **Mechanical rename** across `frontend/**/*.ts` and `frontend/**/*.html` — review the diff, `sl-` is a substring that can false-positive on unrelated words:
+   ```bash
+   grep -rl "@shoelace-style/shoelace" frontend --include="*.ts" | xargs sed -i \
+     -e "s/@shoelace-style\/shoelace/@awesome.me\/webawesome/g"
+   grep -rl '\bsl-[a-z-]\+\b\|--sl-' frontend --include="*.ts" --include="*.html" | xargs sed -i \
+     -e 's/\bsl-\([a-z-]\+\)\b/wa-\1/g' \
+     -e 's/--sl-/--wa-/g' \
+     -e 's/sl-theme-light/wa-light/g'
+   ```
+3. **Manual review — components that changed shape, not just prefix** (the sed above only renames the tag, not the API):
+
+   | Shoelace | Web Awesome | What changed |
+   |----------|-------------|---------------|
+   | `<sl-alert>` | `<wa-callout>` | static/inline only — toast moved to a separate Pro `<wa-toast>` |
+   | `<sl-menu>` + `<sl-menu-item>` | `<wa-dropdown>` + `<wa-dropdown-item>` | no standalone menu component anymore |
+   | `<sl-icon-button>` | `<wa-button>` + icon child | compact/icon-only styling is auto-detected, not a distinct tag |
+   | `<sl-radio-button>` | `<wa-radio appearance="button">` | no dedicated component, it's an appearance variant |
+   | `<sl-range>` | `<wa-slider>` | adds multi-thumb via a `range` attribute |
+   | `<sl-image-comparer>` | `<wa-comparison>` | same slots/attributes, renamed only |
+
+4. **Attribute/slot renames** (unrecognized attributes fail silently, they don't error): `help-text`→`hint` · `prefix`/`suffix` slots→`start`/`end` · `clearable`→`with-clear` · `variant="primary"`→`variant="brand"` · `outline` boolean→`appearance="outlined"` · `circle` boolean removed (icon-only auto-detected; use `pill` for a circular shape).
+5. **Theme file**: replace any `@shoelace-style/shoelace/dist/themes/(light|dark).css` import with `greycat.css` alone (it re-skins `@awesome.me/webawesome/dist/styles/webawesome.css` — don't import the base stylesheet a second time, see `/greycat:frontend` §3c). Light/dark is now the `wa-light`/`wa-dark` class on `<html>`, not a theme-file swap.
+6. **Events**: most custom events renamed `sl-*` → `wa-*` (a few, like `change`, are now native and fire without a prefix). Stale listener strings don't error, they just silently stop firing:
+   ```bash
+   grep -rn "addEventListener(['\"]sl-" frontend --include="*.ts" && echo "⚠ stale sl-* event listener — check the new event name"
+   ```
+7. **Verify + fix**: run the Step 8 loop (`greycat codegen ts && pnpm lint && vp build`), then manually exercise every migrated view — silent breakage (a missed attribute rename, `variant="primary"` now rendering neutral instead of brand color, a stale `--sl-*` override doing nothing) won't surface as a build or lint failure.
+
+Full reference: https://webawesome.com/docs/resources/migrating-from-shoelace/
 
 ---
 
@@ -225,7 +264,7 @@ greycat serve                  # runtime
 **Frontend** (if `frontend/` exists):
 ```bash
 cd frontend
-grep -E '"(lit|@shoelace-style/shoelace|typescript|vite-plus)"' package.json  # core stack, exact-pinned, no ^/~
+grep -E '"(lit|@awesome.me/webawesome|typescript|vite-plus)"' package.json  # core stack, exact-pinned, no ^/~
 pnpm lint                      # typecheck (always)
 pnpm test                      # vitest (only if the project uses it)
 vp build                       # production build (always)

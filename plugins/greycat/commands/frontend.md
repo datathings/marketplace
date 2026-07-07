@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Shoelace + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
+description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Web Awesome + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
 argument-hint: "[lens ...] | help"
 allowed-tools: Bash, Read, Grep, Glob, Task
 ---
@@ -26,7 +26,7 @@ Default = **everything**. No upfront questions — resolve the scope from the ar
 |---------|--------------------|
 | `layout` | §1 Layout & config + prescribed-stack presence |
 | `ts` | §2–2c TypeScript quality, codegen freshness, SDK-derived strings |
-| `components` | §3–3e Lit patterns, Shoelace, theming, icons, dependencies |
+| `components` | §3–3e Lit patterns, Web Awesome, theming, icons, dependencies |
 | `init` | §4 Init / login gate |
 | `perf` | §5 Performance |
 | `lighthouse` | §6 Lighthouse audit (auto-skips if prerequisites are missing — see §6) |
@@ -43,10 +43,10 @@ Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full p
 
 ## How to run this review — ultrathink + ultracode
 
-**Ultrathink (always).** Reason deeply about *why* each rule exists (why light DOM, why the init gate, why per-component Shoelace imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
+**Ultrathink (always).** Reason deeply about *why* each rule exists (why light DOM, why the init gate, why per-component Web Awesome imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
 
 **Ultracode (when available).** If multi-agent orchestration is on, run this as a **Workflow** — the checklist below splits cleanly into independent lenses:
-1. **Fan out** — one agent per **in-scope** lens (see Scope above): *(a)* layout & config + TypeScript, *(b)* Lit/Shoelace/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
+1. **Fan out** — one agent per **in-scope** lens (see Scope above): *(a)* layout & config + TypeScript, *(b)* Lit/Web Awesome/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
 2. **Verify** — for CRITICAL/HIGH findings, a second agent confirms it against the served app or the actual config, not just a grep hit.
 3. **Synthesize** — one severity-grouped report.
 
@@ -64,20 +64,20 @@ Every GreyCat webapp uses the same toolchain, layout, and design tokens. Deviate
 | Pages | **MPA** — each route is a real HTML page under `frontend/routes/`; URL == file path, no SPA router |
 | Components | **Lit** in **light DOM** — one root element per route, a component only for views reused across routes; `@customElement('app-…')` |
 | Language | **TypeScript** — `experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"` |
-| UI kit (atomics) | **Shoelace** (`sl-*`) — button, input, dialog, tabs, tooltip, date-picker |
+| UI kit (atomics) | **Web Awesome** (`wa-*`) — button, input, dialog, tabs, tooltip, date-picker |
 | UI kit (rich) | **`@greycat/web`** (`gui-*`) — tables, charts, maps, `gui-object` form generator, sign-in |
-| Theme | **`greycat.css`** (a Shoelace theme, dark by default) + **`frontend/theme.css`** (the `--app-*` tokens + `--sl-*` re-skin), imported **after** `greycat.css` |
+| Theme | **`greycat.css`** (a Web Awesome theme, dark by default) + **`frontend/theme.css`** (the `--app-*` tokens + `--wa-*` re-skin), imported **after** `greycat.css` |
 | Client | **`@greycat/web` SDK** for every backend call → `greycat codegen ts` is mandatory (`project.d.ts`) |
 | Icons | **lucide-static** — prebuilt SVG strings inlined via Lit `unsafeSVG`; self-hosted, `currentColor` + `aria-hidden`, no CDN fetch |
 | Package manager | **pnpm** |
 
 > **`vp` and pnpm are different layers, not alternatives.** pnpm is the *package manager* (fetches deps into `node_modules`); `vp` (VitePlus, rolldown/oxc-based) is the *build toolchain* that bundles `frontend/` → `webroot/`, replacing plain Vite. `vp install` delegates to the package manager, so they work together.
 
-> `@greycat/web` is **not on npm** — it ships as a tarball URL from GreyCat's registry, tracking the same branch (`dev`/`stable`) and version as the project's `std`. Shoelace and Lit are ordinary semver deps; Shoelace must satisfy `@greycat/web`'s peer range.
+> `@greycat/web` is **not on npm** — it ships as a tarball URL from GreyCat's registry, tracking the same branch (`dev`/`stable`) and version as the project's `std`. Web Awesome and Lit are ordinary semver deps; Web Awesome must satisfy `@greycat/web`'s peer range.
 
 ```bash
 # Confirm the prescribed stack is present
-grep -nE '"(vite-plus|lit|@shoelace-style/shoelace|@greycat/web)"' package.json
+grep -nE '"(vite-plus|lit|@awesome.me/webawesome|@greycat/web)"' package.json
 grep -q 'get.greycat.io/files/sdk/web' package.json || echo "⚠ @greycat/web not pinned to a registry tarball URL"
 grep -q '"vite-plus"' package.json || echo "⚠ not on VitePlus — expected the vp toolchain"
 ```
@@ -121,7 +121,7 @@ Enum entries are class statics built during `gc.sdk.init()` — don't touch `gc.
 
 ### 3. Component patterns (Lit, light DOM)
 - One `LitElement` per file, `@customElement('app-…')` with a consistent kebab prefix
-- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Shoelace/GreyCat styles cascade in. Shadow DOM (``static styles = css`…` ``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
+- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Web Awesome/GreyCat styles cascade in. Shadow DOM (``static styles = css`…` ``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
 - The route's **root element owns the init/login gate** (see §4) — `gc.sdk.init()` must resolve before any typed call or `gui-*` element works
 - `@property()` for public inputs, `@state()` for internal state; update reactive props, don't recreate DOM
 - Charts (`gui-*` or chart.js): instantiate after init, destroy in `disconnectedCallback`
@@ -129,33 +129,33 @@ Enum entries are class statics built during `gc.sdk.init()` — don't touch `gc.
 grep -rn 'createRenderRoot' frontend/ --include="*.ts" | grep -q 'return this' || echo "⚠ app components must render to light DOM (createRenderRoot(){return this})"
 ```
 
-### 3b. Shoelace usage (`sl-*` atomics)
-- Import components **individually** for tree-shaking (`import '@shoelace-style/shoelace/dist/components/button/button.js'`), never the whole bundle
-- Use Shoelace for atomic controls (button, input, dialog, tabs, tooltip); use `@greycat/web` `gui-*` for rich/GreyCat-aware widgets
+### 3b. Web Awesome usage (`wa-*` atomics)
+- Import components **individually** for tree-shaking (`import '@awesome.me/webawesome/dist/components/button/button.js'`), never the whole bundle
+- Use Web Awesome for atomic controls (button, input, dialog, tabs, tooltip); use `@greycat/web` `gui-*` for rich/GreyCat-aware widgets
 ```bash
-grep -rn "from '@shoelace-style/shoelace'" frontend/ --include="*.ts" && echo "⚠ whole-bundle import — switch to per-component imports"
+grep -rn "from '@awesome.me/webawesome'" frontend/ --include="*.ts" && echo "⚠ whole-bundle import — switch to per-component imports"
 ```
 
 ### 3c. Theming (`greycat.css` + `frontend/theme.css`)
 - Import `@greycat/web/greycat.css` (the theme, dark by default), then `~/theme.css` **after** it so the re-skin wins the cascade
-- **Never** import Shoelace's own `themes/light.css` / `dark.css` — `greycat.css` replaces them; importing them double-defines `--sl-*` and fights the re-skin
-- Light theme is the `sl-theme-light` class on `<html>` (flips both `greycat.css` and the app tokens together)
+- **Never** import Web Awesome's own `dist/styles/webawesome.css` directly alongside it — `greycat.css` bundles and re-skins those tokens; a second import double-defines `--wa-*` and fights the re-skin. (Unlike Shoelace, Web Awesome ships one base stylesheet, not separate `light.css`/`dark.css` theme files.)
+- Light/dark is class-based: `wa-light` / `wa-dark` on `<html>` (flips both `greycat.css` and the app tokens together) — there's no theme file to swap
 - No hardcoded colors/sizes in components — every value comes from an `--app-*` token in `theme.css`
 ```bash
-grep -rnE "shoelace/dist/themes/(light|dark)\.css" frontend/ --include="*.ts" && echo "⚠ importing Shoelace's own theme — greycat.css IS the theme, remove these"
+grep -rnE "@awesome\.me/webawesome/dist/styles/webawesome\.css" frontend/ --include="*.ts" && echo "⚠ importing Web Awesome's own base stylesheet directly — greycat.css already provides it re-skinned, remove this import"
 grep -rnE "#[0-9a-fA-F]{3,6}\b" frontend/ --include="*.ts" | grep -v theme.css && echo "⚠ raw hex outside theme.css — use --app-* tokens"
 ```
 
 ### 3d. Icons (lucide-static)
 - Use **`lucide-static`** — prebuilt SVG strings inlined via Lit `unsafeSVG`. Self-hosted/bundled, **no runtime icon fetch**
 - Render with `stroke="currentColor"` + `aria-hidden="true"`; decorative icons must be `aria-hidden`, meaningful ones need an accessible label
-- Shoelace's own built-in UI icons (chevrons in `sl-select`, etc.) still work out of the box — those need Shoelace's icon assets copied into `frontend/public/` with `setBasePath` only if you use `<sl-icon>` directly
+- Web Awesome's own built-in UI icons (chevrons in `wa-select`, etc.) still work out of the box — those default to Font Awesome and need the icon assets copied into `frontend/public/` with `setBasePath` only if you use `<wa-icon>` directly
 ```bash
 grep -rnE "cdn|unpkg|jsdelivr|googleapis\.com/.*icon" frontend/ --include="*.ts" --include="*.html" && echo "⚠ runtime/CDN icon fetch — use lucide-static (inlined SVG) instead"
 ```
 
 ### 3e. Dependencies (on-stack + exact pins)
-- The prescribed stack (`lit`, `@shoelace-style/shoelace`, `lucide-static`, `@greycat/web`, `vite-plus`, `typescript`) must be present and current. Heavy/duplicate libs (`moment`, `lodash`, `jquery`) should be replaced with native / web-component equivalents — they bloat the bundle and hurt LCP/TBT
+- The prescribed stack (`lit`, `@awesome.me/webawesome`, `lucide-static`, `@greycat/web`, `vite-plus`, `typescript`) must be present and current. Heavy/duplicate libs (`moment`, `lodash`, `jquery`) should be replaced with native / web-component equivalents — they bloat the bundle and hurt LCP/TBT
 - Pin **exact** versions (no `^`/`~`) so builds are reproducible; `@greycat/web` is a registry tarball URL, not npm
 ```bash
 grep -nE '"(moment|lodash|jquery)"' package.json && echo "⚠ heavyweight dep — prefer native / web-component equivalent"
@@ -178,7 +178,7 @@ grep -rn "from '@greycat/web'\b" frontend/ --include="*.ts" && echo "⚠ umbrell
 - Update reactive properties instead of recreating DOM trees; batch imperative attribute sets
 - Use `gui-table` (virtualized) for large datasets, not manual DOM loops
 - Code-split routes are natural in MPA; lazy-load heavy widgets (charts) with dynamic `import()`
-- Tree-shake Shoelace (per-component imports); self-host icon assets (no CDN)
+- Tree-shake Web Awesome (per-component imports); self-host icon assets (no CDN)
 - Defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve element sizes to avoid layout shift (CLS)
 
 ### 6. Lighthouse audit (performance · SEO · accessibility · best-practices)
@@ -224,7 +224,7 @@ Treat any **Lighthouse category < 90** (on mobile *or* desktop) as an open cover
 Start with a one-line scope recap: lenses run, and every lens **not** run as `SKIPPED: <reason>` (argument scope, missing `lighthouse` CLI, app not served, …).
 
 Group by severity:
-- **CRITICAL**: missing init/login gate (touching `gc.<module>.*` / `gui-*` before `gc.sdk.init()` resolves), importing Shoelace's own `themes/*.css`, Shadow DOM in app components, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + Shoelace is the standard
-- **HIGH**: `theme.css` imported before `greycat.css`, umbrella `@greycat/web` import, whole-bundle Shoelace import, missing route entries in `rollupOptions.input`, `@greycat/web` not pinned to a registry tarball, Lighthouse category < 90 on **mobile or desktop**, non-responsive layout, missing meta description / structured data
+- **CRITICAL**: missing init/login gate (touching `gc.<module>.*` / `gui-*` before `gc.sdk.init()` resolves), importing Web Awesome's own `dist/styles/webawesome.css` redundantly alongside `greycat.css`, Shadow DOM in app components, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + Web Awesome is the standard
+- **HIGH**: `theme.css` imported before `greycat.css`, umbrella `@greycat/web` import, whole-bundle Web Awesome import, missing route entries in `rollupOptions.input`, `@greycat/web` not pinned to a registry tarball, Lighthouse category < 90 on **mobile or desktop**, non-responsive layout, missing meta description / structured data
 - **MEDIUM**: `any` usage, hardcoded colors/sizes instead of `--app-*` tokens, stale `project.d.ts` (codegen not re-run), relative imports instead of `~`, missing `llms.txt` / sitemap / manifest, runtime/CDN asset fetch
 - **LOW**: style inconsistency, `emptyOutDir` mismatch, missing type casts

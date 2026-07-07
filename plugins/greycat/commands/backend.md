@@ -268,7 +268,7 @@ Every `@expose` body wraps in `try { … } catch (ex) { error("..."); throw ex; 
   ```
 
 ### 5.6 Frontend / LLM consumption
-These endpoints feed the **Lit + Shoelace + `@greycat/web`** frontend via the generated client and back the `llms.txt` index. Return lean `@volatile …View` types; self-documenting params clarify both the TS SDK and `llms.txt`. After any type/`@expose` change, regenerate the client: `greycat codegen ts`. Full frontend review: `/greycat:frontend`.
+These endpoints feed the **Lit + Web Awesome + `@greycat/web`** frontend via the generated client and back the `llms.txt` index. Return lean `@volatile …View` types; self-documenting params clarify both the TS SDK and `llms.txt`. After any type/`@expose` change, regenerate the client: `greycat codegen ts`. Full frontend review: `/greycat:frontend`.
 
 ---
 

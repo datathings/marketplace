@@ -20,7 +20,7 @@ allowed-tools: AskUserQuestion, Read, Write, Bash, Grep, Glob
 | 8 | Parallelization | 25m | Jobs, await |
 | 9 | Time & Geo | 30m | nodeTime, nodeGeo |
 | 10 | Advanced | 30m | Inheritance, polymorphism |
-| 11 | Frontend | 35m | Lit + Shoelace + lucide-static, Lighthouse, LLM-friendly SEO |
+| 11 | Frontend | 35m | Lit + Web Awesome + lucide-static, Lighthouse, LLM-friendly SEO |
 
 ---
 
@@ -258,9 +258,9 @@ Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abs
 
 ---
 
-## Module 11: Frontend (Lit + Shoelace + lucide-static) (35m)
+## Module 11: Frontend (Lit + Web Awesome + lucide-static) (35m)
 
-**Concept**: preferred GreyCat frontend = web components — **VitePlus** (`vp`) + **Lit** (light DOM) + **TypeScript** + **Shoelace** (UI kit) + typed **`@greycat/web`** client + **lucide-static** icons (self-hosted inline SVG, no CDN), **pnpm**. Pin exact latest versions; use these native packages.
+**Concept**: preferred GreyCat frontend = web components — **VitePlus** (`vp`) + **Lit** (light DOM) + **TypeScript** + **Web Awesome** (UI kit) + typed **`@greycat/web`** client + **lucide-static** icons (self-hosted inline SVG, no CDN), **pnpm**. Pin exact latest versions; use these native packages.
 
 **Setup** (configs in root, source in `frontend/`, builds to `webroot/`):
 ```bash
@@ -273,7 +273,7 @@ greycat dev          # VitePlus build watcher + serve API/assets on :8080
 ```ts
 import { LitElement, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import '@shoelace-style/shoelace/dist/components/card/card.js';   // per-component (tree-shaking)
+import '@awesome.me/webawesome/dist/components/card/card.js';   // per-component (tree-shaking)
 import '@greycat/web/sdk';                     // `gc` global + typed bindings
 import { icon } from '~/icons';               // lucide-static, self-hosted (no CDN)
 
@@ -288,8 +288,8 @@ export class AppProducts extends LitElement {
     this.rows = await gc.products_api.get_products();   // module = api file basename
   }
   render() {
-    return html`<sl-card><h2 slot="header">${icon('boxes', 18)} Products</h2>
-      <ul>${this.rows.map(r => html`<li>${r.name}</li>`)}</ul></sl-card>`;
+    return html`<wa-card><h2 slot="header">${icon('boxes', 18)} Products</h2>
+      <ul>${this.rows.map(r => html`<li>${r.name}</li>`)}</ul></wa-card>`;
   }
 }
 ```
@@ -299,7 +299,7 @@ export class AppProducts extends LitElement {
 greycat serve            # serve the built app first
 pnpm lighthouse          # if a lighthouse script is defined (also :desktop / :ci); else the `lighthouse` CLI
 ```
-Levers: per-component Shoelace imports, self-hosted lucide-static icons (no CDN), code-split routes, defer non-critical JS, reserve element sizes (avoid layout shift).
+Levers: per-component Web Awesome imports, self-hosted lucide-static icons (no CDN), code-split routes, defer non-critical JS, reserve element sizes (avoid layout shift).
 
 **LLM-friendly SEO** (always): in `index.html` set `<html lang>`, a unique `<title>`, `<meta name="description">`, canonical link, Open Graph + Twitter Card, and JSON-LD (`schema.org`). Use semantic landmarks + `alt`/ARIA (pre-render/SSR if content is in Shadow DOM). Ship `robots.txt`, `sitemap.xml`, a web manifest, and **`llms.txt`** (a Markdown index of pages + endpoints) to `webroot/`.
 
@@ -320,7 +320,7 @@ Update progress file after each completion.
 
 ## Completion
 
-After Module 11: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project with a Lit + Shoelace + lucide-static frontend; use `/greycat:scaffold` / `/greycat:migrate` / `/greycat:frontend`; audit with Lighthouse — `pnpm lighthouse` script if present, else the `lighthouse` CLI; read references; https://greycat.io/community).
+After Module 11: show certificate listing all completed modules, time invested, tutorial directory, next steps (build a real project with a Lit + Web Awesome + lucide-static frontend; use `/greycat:scaffold` / `/greycat:migrate` / `/greycat:frontend`; audit with Lighthouse — `pnpm lighthouse` script if present, else the `lighthouse` CLI; read references; https://greycat.io/community).
 
 ---
 
@@ -338,7 +338,7 @@ tutorial/
 ├── module8_parallelization.gcl
 ├── module9_timeseries_geo.gcl
 ├── module10_advanced.gcl
-└── module11_frontend/             # Lit + Shoelace + lucide-static (app-products.ts, index.html, llms.txt)
+└── module11_frontend/             # Lit + Web Awesome + lucide-static (app-products.ts, index.html, llms.txt)
 ```
 
 Each module = theory + hands-on runnable code; tests validate understanding; progressive (each builds on prior); self-paced.
