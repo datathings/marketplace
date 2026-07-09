@@ -1,4 +1,4 @@
 *.skill
-vllm/
+/vllm/
 __pycache__/
 *.pyc
