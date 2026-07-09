@@ -219,7 +219,9 @@ N-dimensional numeric structure.
 
 ```gcl
 enum TensorType { i32(4); i64(8); f32(4); f64(8); c64(8); c128(16); }
-enum TensorDistance { euclidean; l2sq; cosine; }   // euclidean aka l2
+enum TensorDistance { euclidean; l2sq; cosine; lorentz; poincare; }
+// euclidean aka l2; lorentz = Lorentz/hyperboloid model (full hyperboloid coords, index 0 = time
+// component); poincare = Poincaré ball model (ball coords, norm < 1); both curvature fixed at -1
 ```
 
 ### Geospatial Types
@@ -619,6 +621,8 @@ type Identity {
   //                               static native fn has_permission(permission: String): bool
   // @expose                       static native fn set_password(name: String, pass: String): bool
   // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
+  // @expose                       static native fn set_role(name: String, role: String): bool
+  //   (requires admin permission; false if name not found; throws if role is unknown)
 }
 
 var me        = Identity::current();
