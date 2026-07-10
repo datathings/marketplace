@@ -361,7 +361,7 @@ static bool lib_start(gc_unused gc_program_library_t *lib,
                        gc_unused gc_program_t *prog,
                        gc_unused void **user_data) {
     // Initialize global state (called once on startup)
-    g_alloc = gc_host__allocator(gc_host__get_global());
+    g_alloc = gc_host__global_allocator();  // shorthand for gc_host__allocator(gc_host__get_global())
     global_state = (my_global_state_t *)gc_alloc__calloc(g_alloc, sizeof(my_global_state_t));
     pthread_mutex_init(&global_state->lock, NULL);
 
@@ -495,17 +495,17 @@ Every allocation must be routed to one of two allocators — pick the one whose 
 
 | Allocator | Lifecycle | When to use |
 |-----------|-----------|-------------|
-| `((gc_ctx_t *)ctx)->allocator` | Bound to the current native call | Scratch buffers, intermediate arrays, per-call strings. Default inside any native function. |
-| `gc_host__allocator(gc_host__get_global())` | Plugin-global, persists across threads and calls | Module-level state allocated in `lib_start`, freed in `lib_stop`. Requires your own mutex when multiple workers touch it. |
+| `((gc_ctx_t *)ctx)->allocator` (or `gc_machine__allocator(ctx)`) | Bound to the current native call | Scratch buffers, intermediate arrays, per-call strings. Default inside any native function. |
+| `gc_host__allocator(gc_host__get_global())` (or the shorthand `gc_host__global_allocator()`) | Plugin-global, persists across threads and calls | Module-level state allocated in `lib_start`, freed in `lib_stop`. Requires your own mutex when multiple workers touch it. |
 
 Cache the global one in `lib_start`:
 
 ```c
 static gc_allocator_t *g_alloc;    // plugin-global
-// in lib_start:  g_alloc = gc_host__allocator(gc_host__get_global());
+// in lib_start:  g_alloc = gc_host__global_allocator();  // = gc_host__allocator(gc_host__get_global())
 ```
 
-**Allocation mechanics** (`gc_alloc__malloc(a, size)` / `gc_alloc__free(a, ptr, size)` — size required on free — plus `gc_alloc__calloc`/`gc_alloc__realloc`, and the per-call scratch vs. `lib_start`/`lib_stop` global-state examples) are documented in **api_memory_text.md** (`gc/alloc.h`). Plugin rule of thumb: temporaries use the per-call allocator `((gc_ctx_t *)ctx)->allocator`; persistent global state uses the cached `g_alloc` under your mutex and is freed in `lib_stop`.
+**Allocation mechanics** (`gc_alloc__malloc(a, size)` / `gc_alloc__free(a, ptr, size)` — size required on free — plus `gc_alloc__calloc`/`gc_alloc__realloc`, and the per-call scratch vs. `lib_start`/`lib_stop` global-state examples) are documented in **api_memory_text.md** (`gc/alloc.h`). Plugin rule of thumb: temporaries use the per-call allocator `((gc_ctx_t *)ctx)->allocator` (or `gc_machine__allocator(ctx)`); persistent global state uses the cached `g_alloc` (from `gc_host__global_allocator()`) under your mutex and is freed in `lib_stop`.
 
 To avoid allocation entirely for scratch raw bytes, reuse the machine's scratch buffer: `gc_machine__get_buffer(ctx)` → `gc_buffer__clear(buf)` → `gc_buffer__prepare(buf, needed_bytes)`, then write `buf->data` directly (see `gc/buffer.h` in api_memory_text.md, and the Tokenization Retry pattern below).
 
@@ -684,7 +684,7 @@ void my_function(gc_machine_t *ctx) {
     memcpy(dest, str->buffer, str->size);
 
     // Option 2: Create null-terminated copy on the per-call allocator
-    gc_allocator_t *a = ((gc_ctx_t *)ctx)->allocator;
+    gc_allocator_t *a = gc_machine__allocator(ctx);   // equivalent to ((gc_ctx_t *)ctx)->allocator
     size_t n = str->size + 1;
     char *cstr = (char *)gc_alloc__malloc(a, n);
     memcpy(cstr, str->buffer, str->size);
@@ -829,8 +829,8 @@ void use_model(gc_machine_t *ctx) {
 
 ### Rules
 
-1. **Per-call allocator** (`((gc_ctx_t *)ctx)->allocator`) is scoped to one native call — no mutex needed.
-2. **Plugin-global allocator** (`gc_host__allocator(gc_host__get_global())`) is shared; protect the data structures you keep there with your own mutex.
+1. **Per-call allocator** (`((gc_ctx_t *)ctx)->allocator`, or `gc_machine__allocator(ctx)`) is scoped to one native call — no mutex needed.
+2. **Plugin-global allocator** (`gc_host__allocator(gc_host__get_global())`, or the shorthand `gc_host__global_allocator()`) is shared; protect the data structures you keep there with your own mutex.
 3. **GreyCat objects** created in a function are local to that call — no mutex needed.
 4. **Global state** accessed from native functions needs protection.
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.0**. The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.1**. The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
 - **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, OpenAPI export, MCP server endpoints
@@ -184,7 +184,7 @@ Persistent graph node primitives. All are `native` and stored to disk.
 - **`nodeTime<T>`** - temporal series. `resolve()`, `resolveAt(time)`, `resolveAtWithin(time, duration)`, `resolveTimeAt`, `resolveTimeValueAt`, `getAt`, `removeAt`, `setAt(time, value)`, `setAll(time, values, delta)`, `rangeSize(from, to)`, `size`, `firstTime`/`first`/`lastTime`/`last`, `prev(time)`/`next(time)`, `removeAll`, static `sample(...)`, static `info(...)`.
 - **`nodeList<T>`** - sparse indexed list. `get(index)`, `set(index, value)`, `add(value)`, `resolve(index)`, `resolveEntry(index): Tuple<int,T>?`, `remove(index): bool`, `firstIndex`/`first`/`lastIndex`/`last`, etc.
 - **`nodeIndex<K, V>`** - keyed map, O(log n). `set(key, value)`, `get(key)`, `remove(key)`, `search(key, max): Array<SearchResult<K,V>>`, static `search_closest`, static `sample`/`info`.
-- **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), etc.
+- **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), `search(center: geo, max: int): Array<SearchResult<geo,T>>`, etc.
 - **`nodeTimeCursor<T>`** (`@volatile`) - iterator over a nodeTime (`first`, `last`, `next`, `previous`, `lessOrEq(t)`, `skip_values`, `skip_duration`, `currentTime`, `current`).
 
 ```gcl
@@ -461,13 +461,14 @@ enum TaskStatus {
 
 type Task {
   user_id: int;
+  user_name: String;
   task_id: int;
   mod: String?;
   type: String?;
   fun: String?;
   creation: time;
   start: time?;
-  duration: duration?;
+  completion: time?;
   status: TaskStatus;
   progress: float?;
   // static native fns:
@@ -621,8 +622,7 @@ type Identity {
   //                               static native fn has_permission(permission: String): bool
   // @expose                       static native fn set_password(name: String, pass: String): bool
   // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
-  // @expose                       static native fn set_role(name: String, role: String): bool
-  //   (requires admin permission; false if name not found; throws if role is unknown)
+  // @expose                       static native fn set_role(name: String, role: String)
 }
 
 var me        = Identity::current();
@@ -799,7 +799,7 @@ var type_code = Csv::generate(stats);                     // generated GCL types
 var reader = CsvReader<any> { path: "/data/sales.csv" };
 var sample = Csv::sample(reader, 100);                     // Table
 ```
-`CsvStatistics` (per-`CsvColumnStatistics` profiling, `line_count`, `fail_count`, `file_count`), `CsvColumnStatistics` (type counts, `date_format_count`, `enumerable_count`, `profile: Gaussian`), `CsvAnalysisConfig` (`header_lines?`, `separator?`, `row_limit?`, `enumerable_limit?`, `date_check_limit?`, `date_formats?`), and `CsvSharding` (`id`, `column`, `modulo`) round out CSV support.
+`CsvStatistics` (`header_lines?`, `separator?`, `string_delimiter?`, `decimal_separator?`, `thousands_separator?`, per-`CsvColumnStatistics` `columns`, `line_count`, `fail_count`, `file_count`), `CsvColumnStatistics` (`name?`, `example?`, type counts, `date_format_count`, `enumerable_count`, `profile: Gaussian`), `CsvAnalysisConfig` (`header_lines?`, `separator?`, `string_delimiter?`, `decimal_separator?`, `thousands_separator?`, `row_limit?`, `enumerable_limit?`, `date_check_limit?`, `date_formats?`; static `enumerable_limit_default`/`date_check_limit_default` = 100), and `CsvSharding` (`id`, `column`, `modulo`) round out CSV support.
 
 ### File System
 

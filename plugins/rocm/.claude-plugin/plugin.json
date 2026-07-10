@@ -1,6 +1,6 @@
 {
   "name": "rocm",
-  "version": "2.8.5",
+  "version": "2.8.6",
   "description": "AMD ROCm 7.2.4 GPU computing stack: HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER compute libraries, profiling, and CUDA-to-HIP porting",
   "author": {
     "name": "Datathings",

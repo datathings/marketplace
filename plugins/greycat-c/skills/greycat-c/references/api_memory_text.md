@@ -30,6 +30,7 @@ typedef struct gc_allocator gc_allocator_t;
 |----------|-----------|-------------|
 | `gc_alloc__create` | `gc_allocator_t *gc_alloc__create(bool shared)` | Create a new allocator. Pass `true` if it will be touched by multiple threads (jemalloc shared arena), `false` for a thread-private arena. |
 | `gc_alloc__destroy` | `void gc_alloc__destroy(gc_allocator_t *allocator)` | Destroy an allocator created with `gc_alloc__create`. |
+| `gc_alloc__reset` | `void gc_alloc__reset(gc_allocator_t *allocator)` | Discard every extant allocation of `allocator` and zero its accounting, keeping the allocator usable. On the jemalloc path this does `arena.<id>.reset`, which reclaims even leaked memory (lost pointers) that per-object frees cannot. All pointers previously handed out by this allocator become invalid, so callers MUST have already torn down everything built on it. No-op on the native-malloc / WASM / standalone paths. |
 | `gc_alloc__bind` | `void gc_alloc__bind(gc_allocator_t *allocator)` | Bind the allocator to the current thread (thread-local binding for internal use). |
 | `gc_alloc__allocated` | `u64_t gc_alloc__allocated(const gc_allocator_t *allocator)` | Return the number of bytes currently live in `allocator`'s accounting counter. |
 | `gc_alloc__stats` | `void gc_alloc__stats(gc_allocator_t *allocator, const char *tag)` | Dump live allocation stats for `allocator` to stderr (jemalloc per-arena breakdown on jemalloc builds, otherwise just the gc_allocator_t counter). |
@@ -197,6 +198,21 @@ if (after != before) {
 }
 ```
 
+#### Reclaiming a worker-private arena with `gc_alloc__reset`
+
+`gc_alloc__reset` is destructive: it invalidates every pointer previously handed out by `allocator` in one shot, so it is only safe once the caller has already torn down everything built on that arena. Use it between iterations of a long-lived worker loop to reclaim jemalloc memory that per-object `gc_alloc__free` calls cannot (e.g. state lost to a leak). It is a no-op on the native-malloc / WASM / standalone allocator paths, so it does not substitute for pairing every `gc_alloc__malloc`/`gc_alloc__calloc` with a `gc_alloc__free` there.
+
+```c
+gc_allocator_t *worker_alloc = gc_alloc__create(false);   // thread-private arena
+
+for (;;) {
+    // ... allocate scratch state from worker_alloc, process one unit of work ...
+    // ... explicitly tear down / free everything built on worker_alloc here ...
+
+    gc_alloc__reset(worker_alloc);   // reclaim arena memory before the next iteration
+}
+```
+
 
 ---
 
@@ -341,6 +357,7 @@ These are `static inline` functions for zero-overhead binary serialization. Call
 | `gc_buffer_read_vu32` | Variable-length `u32_t` |
 | `gc_buffer_read_vu32_size_checked` | Like `gc_buffer_read_vu32` but returns `false` on buffer overflow |
 | `gc_buffer_read_vu64` | Variable-length `u64_t` |
+| `gc_buffer_read_vu64_size_checked` | Like `gc_buffer_read_vu64` but returns `false` on buffer overflow |
 | `gc_buffer_read_vi64` | Variable-length zig-zag `i64_t` |
 
 **Raw pointer read/write macros:**
@@ -507,6 +524,8 @@ if (!gc_buffer_read_vu32_size_checked(in_buf, &count)) {
     return false;                      // overran the buffer
 }
 ```
+
+The `u64_t` counterpart `gc_buffer_read_vu64_size_checked` follows the same contract for wider varints.
 
 #### Serializing a slot to JSON
 

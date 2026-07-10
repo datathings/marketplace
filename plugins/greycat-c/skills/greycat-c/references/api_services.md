@@ -380,7 +380,7 @@ typedef struct {
 |----------|-----------|-------------|
 | `gc_time__now` | `i64_t gc_time__now()` | Get current time in microseconds since epoch |
 | `gc_time__tm_from_time` | `gc_tm_t gc_time__tm_from_time(i64_t time, u32_t timezone)` | Convert a GreyCat timestamp to calendar fields |
-| `gc_gmtime_r_safe` | `void gc_gmtime_r_safe(i64_t tim_p, gc_tm_t *res)` | Convert a timestamp to UTC calendar (safe, no timezone) |
+| `gc_gmtime_r_safe` | `void gc_gmtime_r_safe(i64_t tim_p, gc_tm_t *__restrict res)` | Convert a timestamp to UTC calendar (safe, no timezone) |
 | `gc_mktime_safe` | `i64_t gc_mktime_safe(gc_tm_t *tim_p)` | Convert calendar fields to a timestamp |
 | `gc_dtz_utc_to_time_zone` | `i32_t gc_dtz_utc_to_time_zone(u32_t time_zone, i64_t utc_epoch, i64_t *localized_epoch)` | Convert UTC epoch to a localized epoch. Returns `GC_DTZ_OK` on success. |
 | `gc_dtz_time_zone_to_utc` | `i32_t gc_dtz_time_zone_to_utc(u32_t time_zone, i64_t localized_epoch, i64_t *utc_epoch, u32_t *next_utc_offset)` | Convert localized epoch to UTC. |
@@ -659,8 +659,8 @@ These functions interleave/deinterleave integer coordinates into a single 64-bit
 
 | Function | Description |
 |----------|-------------|
-| `gc_common__parse_number(str, str_len)` | Parse an unsigned integer from a string. Updates `*str_len` to bytes consumed. |
-| `gc_common__parse_sign_number(str, str_len)` | Parse a signed integer from a string. Updates `*str_len` to bytes consumed. |
+| `gc_common__parse_number(str, str_len)` | Parse an unsigned integer from a string. `str_len` is `u64_t *` (in: available, out: bytes consumed). |
+| `gc_common__parse_sign_number(str, str_len)` | Parse a signed integer from a string. `str_len` is `u32_t *` (in: available, out: bytes consumed). |
 | `gc_common__parse_date_iso8601(data, len, epoch_utc)` | Parse an ISO 8601 date string to a UTC epoch (microseconds) |
 | `gc_json__parse(ctx, str, len, result, type, type_d)` | Parse a JSON string into a GreyCat slot. Returns `true` on success. |
 | `gc_duration__parse(str, len, duration)` | Parse a duration string (e.g., "1h30m") into microseconds |
@@ -736,12 +736,12 @@ void my_hex_decode(gc_machine_t *ctx) {
 }
 ```
 
-**Parsing numbers, durations, and ISO-8601 dates from configuration strings.** `gc_common__parse_number` / `gc_common__parse_sign_number` take `*str_len` as in/out: pass the available length, read back how many bytes were consumed so you can detect trailing garbage or parse a suffix. This is exactly how env-var option parsing works.
+**Parsing numbers, durations, and ISO-8601 dates from configuration strings.** `gc_common__parse_number` / `gc_common__parse_sign_number` take `*str_len` as in/out: pass the available length, read back how many bytes were consumed so you can detect trailing garbage or parse a suffix. Note the two functions disagree on the pointer's width — `gc_common__parse_number` takes `u64_t *str_len` while `gc_common__parse_sign_number` takes `u32_t *str_len`; match the local's type to the callee or you'll get a pointer-type mismatch. This is exactly how env-var option parsing works.
 
 ```c
 // Parse "<number><suffix>" — consume digits, then look at what's left
 bool parse_bytes(const char *str, u32_t str_len, u64_t *bytes) {
-    u32_t num_len = str_len;                            // in: available, out: consumed
+    u64_t num_len = str_len;                            // in: available, out: consumed (u64_t* required)
     u64_t value = gc_common__parse_number(str, &num_len);
     const char *suffix = str + num_len;                 // remaining chars after the digits
     size_t remaining = str_len - num_len;

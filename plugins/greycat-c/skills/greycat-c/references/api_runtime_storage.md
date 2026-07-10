@@ -332,6 +332,7 @@ struct gc_block {
     u32_t type;                // Block type
     gc_block_key_t key;        // Block key
     u64_t origin;              // Origin identifier
+    u64_t node_ref;            // Node reference this block backs (used by suspend/resume serialization)
     struct {
         gc_block_t *cache_prev;  // LRU cache previous
         gc_block_t *cache_next;  // LRU cache next
