@@ -12,7 +12,7 @@ allowed-tools: Bash, Read, Grep, Glob, Write, Edit, Task
 
 **ultrathink + ultracode** — read the actual code, never emit boilerplate. README.md (feature scan), API.md (`@expose` scan), MCP.md (`@tag("mcp")` scan), and the Phase-5 SEO/`llms.txt` artifacts are INDEPENDENT deliverables: when parallel subagents / ultracode are available, draft them as PARALLEL subagents (one each), then assemble & write. Otherwise generate sequentially.
 
-**Frontend stack** (referred to below as *the frontend stack*): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome + `@greycat/web` + lucide-static, pnpm; note i18next / maplibre-gl / Vitest (optional) if present.
+**Frontend stack** (referred to below as *the frontend stack*): VitePlus (`vp`) + Lit (shadow DOM) + TypeScript + Web Awesome (or equivalent) + `@greycat/web/sdk` + lucide-static, pnpm; note i18next / maplibre-gl / Vitest (optional) if present.
 
 **Lighthouse** (referred to below): audit both mobile (default) and desktop (`--preset=desktop`), target ≥ 90 per category — via the project's lighthouse script (`:desktop` / `:ci` variants) if present, else the `lighthouse` CLI against the served app (`greycat serve`/`dev` first). Optional tooling.
 
@@ -114,7 +114,7 @@ Typed-error envelope (recommended); clients branch on `code`, not `message`:
 ```bash
 curl -H "task: true" -X POST -d '[]' http://localhost:8080/<module>::<fn>   # returns task_id
 # poll status from GCL/RPC via Task::is_running(task_id) / Task::running() / Task::history(offset, max)
-GET /files/<user_id>/tasks/<task_id>/result.gcb?json                        # fetch result once ended
+GET /files/<user_name>/tasks/<task_id>/result.gcb?json                      # fetch result once ended
 ```
 States: `empty → waiting → running → await → ended | error | cancelled | ended_with_errors`.
 
@@ -154,15 +154,20 @@ Each tool is a function tagged `@tag("mcp")`. `/// @param <name> <desc>` doc-com
 
 ---
 
-## Phase 4: OpenAPI Spec (optional)
+## Phase 4: OpenAPI Spec (if `@tag("openapi")` detected)
 
-Generate `openapi.yaml` (OpenAPI 3.0):
+`@tag("openapi")` is opt-in — a bare `@expose` does **not** appear in the spec on its own. Scan for tagged functions only:
+```bash
+grep -rn '@tag("openapi"' src/ --include="*.gcl" -B2 -A10
+```
+
+Generate `openapi.yaml` (OpenAPI 3.0) with one path per `@tag("openapi")`-tagged function (or read it live from `runtime::OpenApi::v3` on a served project):
 ```yaml
 openapi: 3.0.0
 info: { title: <name>, version: <ver> }
 servers: [{ url: http://localhost:8080 }]
 paths:
-  /<module>::<fn>:
+  /<module>::<fn>:                    # only functions tagged @tag("openapi")
     post:
       security: [{ cookieAuth: [] }]
       requestBody: { content: { application/json: { schema: { type: array, items: ... } } } }

@@ -17,7 +17,7 @@ When uncertain about a construct: read `lib/std/*.gcl` for real examples, then r
 
 ## When to read which file
 
-This file covers the 80% you need across language *and* tooling. Drill into a reference file when the task touches its area:
+This file covers the 80% you need across language _and_ tooling. Drill into a reference file when the task touches its area:
 
 **Language:**
 
@@ -34,7 +34,8 @@ This file covers the 80% you need across language *and* tooling. Drill into a re
 - **[reference/lang.md](reference/lang.md)** — `greycat-lang` CLI: `lint`, `fmt`, LSP `server`, debug dumps. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)** — What's alive in a running server: the graph store (`gcdata/`), workers and tasks, the HTTP server (JSON-RPC / path-RPC / `/files` / `webroot`), identity and permissions, the scheduler, backups, logging.
 - **[reference/workflow.md](reference/workflow.md)** — Operational recipes: bootstrap a project, add an endpoint, add a persisted type, write tests, evolve schemas, generate SDKs, deploy.
-- **[reference/webapp.md](reference/webapp.md)** — Bundling a webapp: the one prescribed stack (VitePlus + MPA + Lit light-DOM + Shoelace/`gui-*` components themed by `greycat.css` + `app/theme.css` tokens), `app/` sources bundled into `webroot/` via `greycat dev`, and calling the backend through the `@greycat/web` SDK (`greycat codegen ts`).
+- **[reference/webapp.md](reference/webapp.md)** — Bundling a webapp: the one prescribed stack (VitePlus + MPA + Lit shadow-DOM components with `static styles` + Web Awesome `wa-*` components themed by `--wa-*` tokens + `app/theme.css` brand overrides), `app/` sources bundled into `webroot/` via `greycat dev`, and calling the backend through the headless `@greycat/web/sdk` (`greycat codegen ts`).
+- **[reference/webapp-tests.md](reference/webapp-tests.md)** — End-to-end UI testing of a webapp with Playwright: `playwright.config.ts` driving `greycat dev`, authenticate-once via `storageState`, piercing the Lit/Web Awesome shadow DOM, and isolating specs from the persistent `gcdata/` store.
 
 ## File anatomy
 
@@ -79,7 +80,7 @@ my-project/
 │   └── std/                 # the stdlib
 ├── src/                     # @include("src"); — your code
 ├── test/                    # @include("test"); — *_test.gcl stripped by `greycat build`
-├── files/                   # served at /files/<user>/... — user uploads
+├── files/                   # served at /files/<user_name>/... — user uploads
 ├── gcdata/                  # graph storage. DO NOT COMMIT. Back this up.
 └── webroot/                 # public static assets, served at /
 ```
@@ -153,13 +154,13 @@ Trailing `;` between members is optional but always safe. Methods can omit retur
 
 Everything is typed. Type references appear after `:` and inside generic brackets.
 
-| Category                            | Names                                                                            |
-| ----------------------------------- | -------------------------------------------------------------------------------- |
-| Primitives                          | `bool`, `int` (i64), `float` (f64), `char`, `String`                             |
-| Native containers                   | `Array<T>`, `Map<K, V>`, `Tuple<T, U>`, `Buffer`, `Table<T>`, `Tensor`           |
-| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeGeo<T>`         |
-| Native value types                  | `time`, `duration`, `geo`, `function`, `field`, `type`, `any`, `null`            |
-| User-defined                        | Anything declared with `type` / `enum`                                           |
+| Category                            | Names                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| Primitives                          | `bool`, `int` (i64), `float` (f64), `char`, `String`                     |
+| Native containers                   | `Array<T>`, `Map<K, V>`, `Tuple<T, U>`, `Buffer`, `Table<T>`, `Tensor`   |
+| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeGeo<T>` |
+| Native value types                  | `time`, `duration`, `geo`, `function`, `field`, `type`, `any`, `null`    |
+| User-defined                        | Anything declared with `type` / `enum`                                   |
 
 ### Nullability
 
@@ -213,11 +214,11 @@ var n = node<User> { User { id: 1, name: "alice", password_hash: "" } };
 
 Three distinct operators — pick by what's on the left:
 
-| Form                                    | Meaning                                                                                       | When                                                                                                                          |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `obj.field` / `obj.method()`            | Access the **value's own** field or method                                                    | Always for user types and value types                                                                                         |
-| `n->field`                              | **Deref then access**: resolves the node payload, then `.field` on the result                 | Only on the stdlib node tags: `node<T>`, `nodeTime<T>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeGeo<T>`. User types cannot opt in.    |
-| `Type::member` / `Module::Type::member` | **Static / namespaced** access                                                                | Static fields, static methods, enum entries, fully-qualified names                                                            |
+| Form                                    | Meaning                                                                       | When                                                                                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `obj.field` / `obj.method()`            | Access the **value's own** field or method                                    | Always for user types and value types                                                                                            |
+| `n->field`                              | **Deref then access**: resolves the node payload, then `.field` on the result | Only on the stdlib node tags: `node<T>`, `nodeTime<T>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeGeo<T>`. User types cannot opt in. |
+| `Type::member` / `Module::Type::member` | **Static / namespaced** access                                                | Static fields, static methods, enum entries, fully-qualified names                                                               |
 
 ```gcl
 var u: User = expr;
@@ -391,7 +392,6 @@ See [reference/project.md](reference/project.md) for cross-module visibility rul
 
 ```gcl
 @expose
-@tag("openapi")
 fn add(a: int, b: int): int {
     return a + b;
 }
@@ -467,7 +467,7 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat-lang` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
 11. **Don't commit `gcdata/`, `bin/`, or `lib/`.** They are runtime / install state, not source. `gcdata/` is the durable application state — back it up but never check it in.
 12. **Default `@expose` to authenticated. `@permission("public")` requires user opt-in.** A bare `@expose` already requires the `api` permission (any authenticated caller). Reaching for `@permission("public")` because "the frontend doesn't have auth wired up yet" hands every anonymous caller on the network the same write access. Only add it when the user explicitly asks for an anonymous endpoint (typical examples: `login`, an unauthenticated health probe). If the answer is "I made it public so the demo would work," remove it and wire login instead. See [reference/idioms.md § HTTP / @expose patterns](reference/idioms.md).
-13. **Never run `greycat serve --user=<id>` / `GREYCAT_USER=<id>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<id>` to mint a short-lived token and pass it via `?authorization=…` / cookie. See [reference/runtime.md § Identity and permissions](reference/runtime.md).
+13. **Never run `greycat serve --user=<name>` / `GREYCAT_USER=<name>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<name>` to mint a short-lived token and pass it via header as `Authorization: <TOKEN>` (**no `Bearer`**) / cookie. See [reference/runtime.md § Identity and permissions](reference/runtime.md).
 
 ## Verifying syntax assumptions
 
@@ -476,5 +476,5 @@ When uncertain whether a construct is valid GreyCat:
 1. **Run `greycat-lang lint`** — fastest oracle, catches shape drift the runtime accepts silently (unused locals, non-exhaustive enum chains, redundant null-checks, `->` on non-deref receivers, …). See [reference/lang.md](reference/lang.md).
 2. Search the stdlib (`lib/std/*.gcl`) for real examples of the construct.
 3. Run `greycat run` against a minimal `project.gcl` — the runtime is the oracle for valid programs.
-After any non-trivial `.gcl` edit, run `greycat-lang fmt --mode=check` + `greycat-lang lint` as the definition of done — `greycat build` happily produces a `.gcp` from code that still has warnings or formatting drift.
+   After any non-trivial `.gcl` edit, run `greycat-lang fmt --mode=check` + `greycat-lang lint` as the definition of done — `greycat build` happily produces a `.gcp` from code that still has warnings or formatting drift.
 4. If still unsure, ask. Do not assume by analogy to TypeScript / Rust / Kotlin / Java — GreyCat has its own conventions (no `new`, no ternary, `->` vs `.`, `private` semantics).

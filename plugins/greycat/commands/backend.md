@@ -262,7 +262,7 @@ Every `@expose` body wraps in `try { … } catch (ex) { error("..."); throw ex; 
 - `@expose("path")` exposes at that **exact arbitrary path** (need not equal the fn name) — clients and the generated SDK must call the declared path. Flag code/docs assuming the default `<module>::<fn>` when a custom alias overrides it.
 - **No bare `/<fn>` route.** Routes are `POST /<module>::<fn>` and `POST /<module>::<Type>::<fn>` (static fn on a type, e.g. `/runtime::Identity::current_id`); JSON-RPC at `POST /` uses `"<module>.<fn>"` (dots). `/runtime::` is a module name, not a routing prefix.
 - `@role("name", "perm", …)` belongs in `project.gcl`.
-- **20s TTL — HIGH if reachable** — the request TTL (`--request_ttl` flag, `serve` only) defaults to `20s`; past it the runtime kills the handler and **`try/catch` does NOT fire**. Raise `--request_ttl`, or dispatch as a background task (`task: true` header → returns `task_id`; poll `Task::is_running(id)` / `Task::running()` / `Task::history(offset, max)`; fetch `GET /files/<user_id>/tasks/<task_id>/result.gcb?json`).
+- **20s TTL — HIGH if reachable** — the request TTL (`--request_ttl` flag, `serve` only) defaults to `20s`; past it the runtime kills the handler and **`try/catch` does NOT fire**. Raise `--request_ttl`, or dispatch as a background task (`task: true` header → returns `task_id`; poll `Task::is_running(id)` / `Task::running()` / `Task::history(offset, max)`; fetch `GET /files/<user_name>/tasks/<task_id>/result.gcb?json`).
   ```bash
   grep -rnE '@expose' src/ --include="*.gcl" -A30 | grep -E "for\s*\(.*in\s+|await\(|System::exec"
   ```
@@ -284,7 +284,7 @@ greycat test
 ```
 Stale persistence causes startup failures and false results; wipe first. Tests in one module **share state** across `@test` fns (mutations visible to the next, not persisted). **Exit codes**: `0` success · `1` generic CLI error · `2` compile/load error (every test affected — coverage numbers unreliable). A segfault/kill invalidates the run even though there's no dedicated exit code.
 
-**Single test** = a bare `@test` **function name** (`greycat test test_echo`), **not** a file path or `module::fn`. Omit to run all. Cross-module helpers go in `test/test_helpers.gcl` as plain `fn` (not `private`).
+**Single test** = a bare `@test` **function name** (`greycat test test_echo`), **not** a file path. Module qualification also works (`greycat test mymod::test_echo`). Omit to run all. Cross-module helpers go in `test/test_helpers.gcl` as plain `fn` (not `private`).
 
 ### 6.2 Find gaps
 ```bash

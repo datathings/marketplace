@@ -277,10 +277,10 @@ typedef struct {
     gc_object_t header;    // Object header
     u8_t *types;           // Per-cell type tags (cols * rows elements)
     gc_slot_t *slots;      // Per-cell values (cols * rows elements)
-    u32_t cols;            // Number of columns
-    u32_t rows;            // Number of rows
-    u32_t capacity;        // Allocated row capacity
-    u32_t start;           // Start offset (for sliding window behavior)
+    u32_t cols;            // Number of columns (fixed once set)
+    u32_t rows;            // Number of live rows (logical height)
+    u32_t capacity;        // Allocated physical slots (always a multiple of cols)
+    u32_t start;           // Physical index of logical cell (0,0) — ring-buffer head
 } gc_table_t;
 ```
 

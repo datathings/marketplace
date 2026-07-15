@@ -56,7 +56,7 @@ When you change a type's shape (rename, reorder, change attribute types) and reb
 
 A **task** is a function call run on a worker thread. Two ways to spawn:
 
-- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_id>/tasks/<task_id>/result.gcb?json` once the task has ended.
+- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended.
 - **Programmatic** — `Scheduler::add(fn, periodicity, ...)` schedules a periodic task; the startup `main()` is enqueued as a task on `serve` boot.
 
 A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and **only run in parallel inside a task context** — calling `await` from a one-shot `greycat run` script runs them serially.
@@ -115,7 +115,7 @@ Every task runs inside an implicit transaction. **Node writes are only committed
 
 ```gcl
 fn import_batch(rows: Array<Row>) {
-    for (r in rows) {
+    for (_, r in rows) {
         var n = registry.get(r.key);
         n.set(r.value);              // staged, not committed
     }
@@ -147,11 +147,11 @@ Every request resolves to an identity (user). The server reads the token from on
 
 - Cookie `greycat=<token>`,
 - Header `Authorization: <token>` (no `Bearer` prefix),
-- Query parameter `?authorization=<token>` (handy for the boot URL printed on first `serve`).
+- Query parameter `?authorization=<token>` (handy for the boot URL printed on first `serve`, only for GET requests).
 
 No token = anonymous (`user_id = 0`, role `public`). Anonymous callers only reach functions gated by `@permission("public")`.
 
-Tokens are HMAC-signed and live in-memory; restart issues fresh ones. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<id>` from the CLI.
+Tokens are HMAC-signed and live in-memory; restart issues fresh ones. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<name>` from the CLI.
 
 ### Response shapes
 
@@ -202,18 +202,18 @@ fn ping(): String { return "pong"; }              // anonymous — use only when
 
 Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`. CLI equivalents under `greycat user`.
 
-### The `--user=<id>` impersonation flag — footgun, do not promote
+### The `--user=<name>` impersonation flag — footgun, do not promote
 
-`greycat serve --user=<id>` (or `GREYCAT_USER=<id>`) makes **every incoming request run as that user, without checking auth**. Anyone who can reach the port executes endpoints with that user's full permission set — there is no "only on localhost" guard. It is **not** a dev convenience to reach for by default. Catastrophic in production; risky on a laptop on a shared / open network.
+`greycat serve --user=<name>` (or `GREYCAT_USER=<name>`) makes **every incoming request run as that user, without checking auth**. Anyone who can reach the port executes endpoints with that user's full permission set — there is no "only on localhost" guard. It is **not** a dev convenience to reach for by default. Catastrophic in production; risky on a laptop on a shared / open network.
 
 Do not propose this flag, put it in a recipe, or bake it into a `.env`. The correct dev pattern is:
 
-1. `greycat token --user=<id>` to mint a short-lived token for `<id>` (default `1` = `root`), then attach it via `Authorization: <TOKEN>` header or `?authorization=<TOKEN>`.
+1. `greycat token --user=<name>` to mint a short-lived token for `<name>` (default `root`), then attach it via `Authorization: <TOKEN>` header or `?authorization=<TOKEN>`.
 2. Or call `Identity::login(name, pass)` from the browser / a script to get a cookie-backed session.
 
 The boot URL printed by `greycat serve` on a fresh `gcdata/` already carries a `root` token — that's the intended bootstrap path.
 
-If the user explicitly asks for `--user=<id>` for a one-off local test, fine; never propose it yourself.
+If the user explicitly asks for `--user=<name>` for a one-off local test, fine; never propose it yourself.
 
 ## Tasks and the scheduler
 

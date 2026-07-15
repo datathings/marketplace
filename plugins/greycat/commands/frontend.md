@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Web Awesome + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
+description: Comprehensive GreyCat frontend review — correctness, the prescribed VitePlus + Lit + Web Awesome (or similar) + @greycat/web stack, performance, Lighthouse/SEO, type safety, and testing
 argument-hint: "[lens ...] | help"
 allowed-tools: Bash, Read, Grep, Glob, Task
 ---
@@ -43,7 +43,7 @@ Read [reference/webapp.md](../skills/greycat/reference/webapp.md) for the full p
 
 ## How to run this review — ultrathink + ultracode
 
-**Ultrathink (always).** Reason deeply about *why* each rule exists (why light DOM, why the init gate, why per-component Web Awesome imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
+**Ultrathink (always).** Reason deeply about *why* each rule exists (why shadow DOM, why the init gate, why per-component Web Awesome imports) before flagging — a violation you can't tie to a broken render, a blank page, a 422, or a Lighthouse regression is not a finding.
 
 **Ultracode (when available).** If multi-agent orchestration is on, run this as a **Workflow** — the checklist below splits cleanly into independent lenses:
 1. **Fan out** — one agent per **in-scope** lens (see Scope above): *(a)* layout & config + TypeScript, *(b)* Lit/Web Awesome/theming/icons component patterns, *(c)* init/login gate, *(d)* performance + Lighthouse, *(e)* SEO + LLM discoverability, *(f)* testing. Each returns structured findings (`file`, `line`, `severity`, `problem`, `fix`).
@@ -62,12 +62,11 @@ Every GreyCat webapp uses the same toolchain, layout, and design tokens. Deviate
 |---------|--------|
 | Toolchain | **VitePlus** — global `vp` CLI + local `vite-plus` package; explicit `vite.config.ts`, **no plugin** |
 | Pages | **MPA** — each route is a real HTML page under `frontend/routes/`; URL == file path, no SPA router |
-| Components | **Lit** in **light DOM** — one root element per route, a component only for views reused across routes; `@customElement('app-…')` |
+| Components | **Lit** in **shadow DOM** (the Lit default) — one root element per route, a component only for views reused across routes; each owns its styles in a `static styles` block; `@customElement('app-…')` |
 | Language | **TypeScript** — `experimentalDecorators: true`, `useDefineForClassFields: false`, `moduleResolution: "bundler"` |
-| UI kit (atomics) | **Web Awesome** (`wa-*`) — button, input, dialog, tabs, tooltip, date-picker |
-| UI kit (rich) | **`@greycat/web`** (`gui-*`) — tables, charts, maps, `gui-object` form generator, sign-in |
-| Theme | **`greycat.css`** (a Web Awesome theme, dark by default) + **`frontend/theme.css`** (the `--app-*` tokens + `--wa-*` re-skin), imported **after** `greycat.css` |
-| Client | **`@greycat/web` SDK** for every backend call → `greycat codegen ts` is mandatory (`project.d.ts`) |
+| UI kit | **Web Awesome** (`wa-*`) by default, or an equivalent web-component design-system library if the project has a concrete reason to pick a different one — button, input, dialog, tabs, tooltip, date-picker, and every other visual element; its own CSS custom-property tokens (`--wa-*` for Web Awesome) are the single source of truth for color, spacing, and type |
+| Theme | The chosen kit's own base stylesheet (for Web Awesome: `@awesome.me/webawesome/dist/styles/webawesome.css` — tokens + light/dark) + **`frontend/theme.css`** (the kit's token namespace, brand-overridden), imported **after** the kit's base stylesheet |
+| Client | **`@greycat/web/sdk`** for every backend call — headless, ships no components or CSS → `greycat codegen ts` is mandatory (`project.d.ts`) |
 | Icons | **lucide-static** — prebuilt SVG strings inlined via Lit `unsafeSVG`; self-hosted, `currentColor` + `aria-hidden`, no CDN fetch |
 | Package manager | **pnpm** |
 
@@ -119,43 +118,44 @@ Backend type / `@expose` changes require `greycat codegen ts` (regenerates `proj
 ```
 Enum entries are class statics built during `gc.sdk.init()` — don't touch `gc.<module>.*` at import/module-eval time, only after init resolves.
 
-### 3. Component patterns (Lit, light DOM)
+### 3. Component patterns (Lit, shadow DOM)
 - One `LitElement` per file, `@customElement('app-…')` with a consistent kebab prefix
-- **Light DOM**: `createRenderRoot() { return this; }` so `theme.css` and Web Awesome/GreyCat styles cascade in. Shadow DOM (``static styles = css`…` ``) is for distributable libraries, not app views — it hides text from crawlers and blocks the theme
-- The route's **root element owns the init/login gate** (see §4) — `gc.sdk.init()` must resolve before any typed call or `gui-*` element works
+- **Shadow DOM** (the Lit default): each component owns its layout in a `static styles` block (a `css` tagged-template literal), reading the global `--wa-*` tokens — they inherit across the shadow boundary. Don't override `createRenderRoot()` to force light DOM; only `<wa-page>` and other Web-Awesome-owned elements render in light DOM, by their own design
+- The route's **root element owns the init/login gate** (see §4) — `gc.sdk.init()` must resolve before any typed call works
 - `@property()` for public inputs, `@state()` for internal state; update reactive props, don't recreate DOM
-- Charts (`gui-*` or chart.js): instantiate after init, destroy in `disconnectedCallback`
+- Charts (chart.js or similar): instantiate after init, destroy in `disconnectedCallback`
 ```bash
-grep -rn 'createRenderRoot' frontend/ --include="*.ts" | grep -q 'return this' || echo "⚠ app components must render to light DOM (createRenderRoot(){return this})"
+grep -rn 'createRenderRoot' frontend/ --include="*.ts" && echo "⚠ overriding createRenderRoot — app components should stay in shadow DOM unless there's a concrete reason"
 ```
 
-### 3b. Web Awesome usage (`wa-*` atomics)
-- Import components **individually** for tree-shaking (`import '@awesome.me/webawesome/dist/components/button/button.js'`), never the whole bundle
-- Use Web Awesome for atomic controls (button, input, dialog, tabs, tooltip); use `@greycat/web` `gui-*` for rich/GreyCat-aware widgets
+### 3b. UI-kit usage (Web Awesome `wa-*` by default, or an equivalent kit)
+- Import components **individually** for tree-shaking (Web Awesome: `import '@awesome.me/webawesome/dist/components/button/button.js'`), never the whole bundle
+- The chosen kit supplies every visual element — atomic controls (button, input, dialog, tabs, tooltip) and full-page layout (Web Awesome's `<wa-page>` for app-shell/sidebar/header, or the equivalent in whatever kit is used). There is no separate rich-widget kit; tables/charts/maps are hand-built (chart.js, a plain table) or a third-party web component, styled with the kit's tokens
+- If the project uses a kit other than Web Awesome, confirm it's used consistently — don't mix two component libraries in the same app
 ```bash
 grep -rn "from '@awesome.me/webawesome'" frontend/ --include="*.ts" && echo "⚠ whole-bundle import — switch to per-component imports"
 ```
 
-### 3c. Theming (`greycat.css` + `frontend/theme.css`)
-- Import `@greycat/web/greycat.css` (the theme, dark by default), then `~/theme.css` **after** it so the re-skin wins the cascade
-- **Never** import Web Awesome's own `dist/styles/webawesome.css` directly alongside it — `greycat.css` bundles and re-skins those tokens; a second import double-defines `--wa-*` and fights the re-skin. (Unlike Shoelace, Web Awesome ships one base stylesheet, not separate `light.css`/`dark.css` theme files.)
-- Light/dark is class-based: `wa-light` / `wa-dark` on `<html>` (flips both `greycat.css` and the app tokens together) — there's no theme file to swap
-- No hardcoded colors/sizes in components — every value comes from an `--app-*` token in `theme.css`
+### 3c. Theming (kit base stylesheet + `frontend/theme.css`)
+- Import the kit's own base stylesheet (Web Awesome: `@awesome.me/webawesome/dist/styles/webawesome.css` — full `--wa-*` token set, light/dark out of the box), then `~/theme.css` **after** it so the brand overrides win the cascade
+- `theme.css` holds only the kit's token overrides (brand color, radius, font) plus a small page reset — component-specific rules (`.card { ... }`) belong in that component's own `static styles`, since a bare selector in `theme.css` never crosses the shadow boundary
+- Light/dark is class-based on `<html>` (Web Awesome: `wa-light` / `wa-dark`) — a single toggle switches every element and every component together
+- No hardcoded colors/sizes in components — every value comes from the kit's design token (`--wa-*` for Web Awesome), re-branded in `theme.css`
 ```bash
-grep -rnE "@awesome\.me/webawesome/dist/styles/webawesome\.css" frontend/ --include="*.ts" && echo "⚠ importing Web Awesome's own base stylesheet directly — greycat.css already provides it re-skinned, remove this import"
-grep -rnE "#[0-9a-fA-F]{3,6}\b" frontend/ --include="*.ts" | grep -v theme.css && echo "⚠ raw hex outside theme.css — use --app-* tokens"
+grep -rq "@awesome\.me/webawesome/dist/styles/webawesome\.css" frontend/ || echo "ℹ webawesome.css not imported — confirm the project's chosen UI kit's base stylesheet is imported instead"
+grep -rnE "#[0-9a-fA-F]{3,6}\b" frontend/ --include="*.ts" | grep -v theme.css && echo "⚠ raw hex outside theme.css — use the UI kit's design tokens"
 ```
 
 ### 3d. Icons (lucide-static)
 - Use **`lucide-static`** — prebuilt SVG strings inlined via Lit `unsafeSVG`. Self-hosted/bundled, **no runtime icon fetch**
 - Render with `stroke="currentColor"` + `aria-hidden="true"`; decorative icons must be `aria-hidden`, meaningful ones need an accessible label
-- Web Awesome's own built-in UI icons (chevrons in `wa-select`, etc.) still work out of the box — those default to Font Awesome and need the icon assets copied into `frontend/public/` with `setBasePath` only if you use `<wa-icon>` directly
+- The UI kit's own built-in icons (e.g. chevrons in Web Awesome's `wa-select`) still work out of the box — Web Awesome's default there is Font Awesome, and needs the icon assets copied into `frontend/public/` with `setBasePath` only if you use `<wa-icon>` directly
 ```bash
 grep -rnE "cdn|unpkg|jsdelivr|googleapis\.com/.*icon" frontend/ --include="*.ts" --include="*.html" && echo "⚠ runtime/CDN icon fetch — use lucide-static (inlined SVG) instead"
 ```
 
 ### 3e. Dependencies (on-stack + exact pins)
-- The prescribed stack (`lit`, `@awesome.me/webawesome`, `lucide-static`, `@greycat/web`, `vite-plus`, `typescript`) must be present and current. Heavy/duplicate libs (`moment`, `lodash`, `jquery`) should be replaced with native / web-component equivalents — they bloat the bundle and hurt LCP/TBT
+- The prescribed stack (`lit`, a UI kit — `@awesome.me/webawesome` by default, `lucide-static`, `@greycat/web`, `vite-plus`, `typescript`) must be present and current. Heavy/duplicate libs (`moment`, `lodash`, `jquery`) should be replaced with native / web-component equivalents — they bloat the bundle and hurt LCP/TBT
 - Pin **exact** versions (no `^`/`~`) so builds are reproducible; `@greycat/web` is a registry tarball URL, not npm
 ```bash
 grep -nE '"(moment|lodash|jquery)"' package.json && echo "⚠ heavyweight dep — prefer native / web-component equivalent"
@@ -164,21 +164,21 @@ grep -nE '"[~^]' package.json && echo "ℹ non-exact pins — pin exact latest f
 
 ### 4. Init / login gate (CRITICAL ordering)
 `gc.sdk.init()` loads the ABI over an authenticated endpoint, so it needs a session. The route's root element must:
-1. `import '@greycat/web/sdk'` (the runtime: `gc` global, `init`, typed bindings) — import once; import `gui-*` components individually, not the umbrella `@greycat/web`
+1. `import '@greycat/web/sdk'` (the runtime: `gc` global, `init`, typed bindings, nothing else — it's headless, no components, no CSS) — import once
 2. Call `gc.sdk.init()` with no args in `connectedCallback` — succeeds if a prior-login session cookie exists
 3. On throw, render a login form → `gc.sdk.init({ auth: { username, password } })` (or `{ token }`)
-4. Only after init resolves are `gc.<module>.*` calls and `gui-*` tags usable
+4. Only after init resolves are `gc.<module>.*` calls usable
 - Don't add `@permission("public")` to endpoints just to skip login in dev — that exposes them to anonymous callers
 ```bash
 grep -rq "@greycat/web/sdk" frontend/ || echo "⚠ SDK runtime not imported — expected import '@greycat/web/sdk'"
-grep -rn "from '@greycat/web'\b" frontend/ --include="*.ts" && echo "⚠ umbrella import registers every component — import gui-* individually + '@greycat/web/sdk'"
+grep -rn "from '@greycat/web'\b" frontend/ --include="*.ts" | grep -v "@greycat/web/sdk" && echo "⚠ import from something other than '@greycat/web/sdk' — the package is headless, nothing else to import"
 ```
 
 ### 5. Performance (feeds Lighthouse)
 - Update reactive properties instead of recreating DOM trees; batch imperative attribute sets
-- Use `gui-table` (virtualized) for large datasets, not manual DOM loops
+- Virtualize/paginate large lists and tables instead of manual DOM loops over thousands of rows
 - Code-split routes are natural in MPA; lazy-load heavy widgets (charts) with dynamic `import()`
-- Tree-shake Web Awesome (per-component imports); self-host icon assets (no CDN)
+- Tree-shake the UI kit (per-component imports); self-host icon assets (no CDN)
 - Defer non-critical JS, inline critical CSS, long-cache hashed assets, reserve element sizes to avoid layout shift (CLS)
 
 ### 6. Lighthouse audit (performance · SEO · accessibility · best-practices)
@@ -196,7 +196,7 @@ grep -q '"lighthouse"' package.json || echo "ℹ no lighthouse script — add mo
 Check the route `index.html` files and the built `webroot/`:
 - **Head**: `<html lang>`, unique `<title>`, `<meta name="description">`, canonical `<link rel="canonical">`, Open Graph + Twitter Card tags, `theme-color`, `<meta name="color-scheme">`, `viewport` (`width=device-width, initial-scale=1`)
 - **Responsive / mobile usability**: layout adapts from mobile to desktop (fluid grids / `clamp()` / media queries, no fixed-px page widths); tap targets ≥ 24–48px, no horizontal scroll at 360px, text readable without zoom. This is a Lighthouse SEO + best-practices signal and the mobile audit surfaces it
-- **Semantics**: landmark elements (`header`/`nav`/`main`/`article`/`footer`), correct heading order, `alt` text, ARIA labels. Light DOM (already prescribed) keeps content crawlable — good
+- **Semantics**: landmark elements (`header`/`nav`/`main`/`article`/`footer`), correct heading order, `alt` text, ARIA labels. The prescribed stack renders app content into shadow DOM (Lit's default) — this is fine for JS-executing crawlers (Googlebot renders the DOM before indexing) but a non-JS text scraper (some LLM fetchers) sees only `index.html`'s light-DOM markup. Keep page-critical text (title, headings, meta, key copy) in `index.html` itself or a light-DOM landmark, not solely inside a component's shadow root
 - **Structured data**: JSON-LD (`schema.org`) in `<head>`
 - **Machine-readable for crawlers AND LLMs**: `robots.txt`, `sitemap.xml`, a web app manifest, and **`llms.txt`** (+ optional `llms-full.txt`) — a concise Markdown index of the app's purpose, key routes, and public endpoints. Ship them via `frontend/public/` (copied to `webroot/`)
 - Descriptive link text, stable URLs (MPA gives real per-route URLs), per-route `<title>`/description
@@ -224,7 +224,7 @@ Treat any **Lighthouse category < 90** (on mobile *or* desktop) as an open cover
 Start with a one-line scope recap: lenses run, and every lens **not** run as `SKIPPED: <reason>` (argument scope, missing `lighthouse` CLI, app not served, …).
 
 Group by severity:
-- **CRITICAL**: missing init/login gate (touching `gc.<module>.*` / `gui-*` before `gc.sdk.init()` resolves), importing Web Awesome's own `dist/styles/webawesome.css` redundantly alongside `greycat.css`, Shadow DOM in app components, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + Web Awesome is the standard
-- **HIGH**: `theme.css` imported before `greycat.css`, umbrella `@greycat/web` import, whole-bundle Web Awesome import, missing route entries in `rollupOptions.input`, `@greycat/web` not pinned to a registry tarball, Lighthouse category < 90 on **mobile or desktop**, non-responsive layout, missing meta description / structured data
-- **MEDIUM**: `any` usage, hardcoded colors/sizes instead of `--app-*` tokens, stale `project.d.ts` (codegen not re-run), relative imports instead of `~`, missing `llms.txt` / sitemap / manifest, runtime/CDN asset fetch
+- **CRITICAL**: missing init/login gate (touching `gc.<module>.*` before `gc.sdk.init()` resolves), importing anything from `@greycat/web` other than `@greycat/web/sdk`, missing `experimentalDecorators`/`useDefineForClassFields`, security (raw `innerHTML`), an off-stack toolchain when VitePlus + Lit + a component UI kit is the standard
+- **HIGH**: `theme.css` imported before the UI kit's base stylesheet, whole-bundle UI-kit import, missing route entries in `rollupOptions.input`, `@greycat/web` not pinned to a registry tarball, Lighthouse category < 90 on **mobile or desktop**, non-responsive layout, missing meta description / structured data
+- **MEDIUM**: `any` usage, hardcoded colors/sizes instead of the UI kit's design tokens, stale `project.d.ts` (codegen not re-run), relative imports instead of `~`, missing `llms.txt` / sitemap / manifest, runtime/CDN asset fetch, overriding `createRenderRoot()` without a concrete reason
 - **LOW**: style inconsistency, `emptyOutDir` mismatch, missing type casts

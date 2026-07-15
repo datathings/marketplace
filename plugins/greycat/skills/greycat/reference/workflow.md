@@ -1,6 +1,6 @@
 # Working with a GreyCat project
 
-Reach for this file when the task is operational: starting a fresh project, evolving an existing one, adding an endpoint, running tests, shipping a build. The other reference files (`syntax.md`, `types.md`, `stdlib.md`, `cli.md`, `runtime.md`) cover the *what*; this one is the *how*.
+Reach for this file when the task is operational: starting a fresh project, evolving an existing one, adding an endpoint, running tests, shipping a build. The other reference files (`syntax.md`, `types.md`, `stdlib.md`, `cli.md`, `runtime.md`) cover the _what_; this one is the _how_.
 
 ## Contents
 
@@ -53,13 +53,13 @@ greycat install                 # downloads lib/std/ and bin/greycat
 The serve command prints the boot URL with the `root` user's token. Open it, then call `ping` with the token attached:
 
 ```sh
-ID="user_id" # eg. 1, 2, etc.
+NAME="user_name" # eg. alice, root, etc.
 VALIDITY="duration" # eg. 3day, 2hour, etc.
-TOKEN=$(greycat token --user=$ID --validity=$VALIDITY)
+TOKEN=$(greycat token --user=$NAME --validity=$VALIDITY)
 curl -X POST -H "Authorization: $TOKEN" "http://localhost:8080/api::ping"
 ```
 
-For a frontend-bundled project, swap `serve` for `dev` to also spawn the VitePlus watcher. See [webapp.md](webapp.md) for the one prescribed stack (VitePlus + MPA + Lit + Shoelace/GreyCat components), with `app/` sources bundled into `webroot/`.
+For a frontend-bundled project, swap `serve` for `dev` to also spawn the VitePlus watcher. See [webapp.md](webapp.md) for the one prescribed stack (VitePlus + MPA + Lit + Web Awesome `wa-*` components), with `app/` sources bundled into `webroot/`.
 
 ## The edit / install / run loop
 
@@ -183,9 +183,9 @@ function, including a stdlib static. So the blessed one-shot way to create a log
 no server and no setup wrapper needed:
 
 ```sh
-greycat run runtime::Identity::create alice user       # user "alice", role "user"
+greycat run runtime::Identity::create alice user         # user "alice", role "user"
 greycat run runtime::Identity::set_password alice s3cret
-greycat token --user=<id>                              # mint their token (id printed by create)
+greycat token --user=alice                               # mint their token
 ```
 
 Arguments after the function are JSON-parsed and bound to the parameters (see [cli.md](cli.md)), so `alice` /
@@ -212,17 +212,17 @@ The test harness in `test/server/` of this repo is a working reference.
 
 The runtime stores an ABI snapshot in `gcdata/abi` next to the program. On rebuild, the compiler diffs the new program against the snapshot and migrates compatible changes:
 
-| Change                                                  | Migrates automatically?                                  |
-| ------------------------------------------------------- | -------------------------------------------------------- |
-| Add a nullable attribute                                | Yes — existing instances read it as `null`.              |
-| Add a non-null attribute with a default                 | Yes — existing instances get the default.                |
-| Add a non-null attribute without default                | No — load fails. Provide a default or write a migration. |
-| Remove an attribute                                     | Yes — value is dropped on next save.                     |
-| Rename an attribute                                     | No — looks like remove + add.                            |
-| Change an attribute's type to a wider one (e.g. `int` → `int?`) | Yes.                                              |
-| Change an attribute's type to a narrower one            | No — load fails on a non-conforming value.                |
-| Add/remove an enum entry                                | Add: yes. Remove: only if no instance references it.     |
-| Rename a type                                           | No — looks like a new type.                              |
+| Change                                                          | Migrates automatically?                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------- |
+| Add a nullable attribute                                        | Yes — existing instances read it as `null`.              |
+| Add a non-null attribute with a default                         | Yes — existing instances get the default.                |
+| Add a non-null attribute without default                        | No — load fails. Provide a default or write a migration. |
+| Remove an attribute                                             | Yes — value is dropped on next save.                     |
+| Rename an attribute                                             | No — looks like remove + add.                            |
+| Change an attribute's type to a wider one (e.g. `int` → `int?`) | Yes.                                                     |
+| Change an attribute's type to a narrower one                    | No — load fails on a non-conforming value.               |
+| Add/remove an enum entry                                        | Add: yes. Remove: only if no instance references it.     |
+| Rename a type                                                   | No — looks like a new type.                              |
 
 When the runtime cannot migrate, it refuses to load and prints the offending shape diff. Either undo the source change, write a migration in `greycat run` mode (read the old graph, transform, save), or restore from backup.
 
@@ -252,15 +252,15 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 
 ## Common project chores
 
-| Task                                  | How                                                                              |
-| ------------------------------------- | -------------------------------------------------------------------------------- |
-| Pin a new stdlib version              | Bump `@library("std", "X.Y.Z")` in `project.gcl`, then `greycat install`.        |
-| Add a third-party library             | Add `@library("name", "version");` then `greycat install`.                       |
-| Roll back to a known graph state      | `greycat restore <archive>`. Stop the server first.                              |
-| Inspect a `.gcb` file from disk       | `greycat print path/to/file.gcb` (use `--format=json` for JSON).                  |
-| Inspect the compiled bytecode         | `greycat bytecode`.                                                              |
-| Reset everything                      | `rm -rf gcdata/ bin/ lib/` then `greycat install` + `greycat serve`. **Data loss.** |
-| Add a new user                        | `greycat run runtime::Identity::create alice admin` then `greycat token --user=<id>`. See "Creating users". |
-| See what's running                    | `Task::running()` from GCL, or hit the corresponding admin endpoint over RPC.    |
-| Cancel a stuck task                   | `Task::cancel(task_id)`.                                                         |
-| Run a one-shot migration script       | Write a function, then `greycat run my_migration_fn`.                            |
+| Task                             | How                                                                                                           |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Pin a new stdlib version         | Bump `@library("std", "X.Y.Z")` in `project.gcl`, then `greycat install`.                                     |
+| Add a third-party library        | Add `@library("name", "version");` then `greycat install`.                                                    |
+| Roll back to a known graph state | `greycat restore <archive>`. Stop the server first.                                                           |
+| Inspect a `.gcb` file from disk  | `greycat print path/to/file.gcb` (use `--format=json` for JSON).                                              |
+| Inspect the compiled bytecode    | `greycat bytecode`.                                                                                           |
+| Reset everything                 | `rm -rf gcdata/ bin/ lib/` then `greycat install` + `greycat serve`. **Data loss.**                           |
+| Add a new user                   | `greycat run runtime::Identity::create alice admin` then `greycat token --user=<name>`. See "Creating users". |
+| See what's running               | `Task::running()` from GCL, or hit the corresponding admin endpoint over RPC.                                 |
+| Cancel a stuck task              | `Task::cancel(task_id)`.                                                                                      |
+| Run a one-shot migration script  | Write a function, then `greycat run my_migration_fn`.                                                         |

@@ -18,23 +18,23 @@ The patterns that keep GreyCat code correct, and the mistakes that an agent fami
 
 ## The big "do not write this" list
 
-| Wrong                                               | Right                                        | Why                                     |
-| --------------------------------------------------- | -------------------------------------------- | --------------------------------------- |
-| `cond ? a : b`                                      | `if (cond) { a } else { b }` (statement)     | No ternary.                             |
-| `void` return type                                  | Omit `: T` clause                            | No `void` keyword.                      |
-| `new Type(...)`                                     | `Type { ... }`                               | No `new` keyword.                       |
-| `Type::new(...)`                                    | `Type { ... }`                               | No `::new()` convention.                |
-| `Array::of(1, 2)`                                   | `[1, 2]` or `Array<int> { 1, 2 }`            | No `of` helper.                         |
-| `import foo from "bar"`                             | Add `@library` / `@include` to `project.gcl` | No import statements.                   |
-| `switch (x) { case … }`                             | Chained `if`, or `type::enum_offset(x)`      | No `switch` / `match`.                  |
-| `interface Foo { ... }`                             | `abstract type Foo { ... }`                  | No `interface` keyword.                 |
-| `let x = ...`                                       | `var x = ...`                                | Only `var`.                             |
-| `const PI = 3.14`                                   | `static pi: float = 3.14;` inside a type     | No `const`; use `static` attributes.    |
-| `T extends Bound` generic                           | `<T>` (no bounds)                            | Generics are unbounded.                 |
-| `(a, b, c)` triple                                  | `Tuple<Tuple<A, B>, C>` or a custom type     | Only 2-tuples.                          |
-| `obj?.field?.method?.()` JS-style                   | `obj?.field?.method()`                       | Method call doesn't have an extra `?.`. |
-| `} ;` after a fn body                               | `}` (no trailing semicolon)                  | Lint flags this.                        |
-| `private inside_only: int;` thinking "Java private" | See `reference/annotations.md` § `private`   | `private` ≠ hidden.                     |
+| Wrong                                               | Right                                              | Why                                                           |
+| --------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `cond ? a : b`                                      | `if (cond) { a } else { b }` (statement)           | No ternary.                                                   |
+| `void` return type                                  | Omit `: T` clause                                  | No `void` keyword.                                            |
+| `new Type(...)`                                     | `Type { ... }`                                     | No `new` keyword.                                             |
+| `Type::new(...)`                                    | `Type { ... }`                                     | No `::new()` convention.                                      |
+| `Array::of(1, 2)`                                   | `[1, 2]` or `Array<int> { 1, 2 }`                  | No `of` helper.                                               |
+| `import foo from "bar"`                             | Add `@library` / `@include` to `project.gcl`       | No import statements.                                         |
+| `switch (x) { case … }`                             | Chained `if`, or `type::enum_offset(x)`            | No `switch` / `match`.                                        |
+| `interface Foo { ... }`                             | `abstract type Foo { ... }`                        | No `interface` keyword.                                       |
+| `let x = ...`                                       | `var x = ...`                                      | Only `var`.                                                   |
+| `const PI = 3.14`                                   | `static pi: float = 3.14;` inside a type           | No `const`; use `static` attributes.                          |
+| `T extends Bound` generic                           | `<T>` (no bounds)                                  | Generics are unbounded.                                       |
+| `(a, b, c)` triple                                  | `Tuple<Tuple<A, B>, C>` or a custom type           | Only 2-tuples.                                                |
+| `obj?.field?.method?.()` JS-style                   | `obj?.field?.method()`                             | Method call doesn't have an extra `?.`.                       |
+| `} ;` after a fn body                               | `}` (no trailing semicolon)                        | Lint flags this.                                              |
+| `private inside_only: int;` thinking "Java private" | See `reference/annotations.md` § `private`         | `private` ≠ hidden.                                           |
 | `idx.set(k, n)` where `n = idx.get(k)`              | mutate `n`'s fields in place; `set` only NEW nodes | Re-attaching a live node throws "object is already attached". |
 
 ## Member access — when to use `.` vs `->` vs `::`
@@ -261,7 +261,7 @@ A bare `thing as User` without an `is` check is allowed but will behave unpredic
 
 ### Permission defaults — authenticated by default, public is rare
 
-A bare `@expose` already requires the `api` permission, which is exactly what you want for almost every endpoint. **Do not** add `@permission("public")` reflexively to make a frontend work without login — that hands anonymous callers on the network the same write access as an authenticated user. `@permission("public")` is reserved for the small set of endpoints that genuinely *must* serve anonymous traffic (`Identity::login`, a no-auth health probe). When you're unsure, leave the default in place and have the frontend authenticate via `Identity::login` first. Adding `@permission("public")` to a new endpoint is a judgment call that should be made by the project owner, not the agent.
+A bare `@expose` already requires the `api` permission, which is exactly what you want for almost every endpoint. **Do not** add `@permission("public")` reflexively to make a frontend work without login — that hands anonymous callers on the network the same write access as an authenticated user. `@permission("public")` is reserved for the small set of endpoints that genuinely _must_ serve anonymous traffic (`Identity::login`, a no-auth health probe). When you're unsure, leave the default in place and have the frontend authenticate via `Identity::login` first. Adding `@permission("public")` to a new endpoint is a judgment call that should be made by the project owner, not the agent.
 
 ### Authenticated endpoint (the default)
 
@@ -272,7 +272,7 @@ fn ping(): String {
 }
 ```
 
-No `@permission` clause — calls require a valid session. The browser obtains one via `Identity::login` (cookie) or `greycat token --user=<id>` (header / query string). See [runtime.md § Identity and permissions](runtime.md).
+No `@permission` clause — calls require a valid session. The browser obtains one via `Identity::login` (cookie) or `greycat token --user=<name>` (header / query string). See [runtime.md § Identity and permissions](runtime.md).
 
 ### Per-user data (scope by caller)
 
@@ -405,7 +405,7 @@ fn put(idx: nodeIndex<String, Account>, acc: Account) {
 
 A value from `idx.get(k)`, `n.resolve()`, or a `for ... in` over a `nodeIndex` is a
 **live graph node**: assign to its fields and the change persists on commit. `set`
-*inserts* a node under a key; calling it on a node you just fetched re-attaches an
+_inserts_ a node under a key; calling it on a node you just fetched re-attaches an
 already-attached node and throws `object is already attached to another node`.
 
 ```gcl

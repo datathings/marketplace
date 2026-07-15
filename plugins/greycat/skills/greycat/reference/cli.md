@@ -35,6 +35,19 @@ This is how a project pins a specific runtime version: `@library("std", "1.2.3")
 
 ## Commands
 
+### `greycat new [name]`
+
+Scaffolds a new project. With a `name`, creates a `./<name>/` directory; without one, scaffolds into the current directory. Refuses to run when the target already contains a `project.gcl`.
+
+Writes `project.gcl` pinned to the latest `stable` `std` (resolved from `https://get.greycat.io/files/core/stable/latest`), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
+
+```sh
+greycat new my-app     # into ./my-app/
+greycat new            # into the current directory
+```
+
+Follow with `greycat install`.
+
 ### `greycat run [function]`
 
 Builds the project, then executes `function` (defaults to `main`). Each argument after `function` is JSON-parsed and bound to the matching parameter, coerced best-effort to its declared type, so primitives and complex objects both pass through. Used for one-off scripts, data processing, migrations.
@@ -62,7 +75,7 @@ Like `serve`, but auto-detects and spawns a frontend build tool in watch mode al
 
 If the watched build process exits non-zero, `greycat dev` stops the server.
 
-See [webapp.md](webapp.md) for the one prescribed webapp stack (VitePlus + MPA + Lit + Shoelace/GreyCat components, `@greycat/web` SDK): `app/` sources, `vite.config.ts` at the project root, bundle into `webroot/`.
+See [webapp.md](webapp.md) for the one prescribed webapp stack (VitePlus + MPA + Lit + Web Awesome `wa-*` components, headless `@greycat/web/sdk`): `app/` sources, `vite.config.ts` at the project root, bundle into `webroot/`.
 
 ### `greycat build`
 
@@ -138,35 +151,35 @@ Prints the version recorded in the last build (`build-version-full` includes the
 
 Options can be passed on the command line (`--name=value`) or as environment variables (`GREYCAT_NAME=value`). The env-var form is also read from a `.env` file in the current working directory at startup.
 
-| Option / env                       | Default                | Applies to                | Meaning                                                                          |
-| ---------------------------------- | ---------------------- | ------------------------- | -------------------------------------------------------------------------------- |
-| `--log` / `GREYCAT_LOG`            | `info`                 | `run`, `serve`, `dev`, …  | Log level: `none`, `error`, `warn`, `info`, `perf`, `trace`.                     |
-| `--logfile` / `GREYCAT_LOGFILE`    | `false`                | `run`, `serve`            | Mirror logs to a file (alongside stdout).                                        |
-| `--cache` / `GREYCAT_CACHE`        | 75% of host memory     | `run`, `serve`            | Worker object-cache size. Suffixes: `K`/`M`/`G`/`T` (binary), `KB`/`MB`/`GB`/`TB` (decimal), `KiB`/`MiB`/`GiB`/`TiB`. |
-| `--store` / `GREYCAT_STORE`        | 1 GB                   | `run`, `serve`            | Per-zone storage cap.                                                            |
-| `--port` / `GREYCAT_PORT`          | `8080`                 | `serve`, `dev`            | HTTP port. Set to `0` to pick a random free port (printed at startup).           |
-| `--webroot` / `GREYCAT_WEBROOT`    | `webroot`              | `serve`, `dev`            | Directory served at `/`.                                                         |
-| `--workers` / `GREYCAT_WORKERS`    | host CPU count         | `run`, `serve`, `test`    | Number of GreyCat task workers.                                                  |
-| `--http_threads`                   | `3`                    | `serve`                   | IO threads serving HTTP connections.                                             |
-| `--req_workers`                    | `2`                    | `serve`                   | Workers dedicated to handling JSON-RPC requests.                                 |
-| `--user` / `GREYCAT_USER`          | `0`                    | `run`, `serve`, `test`    | **Footgun.** Bypasses auth on every request, running it as `<id>`. Never propose this flag — use `greycat token` + a real `Authorization` header instead. See [runtime.md § the `--user=<id>` impersonation flag](runtime.md). |
-| `--validity` / `GREYCAT_VALIDITY`  | `24h`                  | `serve`, `token`          | TTL for session tokens.                                                          |
-| `--tz` / `GREYCAT_TZ`              | host TZ                | `run`, `serve`            | Default IANA timezone (e.g. `Europe/Luxembourg`).                                |
-| `--mode` / `GREYCAT_MODE`          | none                   | (global)                  | If set, runs as if the user had typed that command. Values: `serve`, `run`.      |
-| `--key` / `GREYCAT_KEY`            | none                   | `serve`                   | Path to a license / signing key.                                                 |
-| `--keysafe` / `GREYCAT_KEYSAFE`    | none                   | `serve`                   | Password for the on-disk user secret store.                                      |
-| `--unsecure` / `GREYCAT_UNSECURE`  | `false`                | `serve`                   | Allow session tokens behind a non-HTTPS reverse proxy.                           |
-| `--backup_path` / `GREYCAT_BACKUP_PATH` | `backup`         | `backup`, `restore`, `run`, `serve` | Where backups go.                                                  |
-| `--max_backup_files`               | `3`                    | `backup`, `run`, `serve`  | Max backup files retained in `backup_path`.                                      |
-| `--defrag_ratio`                   | `1.0`                  | `run`, `serve`            | Fragmentation ratio target. Negative disables auto-defrag.                       |
-| `--ca_path` / `GREYCAT_CA_PATH`    | none                   | `run`, `serve`, `test`    | Directory of extra CA certs to trust for outbound TLS.                           |
-| `--keep_alive`                     | `false`                | `serve`                   | Enable HTTP keep-alive.                                                          |
-| `--task_pool_capacity`             | `10000`                | `serve`                   | Max queued tasks.                                                                |
-| `--request_pool_capacity`          | `512`                  | `serve`                   | Max queued HTTP requests.                                                        |
-| `--request_ttl`                    | `20s`                  | `serve`                   | Force-close requests that exceed this lifetime.                                  |
-| `--force`                          | `false`                | `install`                 | Re-download even libraries already at the requested version.                     |
-| `--with=<cmd>`                     | none                   | `dev`                     | Watch-build command to spawn alongside the server.                               |
-| `--worlds` / `GREYCAT_WORLDS`      | `1`                    | `run`, `serve`            | Number of parallel graph "worlds" (branching state) — see [runtime.md § many-worlds](runtime.md). Worker count is multiplied accordingly. |
+| Option / env                            | Default            | Applies to                          | Meaning                                                                                                                                                                                                                            |
+| --------------------------------------- | ------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--log` / `GREYCAT_LOG`                 | `info`             | `run`, `serve`, `dev`, …            | Log level: `none`, `error`, `warn`, `info`, `perf`, `trace`.                                                                                                                                                                       |
+| `--logfile` / `GREYCAT_LOGFILE`         | `false`            | `run`, `serve`                      | Mirror logs to a file (alongside stdout).                                                                                                                                                                                          |
+| `--cache` / `GREYCAT_CACHE`             | 75% of host memory | `run`, `serve`                      | Worker object-cache size. Suffixes: `K`/`M`/`G`/`T` (binary), `KB`/`MB`/`GB`/`TB` (decimal), `KiB`/`MiB`/`GiB`/`TiB`.                                                                                                              |
+| `--store` / `GREYCAT_STORE`             | 1 GB               | `run`, `serve`                      | Per-zone storage cap.                                                                                                                                                                                                              |
+| `--port` / `GREYCAT_PORT`               | `8080`             | `serve`, `dev`                      | HTTP port. Set to `0` to pick a random free port (printed at startup).                                                                                                                                                             |
+| `--webroot` / `GREYCAT_WEBROOT`         | `webroot`          | `serve`, `dev`                      | Directory served at `/`.                                                                                                                                                                                                           |
+| `--workers` / `GREYCAT_WORKERS`         | host CPU count     | `run`, `serve`, `test`              | Number of GreyCat task workers.                                                                                                                                                                                                    |
+| `--http_threads`                        | `3`                | `serve`                             | IO threads serving HTTP connections.                                                                                                                                                                                               |
+| `--req_workers`                         | `2`                | `serve`                             | Workers dedicated to handling JSON-RPC requests.                                                                                                                                                                                   |
+| `--user` / `GREYCAT_USER`               | `public`           | `run`, `serve`, `test`              | **Footgun.** Bypasses auth on every request, running it as `<name>`. Never propose this flag — use `greycat token` + a real `Authorization` header instead. See [runtime.md § the `--user=<name>` impersonation flag](runtime.md). |
+| `--validity` / `GREYCAT_VALIDITY`       | `24h`              | `serve`, `token`                    | TTL for session tokens.                                                                                                                                                                                                            |
+| `--tz` / `GREYCAT_TZ`                   | host TZ            | `run`, `serve`                      | Default IANA timezone (e.g. `Europe/Luxembourg`).                                                                                                                                                                                  |
+| `--mode` / `GREYCAT_MODE`               | none               | (global)                            | If set, runs as if the user had typed that command. Values: `serve`, `run`.                                                                                                                                                        |
+| `--key` / `GREYCAT_KEY`                 | none               | `serve`                             | Path to a license / signing key.                                                                                                                                                                                                   |
+| `--keysafe` / `GREYCAT_KEYSAFE`         | none               | `serve`                             | Password for the on-disk user secret store.                                                                                                                                                                                        |
+| `--unsecure` / `GREYCAT_UNSECURE`       | `false`            | `serve`                             | Allow session tokens behind a non-HTTPS reverse proxy.                                                                                                                                                                             |
+| `--backup_path` / `GREYCAT_BACKUP_PATH` | `backup`           | `backup`, `restore`, `run`, `serve` | Where backups go.                                                                                                                                                                                                                  |
+| `--max_backup_files`                    | `3`                | `backup`, `run`, `serve`            | Max backup files retained in `backup_path`.                                                                                                                                                                                        |
+| `--defrag_ratio`                        | `1.0`              | `run`, `serve`                      | Fragmentation ratio target. Negative disables auto-defrag.                                                                                                                                                                         |
+| `--ca_path` / `GREYCAT_CA_PATH`         | none               | `run`, `serve`, `test`              | Directory of extra CA certs to trust for outbound TLS.                                                                                                                                                                             |
+| `--keep_alive`                          | `false`            | `serve`                             | Enable HTTP keep-alive.                                                                                                                                                                                                            |
+| `--task_pool_capacity`                  | `10000`            | `serve`                             | Max queued tasks.                                                                                                                                                                                                                  |
+| `--request_pool_capacity`               | `512`              | `serve`                             | Max queued HTTP requests.                                                                                                                                                                                                          |
+| `--request_ttl`                         | `20s`              | `serve`                             | Force-close requests that exceed this lifetime.                                                                                                                                                                                    |
+| `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version.                                                                                                                                                                       |
+| `--with=<cmd>`                          | none               | `dev`                               | Watch-build command to spawn alongside the server.                                                                                                                                                                                 |
+| `--worlds` / `GREYCAT_WORLDS`           | `1`                | `run`, `serve`                      | Number of parallel graph "worlds" (branching state) — see [runtime.md § many-worlds](runtime.md). Worker count is multiplied accordingly.                                                                                          |
 
 Run `greycat <command> -h` to see only the options that apply to `<command>` along with their **resolved** values (after `.env` and env-var processing) — handy for debugging configuration.
 
@@ -177,7 +190,7 @@ A short prescriptive cookbook — adapt paths/users to your project.
 ```bash
 # Local dev — auto-rebuild watcher + verbose logs.
 # The boot URL printed on first start includes a root token; copy it,
-# or run `greycat token` separately to mint one. DO NOT add --user=<id>
+# or run `greycat token` separately to mint one. DO NOT add --user=<name>
 # — that disables auth for every caller on the network. See runtime.md.
 greycat dev --log=debug
 
@@ -221,13 +234,13 @@ Precedence (lowest → highest): built-in defaults → `.env` file → process e
 
 Generated SDKs land at standard paths in the project:
 
-| Target | Output path / convention                                |
-| ------ | ------------------------------------------------------- |
-| `c`    | Header(s) under the project's CMake-controlled tree.    |
-| `ts`   | Typed client into `node_modules`-style path or `src/`. |
+| Target   | Output path / convention                                               |
+| -------- | ---------------------------------------------------------------------- |
+| `c`      | Header(s) under the project's CMake-controlled tree.                   |
+| `ts`     | Typed client into `node_modules`-style path or `src/`.                 |
 | `python` | Python module — emit looks for `python` library or `requirements.txt`. |
-| `rust` | Crate-shaped output near `Cargo.toml`.                   |
-| `java` | Maven/Gradle output near `pom.xml` / `gradle.properties`. |
+| `rust`   | Crate-shaped output near `Cargo.toml`.                                 |
+| `java`   | Maven/Gradle output near `pom.xml` / `gradle.properties`.              |
 
 Codegen reads `@expose`, `@permission`, and `@tag` from the project's compiled program. `@tag("openapi")` and `@tag("mcp")` mark functions for inclusion in the OpenAPI spec exposed at runtime and in the MCP tool list respectively.
 

@@ -56,7 +56,7 @@ Ask (AskUserQuestion):
 
 ```gcl
 fn greet(name: String?): String {
-    if (name == null) return "Hello, stranger!";
+    if (name == null) { return "Hello, stranger!"; }
     return "Hello, ${name}!";
 }
 ```
@@ -208,7 +208,7 @@ Lifecycle: `fn setup()` / `fn teardown()`.
 
 ```gcl
 var jobs = Array<Job> {};
-for (i, item in items) jobs.add(Job { function: process_fn, arguments: [item] });
+for (i, item in items) { jobs.add(Job { function: process_fn, arguments: [item] }); }
 await(jobs, MergeStrategy::strict);                  // 2nd arg required
 for (i, job in jobs) { var result = job.result() as ResultType; }
 ```
@@ -260,7 +260,7 @@ Reminder: concrete methods on `abstract type` CANNOT be overridden. Declare `abs
 
 ## Module 11: Frontend (Lit + Web Awesome + lucide-static) (35m)
 
-**Concept**: preferred GreyCat frontend = web components — **VitePlus** (`vp`) + **Lit** (light DOM) + **TypeScript** + **Web Awesome** (UI kit) + typed **`@greycat/web`** client + **lucide-static** icons (self-hosted inline SVG, no CDN), **pnpm**. Pin exact latest versions; use these native packages.
+**Concept**: preferred GreyCat frontend = web components — **VitePlus** (`vp`) + **Lit** (shadow DOM) + **TypeScript** + **Web Awesome** (UI kit, or an equivalent) + typed, headless **`@greycat/web/sdk`** client + **lucide-static** icons (self-hosted inline SVG, no CDN), **pnpm**. Pin exact latest versions; use these native packages.
 
 **Setup** (configs in root, source in `frontend/`, builds to `webroot/`):
 ```bash
@@ -271,15 +271,15 @@ greycat dev          # VitePlus build watcher + serve API/assets on :8080
 
 **A Lit component** consuming an `@expose` endpoint (from Module 6):
 ```ts
-import { LitElement, html } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import '@awesome.me/webawesome/dist/components/card/card.js';   // per-component (tree-shaking)
-import '@greycat/web/sdk';                     // `gc` global + typed bindings
+import '@greycat/web/sdk';                     // `gc` global + typed bindings — headless
 import { icon } from '~/icons';               // lucide-static, self-hosted (no CDN)
 
 @customElement('app-products')
 export class AppProducts extends LitElement {
-  createRenderRoot() { return this; }          // light DOM: theme.css cascades, content is crawlable
+  static styles = css``;                       // shadow DOM (Lit default) — reads global --wa-* tokens
   @state() private rows: gc.project.ProductView[] = [];
 
   async connectedCallback() {

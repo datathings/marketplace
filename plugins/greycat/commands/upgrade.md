@@ -103,7 +103,7 @@ See `/greycat:migrate` Operation A and D for the full safe-rollback flow.
 
 ## Frontend Step 8: package.json upgrade + fix
 
-Stack: **VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome + @greycat/web + lucide-static, pnpm.**
+Stack: **VitePlus (`vp`) + Lit (shadow DOM) + TypeScript + Web Awesome (or equivalent) + @greycat/web/sdk + lucide-static, pnpm.**
 
 If `frontend/` exists, upgrade **every** dependency to its latest published version (not just the stack below). Pin **exact latest** (no `^`/`~`). The **core** stack must stay present and current; the tooling rows are upgraded only if the project already uses them:
 
@@ -112,7 +112,7 @@ If `frontend/` exists, upgrade **every** dependency to its latest published vers
 | `lit` | web components |
 | `@awesome.me/webawesome` | UI kit (must satisfy `@greycat/web`'s peer range) |
 | `lucide-static` | icons (native, self-hosted SVG) |
-| `@greycat/web` | typed client + `gui-*` widgets (registry tarball, not npm) |
+| `@greycat/web` | typed SDK client only — headless, no components/CSS (registry tarball, not npm) |
 | `vite-plus` | build toolchain (`vp`) |
 | `typescript` | language |
 | `vitest` | frontend tests — optional, only if the project uses it |
@@ -171,7 +171,7 @@ This is a **one-time structural migration**, not a routine bump — do it once, 
    | `<sl-image-comparer>` | `<wa-comparison>` | same slots/attributes, renamed only |
 
 4. **Attribute/slot renames** (unrecognized attributes fail silently, they don't error): `help-text`→`hint` · `prefix`/`suffix` slots→`start`/`end` · `clearable`→`with-clear` · `variant="primary"`→`variant="brand"` · `outline` boolean→`appearance="outlined"` · `circle` boolean removed (icon-only auto-detected; use `pill` for a circular shape).
-5. **Theme file**: replace any `@shoelace-style/shoelace/dist/themes/(light|dark).css` import with `greycat.css` alone (it re-skins `@awesome.me/webawesome/dist/styles/webawesome.css` — don't import the base stylesheet a second time, see `/greycat:frontend` §3c). Light/dark is now the `wa-light`/`wa-dark` class on `<html>`, not a theme-file swap.
+5. **Theme file**: replace any `@shoelace-style/shoelace/dist/themes/(light|dark).css` import with `@awesome.me/webawesome/dist/styles/webawesome.css` (Web Awesome's own base stylesheet — tokens + light/dark, imported directly), then `frontend/theme.css` **after** it for brand overrides (see `/greycat:frontend` §3c). Light/dark is now the `wa-light`/`wa-dark` class on `<html>`, not a theme-file swap.
 6. **Events**: most custom events renamed `sl-*` → `wa-*` (a few, like `change`, are now native and fire without a prefix). Stale listener strings don't error, they just silently stop firing:
    ```bash
    grep -rn "addEventListener(['\"]sl-" frontend --include="*.ts" && echo "⚠ stale sl-* event listener — check the new event name"

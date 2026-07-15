@@ -16,7 +16,7 @@ Generated files:
 
 Templates: **CRUD** | **Time-series collector** | **Graph traversal** | **Custom**
 
-**Frontend stack** (for the UI component): VitePlus (`vp`) + Lit (light DOM) + TypeScript + Web Awesome (`@awesome.me/webawesome`) + `@greycat/web` + lucide-static (self-hosted inline SVG), pnpm. Pin exact latest versions; keep content accessible for LLM-friendly SEO. Lighthouse tuning is optional.
+**Frontend stack** (for the UI component): VitePlus (`vp`) + Lit (shadow DOM) + TypeScript + Web Awesome (`@awesome.me/webawesome`, or an equivalent web-component UI kit) + `@greycat/web/sdk` + lucide-static (self-hosted inline SVG), pnpm. Pin exact latest versions; keep content accessible for LLM-friendly SEO. Lighthouse tuning is optional.
 
 **One entity = sequential** (model → api → test → frontend; each step depends on the prior file) — this is the default flow. To scaffold **several entities at once**, fan out one subagent (Task) per entity — they are independent.
 
@@ -252,16 +252,20 @@ fn delete_{entity}({entity}Id: int) {
 Small **Lit** element listing the entity via the generated client, Web Awesome chrome + a lucide-static icon. Then regenerate the typed client (`greycat codegen ts`) so `gc.{snake}_api.{Entity}View` exists — codegen namespaces types by **module** (the `{snake}_api` file basename), not the entity name, same as the call on line ~269.
 
 ```ts
-import { LitElement, html } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import '@greycat/web/sdk';                        // runtime: `gc` global, init, typed bindings
+import '@greycat/web/sdk';                        // runtime: `gc` global, init, typed bindings — headless
 import '@awesome.me/webawesome/dist/components/card/card.js';
 import '@awesome.me/webawesome/dist/components/spinner/spinner.js';
 import { icon } from '~/icons';                  // lucide-static (self-hosted inline SVG, no CDN)
 
 @customElement('{snake}-table')
 export class {Entity}Table extends LitElement {
-  createRenderRoot() { return this; }            // light DOM — let theme.css cascade
+  // Shadow DOM (the Lit default) — reads the global --wa-* tokens, which inherit across the shadow boundary.
+  static styles = css`
+    table { width: 100%; border-collapse: collapse; }
+  `;
+
   @state() private rows: gc.{snake}_api.{Entity}View[] = [];   // module = file basename, matches the call below
   @state() private loading = true;
 
@@ -289,7 +293,7 @@ export class {Entity}Table extends LitElement {
 declare global { interface HTMLElementTagNameMap { '{snake}-table': {Entity}Table } }
 ```
 
-Reminders: import Web Awesome components **per-component** (tree-shaking); derive endpoint/field strings from `project.d.ts` `$fields`; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; optionally run Lighthouse after wiring the page (`pnpm lighthouse` if that script exists, else the `lighthouse` CLI).
+Reminders: import Web Awesome components **per-component** (tree-shaking); name endpoint/field strings directly from `project.d.ts` (`gc.{snake}_api.{Entity}View`'s own field names) — don't hard-code separately; keep content semantic + accessible (`scope`, `alt`/`aria`) for SEO; optionally run Lighthouse after wiring the page (`pnpm lighthouse` if that script exists, else the `lighthouse` CLI).
 
 ---
 

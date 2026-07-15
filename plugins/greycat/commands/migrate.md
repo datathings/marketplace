@@ -73,6 +73,22 @@ Then: `greycat run migrate_add_device_priority` → set type non-nullable → `g
 3. `greycat-lang lint`
 4. Existing nodes still hold old data — harmless but wastes space; consider `greycat defrag` or full reset
 
+### A.5 Change field type — widen vs narrow
+```
+  • Widen (e.g. int → int?, int → float) → auto-migrates.
+  • Narrow (e.g. int? → int, float → int) → load FAILS on any non-conforming existing value.
+```
+- **Widening** (nullable, or a type that can represent every prior value) is safe — edit the field's type and rebuild.
+- **Narrowing** requires a migration: write a `greycat run` script that reads every instance under the old (wider) shape, validates/coerces each value, then rebuild with the narrower type. If any value can't be coerced, the load fails — fix the data first or keep the field nullable.
+- Options mirror A.3: **A) widen only if safe (recommended)**, **B) narrow via a validated migration script**, **C) dev reset**, **D) cancel**.
+
+### A.6 Rename field — NOT automatic
+The runtime cannot distinguish a rename from a remove + add — it sees the old attribute disappear and a new one appear, and treats them independently (old data is dropped, new field starts empty/default).
+1. Add the new field (nullable or with a default, per A.3)
+2. Write a migration (`greycat run`) that copies `old->old_field` into `old->new_field` for every existing instance
+3. Remove the old field (A.4) only after the migration has run and been verified
+4. `greycat-lang lint`
+
 ---
 
 ## Operation B: Data Migration
@@ -144,7 +160,7 @@ fn import_devices_from_csv() {
   info("Done: ${count} imported, ${errors} errors");
 }
 ```
-(Schema inference on an unfamiliar file: `Csv::analyze([path], fmt)` → `Csv::generate(stats)`, or `Csv::sample([path], fmt, 1000)` to peek the first rows into a `Table`.)
+(Schema inference on an unfamiliar file: `Csv::analyze([path], null)` → `Csv::generate(stats)` to infer types, or `Csv::sample(reader, 1000)` — given an already-constructed `CsvReader` — to peek the first rows into a `Table`.)
 
 ### C.1b ⚠ Re-Import discipline — UPSERT, never duplicate
 
@@ -164,7 +180,7 @@ fn import_devices(rows: Array<DeviceRow>) {
   for (i, row in rows) {
     var existing = prev.get(row.id);
     if (existing != null) {
-      existing->name = row.name; existing->lat = row.lat;   // mutate the resolved payload in place
+      existing->name = row.name; existing->location = row.location;   // mutate the resolved payload in place
       devices_by_id.set(row.id, existing);                  // re-point the fresh index at the same node
     } else {
       devices_by_id.set(row.id, node<Device>{ ... });
@@ -271,4 +287,4 @@ systemctl start greycat
 
 - Backup before risky ops; batch large migrations and log progress every N rows.
 - Dev: may delete `gcdata`; Prod: rotate `gcdata`, never delete (see D.5).
-- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the frontend (VitePlus (vp) + Lit (light DOM) + TypeScript + Web Awesome + @greycat/web + lucide-static, pnpm) so types stay in sync; if payload shapes changed, re-audit with `pnpm lighthouse:ci` (that script if present, else the `lighthouse` CLI).
+- **Frontend ripple**: schema/`…View` changes invalidate the generated client — after a migration run `greycat codegen ts` (regenerate `project.d.ts`) and rebuild the frontend (VitePlus (vp) + Lit (shadow DOM) + TypeScript + Web Awesome (or equivalent) + @greycat/web/sdk + lucide-static, pnpm) so types stay in sync; if payload shapes changed, re-audit with `pnpm lighthouse:ci` (that script if present, else the `lighthouse` CLI).
