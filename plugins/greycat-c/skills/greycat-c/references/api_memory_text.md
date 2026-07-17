@@ -546,16 +546,16 @@ gc_object__un_mark(text, ctx);
 <a id="gcstring-h"></a>
 ## gc/string.h — String Objects
 
-Heap-allocated, hash-cached strings. GreyCat strings are immutable objects with a flexible array member for the character data.
+Immutable, length-prefixed UTF-8 strings — the runtime backing for GreyCat's `String`. The character data is a flexible array member allocated inline with the object (a string is one contiguous allocation of `offsetof(gc_string_t, buffer) + size + 1` bytes), and a NUL is always appended after `size` bytes, so `buffer` doubles as a valid C string. A string may be an ordinary heap value or, when interned as a program symbol (a "literal"), a shared instance owned by the program's stub block — see `gc_string__is_lit`.
 
 ### Structure
 
 ```c
 typedef struct {
-    gc_object_t header;  // Object header
-    u32_t size;          // String length in bytes (not including null terminator)
-    u64_t hash;          // Precomputed hash value (0 = not yet computed)
-    char buffer[];       // Flexible array member holding the string bytes
+    gc_object_t header;  // Object header (must be first field; string casts to/from gc_object_t*)
+    u32_t size;          // Byte length of the content, excluding the trailing '\0'
+    u64_t hash;          // Cached FNV-1a hash of the content, or 0 if not yet computed
+    char buffer[];       // Inline, NUL-terminated character data; size + 1 bytes. Never a separate allocation.
 } gc_string_t;
 ```
 
@@ -563,13 +563,13 @@ typedef struct {
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_string__create_from` | `gc_string_t *gc_string__create_from(const char *str, u64_t len, const gc_machine_t *ctx)` | Create a new string from a raw buffer and length (allocated via the call's allocator). |
-| `gc_string__create_concat` | `gc_string_t *gc_string__create_concat(const char *str, u64_t len, const char *str2, u64_t len2, const gc_machine_t *ctx)` | Create a new string by concatenating two raw buffers. |
-| `gc_string__is_lit` | `bool gc_string__is_lit(const gc_string_t *str)` | Returns `true` if the string is a literal symbol (interned in the program's symbol table, not heap-allocated). |
-| `gc_string__hash` | `u64_t gc_string__hash(const char *str, u32_t len)` | Compute hash of a raw character buffer. |
-| `gc_string__create_from_or_symbol` | `gc_string_t *gc_string__create_from_or_symbol(const gc_program_t *prog, const char *str, u64_t len, const gc_machine_t *ctx)` | Lookup the string in the program's symbol table; return the interned symbol if found, otherwise allocate a new string via the call's allocator. |
+| `gc_string__create_from` | `gc_string_t *gc_string__create_from(const char *str, u64_t len, const gc_machine_t *ctx)` | Allocate a new string copying `len` bytes from `str` (a NUL is always appended). `str` may be null when `len` is 0. Result is a standalone, marked heap value. |
+| `gc_string__create_concat` | `gc_string_t *gc_string__create_concat(const char *str, u64_t len, const char *str2, u64_t len2, const gc_machine_t *ctx)` | Allocate a new string holding `str[0..len) ++ str2[0..len2)` (a NUL is always appended). Result is a standalone, marked heap value. |
+| `gc_string__is_lit` | `bool gc_string__is_lit(const gc_string_t *str)` | Returns `true` if the string is an interned program symbol (owned by the program's stub block, shared and never individually finalized), `false` for an ordinary heap string. |
+| `gc_string__hash` | `u64_t gc_string__hash(const char *str, u32_t len)` | Compute the FNV-1a 64-bit hash of `str[0..len)`. Stateless — does not read or update `gc_string_t.hash`. |
+| `gc_string__create_from_or_symbol` | `gc_string_t *gc_string__create_from_or_symbol(const gc_program_t *prog, const char *str, u64_t len, const gc_machine_t *ctx)` | Return the shared program symbol matching `str[0..len)` if one exists; otherwise allocate a fresh heap string via `gc_string__create_from`. Prefer this over `gc_string__create_from` to deduplicate against known literals. |
 
-> Note: `gc_string_t.buffer` is NOT null-terminated. Use the `size` field for length.
+> Note: `gc_string_t.buffer` IS NUL-terminated (`size + 1` bytes are always allocated and the trailing byte is always `'\0'`), but `size` excludes that terminator — use `size` for the content length, and the buffer can still be passed directly to C string functions.
 
 ### Usage Examples
 
@@ -638,7 +638,7 @@ gc_object__un_mark((gc_object_t *) p2, ctx);
 
 **Reading fields, hashing, and detecting interned literals**
 
-Access content through the `buffer`/`size` fields directly (the buffer is NOT null-terminated). `gc_string__hash` computes the same hash GreyCat caches in `gc_string_t.hash`, and `gc_string__is_lit` tells you whether a string is an interned symbol (backed by the program) rather than a heap object — useful before deciding whether you may free or must copy it.
+Access content through the `buffer`/`size` fields directly (`buffer` is always NUL-terminated at `buffer[size]`, but `size` is still the authoritative content length — never call `strlen` on it). `gc_string__hash` computes the same hash GreyCat caches in `gc_string_t.hash`, and `gc_string__is_lit` tells you whether a string is an interned symbol (backed by the program) rather than a heap object — useful before deciding whether you may free or must copy it.
 
 ```c
 // lazily fill the cached hash from the raw bytes (core/src/type.c)

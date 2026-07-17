@@ -679,18 +679,14 @@ void my_function(gc_machine_t *ctx) {
     const char *data = str->buffer;
     u32_t length = str->size;
 
-    // Use with C functions (string is NOT null-terminated by default)
-    // Option 1: Use length-aware functions
-    memcpy(dest, str->buffer, str->size);
+    // gc_string_t.buffer is always NUL-terminated at buffer[size] (size + 1 bytes
+    // are allocated), so it can be passed directly to C string functions that expect
+    // a NUL-terminated input — no copy needed just for that.
+    size_t n = strlen(str->buffer);   // safe: buffer[size] == '\0'
 
-    // Option 2: Create null-terminated copy on the per-call allocator
-    gc_allocator_t *a = gc_machine__allocator(ctx);   // equivalent to ((gc_ctx_t *)ctx)->allocator
-    size_t n = str->size + 1;
-    char *cstr = (char *)gc_alloc__malloc(a, n);
-    memcpy(cstr, str->buffer, str->size);
-    cstr[str->size] = '\0';
-    // ... use cstr ...
-    gc_alloc__free(a, cstr, n);
+    // Still prefer length-aware functions (memcpy, not strcpy) when the content may
+    // contain embedded NUL bytes (binary/UTF-8 data) — `size` is the authoritative length.
+    memcpy(dest, str->buffer, str->size);
 }
 ```
 
