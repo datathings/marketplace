@@ -466,7 +466,7 @@ void gc_core_tensor__set_2d_f32(tensor, row, col, value, ctx);
 // ... same pattern for all types and dimensions
 ```
 
-**Add** — Atomically add a value at the given position and return the new value:
+**Add** — Add a value into the element at the given position and return the new value. This is a plain in-place read-modify-write (`data[offset] += value`), **not** atomic — guard it yourself if two threads can touch the same tensor:
 
 ```c
 // Pattern: gc_core_tensor__add_{dim}d_{type}(tensor, ...indices, value, ctx) -> new_value
