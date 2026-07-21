@@ -5,7 +5,7 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.1** (headers re-verified 2026-07-20: no upstream header changes since the 2026-07-18 pass; corrected a stale claim that `gc_core_tensor__add_*` is atomic — it is a plain in-place read-modify-write).
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.1** (headers re-verified 2026-07-21: no upstream header changes since the 2026-07-13 commit; corrected a stale claim that `gc_core_tensor__add_*` is atomic — it is a plain in-place read-modify-write).
 
 ## Key Considerations
 

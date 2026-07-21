@@ -65,14 +65,14 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (310 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (311 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (241 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (419 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (412 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 199 active functions (b9870) across 6 organized files
+**Total:** 199 active functions (b10075) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,7 +148,7 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,270 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,271 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
@@ -157,11 +157,17 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,615 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b9870
+## What's New in b10075
 
-**b9870** adds two model file-type (quantization) introspection helpers (b9859→b9870 header change, PR #25134):
+**b10075** (~205 commits since b9870) touches the public C API in exactly one place — everything else in that
+range (new Hy3/hy_v3 model + MTP speculative decoding, server `reasoning_budget_tokens`, mtmd NUL-truncation
+fix, deepseek-ocr v1 multi-tile, `/responses` streaming timings, etc.) is internal/server-side and does not
+change `llama.h`:
 
-**New functions:**
+**New enum value:**
+- `LLAMA_FTYPE_MOSTLY_Q2_0 = 41` — new Q2_0 quantization type (CPU backend), PR #24448.
+
+**Recent (added in b9859→b9870, PR #25134):**
 - `llama_model_ftype()` — returns the model's file type as an `enum llama_ftype` (e.g. `LLAMA_FTYPE_MOSTLY_Q8_0`).
 - `llama_ftype_name()` — converts an `enum llama_ftype` to a human-readable string (e.g. `"Q8_0"`, `"Q4_K - Medium"`). Pair the two to display a loaded model's quantization.
 

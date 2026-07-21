@@ -296,6 +296,7 @@ typedef struct llama_model_quantize_params {
 LLAMA_FTYPE_MOSTLY_MXFP4_MOE = 38  // MXFP4 MOE quantization (except 1d tensors)
 LLAMA_FTYPE_MOSTLY_NVFP4     = 39  // NVFP4 quantization (except 1d tensors)
 LLAMA_FTYPE_MOSTLY_Q1_0      = 40  // Q1_0 quantization (except 1d tensors)
+LLAMA_FTYPE_MOSTLY_Q2_0      = 41  // Q2_0 quantization (except 1d tensors), CPU backend
 
 // New split mode
 LLAMA_SPLIT_MODE_TENSOR = 3    // Backend-agnostic tensor parallelism

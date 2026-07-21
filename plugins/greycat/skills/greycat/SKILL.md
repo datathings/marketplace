@@ -9,6 +9,8 @@ GreyCat is **one language and one runtime in one binary**. A project lives in a 
 
 `.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@library` / `@include` pragmas (which **must** appear in that file only) form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat-lang`.
 
+Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with an `@library` pragma and `greycat install`.
+
 ## Anti-hallucination rule
 
 GreyCat is **not** Java, Rust, Kotlin, Python, or TypeScript. It has its own conventions and a small grammar. Before writing GCL by analogy to another language, check [`reference/idioms.md`](reference/idioms.md) — most "obvious" guesses are wrong (no `new`, no ternary, no `switch`, no `import`, `private` ≠ "hidden", `->` ≠ `.`, etc.).
@@ -30,6 +32,7 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 **Tooling / project / runtime:**
 
 - **[reference/project.md](reference/project.md)** — Project model: entrypoint, `@library` / `@include` resolution, `lib/<name>/` layout, FQN, multi-project workspaces.
+- **[reference/libraries.md](reference/libraries.md)** — Catalog of publishable **domain libraries** (`kafka`, `mqtt`, `opcua`, `sql`, `ai`, `algebra`, `text_search`, ...) with what each pulls in, plus how to discover a library's latest version. Check here before hand-rolling a domain integration.
 - **[reference/cli.md](reference/cli.md)** — `greycat` CLI: every command (`run`, `serve`, `dev`, `build`, `test`, `install`, `codegen`, `user`, `backup`, `restore`, …), every option, the `.env` file.
 - **[reference/lang.md](reference/lang.md)** — `greycat-lang` CLI: `lint`, `fmt`, LSP `server`, debug dumps. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)** — What's alive in a running server: the graph store (`gcdata/`), workers and tasks, the HTTP server (JSON-RPC / path-RPC / `/files` / `webroot`), identity and permissions, the scheduler, backups, logging.
