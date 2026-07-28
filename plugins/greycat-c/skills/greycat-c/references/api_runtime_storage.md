@@ -809,7 +809,7 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 |----------|-----------|-------------|
 | `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to its stored slot value. Writes the resolved type to `*result_type`. Marks the value if it is an object (caller must `gc_object__un_mark` it). This is the plain-`node<T>` dereference, and also the per-entry resolve used by every variant. |
 | `gc_machine_native__node_set_at` | `void gc_machine_native__node_set_at(u64_t node_ref, gc_slot_t key_value, gc_type_t key_type, bool add_semantic, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert/update the entry identified by the typed `key_value` on `node_ref`. When `add_semantic` is `true` the key is treated as an append/auto position (e.g. `nodeList.add`). Used by `setAt`/`set`/`add` on every variant. |
-| `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, gc_machine_t *ctx)` | **Exact-key** read of a single entry (`key`/`value`/types/node type) from `node_ref`. `key` is the already-encoded raw `u64_t` (see encoding table). Returns a null single if no entry matches exactly. Backs `nodeTime.getAt`, `nodeList.get`, `nodeGeo.get`. |
+| `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, u32_t expected_type_id, gc_machine_t *ctx)` | **Exact-key** read of a single entry (`key`/`value`/types/node type) from `node_ref`. `key` is the already-encoded raw `u64_t` (see encoding table). `expected_type_id` is the node variant the caller expects (`gc_core_nodeTime`, `gc_core_nodeList`, `gc_core_nodeGeo`, `gc_core_nodeIndex`, `gc_core_node` — `extern u32_t` symbols from the generated `nativegen.h`); see *Type-id guard* below. Returns a null single if no entry matches exactly. Backs `nodeTime.getAt`, `nodeList.get`, `nodeGeo.get`. |
 | `gc_node_single_value__clear` | `void gc_node_single_value__clear(gc_node_single_value_t *value, gc_machine_t *ctx)` | Release/unmark the contents of a `gc_node_single_value_t` returned by `gc_machine_native__node_get` (and the internal `node_first`/`node_last`/`node_resolve`). **Always call this** on the returned single once you have consumed its slots, or object values leak a GC mark. |
 
 ### Key encoding per variant
@@ -822,7 +822,9 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 | `nodeTime` | `time` (µs since epoch) | `(u64_t)(time + INT64_MIN)` — same offset-binary on the timestamp; `nodeTime.resolve()` uses the ambient `ctx->current_time_offset` |
 | `nodeGeo` | `geo` (geohash/Morton code) | the `geo` value used directly as `.u64` (already an unsigned, order-preserving code) |
 | `node` | none (single slot) | n/a — a plain `node<T>` holds one value; use `gc_node__resolve` to dereference it (there is no per-key `node_get`) |
-| `nodeIndex` | typed / multi-field key | not a flat `u64_t` — `nodeIndex` has no public per-key `node_get`; writes still use `node_set_at` |
+| `nodeIndex` | typed / multi-field key | usually not a flat `u64_t`, so `node_set_at` (typed key slot) is the normal path; the one exception is a `nodeIndex` keyed by a node, where the key node's own `u64_t` ref is passed straight through (this is how the runtime's vector index reads its values) |
+
+> **Type-id guard (8.1).** `gc_machine_native__node_get` takes an `expected_type_id` and refuses to read a block of any other type. The check is `gc_program__is_type(prog, block->type, expected_type_id)`, so declared subtypes pass. On mismatch — or on an unresolvable block id — the call sets a runtime error on `ctx` (`"resolved block <id> is of type 'X' while 'Y' was expected"`) and returns a null single, guarding against type confusion from a forged or stale `node_ref`. Pass the `gc_core_*` id matching the variant you were handed; the runtime's own wrappers pass `gc_core_nodeTime` / `gc_core_nodeList` / `gc_core_nodeGeo` / `gc_core_nodeIndex`. Always check `ctx` for a runtime error after the call when the `node_ref` came from untrusted input.
 
 > **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — plus broader range helpers (first / last / size / range-size / remove) are powered by internal *floor* lookups declared in the runtime's internal `machine.h`, **not** in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The four functions documented above are the publicly exported, uniform-across-variants surface.
 
@@ -866,14 +868,14 @@ for (u32_t i = 0; i < param->size; i++) {
 
 #### Exact-key read with `gc_machine_native__node_get` + `gc_node_single_value__clear`
 
-`node_get` takes the **raw** `u64_t` key (already encoded per variant — see the encoding table above) and returns a `gc_node_single_value_t`. Always pair it with `gc_node_single_value__clear` to release any object slots it holds. For `nodeList` / `nodeTime` the index/timestamp is converted to offset-binary with `+ INT64_MIN`:
+`node_get` takes the **raw** `u64_t` key (already encoded per variant — see the encoding table above), the `expected_type_id` of the variant, and returns a `gc_node_single_value_t`. Always pair it with `gc_node_single_value__clear` to release any object slots it holds. For `nodeList` / `nodeTime` the index/timestamp is converted to offset-binary with `+ INT64_MIN`:
 
 ```c
 // nodeList.get(index) — offset-binary encode the signed int index
 const u64_t node_ref = gc_machine__this(ctx).u64;
 const u64_t to_get_key = ((u64_t) gc_machine__get_param(ctx, 0).i64 + INT64_MIN); // index param
 
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, ctx);
+gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeList, ctx);
 gc_machine__set_result(ctx, single.value, single.value_type);
 gc_node_single_value__clear(&single, ctx); // mandatory: frees marked object values/keys
 ```
@@ -883,7 +885,7 @@ gc_node_single_value__clear(&single, ctx); // mandatory: frees marked object val
 const u64_t node_ref = gc_machine__this(ctx).u64;
 const u64_t to_get_key = ((u64_t) gc_machine__get_param(ctx, 0).i64 + INT64_MIN); // exactTime param
 
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, ctx);
+gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeTime, ctx);
 gc_machine__set_result(ctx, single.value, single.value_type);
 gc_node_single_value__clear(&single, ctx);
 ```
@@ -893,7 +895,7 @@ A `nodeGeo` lookup uses the `geo` code directly as the `.u64` key (no offset shi
 ```c
 // nodeGeo.get(geo) — geohash/Morton code is already an order-preserving unsigned key
 const u64_t to_get_key = key.u64;
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, ctx);
+gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeGeo, ctx);
 gc_machine__set_result(ctx, single.value, single.value_type);
 gc_node_single_value__clear(&single, ctx);
 ```

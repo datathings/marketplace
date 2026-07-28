@@ -359,6 +359,17 @@ These are `static inline` functions for zero-overhead binary serialization. Call
 | `gc_buffer_read_vu64` | Variable-length `u64_t` |
 | `gc_buffer_read_vu64_size_checked` | Like `gc_buffer_read_vu64` but returns `false` on buffer overflow |
 | `gc_buffer_read_vi64` | Variable-length zig-zag `i64_t` |
+| `gc_buffer_read_vi64_size_checked` | Like `gc_buffer_read_vi64` but returns `false` on buffer overflow (decodes via `gc_buffer_read_vu64_size_checked`, then zig-zag: `(i64_t)((u >> 1) ^ -(u & 1))`) |
+
+**Varint sizing constant:**
+
+```c
+// Worst-case wire size of a variable-length u64: 8 continuation bytes carrying 7 bits each,
+// then a final unmasked byte carrying the top 8 bits (8 * 7 + 8 = 64).
+#define GC_VU64_MAX_BYTES 9UL
+```
+
+Use it to size length-prefix reservations and `pread` margins so `gc_buffer_read_vu64_size_checked()` can always decode the prefix.
 
 **Raw pointer read/write macros:**
 
@@ -373,6 +384,8 @@ gc_buffer_write_ptr(buf, value, len)    // memcpy from value to buffer cursor (N
 // Returns true if reading `len` bytes at `current` would exceed `size`
 static inline bool gc_buffer_unavailable(gc_buffer_t *buf_ptr, u64_t len);
 ```
+
+It computes in **offset space** (`consumed = current - data`, then `consumed + len > size`) rather than `current + len`, which could overflow the pointer when `len` is an attacker-controlled length read from the input and wrongly report "available". It also fails closed — returning `true` — when `data` or `current` is `NULL`, or when `current` has underflowed below `data`.
 
 ### Non-Inline Write Functions
 
@@ -525,7 +538,16 @@ if (!gc_buffer_read_vu32_size_checked(in_buf, &count)) {
 }
 ```
 
-The `u64_t` counterpart `gc_buffer_read_vu64_size_checked` follows the same contract for wider varints.
+The `u64_t` counterpart `gc_buffer_read_vu64_size_checked` follows the same contract for wider varints, and `gc_buffer_read_vi64_size_checked` adds the zig-zag decode for signed values:
+
+```c
+i64_t delta = 0;
+if (!gc_buffer_read_vi64_size_checked(in_buf, &delta)) {
+    return false;                      // overran the buffer
+}
+```
+
+When you must reserve room for a varint length prefix before knowing its value, size the reservation with `GC_VU64_MAX_BYTES` (9) so the checked reader can always decode it.
 
 #### Serializing a slot to JSON
 
