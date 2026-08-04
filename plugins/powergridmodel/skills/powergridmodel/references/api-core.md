@@ -307,6 +307,8 @@ from power_grid_model.utils import (
 | `get_dataset_batch_size(dataset)` | Return number of scenarios in a batch |
 | `get_component_batch_size(data_array)` | Return number of scenarios for a single component's batch data |
 
+**Known limitation:** very large datasets can trigger a `bad_alloc`-wrapped `PowerGridError` during (de)serialization due to memory/contiguity limits.
+
 ---
 
 ## Stream serialization

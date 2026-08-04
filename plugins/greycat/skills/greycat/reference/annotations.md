@@ -408,4 +408,4 @@ Several lint rules are tied to annotations:
 - `@expose` keeps a decl alive — the `unused-fn` lint doesn't fire on exposed functions.
 - `@permission("name")` without a corresponding `@permission(...)` module pragma declaring that name fires an unknown-permission lint.
 
-Run `greycat-lang lint --list-rules` to see the current set.
+Run `greycat lint --list-rules` to see the current set.

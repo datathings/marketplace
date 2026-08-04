@@ -257,6 +257,7 @@ Lazy grammar sampler (triggers based on patterns or tokens).
 
 ```c
 struct llama_sampler * llama_sampler_init_penalties(
+    int32_t n_vocab,
     int32_t penalty_last_n,
     float penalty_repeat,
     float penalty_freq,
@@ -265,10 +266,11 @@ struct llama_sampler * llama_sampler_init_penalties(
 Apply repetition penalties. **Note:** Avoid using on full vocabulary (slow). Apply top-k or top-p first.
 
 **Parameters:**
+- `n_vocab`: Vocabulary size, e.g. `llama_vocab_n_tokens(vocab)`
 - `penalty_last_n`: Last n tokens to penalize (0 = disabled, -1 = context size)
-- `penalty_repeat`: Repeat penalty (1.0 = disabled)
-- `penalty_freq`: Frequency penalty (0.0 = disabled)
-- `penalty_present`: Presence penalty (0.0 = disabled)
+- `penalty_repeat`: Repeat penalty (must be > 0.0, 1.0 = disabled)
+- `penalty_freq`: Frequency penalty (must be finite, 0.0 = disabled)
+- `penalty_present`: Presence penalty (must be finite, 0.0 = disabled)
 
 #### DRY Sampler
 

@@ -71,6 +71,8 @@ else:
 - `calculation_type: CalculationType | None`
 - `symmetric: bool`
 
+**Since v1.13.107:** if `update_data` references a component type entirely absent from `input_data`, this correctly raises `InvalidIdError` per scenario instead of crashing with an unhandled `KeyError`. Zero-width component entries in a scenario's update data (0 rows) are now treated as a no-op rather than an error.
+
 **Example:**
 ```python
 from power_grid_model.validation import validate_batch_data
@@ -208,7 +210,7 @@ print(errors_to_string(errors, name="my grid", details=True))
 | `NotBooleanError` | `status`, `from_status`, `to_status` not 0 or 1 |
 | `InvalidIdError` | `from_node`, `to_node`, etc. refer to non-existent or wrong-type component |
 | `IdNotInDatasetError` | Update data references an ID not present in input data |
-| `SameValueError` | Two fields have equal values where they should differ (e.g. `from_node == to_node`) |
+| `SameValueError` | Two fields have equal values where they should differ (e.g. `node_1`/`node_2`/`node_3` on a `three_winding_transformer`). Since v1.13.107, 2-node branches (`line`, `link`, `transformer`, `generic_branch`, `asym_line`) may have `from_node == to_node` (self-loop) — this is no longer flagged. |
 | `TwoValuesZeroError` | Two fields are both zero where at least one must be nonzero (e.g. `r1` and `x1`) |
 | `InfinityError` | A field contains infinite values |
 | `TransformerClockError` | Invalid clock number for given winding types |

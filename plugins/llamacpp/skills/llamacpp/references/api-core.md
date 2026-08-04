@@ -241,6 +241,38 @@ Free a loaded model. Always call this when done with a model.
 llama_model_free(model);
 ```
 
+### Load Mode
+
+```c
+enum llama_load_mode {
+    LLAMA_LOAD_MODE_NONE       = 0, // no special loading mode
+    LLAMA_LOAD_MODE_MMAP       = 1, // memory map the model
+    LLAMA_LOAD_MODE_MLOCK      = 2, // force system to keep model in RAM rather than swapping or compressing
+    LLAMA_LOAD_MODE_MMAP_MLOCK = 3, // mmap + force system to keep model in RAM rather than swapping or compressing
+    LLAMA_LOAD_MODE_DIRECT_IO  = 4, // use direct I/O if available
+};
+```
+Controls how the model file is loaded into memory. Set via `llama_model_params.load_mode` (replaces the removed `use_mmap`, `use_direct_io`, and `use_mlock` boolean fields).
+
+### llama_load_mode_name
+```c
+const char * llama_load_mode_name(enum llama_load_mode load_mode);
+```
+Get the human-readable name of a load mode.
+
+### llama_load_mode_from_str
+```c
+enum llama_load_mode llama_load_mode_from_str(const char * str);
+```
+Parse a load mode from its string name.
+
+**Usage:**
+```c
+struct llama_model_params params = llama_model_default_params();
+params.load_mode = LLAMA_LOAD_MODE_MMAP;
+struct llama_model * model = llama_model_load_from_file("model.gguf", params);
+```
+
 ### llama_model_quantize
 ```c
 uint32_t llama_model_quantize(

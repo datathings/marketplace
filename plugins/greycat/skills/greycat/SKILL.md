@@ -7,7 +7,7 @@ description: Build, run, and edit GreyCat projects. GreyCat is a statically-type
 
 GreyCat is **one language and one runtime in one binary**. A project lives in a directory rooted at `project.gcl`. The `greycat` binary compiles it, runs it, serves it as an HTTP server, manages users, and stores its state in `gcdata/`. There is no separate database, queue, or web server.
 
-`.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@library` / `@include` pragmas (which **must** appear in that file only) form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat-lang`.
+`.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@library` / `@include` pragmas (which **must** appear in that file only) form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat lint` and formatted by `greycat fmt`.
 
 Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with an `@library` pragma and `greycat install`.
 
@@ -34,10 +34,10 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 - **[reference/project.md](reference/project.md)** — Project model: entrypoint, `@library` / `@include` resolution, `lib/<name>/` layout, FQN, multi-project workspaces.
 - **[reference/libraries.md](reference/libraries.md)** — Catalog of publishable **domain libraries** (`kafka`, `mqtt`, `opcua`, `sql`, `ai`, `algebra`, `text_search`, ...) with what each pulls in, plus how to discover a library's latest version. Check here before hand-rolling a domain integration.
 - **[reference/cli.md](reference/cli.md)** — `greycat` CLI: every command (`run`, `serve`, `dev`, `build`, `test`, `install`, `codegen`, `user`, `backup`, `restore`, …), every option, the `.env` file.
-- **[reference/lang.md](reference/lang.md)** — `greycat-lang` CLI: `lint`, `fmt`, LSP `server`, debug dumps. The pre-commit / definition-of-done tooling.
+- **[reference/lang.md](reference/lang.md)** — `greycat lint`, `greycat fmt`, `greycat lsp`: lint rules, suppression directives, formatter modes. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)** — What's alive in a running server: the graph store (`gcdata/`), workers and tasks, the HTTP server (JSON-RPC / path-RPC / `/files` / `webroot`), identity and permissions, the scheduler, backups, logging.
 - **[reference/workflow.md](reference/workflow.md)** — Operational recipes: bootstrap a project, add an endpoint, add a persisted type, write tests, evolve schemas, generate SDKs, deploy.
-- **[reference/webapp.md](reference/webapp.md)** — Bundling a webapp: the one prescribed stack (VitePlus + MPA + Lit shadow-DOM components with `static styles` + Web Awesome `wa-*` components themed by `--wa-*` tokens + `app/theme.css` brand overrides), `app/` sources bundled into `webroot/` via `greycat dev`, and calling the backend through the headless `@greycat/web/sdk` (`greycat codegen ts`).
+- **[reference/webapp.md](reference/webapp.md)** — Bundling a webapp: the one prescribed stack (VitePlus + MPA + Lit shadow-DOM components with `static styles` + Web Awesome `wa-*` components themed by `--wa-*` tokens + `app/theme.css` brand overrides — Web Awesome ships its own agent skills to load alongside this one), `app/` sources bundled into `webroot/` via `greycat dev`, and calling the backend through the headless `@greycat/web/sdk` (`greycat codegen ts`, which owns every type crossing the wire).
 - **[reference/webapp-tests.md](reference/webapp-tests.md)** — End-to-end UI testing of a webapp with Playwright: `playwright.config.ts` driving `greycat dev`, authenticate-once via `storageState`, piercing the Lit/Web Awesome shadow DOM, and isolating specs from the persistent `gcdata/` store.
 
 ## File anatomy
@@ -99,6 +99,9 @@ greycat dev         # serve + spawn a frontend watcher (vp/vite/--with=<cmd>)
 greycat run [fn]    # build + run `fn` (default: `main`). One-shot.
 greycat test        # build + run every @test function
 greycat build       # produce project.gcp (strips *_test.gcl)
+greycat lint        # static analysis of the .gcl closure (--fix applies auto-fixes)
+greycat fmt         # canonical formatting (--mode=check as a CI gate)
+greycat lsp         # language server over stdio, for editors
 greycat codegen     # generate typed client SDKs (c/ts/python/rust/java)
 greycat user list   # admin LMDB-backed user database
 greycat backup      # snapshot gcdata/ into ./backup/
@@ -467,7 +470,7 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 7. **`private` ≠ "hidden."** A `private type` is still visible across modules via its fully-qualified name; only bare-name lookup is blocked. A `private attr` is read-public, write-private. Never gate same-module access on `private`.
 8. **No imports.** Visibility comes from the project graph (`@library` / `@include`), not from `import`/`use` statements.
 9. **`as` is unchecked at runtime.** The runtime drops `as T` entirely; the lang's static check is the only safety net.
-10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat-lang` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
+10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat lint` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
 11. **Don't commit `gcdata/`, `bin/`, or `lib/`.** They are runtime / install state, not source. `gcdata/` is the durable application state — back it up but never check it in.
 12. **Default `@expose` to authenticated. `@permission("public")` requires user opt-in.** A bare `@expose` already requires the `api` permission (any authenticated caller). Reaching for `@permission("public")` because "the frontend doesn't have auth wired up yet" hands every anonymous caller on the network the same write access. Only add it when the user explicitly asks for an anonymous endpoint (typical examples: `login`, an unauthenticated health probe). If the answer is "I made it public so the demo would work," remove it and wire login instead. See [reference/idioms.md § HTTP / @expose patterns](reference/idioms.md).
 13. **Never run `greycat serve --user=<name>` / `GREYCAT_USER=<name>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<name>` to mint a short-lived token and pass it via header as `Authorization: <TOKEN>` (**no `Bearer`**) / cookie. See [reference/runtime.md § Identity and permissions](reference/runtime.md).
@@ -476,8 +479,8 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 
 When uncertain whether a construct is valid GreyCat:
 
-1. **Run `greycat-lang lint`** — fastest oracle, catches shape drift the runtime accepts silently (unused locals, non-exhaustive enum chains, redundant null-checks, `->` on non-deref receivers, …). See [reference/lang.md](reference/lang.md).
+1. **Run `greycat lint`** — fastest oracle, catches shape drift the runtime accepts silently (unused locals, non-exhaustive enum chains, redundant null-checks, `->` on non-deref receivers, …). See [reference/lang.md](reference/lang.md).
 2. Search the stdlib (`lib/std/*.gcl`) for real examples of the construct.
 3. Run `greycat run` against a minimal `project.gcl` — the runtime is the oracle for valid programs.
-   After any non-trivial `.gcl` edit, run `greycat-lang fmt --mode=check` + `greycat-lang lint` as the definition of done — `greycat build` happily produces a `.gcp` from code that still has warnings or formatting drift.
+   After any non-trivial `.gcl` edit, run `greycat fmt --mode=check` + `greycat lint` as the definition of done — `greycat build` happily produces a `.gcp` from code that still has warnings or formatting drift.
 4. If still unsure, ask. Do not assume by analogy to TypeScript / Rust / Kotlin / Java — GreyCat has its own conventions (no `new`, no ternary, `->` vs `.`, `private` semantics).

@@ -79,6 +79,8 @@ base (id)
 
 All branches have common input fields: `from_node`, `to_node`, `from_status` (0/1), `to_status` (0/1).
 
+**Since v1.13.107:** `from_node == to_node` (a self-loop) is valid for all branch types (`line`, `link`, `transformer`, `generic_branch`, `asym_line`) — the equality check was dropped from validation. `branch3` components (`three_winding_transformer`) still require `node_1`, `node_2`, `node_3` to be pairwise distinct.
+
 Common steady-state output: `p_from`, `q_from`, `i_from`, `s_from`, `p_to`, `q_to`, `i_to`, `s_to`, `loading`.
 
 Common short-circuit output: `i_from`, `i_from_angle`, `i_to`, `i_to_angle`.
@@ -140,6 +142,8 @@ PI-model branch with direct circuit parameters. Symmetric only. Supports lines a
 3- or 4-phase line with per-phase impedance matrix. Symmetric nodes required.
 
 **Input:** Resistance matrix entries `r_aa`, `r_ba`, `r_bb`, `r_ca`, `r_cb`, `r_cc` (and optionally neutral entries `r_na`...`r_nn`). Same pattern for `x_*`. Capacitance either via full matrix `c_aa`...`c_cc` or via `c0` + `c1`.
+
+**Matrix constraints (since v1.13.107):** self/diagonal terms (`r_aa`, `r_bb`, `r_cc`, `x_aa`, `x_bb`, `x_cc`, `c_aa`, `c_bb`, `c_cc`, `c0`, `c1`, and self-neutral `r_nn`, `x_nn`) must be strictly `> 0`. Mutual/off-diagonal terms (`r_ba`, `r_ca`, `r_cb`, `x_ba`, `x_ca`, `x_cb`, `c_ba`, `c_ca`, `c_cb`, and mutual-neutral `r_na`, `r_nb`, `r_nc`, `x_na`, `x_nb`, `x_nc`) now only require `>= 0` (may be zero, e.g. for decoupled/far-apart conductors). `r_nn`/`x_nn` remain strictly `> 0` (the C++ core doesn't yet support zero self-neutral impedance).
 
 ---
 

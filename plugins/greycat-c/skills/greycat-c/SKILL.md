@@ -5,7 +5,7 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.1** (headers re-verified 2026-07-28 against upstream `5749ee409`: `gc_machine_native__node_get` gained a required `expected_type_id` parameter (**breaking**), `gc/buffer.h` gained `gc_buffer_read_vi64_size_checked` and `GC_VU64_MAX_BYTES`, and `gc_buffer_unavailable` now fails closed on NULL/underflowed cursors).
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.1** (headers re-verified 2026-08-04 against upstream `78e57676d`: `gc/buffer.h`'s read side was overhauled — every unchecked inline reader (`gc_buffer_read_bool` / `_u8` / `_i8` / `_u16` / `_u32` / `_i32` / `_u64` / `_i64` / `_f32` / `_f64` / `_vu32` / `_vu64` / `_vi64`) was **removed**, replaced by `bool`-returning `_size_checked` equivalents; new `gc_buffer_read_ptr_size_checked` and `GC_VU32_MAX_BYTES`; `gc_buffer_unavailable` params are now `const`-qualified and it no longer special-cases NULL/underflowed cursors (**breaking** for any code relying on the removed void-returning readers or that fail-closed guard). `gc/table.h`'s `gc_table__init` (param renamed `table`→`self`) now leaves the table untouched on allocation failure — callers must check `self->capacity`. Full detail: [api_memory_text.md](references/api_memory_text.md), [api_collections.md](references/api_collections.md).
 
 ## Key Considerations
 

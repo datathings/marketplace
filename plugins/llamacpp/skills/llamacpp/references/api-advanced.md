@@ -359,14 +359,13 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
 - `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
 - `split_mode`: How to split the model across GPUs
+- `load_mode`: How to load the model (`enum llama_load_mode`: `LLAMA_LOAD_MODE_NONE`/`MMAP`/`MLOCK`/`MMAP_MLOCK`/`DIRECT_IO`; replaces the removed `use_mmap`/`use_direct_io`/`use_mlock` booleans — see [api-core.md](api-core.md#load-mode))
 - `vocab_only`: Only load vocabulary, no weights
-- `use_mmap`: Use mmap if possible
-- `use_direct_io`: Use direct I/O when supported (takes precedence over use_mmap)
-- `use_mlock`: Force system to keep model in RAM
 - `check_tensors`: Validate model tensor data
 - `use_extra_bufts`: Use extra buffer types (for weight repacking)
 - `no_host`: Bypass host buffer allowing extra buffers to be used
 - `no_alloc`: Only load metadata and simulate memory allocations
+- `load_mtp`: Whether to load MTP layers
 
 ### llama_context_params
 Context parameters (get defaults via `llama_context_default_params()`):

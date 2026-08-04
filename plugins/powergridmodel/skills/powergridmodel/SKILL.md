@@ -9,7 +9,7 @@ description: "Python library for steady-state distribution power system analysis
 
 `power-grid-model` is a high-performance C++ library with a Python interface for steady-state distribution power system analysis. It operates on numpy structured arrays via a dictionary-based data model and supports symmetric (single-phase equivalent) and asymmetric (full three-phase) calculations.
 
-**Version:** v1.13.106
+**Version:** v1.13.134
 **Language:** Python (C++ core)
 **License:** Mozilla Public License 2.0 (MPL-2.0)
 **Repo:** https://github.com/PowerGridModel/power-grid-model
@@ -72,6 +72,7 @@ result = model.calculate_power_flow()
 - **Automatic tap changing:** see [workflows.md](references/workflows.md#automatic-tap-changing)
 - **Source impedance sweep:** see [workflows.md](references/workflows.md#source-impedance-sweep)
 - **Validation best practices:** see [workflows.md](references/workflows.md#validation-before-calculation)
+- **Modeling components with no dedicated type** (ideal/phase-shifting transformer, grounding transformer, choke coil): see [workflows.md](references/workflows.md#modeling-non-pgm-components)
 
 ## Key Considerations
 
@@ -85,4 +86,6 @@ result = model.calculate_power_flow()
 - **Voltage regulators** regulate voltage at a node by adjusting the reactive power dispatch of connected load/gen appliances. They cannot coexist with transformer tap regulators in the same model.
 - **Deprecated (v1.13.65):** `MeasuredTerminalType.node` (value `9`, "node injection" power-sensor terminal type) emits a `DeprecationWarning` and will be removed in a future release. It does not represent a physical terminal; use one of the appliance/branch terminal types instead.
 - **Package version (since v1.13.70):** the C++ core version is exposed as `power_grid_model.__version__` (a string, derived from `PGM_version`). Use it for runtime version checks instead of relying on package metadata.
-- **Deprecated error classes (v1.13.87):** `InvalidBranch` and `InvalidBranch3` are deprecated and emit a `DeprecationWarning` on construction; they may be removed in a future release. Branches/lines whose `from_node == to_node` (a branch "into itself") are now handled by the solver core, so these errors are no longer raised by it. The Python data validator still reports `from_node == to_node` via `SameValueError`.
+- **Deprecated error classes (v1.13.87):** `InvalidBranch` and `InvalidBranch3` are deprecated and emit a `DeprecationWarning` on construction; they may be removed in a future release. Branches/lines whose `from_node == to_node` (a branch "into itself") are now handled by the solver core, so these errors are no longer raised by it.
+- **Self-looping branches allowed (since v1.13.107):** `from_node == to_node` is now valid input for `line`, `link`, `transformer`, `generic_branch`, and `asym_line` — the Python validator no longer raises `SameValueError` for it. `three_winding_transformer` (`branch3`) still requires `node_1`/`node_2`/`node_3` to be pairwise distinct.
+- **`asym_line` matrix constraints relaxed (since v1.13.107):** off-diagonal/mutual impedance and capacitance matrix entries now only require `>= 0` (previously strictly `> 0`), so decoupled/far-apart conductors can be modeled with zero mutual terms. Diagonal/self terms are still strictly `> 0`.

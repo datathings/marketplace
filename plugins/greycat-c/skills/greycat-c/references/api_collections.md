@@ -289,7 +289,7 @@ typedef struct {
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_table__create` | `gc_table_t *gc_table__create(const gc_machine_t *ctx)` | Create a new table. |
-| `gc_table__init` | `void gc_table__init(gc_table_t *table, u32_t capacity, const gc_machine_t *ctx)` | Initialize with row capacity (allocates storage via the call's allocator). |
+| `gc_table__init` | `void gc_table__init(gc_table_t *self, u32_t capacity, const gc_machine_t *ctx)` | Initialize with row capacity (allocates storage via the call's allocator). Leaves the table untouched on allocation failure — check `self->capacity` before writing (fixed in this update). |
 | `gc_table__init_cols` | `bool gc_table__init_cols(gc_table_t *self, u32_t cols, const gc_machine_t *ctx)` | Set the number of columns (must be done before adding rows). |
 | `gc_table__get_cell` | `bool gc_table__get_cell(const gc_table_t *self, i64_t row, i64_t col, gc_slot_t *value, gc_type_t *type)` | Read a cell value. |
 | `gc_table__set_cell` | `bool gc_table__set_cell(gc_table_t *self, i64_t row, i64_t col, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Write a cell value. |
@@ -298,7 +298,7 @@ typedef struct {
 
 ### Usage Examples
 
-**Build a table by setting cells, then attach it to an object.** Mirrors how `GaussianProfile` materializes its `bins` table: create via the object's field type, size it with `gc_table__init`, then set `rows`/`cols` explicitly before writing cells. Note that the table is created with `gc_machine__create_object` (it carries an object header) and must be unmarked once stored.
+**Build a table by setting cells, then attach it to an object.** Mirrors how `GaussianProfile` materializes its `bins` table: create via the object's field type, size it with `gc_table__init`, then set `rows`/`cols` explicitly before writing cells. Note that the table is created with `gc_machine__create_object` (it carries an object header) and must be unmarked once stored. `gc_table__init` leaves the table untouched on an allocation failure, so production code should check `bins->capacity` before writing cells.
 
 ```c
 // Allocate a 3-column table sized for q_size rows

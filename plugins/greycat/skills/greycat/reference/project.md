@@ -131,8 +131,8 @@ Each `project.gcl` defines its own analyzed module set. **Cross-project navigati
 The LSP picks the nearest `project.gcl` walking up from any opened `.gcl` file. The CLI takes the entrypoint as an explicit argument:
 
 ```sh
-greycat-lang lint server
-greycat-lang fmt client
+greycat lint server
+greycat fmt client
 ```
 
 ## Practical layout

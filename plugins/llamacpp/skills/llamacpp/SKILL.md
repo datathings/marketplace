@@ -65,14 +65,14 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (311 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (343 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (241 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (419 lines) - Context, memory (KV cache), state management
-- **[api-inference.md](references/api-inference.md)** (412 lines) - Batch operations, inference, tokenization, chat
-- **[api-sampling.md](references/api-sampling.md)** (490 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
+- **[api-inference.md](references/api-inference.md)** (420 lines) - Batch operations, inference, tokenization, chat
+- **[api-sampling.md](references/api-sampling.md)** (492 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
+- **[api-advanced.md](references/api-advanced.md)** (397 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 199 active functions (b10075) across 6 organized files
+**Total:** 202 active functions (b10258) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,24 +148,35 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,271 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,312 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
   - [api-sampling.md](references/api-sampling.md) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
-- **[references/workflows.md](references/workflows.md)** (1,615 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
+- **[references/workflows.md](references/workflows.md)** (1,618 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b10075
+## What's New in b10258
 
-**b10075** (~205 commits since b9870) touches the public C API in exactly one place — everything else in that
-range (new Hy3/hy_v3 model + MTP speculative decoding, server `reasoning_budget_tokens`, mtmd NUL-truncation
-fix, deepseek-ocr v1 multi-tile, `/responses` streaming timings, etc.) is internal/server-side and does not
-change `llama.h`:
+**b10258** (183 commits since b10075) — model loading and sampling API changes:
 
-**New enum value:**
-- `LLAMA_FTYPE_MOSTLY_Q2_0 = 41` — new Q2_0 quantization type (CPU backend), PR #24448.
+**BREAKING:**
+- `llama_sampler_init_penalties()` gained a new required first parameter `n_vocab` (source it via `llama_vocab_n_tokens(vocab)`). Update all call sites.
+
+**New load-mode API (replaces three booleans):**
+- `enum llama_load_mode` (`LLAMA_LOAD_MODE_NONE`/`MMAP`/`MLOCK`/`MMAP_MLOCK`/`DIRECT_IO`) + `llama_load_mode_name()` / `llama_load_mode_from_str()`.
+- `llama_model_params.load_mode` replaces the removed `use_mmap`, `use_direct_io`, and `use_mlock` boolean fields.
+- `llama_model_params.load_mtp` (`bool`) — whether to load MTP layers.
+
+**New vocab function:**
+- `llama_vocab_get_suppress_tokens()` — model-specific suppress tokens (gguf key `tokenizer.ggml.suppress_tokens`).
+
+**Previously (b10075, ~205 commits since b9870):** touched the public C API in exactly one place — new
+`LLAMA_FTYPE_MOSTLY_Q2_0 = 41` quantization type (CPU backend), PR #24448. Everything else in that range (new
+Hy3/hy_v3 model + MTP speculative decoding, server `reasoning_budget_tokens`, mtmd NUL-truncation fix,
+deepseek-ocr v1 multi-tile, `/responses` streaming timings, etc.) was internal/server-side and did not change
+`llama.h`.
 
 **Recent (added in b9859→b9870, PR #25134):**
 - `llama_model_ftype()` — returns the model's file type as an `enum llama_ftype` (e.g. `LLAMA_FTYPE_MOSTLY_Q8_0`).

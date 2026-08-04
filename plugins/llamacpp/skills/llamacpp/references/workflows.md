@@ -724,6 +724,8 @@ int main() {
     struct llama_context_params ctx_params = llama_context_default_params();
     struct llama_context * ctx = llama_init_from_model(model, ctx_params);
 
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
+
     // Advanced sampler chain
     struct llama_sampler * sampler = llama_sampler_chain_init(
         llama_sampler_chain_default_params()
@@ -731,6 +733,7 @@ int main() {
 
     // Add penalties for repetition
     llama_sampler_chain_add(sampler, llama_sampler_init_penalties(
+        llama_vocab_n_tokens(vocab), // n_vocab
         64,     // penalty_last_n (last 64 tokens)
         1.1,    // penalty_repeat (1.1x penalty)
         0.0,    // penalty_freq (disabled)

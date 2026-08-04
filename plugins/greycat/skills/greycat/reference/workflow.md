@@ -64,8 +64,8 @@ For a frontend-bundled project, swap `serve` for `dev` to also spawn the VitePlu
 ## The edit / install / run loop
 
 1. **Edit `.gcl`** under `src/` (or wherever your `@include` covers).
-2. **`greycat-lang lint`** — fastest signal. Catches `unused-local`, `possibly-null`, `arrow-on-non-deref`, non-exhaustive enum chains, and dozens of other shape issues the runtime accepts silently. See [lang.md](lang.md).
-3. **`greycat-lang fmt`** — canonical formatting. The formatter is opinionated and unconfigurable.
+2. **`greycat lint`** — fastest signal. Catches `unused-local`, `possibly-null`, `arrow-on-non-deref`, non-exhaustive enum chains, and dozens of other shape issues the runtime accepts silently. See [lang.md](lang.md).
+3. **`greycat fmt`** — canonical formatting. The formatter is opinionated and unconfigurable.
 4. **Restart the server.** GreyCat does not currently hot-reload schema changes — `serve` rebuilds the project at startup. Save → `Ctrl+C` → `serve` again.
 5. **`greycat install`** only when `project.gcl`'s `@library` pragmas change. Library cache lives in `lib/installed`.
 6. **`greycat codegen`** if external SDKs need to pick up new endpoint signatures.
@@ -77,19 +77,22 @@ For one-off scripts (data import, migration), use `greycat run [function]` — n
 Before declaring a `.gcl` change finished (and before committing), run this gate:
 
 ```sh
-greycat-lang fmt --mode=check  # exit non-zero on formatting drift
-greycat-lang lint              # exit non-zero on error-severity diagnostics
+greycat fmt --mode=check       # exit non-zero on formatting drift
+greycat lint                   # exit non-zero on any diagnostic
 greycat build                  # produce project.gcp
 greycat test                   # run @test functions
 ```
 
-`greycat build` is **not** a substitute for `greycat-lang lint` — the runtime accepts code with unused locals, redundant null-checks, and other shape drift. Apply auto-fixes with `greycat-lang fmt` (default `--mode=write`) and `greycat-lang lint --fix`. See [lang.md](lang.md) for the rule list and suppression directives.
+`greycat build` is **not** a substitute for `greycat lint` — the runtime accepts code with unused locals, redundant null-checks, and other shape drift. Apply auto-fixes with `greycat fmt` (default `--mode=write`) and `greycat lint --fix`. See [lang.md](lang.md) for the rule list and suppression directives.
 
 ## Adding an HTTP endpoint
 
 ```gcl
 // src/api.gcl
+@volatile
 type EchoRequest { msg: String; }
+
+@volatile
 type EchoResponse { echoed: String; at: time; }
 
 /// Echoes the incoming message back, with a timestamp.
@@ -110,6 +113,7 @@ Notes:
 - Without `@permission`, the function requires the `api` permission (any authenticated caller) — that is the right default. Add `@permission("admin")` (or a custom permission declared in `project.gcl`) to narrow it further. **Do not** add `@permission("public")` unless the user explicitly asked for an anonymous-access endpoint; making a write-capable endpoint public exposes it to every caller on the network.
 - `@tag("openapi")` includes it in the spec returned by `OpenApi::v3`. `@tag("mcp")` exposes it as an MCP tool.
 - `/// @param <name> <description>` doc-comment lines surface in the generated OpenAPI / MCP schemas.
+- Request/response types are **views shaped for the caller**, not graph records: give them `@volatile` so persisting one is a runtime error. Clients get them from `greycat codegen` and should never restate them by hand — see [webapp.md](webapp.md) "The backend owns the types".
 
 ## Adding a graph-persistent type
 
@@ -241,7 +245,7 @@ Each codegen run reads the current `project.gcl` and emits typed clients for eve
 
 A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, one `files/`.** No external services. Suggested checklist:
 
-- [ ] `greycat-lang fmt --mode=check` and `greycat-lang lint` both exit `0` on the deploy commit. See [lang.md](lang.md).
+- [ ] `greycat fmt --mode=check` and `greycat lint` both exit `0` on the deploy commit. See [lang.md](lang.md).
 - [ ] `greycat build` produces a `project.gcp` artifact (or ship the source tree with `lib/` populated).
 - [ ] Ship `project.gcl`, `src/`, `lib/`, `webroot/`, and `bin/greycat` (or have the deploy host run `greycat install` once).
 - [ ] Provision a writable `gcdata/` (this is the durable state).

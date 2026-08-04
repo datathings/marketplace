@@ -272,6 +272,14 @@ bool llama_vocab_get_add_eos(const struct llama_vocab * vocab);
 bool llama_vocab_get_add_sep(const struct llama_vocab * vocab);
 ```
 
+### llama_vocab_get_suppress_tokens
+```c
+const llama_token * llama_vocab_get_suppress_tokens(
+    const struct llama_vocab * vocab,
+    int32_t * n_suppress_tokens);
+```
+Get the model-specific suppress tokens (gguf key: `tokenizer.ggml.suppress_tokens`). Returns a pointer to the token array and writes the token count to `n_suppress_tokens`.
+
 Fill-in-the-middle tokens:
 
 ```c

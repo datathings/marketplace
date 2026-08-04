@@ -9,6 +9,7 @@ For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the w
 | Library       | Pulls in                                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | `std`         | Required. Core types, collections, time/duration, IO, runtime, util (`Crypto`, `Random`, `Uuid`, sliding windows, ...). |
+| `lang`        | Language tooling behind `greycat lint` / `greycat fmt` / `greycat lsp`. Ships with a global GreyCat install; pin it here to hold a project to one toolchain version. See [lang.md](lang.md). |
 | `explorer`    | Graph UI + admin tool served at `/explorer` — dev convenience.                                            |
 | `ai`          | LLM inference (llama.cpp): `Model`, `LLM`, `ChatMessage`, embeddings, LoRA.                               |
 | `algebra`     | `PCA`, `FFT`, neural nets, k-means, time-series decomposition, climate (UTCI).                            |

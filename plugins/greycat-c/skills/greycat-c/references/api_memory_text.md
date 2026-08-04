@@ -329,7 +329,7 @@ typedef struct {
 
 ### Inline Read/Write (Fixed-Width Binary)
 
-These are `static inline` functions for zero-overhead binary serialization. Call `gc_buffer_write_check(buf, len)` before writing to ensure capacity. They advance `buf->current`.
+These are `static inline` functions for zero-overhead binary serialization. Writers do not check capacity themselves — call `gc_buffer_write_check(buf, len)` before writing. **All readers are bounds-checked as of this update**: each returns `bool` (`true` on success, `false` — with nothing consumed — if fewer than the required bytes remain) and advances `buf->current` only on success. There is no longer an unchecked reader of any kind.
 
 **Writers:**
 
@@ -345,47 +345,53 @@ These are `static inline` functions for zero-overhead binary serialization. Call
 | `gc_buffer_write_vu64` | Variable-length encoded `u64_t` (1-9 bytes, LEB128 style) |
 | `gc_buffer_write_vi64` | Variable-length zig-zag encoded `i64_t` (1-9 bytes) |
 
-**Readers:**
+**Readers** (all `_size_checked`, all return `bool`):
 
 | Function | Type Read |
 |----------|-----------|
-| `gc_buffer_read_bool` | `bool` |
-| `gc_buffer_read_u8` / `gc_buffer_read_i8` | 1 byte |
-| `gc_buffer_read_u16` | 2 bytes |
-| `gc_buffer_read_u32` / `gc_buffer_read_i32` | 4 bytes |
-| `gc_buffer_read_u64` / `gc_buffer_read_i64` / `gc_buffer_read_f64` / `gc_buffer_read_f32` | 4 or 8 bytes |
-| `gc_buffer_read_vu32` | Variable-length `u32_t` |
-| `gc_buffer_read_vu32_size_checked` | Like `gc_buffer_read_vu32` but returns `false` on buffer overflow |
-| `gc_buffer_read_vu64` | Variable-length `u64_t` |
-| `gc_buffer_read_vu64_size_checked` | Like `gc_buffer_read_vu64` but returns `false` on buffer overflow |
-| `gc_buffer_read_vi64` | Variable-length zig-zag `i64_t` |
-| `gc_buffer_read_vi64_size_checked` | Like `gc_buffer_read_vi64` but returns `false` on buffer overflow (decodes via `gc_buffer_read_vu64_size_checked`, then zig-zag: `(i64_t)((u >> 1) ^ -(u & 1))`) |
+| `gc_buffer_read_bool_size_checked` | `bool` (1 byte) |
+| `gc_buffer_read_u8_size_checked` / `gc_buffer_read_i8_size_checked` | 1 byte |
+| `gc_buffer_read_u16_size_checked` | 2 bytes |
+| `gc_buffer_read_u32_size_checked` / `gc_buffer_read_i32_size_checked` / `gc_buffer_read_f32_size_checked` | 4 bytes |
+| `gc_buffer_read_u64_size_checked` / `gc_buffer_read_i64_size_checked` / `gc_buffer_read_f64_size_checked` | 8 bytes |
+| `gc_buffer_read_vu32_size_checked` | Variable-length `u32_t` |
+| `gc_buffer_read_vu64_size_checked` | Variable-length `u64_t` |
+| `gc_buffer_read_vi64_size_checked` | Variable-length zig-zag `i64_t` (decodes byte-by-byte with its own bounds check, then zig-zag: `(i64_t)((u >> 1) ^ -(u & 1))`) |
+| `gc_buffer_read_ptr_size_checked(buf, target, len)` | Raw bytes via `memcpy`; bounds-checked counterpart of the `gc_buffer_read_ptr` macro below |
 
-**Varint sizing constant:**
+**Breaking change (this update):** the old unchecked readers — `gc_buffer_read_bool`, `_u8`, `_i8`, `_u16`, `_u32`, `_i32`, `_u64`, `_i64`, `_f32`, `_f64`, `_vu32`, `_vu64`, `_vi64` (void-returning, no bounds check) — were **removed**. Callers must migrate to the `_size_checked` equivalents and handle the `bool` return value; `gc_buffer_read_vi64_size_checked` no longer delegates to `gc_buffer_read_vu64_size_checked` internally (it now has its own inline bounds check against `buf->data + buf->size`), though its signature is unchanged.
+
+**Varint sizing constants:**
 
 ```c
 // Worst-case wire size of a variable-length u64: 8 continuation bytes carrying 7 bits each,
 // then a final unmasked byte carrying the top 8 bits (8 * 7 + 8 = 64).
 #define GC_VU64_MAX_BYTES 9UL
+
+// Worst-case wire size of a variable-length u32: 4 continuation bytes carrying 7 bits each,
+// then a final unmasked byte carrying the top 4 bits (4 * 7 + 4 = 32).
+#define GC_VU32_MAX_BYTES 5UL
 ```
 
-Use it to size length-prefix reservations and `pread` margins so `gc_buffer_read_vu64_size_checked()` can always decode the prefix.
+Use `GC_VU64_MAX_BYTES` to size length-prefix reservations and `pread` margins for a `u64_t`/`i64_t` varint so `gc_buffer_read_vu64_size_checked()`/`gc_buffer_read_vi64_size_checked()` can always decode the prefix; use `GC_VU32_MAX_BYTES` (new in this update) for a `u32_t` varint prefix.
 
 **Raw pointer read/write macros:**
 
 ```c
-gc_buffer_read_ptr(buf, target, len)    // memcpy from buffer cursor to target
-gc_buffer_write_ptr(buf, value, len)    // memcpy from value to buffer cursor (NULL-safe)
+gc_buffer_read_ptr(buf, target, len)    // memcpy from buffer cursor to target (unchecked — caller must know `len` bytes remain)
+gc_buffer_write_ptr(buf, value, len)    // memcpy from value to buffer cursor (nullptr-safe)
 ```
+
+Prefer `gc_buffer_read_ptr_size_checked(buf, target, len)` (new in this update, see Readers table above) over the raw `gc_buffer_read_ptr` macro whenever `len` derives from the input rather than a compile-time constant: the macro is an unguarded `memcpy`, so an oversized length reads past the end of the buffer.
 
 ### Buffer Boundary Check
 
 ```c
 // Returns true if reading `len` bytes at `current` would exceed `size`
-static inline bool gc_buffer_unavailable(gc_buffer_t *buf_ptr, u64_t len);
+static inline bool gc_buffer_unavailable(const gc_buffer_t *buf_ptr, const u64_t len);
 ```
 
-It computes in **offset space** (`consumed = current - data`, then `consumed + len > size`) rather than `current + len`, which could overflow the pointer when `len` is an attacker-controlled length read from the input and wrongly report "available". It also fails closed — returning `true` — when `data` or `current` is `NULL`, or when `current` has underflowed below `data`.
+It computes in **offset space** (`consumed = current - data`, then `consumed + len > size`) rather than `current + len`, which could overflow the pointer when `len` is an attacker-controlled length read from the input and wrongly report "available". As of this update both parameters are `const`-qualified, and the explicit fail-closed guard for `data == NULL || current == NULL` / `current < data` (added in the previous sync) was removed as part of the buffer-read cleanup — the function now assumes `data`/`current` are valid pointers with `current >= data`, which holds for any buffer obtained from `gc_buffer__create` or the machine's scratch buffer.
 
 ### Non-Inline Write Functions
 
@@ -478,8 +484,8 @@ buf->current = buf->data;              // rewind cursor for reading
 // Walk the slurped bytes with the inline readers (see below). For example,
 // decode a leading varint length prefix:
 u64_t payload_len = 0;
-if (!gc_buffer_unavailable(buf, 1)) {
-    gc_buffer_read_vu64(buf, &payload_len);
+if (!gc_buffer_read_vu64_size_checked(buf, &payload_len)) {
+    // truncated input
 }
 gc_buffer__finalize(buf);
 ```
@@ -508,37 +514,32 @@ buf->size = (buf->current - buf->data);
 
 #### Inline binary reading with bounds checks
 
-On the read side, guard each read with `gc_buffer_unavailable(buf, len)` (returns `true` when fewer than `len` bytes remain at the cursor) before calling the inline reader. The reader advances `buf->current` and writes through the output pointer:
+Every inline reader is bounds-checked and returns `bool`: check the return value directly rather than pre-guarding with a separate `gc_buffer_unavailable(buf, len)` call — the probe is now folded into each reader. `true` means the field was read and `buf->current` advanced; `false` means fewer bytes remained than needed and nothing was consumed:
 
 ```c
 u64_t root = 0, block_key_generator = 0, task_generator = 0;
 
-if (gc_buffer_unavailable(in_buf, 1)) {
+if (!gc_buffer_read_vu64_size_checked(in_buf, &root)) {
     return false;                      // truncated input
 }
-gc_buffer_read_vu64(in_buf, &root);
-
-if (gc_buffer_unavailable(in_buf, 1)) {
+if (!gc_buffer_read_vu64_size_checked(in_buf, &block_key_generator)) {
     return false;
 }
-gc_buffer_read_vu64(in_buf, &block_key_generator);
-
-if (gc_buffer_unavailable(in_buf, 1)) {
+if (!gc_buffer_read_vu64_size_checked(in_buf, &task_generator)) {
     return false;
 }
-gc_buffer_read_vu64(in_buf, &task_generator);
 ```
 
-For untrusted varint streams where you cannot pre-check the exact byte count, `gc_buffer_read_vu32_size_checked` validates against `buf->size` internally and returns `false` on overrun:
+The same pattern applies to fixed-width fields:
 
 ```c
-u32_t count = 0;
-if (!gc_buffer_read_vu32_size_checked(in_buf, &count)) {
+i32_t count = 0;
+if (!gc_buffer_read_i32_size_checked(in_buf, &count)) {
     return false;                      // overran the buffer
 }
 ```
 
-The `u64_t` counterpart `gc_buffer_read_vu64_size_checked` follows the same contract for wider varints, and `gc_buffer_read_vi64_size_checked` adds the zig-zag decode for signed values:
+`gc_buffer_read_vi64_size_checked` adds the zig-zag decode for signed varints, and `gc_buffer_read_ptr_size_checked(buf, target, len)` is the bounds-checked counterpart of the raw `gc_buffer_read_ptr` macro for variable-length byte spans:
 
 ```c
 i64_t delta = 0;
@@ -547,7 +548,7 @@ if (!gc_buffer_read_vi64_size_checked(in_buf, &delta)) {
 }
 ```
 
-When you must reserve room for a varint length prefix before knowing its value, size the reservation with `GC_VU64_MAX_BYTES` (9) so the checked reader can always decode it.
+When you must reserve room for a varint length prefix before knowing its value, size the reservation with `GC_VU64_MAX_BYTES` (9) for a `u64_t`/`i64_t` prefix, or `GC_VU32_MAX_BYTES` (5) for a `u32_t` prefix, so the checked reader can always decode it.
 
 #### Serializing a slot to JSON
 

@@ -4,7 +4,7 @@ The `greycat` binary is one executable that compiles, runs, serves, and administ
 
 This reference is what the agent reaches for when the user says "build it", "serve it", "install the deps", "back it up", "generate the client", etc.
 
-For static analysis (`lint`, `fmt`, LSP), see the sibling [`greycat-lang`](lang.md) — a separate binary, not bundled into `bin/`.
+Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `greycat lsp`. See [lang.md](lang.md) for the rule list, formatter modes, and suppression directives.
 
 ## Contents
 
@@ -84,6 +84,17 @@ Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `pr
 ### `greycat test [function]`
 
 Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. See [annotations.md § @test](annotations.md).
+
+### `greycat lint` / `greycat fmt` / `greycat lsp`
+
+Static analysis over the entrypoint's `@library` / `@include` closure: `lint` reports diagnostics (`--fix` applies auto-fixes), `fmt` rewrites `.gcl` files canonically (`--mode=check` is the CI gate), `lsp` runs the language server over stdio.
+
+```sh
+greycat fmt --mode=check   # exit non-zero on formatting drift
+greycat lint               # exit non-zero on any diagnostic
+```
+
+These three delegate to the `lang` library, loaded from `lib/lang/` or `~/.greycat/lib/lang/`. When it is absent they exit `127`; reinstall greycat, or pin the library with `@library("lang", "<version>");` and run `greycat install`. Full reference in [lang.md](lang.md).
 
 ### `greycat install`
 
@@ -260,7 +271,8 @@ See [runtime.md](runtime.md) for the auth / request lifecycle details.
 ## Exit codes
 
 - `0` — success.
-- `1` — generic CLI error (missing file, bad option).
+- `1` — generic CLI error (missing file, bad option). Also `lint` / `fmt --mode=check` reporting drift.
 - `2` — compile/load error (program not buildable, or storage couldn't be upgraded).
+- `127` — `lint` / `fmt` / `lsp` invoked without the `lang` library available.
 
 `greycat <cmd> -h` is the source of truth for what flags `<cmd>` accepts on the version of `greycat` you have installed.

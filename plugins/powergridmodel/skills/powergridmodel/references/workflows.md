@@ -12,6 +12,7 @@
 9. [Serialization — Load and Save Datasets](#serialization--load-and-save-datasets)
 10. [Source Impedance Sweep](#source-impedance-sweep)
 11. [Columnar Output Format](#columnar-output-format)
+12. [Modeling Non-PGM Components](#modeling-non-pgm-components)
 
 ---
 
@@ -472,3 +473,41 @@ result = model.calculate_power_flow(
     }
 )
 ```
+
+---
+
+## Modeling Non-PGM Components
+
+PGM has no dedicated component for these — model them with existing component types:
+
+| Real component | Model as | How |
+|---|---|---|
+| Ideal transformer | `link` | Connects two nodes at *different* `u_rated` (self-loop is allowed since v1.13.107, but a real ideal transformer needs two distinct nodes) |
+| Phase-shifting transformer | `generic_branch` | Set `k` (magnitude ratio), `theta` (phase shift, rad), plus `r1`/`x1` series and `g1`/`b1` shunt. `r1 == x1 == 0` is singular — an impedance-free ideal phase shifter cannot be modeled this way |
+| Grounding/earthing transformer | `shunt` | Zero-sequence only: set `g0`/`b0`, leave `g1 = b1 = 0` |
+| Choke coil (symmetric) | `line` | Set `c1 = tan1 = c0 = tan0 = 0`. Asymmetric choke coils aren't supported — `generic_branch` has no zero-sequence parameters yet |
+| Cable | `line` | Equivalent to an overhead line — same component |
+| Ideal source / slack bus | `source` | Set `sk` very high (e.g. `1e50` VA). Extremely high `sk` can produce unresolved infinities in some solvers — validate results |
+
+```python
+import numpy as np
+
+# Grounding transformer as a zero-sequence-only shunt
+grounding = initialize_array('input', 'shunt', 1)
+grounding['id'] = [30]
+grounding['node'] = [2]
+grounding['status'] = [1]
+grounding['g1'] = [0.0]; grounding['b1'] = [0.0]   # no positive-sequence effect
+grounding['g0'] = [10.0]; grounding['b0'] = [0.0]  # zero-sequence grounding impedance
+
+# Phase-shifting transformer as a generic_branch
+psx = initialize_array('input', 'generic_branch', 1)
+psx['id'] = [31]
+psx['from_node'] = [1]; psx['to_node'] = [2]
+psx['from_status'] = [1]; psx['to_status'] = [1]
+psx['r1'] = [0.1]; psx['x1'] = [5.0]   # nonzero — avoid the singular r1=x1=0 case
+psx['g1'] = [0.0]; psx['b1'] = [0.0]
+psx['k'] = [1.0]; psx['theta'] = [np.deg2rad(30)]  # 30-degree phase shift
+```
+
+**Note (PGM-internal slack bus):** source nodes are always treated as slack buses, one per electrically connected island. If an island has multiple sources, the tie-break for which one anchors the angle reference is implementation-defined (currently "first-occurring source") — don't rely on a specific source being chosen when multiple sources share an island.
