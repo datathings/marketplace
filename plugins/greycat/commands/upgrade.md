@@ -9,13 +9,13 @@ allowed-tools: Bash(*), Read, Edit, Grep, Task
 **Purpose**: Upgrade **both ends' dependencies** to latest, then **lint + test both ends and fix every failure the upgrade surfaces until green**:
 1. **Backend** — every `@library` in `project.gcl` to latest from get.greycat.io.
 2. **Frontend** — every `frontend/package.json` dependency to its latest published version (exact-pinned).
-3. **Verify + fix** — backend `greycat-lang lint` + `greycat test`; frontend `pnpm lint` + `vp build` (+ `pnpm test` if the project uses Vitest). Fix all lint/type/test failures the upgrade introduced in **both** back and front, re-running after each fix until everything passes.
+3. **Verify + fix** — backend `greycat lint` + `greycat test`; frontend `pnpm lint` + `vp build` (+ `pnpm test` if the project uses Vitest). Fix all lint/type/test failures the upgrade introduced in **both** back and front, re-running after each fix until everything passes.
 
 **Run When**: Monthly maintenance, before major releases, on announced breaking changes.
 
 ## Two tracks — parallelize under ultracode
 
-The **backend track** (bump `@library` → `greycat install` → `greycat-lang fmt --mode=check` + `lint` → `greycat test` → fix loop) and the **frontend track** (bump `package.json` → `greycat codegen ts` → `pnpm lint` → `vp build`/`pnpm test` → fix loop) are largely independent. Under **ultracode/ultrathink**, dispatch them as **two parallel subagents** (`Task`) and reconcile at the end; otherwise run sequentially.
+The **backend track** (bump `@library` → `greycat install` → `greycat fmt --mode=check` + `lint` → `greycat test` → fix loop) and the **frontend track** (bump `package.json` → `greycat codegen ts` → `pnpm lint` → `vp build`/`pnpm test` → fix loop) are largely independent. Under **ultracode/ultrathink**, dispatch them as **two parallel subagents** (`Task`) and reconcile at the end; otherwise run sequentially.
 
 ---
 
@@ -76,12 +76,12 @@ done
 
 ```bash
 greycat install
-greycat-lang fmt --mode=check
-greycat-lang lint
+greycat fmt --mode=check
+greycat lint
 greycat test
 ```
 
-**Fix loop**: the upgrade CAN break backend code (renamed/removed fns, changed signatures, deprecated decorators). Don't stop at reporting — **fix every lint/test failure**, re-running `greycat-lang lint && greycat test` until both pass. See "Migration of breaking changes" and "Troubleshooting" for common patterns and single-lib rollback.
+**Fix loop**: the upgrade CAN break backend code (renamed/removed fns, changed signatures, deprecated decorators). Don't stop at reporting — **fix every lint/test failure**, re-running `greycat lint && greycat test` until both pass. See "Migration of breaking changes" and "Troubleshooting" for common patterns and single-lib rollback.
 
 ## ⚠ Backend Step 7: Persisted schema check
 
@@ -97,7 +97,7 @@ See `/greycat:migrate` Operation A and D for the full safe-rollback flow.
 ### Adding new libraries
 1. Add `@library("kafka", "<latest>");` to `project.gcl`.
 2. Run `/greycat:upgrade` (auto-detects new libs).
-3. Verify: `ls lib/ | grep kafka`, `greycat-lang lint`, `greycat run`.
+3. Verify: `ls lib/ | grep kafka`, `greycat lint`, `greycat run`.
 
 ---
 
@@ -195,9 +195,9 @@ Full reference: https://webawesome.com/docs/resources/migrating-from-shoelace/
 
 ### Lint fails after update
 - Check https://doc.greycat.io/changelog for breaking changes.
-- Save output: `greycat-lang lint 2>&1 | tee lint-errors.txt`
+- Save output: `greycat lint 2>&1 | tee lint-errors.txt`
 - Common patterns: function renamed/removed, signature changed, decorator deprecated.
-- **Rollback**: `git checkout project.gcl && greycat install && greycat-lang lint`
+- **Rollback**: `git checkout project.gcl && greycat install && greycat lint`
 - **Incremental**: update ONE lib at a time in `project.gcl`, lint between each.
 
 ### Fetch fails
@@ -225,7 +225,7 @@ grep -r "DataService::parse" src/ --include="*.gcl"
 find src/ -name "*.gcl" -exec sed -i 's/DataService::parse/DataService::parseString/g' {} \;
 
 # Verify
-greycat-lang lint && greycat test
+greycat lint && greycat test
 
 # Commit
 git add project.gcl lib/
@@ -255,8 +255,8 @@ Breaking changes:
 ```bash
 grep '@library(' project.gcl   # versions bumped
 ls -la lib/                    # installed
-greycat-lang fmt --mode=check  # formatting
-greycat-lang lint              # syntax/types
+greycat fmt --mode=check  # formatting
+greycat lint              # syntax/types
 greycat test                   # tests
 greycat serve                  # runtime
 ```
@@ -271,4 +271,4 @@ vp build                       # production build (always)
 pnpm lighthouse:ci             # perf/SEO/a11y/best-practices ≥ 90 — optional: the script if present, else the lighthouse CLI
 ```
 
-**Definition of done**: `greycat-lang lint && greycat test` and `pnpm lint && vp build` (plus `pnpm test` if the project uses Vitest) pass with no upgrade-introduced failures remaining.
+**Definition of done**: `greycat lint && greycat test` and `pnpm lint && vp build` (plus `pnpm test` if the project uses Vitest) pass with no upgrade-introduced failures remaining.

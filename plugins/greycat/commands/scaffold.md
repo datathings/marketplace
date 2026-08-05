@@ -58,7 +58,7 @@ mkdir -p src test
 ```bash
 find src -name "*.gcl" | head -3   # check existing patterns
 ```
-Match sibling `.gcl` files (indentation, error-handling style); run `greycat-lang fmt` — the formatter owns width/layout.
+Match sibling `.gcl` files (indentation, error-handling style); run `greycat fmt` — the formatter owns width/layout.
 
 ---
 
@@ -299,7 +299,7 @@ Reminders: import Web Awesome components **per-component** (tree-shaking); name 
 
 ## Step 6: Lint
 ```bash
-greycat-lang lint --fix     # backend
+greycat lint --fix     # backend
 # frontend (if generated):
 greycat codegen ts && pnpm lint   # regenerate client, then typecheck
 ```

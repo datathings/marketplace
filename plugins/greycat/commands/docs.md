@@ -46,7 +46,7 @@ grep -rn "@expose" src/ --include="*.gcl"                # endpoints (@expose ma
 2. **Overview** — GreyCat version; the frontend stack if any; key feature counts (N types, M endpoints, auth?, search?, MCP?)
 3. **Quick Start** — prerequisites, `git clone`, `greycat install`, `pnpm install` (if frontend), `greycat serve` (or `greycat dev` to also run the frontend watcher), `greycat run import`. If frontend: run Lighthouse (above) to audit performance/SEO.
 4. **Architecture** — data model (auto-extracted types), service layer (list services), API endpoints table (`| Endpoint | Permission | Description |`)
-5. **Development** — project structure (see CLAUDE.md template); common commands: `greycat-lang lint/fmt`, `greycat build/test/serve/run/codegen`, `greycat dev`, `greycat codegen ts`, Lighthouse (above); workflow (lint after each change, `greycat codegen ts` after backend type changes)
+5. **Development** — project structure (see CLAUDE.md template); common commands: `greycat lint/fmt`, `greycat build/test/serve/run/codegen`, `greycat dev`, `greycat codegen ts`, Lighthouse (above); workflow (lint after each change, `greycat codegen ts` after backend type changes)
 6. **Testing** — `greycat test`, current coverage stats
 7. **Configuration** — `.env` vars, library versions
 8. **Authentication** (if detected) — roles, permissions, `SecurityService` usage

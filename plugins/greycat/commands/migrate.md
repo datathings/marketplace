@@ -65,12 +65,12 @@ fn migrate_add_device_priority() {
   info("Done: ${count} updated, ${errors} errors");
 }
 ```
-Then: `greycat run migrate_add_device_priority` → set type non-nullable → `greycat-lang lint`.
+Then: `greycat run migrate_add_device_priority` → set type non-nullable → `greycat lint`.
 
 ### A.4 Remove field
 1. Grep usage: `grep -r "entity->field" src/ --include="*.gcl"` — abort if found
 2. Edit type to remove the field line
-3. `greycat-lang lint`
+3. `greycat lint`
 4. Existing nodes still hold old data — harmless but wastes space; consider `greycat defrag` or full reset
 
 ### A.5 Change field type — widen vs narrow
@@ -87,7 +87,7 @@ The runtime cannot distinguish a rename from a remove + add — it sees the old 
 1. Add the new field (nullable or with a default, per A.3)
 2. Write a migration (`greycat run`) that copies `old->old_field` into `old->new_field` for every existing instance
 3. Remove the old field (A.4) only after the migration has run and been verified
-4. `greycat-lang lint`
+4. `greycat lint`
 
 ---
 
@@ -279,7 +279,7 @@ systemctl start greycat
 
 ## Success Criteria
 
-✓ Schema changes safe (no data loss) ✓ Migrations succeed with progress logs ✓ Import/export handles errors ✓ Backups created before risky ops ✓ `greycat-lang lint --fix` passes
+✓ Schema changes safe (no data loss) ✓ Migrations succeed with progress logs ✓ Import/export handles errors ✓ Backups created before risky ops ✓ `greycat lint --fix` passes
 
 ---
 

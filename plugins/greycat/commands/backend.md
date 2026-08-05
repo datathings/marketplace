@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write, AskUserQuestion, Task
 
 **Purpose**: One deep pass over the GCL backend across **seven dimensions** — dead code & duplication, anti-patterns, type safety, performance & concurrency, `@expose` API security/design, test coverage, best-practice gaps — followed by interactive cleanup. This is the single hub for backend quality (it replaces the old separate `apicheck` / `typecheck` / `optimize` / `coverage` commands).
 
-**Run After**: each sprint, before releases, during refactors. Run **when `greycat-lang lint` already passes** — every check here targets what the linter cannot see.
+**Run After**: each sprint, before releases, during refactors. Run **when `greycat lint` already passes** — every check here targets what the linter cannot see.
 
 **Companion**: for the web UI use `/greycat:frontend`.
 
@@ -130,7 +130,7 @@ Mark slim `…View` response DTOs `@volatile`. It guards the type against ever b
 
 ---
 
-## Dimension 3 — Type safety (beyond `greycat-lang lint`)
+## Dimension 3 — Type safety (beyond `greycat lint`)
 
 ### 3.1 Collection type safety — **HIGH**
 ```bash
@@ -310,7 +310,7 @@ Per gap: file, function names, ready template, priority, rationale. Templates us
   Assert::isTrue(failed);
 }
 ```
-**Propose templates in the report only** — never write test files during analysis. Writing `test/<feature>_test.gcl` (with `TODO:` markers, then `greycat-lang lint` + `greycat test` to confirm they compile) happens only if the user opts in during Cleanup. (Frontend/Vitest + Lighthouse coverage lives in `/greycat:frontend`.)
+**Propose templates in the report only** — never write test files during analysis. Writing `test/<feature>_test.gcl` (with `TODO:` markers, then `greycat lint` + `greycat test` to confirm they compile) happens only if the user opts in during Cleanup. (Frontend/Vitest + Lighthouse coverage lives in `/greycat:frontend`.)
 
 ---
 
@@ -338,7 +338,7 @@ If Dimension 6 found coverage gaps, follow up with a **separate yes/no question*
 For each applied fix:
 1. Verify git status is clean (or make a checkpoint branch).
 2. Apply Edits — **only changes that don't alter logic**.
-3. `greycat-lang lint --fix` must pass.
+3. `greycat lint --fix` must pass.
 4. `greycat test` after each cleanup batch.
 5. Report counts (functions/types deleted, lines saved).
 
@@ -368,6 +368,6 @@ CRITICAL=A  HIGH=B  MEDIUM=C  LOW=D
 
 ## Notes
 
-- Run when `greycat-lang lint` already passes; back up first (git checkpoint or `greycat backup`).
+- Run when `greycat lint` already passes; back up first (git checkpoint or `greycat backup`).
 - Fix CRITICAL first; `greycat test` after each batch.
 - Severity is calibrated to real impact: unnecessary persistence is MEDIUM (not lint-enforced), orphan-factory imports and `Array<Job<T>>` are CRITICAL (unbounded storage / runtime crash).

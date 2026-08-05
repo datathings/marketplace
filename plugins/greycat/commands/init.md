@@ -48,7 +48,7 @@ Bias toward caution over speed. Use judgment for trivial edits; for `.gcl`, pers
 
 ### 1. ALWAYS LINT AFTER EACH CHANGE
 ```bash
-greycat-lang lint  # Verify 0 errors after ANY change
+greycat lint  # Verify 0 errors after ANY change
 ```
 
 ### 2. VERIFY BEFORE DELETING
@@ -68,8 +68,8 @@ Don't write GCL by analogy to another language — check the **Common Pitfalls**
 
 ```bash
 # Backend
-greycat-lang lint              # Lint (after EVERY change!)
-greycat-lang fmt               # Format (default write mode; --mode=check for a CI gate)
+greycat lint              # Lint (after EVERY change!)
+greycat fmt               # Format (default write mode; --mode=check for a CI gate)
 greycat build/test/serve       # Build/test/serve (port 8080)
 greycat run [function]         # Run function (default: main)
 greycat codegen ts             # Generate project.d.ts
@@ -522,7 +522,7 @@ export default defineConfig({
 ## Development Workflow
 
 1. Use the `/greycat` skill for backend work.
-2. `greycat-lang lint` after EVERY change (0 errors required); `greycat-lang fmt` to format.
+2. `greycat lint` after EVERY change (0 errors required); `greycat fmt` to format.
 3. `Grep` before deleting; `greycat codegen ts` after backend type changes.
 4. Test: `greycat test` (backend); `vp build` + Lighthouse for frontend.
 5. Before releases: `/greycat:backend` (full backend review) and, if a `frontend/` exists, `/greycat:frontend`.
@@ -531,7 +531,7 @@ export default defineConfig({
 
 ## Consistency Checklist
 
-- [ ] `greycat-lang lint` shows 0 errors; `greycat-lang fmt` applied
+- [ ] `greycat lint` shows 0 errors; `greycat fmt` applied
 - [ ] All `@expose` have try/catch + `error()` log; all thrown errors are typed
 - [ ] All functions/types have `///` docs
 - [ ] Transient/API types are `@volatile` (`…View` suffix)
@@ -556,7 +556,7 @@ export default defineConfig({
 
 ## LSP
 
-`greycat-lang server --stdio` — autocomplete, hover, go-to-def, diagnostics, format, rename. Always run `greycat-lang lint` before commit.
+`greycat-lang server --stdio` — autocomplete, hover, go-to-def, diagnostics, format, rename. Always run `greycat lint` before commit.
 
 More: https://doc.greycat.io/
 ```
