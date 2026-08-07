@@ -1,0 +1,25 @@
+{
+  "name": "greycat",
+  "version": "3.0.0",
+  "description": "Full-stack GreyCat development for its graph-native language, persistence, APIs, parallel processing, and frontend integration.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "GreyCat",
+    "shortDescription": "Build full-stack applications with GreyCat.",
+    "longDescription": "Develop GreyCat data models, APIs, graph persistence, parallel jobs, MCP endpoints, and web frontends.",
+    "developerName": "Datathings",
+    "category": "GreyCat Technology",
+    "capabilities": [],
+    "websiteURL": "https://greycat.io",
+    "defaultPrompt": [
+      "Help me build a GreyCat application."
+    ]
+  }
+}

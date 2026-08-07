@@ -1,0 +1,24 @@
+{
+  "name": "rocm",
+  "version": "3.0.0",
+  "description": "AMD ROCm and HIP reference for GPU kernels, compute libraries, profiling, and CUDA-to-HIP migration.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AMD ROCm",
+    "shortDescription": "Develop AMD GPU applications with ROCm and HIP.",
+    "longDescription": "Build HIP kernels, use ROCm compute libraries, profile workloads, and migrate CUDA applications to AMD GPUs.",
+    "developerName": "Datathings",
+    "category": "High Performance Math & GPU",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me build or port a GPU workload with ROCm."
+    ]
+  }
+}

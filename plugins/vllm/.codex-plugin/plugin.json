@@ -1,0 +1,24 @@
+{
+  "name": "vllm",
+  "version": "3.0.0",
+  "description": "vLLM Python reference for high-throughput inference, offline batches, OpenAI-compatible serving, LoRA, multimodal inputs, and structured outputs.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "vLLM",
+    "shortDescription": "Serve LLMs efficiently with vLLM.",
+    "longDescription": "Build high-throughput vLLM inference workflows with offline batches, OpenAI-compatible APIs, LoRA, and structured outputs.",
+    "developerName": "Datathings",
+    "category": "Agentic AI",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me configure a vLLM inference server."
+    ]
+  }
+}

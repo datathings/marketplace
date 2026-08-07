@@ -1,0 +1,24 @@
+{
+  "name": "pandapower",
+  "version": "3.0.0",
+  "description": "pandapower Python reference for AC and DC power flow, optimal power flow, short-circuit analysis, state estimation, and visualization.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "BSD-3-Clause",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "pandapower",
+    "shortDescription": "Analyze electrical networks with pandapower.",
+    "longDescription": "Model and analyze power networks with load flow, optimal power flow, short circuits, state estimation, and visualization.",
+    "developerName": "Datathings",
+    "category": "Power Grid Management",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me model and analyze a power network with pandapower."
+    ]
+  }
+}

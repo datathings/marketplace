@@ -20,25 +20,25 @@ iwr https://get.greycat.io/install_dev.ps1 -useb | iex
 
 **⚠️ Important: Restart your terminal after installing GreyCat**
 
-**Install Claude Code:**
+**Install with Codex:**
+
+```bash
+codex plugin marketplace add datathings/marketplace
+codex plugin add greycat@datathings
+```
+
+**Install with Claude Code:**
 
 Follow the installation instructions at [https://code.claude.com/docs/en/setup](https://code.claude.com/docs/en/setup)
 
-**Add the marketplace:**
-
-```
-/plugin marketplace add datathings/marketplace
-```
-
-**Install plugins:**
-
-```
-/plugin install greycat@datathings
+```bash
+claude plugin marketplace add datathings/marketplace
+claude plugin install greycat@datathings
 ```
 
 **Try it:**
 
-Run Claude in a demo folder, then paste this prompt:
+Run Codex or Claude Code in a demo folder, then paste this prompt:
 ```
 Use your greycat skill to create a GreyCat backend with Country, City, Street, House, and Person nodes linked as a geographic hierarchy with back references for bidirectional navigation (country contains cities, cities contain streets, etc., and children reference their parents). Add geo coordinates (latitude, longitude) to appropriate nodes. Houses should have temperature sensors storing time series data. Generate two sample CSV files: `./data/addresses.csv` (with house IDs) and `./data/temperatures.csv` (with house_id, date, value columns), and create an importer that loads both on startup (import the CSVs on main if the country index size is 0). Expose all important API endpoints. Create comprehensive API documentation and expose meaningful functions as MCP.
 ```
@@ -48,21 +48,21 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 | Plugin | Category | Type | Version | Description |
 |--------|----------|------|---------|-------------|
 | ***GreyCat Technology*** | | | | |
-| [**greycat**](#greycat) | GreyCat Technology | Skill | 2.9.3 | Full-stack GreyCat development — GCL language, graph persistence, LSP, frontend integration |
-| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 2.9.3 | GreyCat C API and Standard Library for native development |
+| [**greycat**](#greycat) | GreyCat Technology | Skill | 3.0.0 | Full-stack GreyCat development — GCL language, graph persistence, LSP, frontend integration |
+| [**greycat-c**](#greycat-c) | GreyCat Technology | Skill | 3.0.0 | GreyCat C API and Standard Library for native development |
 | ***Agentic AI*** | | | | |
-| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 2.9.3 | llama.cpp C API reference (163 functions) for local LLM inference |
-| [**ggml**](#ggml) | Agentic AI | Skill | 2.9.3 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
-| [**vllm**](#vllm) | Agentic AI | Skill | 2.9.3 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
-| [**ollama**](#ollama) | Agentic AI | Skill | 2.9.3 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
+| [**llamacpp**](#llamacpp) | Agentic AI | Skill | 3.0.0 | llama.cpp C API reference (163 functions) for local LLM inference |
+| [**ggml**](#ggml) | Agentic AI | Skill | 3.0.0 | ggml C tensor library (560+ functions) for graph computation, GGUF I/O, multi-backend inference, and ML training |
+| [**vllm**](#vllm) | Agentic AI | Skill | 3.0.0 | vLLM v0.16.0 — high-throughput Python LLM inference with offline batch, OpenAI-compatible server, LoRA adapters, multimodal inputs, and structured outputs |
+| [**ollama**](#ollama) | Agentic AI | Skill | 3.0.0 | Ollama v0.16.3 — run and interact with local LLMs via REST API (chat, generate, embed, model management) |
 | ***High Performance Math & GPU*** | | | | |
-| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 2.9.3 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
-| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 2.9.3 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
-| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 2.9.3 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
-| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 2.9.3 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
+| [**blas_lapack**](#blas_lapack) | High Performance Math & GPU | Skill | 3.0.0 | CBLAS & LAPACKE C API reference (1284 functions) for numerical linear algebra |
+| [**cuda**](#cuda) | High Performance Math & GPU | Skill | 3.0.0 | NVIDIA CUDA C/C++ — Runtime API, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, Thrust, Cooperative Groups |
+| [**opencl**](#opencl) | High Performance Math & GPU | Skill | 3.0.0 | OpenCL SDK (Khronos) — cross-platform GPU/CPU parallel computing, C API (~60 functions), C++ wrapper (opencl.hpp), SDK utilities |
+| [**rocm**](#rocm) | High Performance Math & GPU | Skill | 3.0.0 | AMD ROCm 7.2.0 — HIP kernel development, rocBLAS/rocFFT/rocRAND/rocSOLVER libraries, profiling, and CUDA-to-HIP porting |
 | ***Power Grid Management*** | | | | |
-| [**pandapower**](#pandapower) | Power Grid Management | Skill | 2.9.3 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
-| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 2.9.3 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
+| [**pandapower**](#pandapower) | Power Grid Management | Skill | 3.0.0 | pandapower v3.4.0 — Python power systems analysis with AC/DC power flow, OPF, short circuit (IEC 60909), state estimation, and visualization |
+| [**powergridmodel**](#powergridmodel) | Power Grid Management | Skill | 3.0.0 | power-grid-model v1.13.10 — high-performance Python library for steady-state distribution power system analysis: power flow, state estimation, and IEC 60909 short-circuit calculations |
 
 ---
 
@@ -71,8 +71,8 @@ Use your greycat skill to create a GreyCat backend with Country, City, Street, H
 GreyCat is both a database and a programming language — stateful, graph-native, and designed to expose functions directly as HTTP APIs or MCP endpoints. Install these plugins when building with GreyCat or extending it at the native level.
 
 ```
-/plugin install greycat@datathings
-/plugin install greycat-c@datathings
+claude plugin install greycat@datathings
+claude plugin install greycat-c@datathings
 ```
 
 ## Agentic AI
@@ -80,10 +80,10 @@ GreyCat is both a database and a programming language — stateful, graph-native
 The inference stack for running AI locally: ggml provides the tensor computation engine and GGUF model format, while llama.cpp builds a complete LLM inference API on top of it. Both plug directly into GreyCat-backed applications or any native pipeline.
 
 ```
-/plugin install llamacpp@datathings
-/plugin install ggml@datathings
-/plugin install vllm@datathings
-/plugin install ollama@datathings
+claude plugin install llamacpp@datathings
+claude plugin install ggml@datathings
+claude plugin install vllm@datathings
+claude plugin install ollama@datathings
 ```
 
 ## High Performance Math & GPU Computing
@@ -91,10 +91,10 @@ The inference stack for running AI locally: ggml provides the tensor computation
 The compute stack for high-performance numerical work: foundational linear algebra (BLAS/LAPACK) and full GPU acceleration across NVIDIA CUDA, OpenCL, and AMD ROCm.
 
 ```
-/plugin install blas_lapack@datathings
-/plugin install cuda@datathings
-/plugin install opencl@datathings
-/plugin install rocm@datathings
+claude plugin install blas_lapack@datathings
+claude plugin install cuda@datathings
+claude plugin install opencl@datathings
+claude plugin install rocm@datathings
 ```
 
 ## Power Grid Management
@@ -102,8 +102,8 @@ The compute stack for high-performance numerical work: foundational linear algeb
 [Kopr](https://kopr-twin.com) — our electricity distribution digital twin built on GreyCat — manages 1 million grid assets and 45 billion annual meter readings, with optimal power flow and grid analysis capabilities built in. We include these libraries because they were instrumental in our testing and validation work.
 
 ```
-/plugin install pandapower@datathings
-/plugin install powergridmodel@datathings
+claude plugin install pandapower@datathings
+claude plugin install powergridmodel@datathings
 ```
 
 ---
@@ -246,11 +246,11 @@ Add to `.claude/settings.json` (project or `~/.claude/settings.json` for global)
 ## Management Commands
 
 ```bash
-/plugin list                              # List installed plugins
-/plugin update greycat@datathings         # Update a plugin
-/plugin uninstall greycat@datathings      # Remove a plugin
-/plugin marketplace list                  # List marketplaces
-/plugin marketplace remove datathings     # Remove marketplace
+claude plugin list                              # List installed plugins
+claude plugin update greycat@datathings         # Update a plugin
+claude plugin uninstall greycat@datathings      # Remove a plugin
+claude plugin marketplace list                  # List marketplaces
+claude plugin marketplace remove datathings     # Remove marketplace
 ```
 
 ## Development
@@ -259,7 +259,7 @@ Add to `.claude/settings.json` (project or `~/.claude/settings.json` for global)
 
 For developing or testing marketplace plugins locally:
 ```bash
-/plugin marketplace add /path/to/marketplace
+claude plugin marketplace add /path/to/marketplace
 ```
 
 ### Bump Versions
@@ -283,14 +283,14 @@ Generate standalone `.skill` files for distribution:
 
 To develop native GreyCat C libraries (custom functions implemented in C), install the **greycat-c** plugin:
 ```bash
-/plugin install greycat-c@datathings
+claude plugin install greycat-c@datathings
 ```
 
 This provides the C API reference, tensor operations, and native function implementation patterns required for extending GreyCat with C code.
 
 ## Troubleshooting
 
-**Skills not activating**: Verify with `/plugin list`, ensure enabled in settings.
+**Skills not activating**: Verify with `claude plugin list`, ensure enabled in settings.
 
 **LSP not working**: Check `greycat-lang --version` is installed and in PATH. The LSP is included in the greycat plugin.
 

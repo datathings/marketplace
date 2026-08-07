@@ -1,0 +1,24 @@
+{
+  "name": "llamacpp",
+  "version": "3.0.0",
+  "description": "llama.cpp C and C++ API reference for model loading, local inference, embeddings, chat, sampling, state management, and GGUF models.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "llama.cpp",
+    "shortDescription": "Build local LLM inference with llama.cpp.",
+    "longDescription": "Use the llama.cpp C and C++ APIs for model loading, inference, embeddings, chat, sampling, and GGUF models.",
+    "developerName": "Datathings",
+    "category": "Agentic AI",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me build a local inference workflow with llama.cpp."
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "greycat-c",
+  "version": "3.0.0",
+  "description": "GreyCat C API and GCL Standard Library reference for native development, tensors, scheduling, I/O, and plugin implementation.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "GreyCat C API",
+    "shortDescription": "Develop native GreyCat extensions in C.",
+    "longDescription": "Use the GreyCat C API and GCL Standard Library for native functions, tensors, scheduling, I/O, and plugins.",
+    "developerName": "Datathings",
+    "category": "GreyCat Technology",
+    "capabilities": [],
+    "websiteURL": "https://greycat.io",
+    "defaultPrompt": [
+      "Help me implement a native GreyCat function in C."
+    ]
+  }
+}

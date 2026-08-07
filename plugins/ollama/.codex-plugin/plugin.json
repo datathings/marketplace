@@ -1,0 +1,24 @@
+{
+  "name": "ollama",
+  "version": "3.0.0",
+  "description": "Ollama REST API reference for local text generation, chat, embeddings, model management, and custom model creation.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ollama",
+    "shortDescription": "Run and manage local models with Ollama.",
+    "longDescription": "Use Ollama's REST API for local generation, chat, embeddings, model management, and custom models.",
+    "developerName": "Datathings",
+    "category": "Agentic AI",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me build a local LLM workflow with Ollama."
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "cuda",
+  "version": "3.0.0",
+  "description": "NVIDIA CUDA C and C++ reference for the Runtime API, GPU kernels, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, and Thrust.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "BSD-3-Clause",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "NVIDIA CUDA",
+    "shortDescription": "Develop GPU-accelerated applications with CUDA.",
+    "longDescription": "Build CUDA kernels and use NVIDIA's runtime, linear algebra, FFT, sparse, random, solver, and Thrust libraries.",
+    "developerName": "Datathings",
+    "category": "High Performance Math & GPU",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me implement a GPU workload with CUDA."
+    ]
+  }
+}

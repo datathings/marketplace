@@ -1,0 +1,24 @@
+{
+  "name": "blas_lapack",
+  "version": "3.0.0",
+  "description": "CBLAS and LAPACKE C API reference for vector and matrix operations, solvers, eigenvalues, SVD, least squares, and factorizations.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "BSD-3-Clause",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "BLAS & LAPACK",
+    "shortDescription": "Build numerical C applications with BLAS and LAPACK.",
+    "longDescription": "Use CBLAS and LAPACKE for vector and matrix operations, linear solvers, eigenvalues, SVD, least squares, and factorizations.",
+    "developerName": "Datathings",
+    "category": "High Performance Math & GPU",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me solve a numerical linear algebra problem with BLAS and LAPACK."
+    ]
+  }
+}

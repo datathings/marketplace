@@ -1,0 +1,152 @@
+{
+  "name": "datathings",
+  "interface": {
+    "displayName": "Datathings"
+  },
+  "plugins": [
+    {
+      "name": "greycat",
+      "source": {
+        "source": "local",
+        "path": "./plugins/greycat"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "GreyCat Technology"
+    },
+    {
+      "name": "greycat-c",
+      "source": {
+        "source": "local",
+        "path": "./plugins/greycat-c"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "GreyCat Technology"
+    },
+    {
+      "name": "llamacpp",
+      "source": {
+        "source": "local",
+        "path": "./plugins/llamacpp"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Agentic AI"
+    },
+    {
+      "name": "ggml",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ggml"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Agentic AI"
+    },
+    {
+      "name": "vllm",
+      "source": {
+        "source": "local",
+        "path": "./plugins/vllm"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Agentic AI"
+    },
+    {
+      "name": "ollama",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ollama"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Agentic AI"
+    },
+    {
+      "name": "cuda",
+      "source": {
+        "source": "local",
+        "path": "./plugins/cuda"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "High Performance Math & GPU"
+    },
+    {
+      "name": "opencl",
+      "source": {
+        "source": "local",
+        "path": "./plugins/opencl"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "High Performance Math & GPU"
+    },
+    {
+      "name": "rocm",
+      "source": {
+        "source": "local",
+        "path": "./plugins/rocm"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "High Performance Math & GPU"
+    },
+    {
+      "name": "pandapower",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pandapower"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Power Grid Management"
+    },
+    {
+      "name": "powergridmodel",
+      "source": {
+        "source": "local",
+        "path": "./plugins/powergridmodel"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Power Grid Management"
+    },
+    {
+      "name": "blas_lapack",
+      "source": {
+        "source": "local",
+        "path": "./plugins/blas_lapack"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "High Performance Math & GPU"
+    }
+  ]
+}

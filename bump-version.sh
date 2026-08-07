@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-# Bump version across all plugins and marketplace.json
+# Bump version across all Claude/Codex plugin manifests and marketplace metadata
 # Usage: ./bump-version.sh 1.3.0
 #        ./bump-version.sh          # shows current versions
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
+CLAUDE_MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
+SKILLS_MARKETPLACE_JSON="${SCRIPT_DIR}/marketplace.json"
 README="${SCRIPT_DIR}/README.md"
 
 # Colors
@@ -21,14 +22,26 @@ show_versions() {
     echo -e "${BLUE}Current versions:${NC}"
     echo ""
 
-    # Marketplace
-    echo -e "${YELLOW}marketplace.json:${NC}"
-    grep -o '"version": "[^"]*"' "$MARKETPLACE_JSON" | head -1 | sed 's/"version": "/  /' | sed 's/"//'
+    # Marketplaces
+    echo -e "${YELLOW}Claude marketplace:${NC}"
+    grep -o '"version": "[^"]*"' "$CLAUDE_MARKETPLACE_JSON" | head -1 | sed 's/"version": "/  /' | sed 's/"//'
 
-    # Individual plugins
+    echo -e "${YELLOW}Standalone skills marketplace:${NC}"
+    grep -o '"version": "[^"]*"' "$SKILLS_MARKETPLACE_JSON" | head -1 | sed 's/"version": "/  /' | sed 's/"//'
+
+    # Individual Claude plugins
     echo ""
-    echo -e "${YELLOW}Plugin manifests:${NC}"
+    echo -e "${YELLOW}Claude plugin manifests:${NC}"
     for plugin_json in "${SCRIPT_DIR}"/plugins/*/.claude-plugin/plugin.json; do
+        plugin_name=$(basename "$(dirname "$(dirname "$plugin_json")")")
+        version=$(grep -o '"version": "[^"]*"' "$plugin_json" | sed 's/"version": "//' | sed 's/"//')
+        echo "  $plugin_name: $version"
+    done
+
+    # Individual Codex plugins
+    echo ""
+    echo -e "${YELLOW}Codex plugin manifests:${NC}"
+    for plugin_json in "${SCRIPT_DIR}"/plugins/*/.codex-plugin/plugin.json; do
         plugin_name=$(basename "$(dirname "$(dirname "$plugin_json")")")
         version=$(grep -o '"version": "[^"]*"' "$plugin_json" | sed 's/"version": "//' | sed 's/"//')
         echo "  $plugin_name: $version"
@@ -47,25 +60,31 @@ bump_version() {
     echo -e "${BLUE}Bumping all versions to ${GREEN}${new_version}${NC}"
     echo ""
 
-    # Update marketplace.json
-    echo -e "${YELLOW}Updating marketplace.json...${NC}"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$MARKETPLACE_JSON"
-    else
-        sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$MARKETPLACE_JSON"
-    fi
-    echo -e "  ${GREEN}✓${NC} Updated"
-
-    # Update each plugin
-    for plugin_json in "${SCRIPT_DIR}"/plugins/*/.claude-plugin/plugin.json; do
-        plugin_name=$(basename "$(dirname "$(dirname "$plugin_json")")")
-        echo -e "${YELLOW}Updating ${plugin_name}...${NC}"
+    # Update versioned marketplace metadata. The Codex marketplace catalog does
+    # not carry versions; versions live in each .codex-plugin/plugin.json.
+    for marketplace_json in "$CLAUDE_MARKETPLACE_JSON" "$SKILLS_MARKETPLACE_JSON"; do
+        marketplace_path="${marketplace_json#${SCRIPT_DIR}/}"
+        echo -e "${YELLOW}Updating ${marketplace_path}...${NC}"
         if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$plugin_json"
+            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$marketplace_json"
         else
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$plugin_json"
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$marketplace_json"
         fi
         echo -e "  ${GREEN}✓${NC} Updated"
+    done
+
+    # Update each Claude and Codex plugin manifest.
+    for manifest_type in .claude-plugin .codex-plugin; do
+        for plugin_json in "${SCRIPT_DIR}"/plugins/*/"${manifest_type}"/plugin.json; do
+            plugin_name=$(basename "$(dirname "$(dirname "$plugin_json")")")
+            echo -e "${YELLOW}Updating ${plugin_name}/${manifest_type}...${NC}"
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$plugin_json"
+            else
+                sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${new_version}\"/g" "$plugin_json"
+            fi
+            echo -e "  ${GREEN}✓${NC} Updated"
+        done
     done
 
     # Update README.md plugin table

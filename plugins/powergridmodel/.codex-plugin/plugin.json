@@ -1,0 +1,24 @@
+{
+  "name": "powergridmodel",
+  "version": "3.0.0",
+  "description": "power-grid-model Python reference for distribution power flow, state estimation, short-circuit calculation, and batch analysis.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MPL-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "power-grid-model",
+    "shortDescription": "Analyze distribution grids with power-grid-model.",
+    "longDescription": "Run symmetric and asymmetric power flow, state estimation, short-circuit, batch, and contingency analyses.",
+    "developerName": "Datathings",
+    "category": "Power Grid Management",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me analyze a distribution grid with power-grid-model."
+    ]
+  }
+}

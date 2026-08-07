@@ -1,0 +1,24 @@
+{
+  "name": "ggml",
+  "version": "3.0.0",
+  "description": "ggml C tensor library reference for computation graphs, GGUF I/O, quantization, multi-backend inference, and ML training.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ggml",
+    "shortDescription": "Develop tensor and inference code with ggml.",
+    "longDescription": "Use ggml for tensor operations, lazy computation graphs, GGUF files, quantization, multi-backend inference, and training.",
+    "developerName": "Datathings",
+    "category": "Agentic AI",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me implement a tensor workflow with ggml."
+    ]
+  }
+}

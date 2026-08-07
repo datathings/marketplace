@@ -1,0 +1,24 @@
+{
+  "name": "opencl",
+  "version": "3.0.0",
+  "description": "OpenCL C and C++ reference for cross-platform GPU and CPU parallel computing, device management, memory, kernels, events, and profiling.",
+  "author": {
+    "name": "Datathings",
+    "email": "contact@datathings.com",
+    "url": "https://datathings.com"
+  },
+  "repository": "https://github.com/datathings/marketplace",
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "OpenCL",
+    "shortDescription": "Build portable parallel applications with OpenCL.",
+    "longDescription": "Use the OpenCL C API and C++ wrapper for cross-platform devices, memory, kernels, events, queues, and profiling.",
+    "developerName": "Datathings",
+    "category": "High Performance Math & GPU",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Help me implement a portable compute kernel with OpenCL."
+    ]
+  }
+}
