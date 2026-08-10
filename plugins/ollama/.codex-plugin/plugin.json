@@ -1,6 +1,6 @@
 {
   "name": "ollama",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Ollama REST API reference for local text generation, chat, embeddings, model management, and custom model creation.",
   "author": {
     "name": "Datathings",

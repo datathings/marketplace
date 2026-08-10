@@ -1,6 +1,6 @@
 {
   "name": "vllm",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "vLLM Python reference for high-throughput inference, offline batches, OpenAI-compatible serving, LoRA, multimodal inputs, and structured outputs.",
   "author": {
     "name": "Datathings",

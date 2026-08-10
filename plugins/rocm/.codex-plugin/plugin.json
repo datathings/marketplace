@@ -1,6 +1,6 @@
 {
   "name": "rocm",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "AMD ROCm and HIP reference for GPU kernels, compute libraries, profiling, and CUDA-to-HIP migration.",
   "author": {
     "name": "Datathings",

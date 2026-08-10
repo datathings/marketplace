@@ -7,6 +7,8 @@ _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL
 ## Contents
 
 - [gc/host.h — Host, Tasks & Scheduler](#gchost-h)
+- [gc/env.h — Resolved Host Configuration](#gcenv-h)
+- [gc/ca.h — Resolved TLS Trust Chain](#gcca-h)
 - [gc/block.h — Storage Blocks](#gcblock-h)
 - [gc/abi.h — ABI (Application Binary Interface)](#gcabi-h)
 - [gc/io.h — File I/O](#gcio-h)
@@ -138,6 +140,7 @@ typedef struct {
 | `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, i64_t task_id, u32_t requester_id, u64_t requester_permissions, gc_task_t *out_task)` | Cancel a running or queued task. Thread-safe. `requester_id`/`requester_permissions` identify the caller (for permission checks); `out_task` is optional and, if non-NULL, receives a copy of the cancelled parent task when found. |
 | `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, i64_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
+| `gc_host__options` | `const gc_env_slot_t *gc_host__options(const gc_host_t *self)` | **New in 8.2.** Configuration the process resolved from CLI flags, the environment, and the `.env` file — indexed by `gc_env_options_offset_t`, `gc_env_options_len` entries long. Settled before any library is linked and read-only afterwards, so the pointer stays valid for the lifetime of the host. See [gc/env.h](#gcenv-h). |
 
 ### Scheduler Functions
 
@@ -296,6 +299,118 @@ if (!gc_host__add_request(fn, data, data_len)) {
 }
 ```
 
+
+---
+
+<a id="gcenv-h"></a>
+## gc/env.h — Resolved Host Configuration
+
+**New header in 8.2.** Gives native libraries read access to the configuration the process resolved at startup from CLI flags, the environment, and the `.env` file — the same values the host itself uses (port, worker counts, TLS/`ca_path`, timezone, MCP settings, etc.) — without each library re-parsing `argv`/env vars on its own. Included automatically via `greycat.h`; `gc/host.h` also includes it directly since `gc_host__options` returns its slot type.
+
+### Types
+
+```c
+/// Value of one resolved configuration option. Which member is live is fixed
+/// per option by its CLI declaration and never varies at runtime: `unsecure` is
+/// always `b`, `ca_path` always `str`, `port` always `i64`.
+typedef union {
+    bool b;
+    i64_t i64;
+    u64_t u64;
+    f64_t f64;
+    char *str;
+} gc_env_slot_t;
+```
+
+`gc_env_options_offset_t` indexes the array `gc_host__options()` returns. The numbering is part of the SDK ABI — a new option is always added immediately before the `gc_env_options_len` marker, never in the middle:
+
+```c
+typedef enum {
+    gc_env_options__none = 0,
+    gc_env_options__log,
+    gc_env_options__logfile,
+    gc_env_options__cache,
+    gc_env_options__backup_path,
+    gc_env_options__max_backup_files,
+    gc_env_options__defrag_ratio,
+    gc_env_options__usage_step,
+    gc_env_options__store,
+    gc_env_options__http_threads,
+    gc_env_options__req_workers,
+    gc_env_options__workers,
+    gc_env_options__worlds,
+    gc_env_options__port,
+    gc_env_options__webroot,
+    gc_env_options__key,
+    gc_env_options__root_pass,
+    gc_env_options__keysafe,
+    gc_env_options__user,
+    gc_env_options__validity,
+    gc_env_options__unsecure,
+    gc_env_options__force,
+    gc_env_options__verify,
+    gc_env_options__tz,
+    gc_env_options__task_pool_capacity,
+    gc_env_options__request_pool_capacity,
+    gc_env_options__mode,
+    gc_env_options__keep_alive,
+    gc_env_options__format,
+    gc_env_options__pretty,
+    gc_env_options__quiet,
+    gc_env_options__store_paths,
+    gc_env_options__request_ttl,
+    gc_env_options__ca_path,
+    gc_env_options__with,
+    gc_env_options__yes,
+    gc_env_options__with_lang,
+    gc_env_options__lang,
+    gc_env_options__mcp_content,
+    gc_env_options__mcp_instructions,
+    // do not move that last one, it serves as an automatic length marker
+    gc_env_options_len,
+} gc_env_options_offset_t;
+```
+
+### Usage Examples
+
+#### Reading a resolved option from a native library
+
+Index the array `gc_host__options()` returns with the matching `gc_env_options_offset_t` variant, then read the union member the option's CLI declaration fixes (see the comment on `gc_env_slot_t` — `port` is always `.i64`, `ca_path` always `.str`, `unsecure` always `.b`):
+
+```c
+gc_host_t *host = gc_host__get_global();
+const gc_env_slot_t *opts = gc_host__options(host);
+
+i64_t port = opts[gc_env_options__port].i64;
+bool tls_disabled = opts[gc_env_options__unsecure].b;
+const char *ca_path = opts[gc_env_options__ca_path].str;  // NULL if unset
+```
+
+`gc_host__options` never returns `NULL`, but individual `char *str` slots for unset string options can be `NULL` — check before use. The array is settled before any library is linked and is read-only afterwards, so it is safe to cache the pointer for the lifetime of the host (no need to re-fetch per call).
+
+---
+
+<a id="gcca-h"></a>
+## gc/ca.h — Resolved TLS Trust Chain
+
+**New header in 8.2.** Exposes the trust chain the process resolved at startup — the system CA store concatenated with whatever the `ca_path` option added — so a library that verifies its own TLS connections (e.g. it links its own TLS stack rather than reusing the host's) can honor the same configuration the runtime does instead of rediscovering a store of its own.
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_ssl_ca__pem_bundle` | `const char *gc_ssl_ca__pem_bundle(u64_t *len)` | Returns the resolved trust chain, PEM-encoded, or `NULL` when no certificate could be resolved (`*len` is left untouched on `NULL`). Owned by the runtime, valid until shutdown — **must not be freed** by the caller. |
+
+Handed out as PEM bytes rather than as a parsed (e.g. mbedtls) chain on purpose: PEM is what every TLS stack accepts, so the library doesn't need to link the same one GreyCat uses internally.
+
+```c
+u64_t len = 0;
+const char *pem = gc_ssl_ca__pem_bundle(&len);
+if (pem != NULL) {
+    // hand `pem`/`len` to your own TLS stack's trust-store loader
+}
+// do not free `pem` — owned by the runtime until process shutdown
+```
 
 ---
 
@@ -567,6 +682,7 @@ typedef struct {
 |----------|-----------|-------------|
 | `gc_abi__create` | `gc_abi_t *gc_abi__create(gc_allocator_t *allocator)` | Allocate a new ABI instance bound to `allocator`. |
 | `gc_abi__finalize` | `void gc_abi__finalize(gc_abi_t *abi)` | Free all ABI memory (uses the allocator stored on the ABI). |
+| `gc_abi__finalize_ex` | `void gc_abi__finalize_ex(gc_abi_t *abi)` | **New in 8.2.** Releases everything a load allocated, but not `abi` itself — for callers that own the `gc_abi_t` inline (e.g. on the stack or embedded in another struct) rather than through `gc_abi__create`. |
 | `gc_abi__save` | `void gc_abi__save(const gc_abi_t *abi, gc_buffer_t *output)` | Serialize the entire ABI to a buffer. |
 | `gc_abi__load` | `bool gc_abi__load(gc_abi_t *abi, gc_buffer_t *input)` | Deserialize an ABI from a buffer. |
 | `gc_abi__get_symbol` | `gc_string_t *gc_abi__get_symbol(const gc_abi_t *abi, gc_symbol_t symb)` | Retrieve a symbol string by its symbol ID. |
@@ -601,6 +717,15 @@ gc_program_t *program = gc_program__create(abi, global_allocator);
 // Shutdown: release every ABI-owned array (symbols, types, attributes,
 // functions). Uses the allocator stored on the ABI, so no allocator arg.
 gc_abi__finalize(abi);
+```
+
+**`gc_abi__finalize` vs. `gc_abi__finalize_ex` (new in 8.2).** `gc_abi__finalize` frees the `gc_abi_t` struct itself in addition to its owned arrays — use it for an ABI obtained from `gc_abi__create`. `gc_abi__finalize_ex` frees only what a load allocated *into* an existing `gc_abi_t`, leaving the struct itself untouched — use it when the ABI lives inline (stack-allocated or embedded in another struct) rather than heap-allocated via `gc_abi__create`:
+
+```c
+gc_abi_t abi = {0};   // inline / stack-owned, not from gc_abi__create
+gc_abi__load(&abi, input_buf);
+// ... use abi ...
+gc_abi__finalize_ex(&abi);   // frees symbols/types/attributes/functions; `abi` itself is untouched
 ```
 
 **Persisting the ABI to and from a buffer.** `gc_abi__save` writes the full

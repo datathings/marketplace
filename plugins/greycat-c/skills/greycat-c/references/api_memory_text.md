@@ -221,6 +221,8 @@ for (;;) {
 
 A growable byte buffer used throughout GreyCat for serialization (binary, JSON, text), string building, I/O, and internal protocol encoding. The buffer maintains a write cursor (`current`) and supports both high-level append operations and low-level inline read/write of fixed-width primitives.
 
+**As of 8.2, every function declared in `gc/buffer.h` is uniformly `gc_sdk`-exported** (a handful previously lacked the export macro and could fail to link when called from a plugin shared library on strict-visibility builds); the three exceptions were removed outright — see the breaking-change note under *Value Formatting* below.
+
 ### Structure
 
 ```c
@@ -301,9 +303,8 @@ typedef struct {
 | `gc_buffer__add_protected_symbol(buf, symb_off, prog)` | Append symbol with non-alphanumeric replaced by `_` |
 | `gc_buffer__add_escaped_symbol(buf, symb_off, prog)` | Append symbol with `"` escaped to `\"` |
 | `gc_buffer__add_function(self, fn_off, prog)` | Append a function's qualified name |
-| `gc_buffer__add_type_name(self, value, type, prog)` | Append the type name of a slot |
-| `gc_buffer__add_type_name_by_id(self, type_id, prog)` | Append a type name by its type ID |
-| `gc_buffer__add_type_qname(self, value, type, prog)` | Append the qualified type name (module::type) |
+
+> **Removed in 8.2 (breaking).** `gc_buffer__add_type_name`, `gc_buffer__add_type_name_by_id`, and `gc_buffer__add_type_qname` are no longer declared in `gc/buffer.h` — they were briefly `gc_sdk`-exported, then dropped again in the same release cycle, so they never shipped as stable public API. There is no replacement; code that called any of the three no longer compiles against this header.
 
 ### Slot Serialization
 
@@ -359,7 +360,9 @@ These are `static inline` functions for zero-overhead binary serialization. Writ
 | `gc_buffer_read_vi64_size_checked` | Variable-length zig-zag `i64_t` (decodes byte-by-byte with its own bounds check, then zig-zag: `(i64_t)((u >> 1) ^ -(u & 1))`) |
 | `gc_buffer_read_ptr_size_checked(buf, target, len)` | Raw bytes via `memcpy`; bounds-checked counterpart of the `gc_buffer_read_ptr` macro below |
 
-**Breaking change (this update):** the old unchecked readers — `gc_buffer_read_bool`, `_u8`, `_i8`, `_u16`, `_u32`, `_i32`, `_u64`, `_i64`, `_f32`, `_f64`, `_vu32`, `_vu64`, `_vi64` (void-returning, no bounds check) — were **removed**. Callers must migrate to the `_size_checked` equivalents and handle the `bool` return value; `gc_buffer_read_vi64_size_checked` no longer delegates to `gc_buffer_read_vu64_size_checked` internally (it now has its own inline bounds check against `buf->data + buf->size`), though its signature is unchanged.
+**Breaking change (8.1):** the old unchecked readers — `gc_buffer_read_bool`, `_u8`, `_i8`, `_u16`, `_u32`, `_i32`, `_u64`, `_i64`, `_f32`, `_f64`, `_vu32`, `_vu64`, `_vi64` (void-returning, no bounds check) — were **removed**. Callers must migrate to the `_size_checked` equivalents and handle the `bool` return value; `gc_buffer_read_vi64_size_checked` no longer delegates to `gc_buffer_read_vu64_size_checked` internally (it now has its own inline bounds check against `buf->data + buf->size`), though its signature is unchanged.
+
+There is no exported double-underscore counterpart for the readers (see *Non-Inline Write Functions* below) — reading stays `static inline`-only.
 
 **Varint sizing constants:**
 
@@ -395,7 +398,7 @@ It computes in **offset space** (`consumed = current - data`, then `consumed + l
 
 ### Non-Inline Write Functions
 
-These are non-inline versions that handle capacity management internally:
+These are non-inline versions that handle capacity management internally. **As of 8.2 they are uniformly `gc_sdk`-exported** (previously some lacked the export macro and could fail to link from a plugin shared library on strict-visibility builds) — useful for callers that can't call a C `static inline` function, e.g. FFI bindings such as the Rust SDK:
 
 | Function | Description |
 |----------|-------------|

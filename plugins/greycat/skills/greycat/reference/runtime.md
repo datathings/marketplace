@@ -173,7 +173,7 @@ Built-in permissions live in `lib/std/runtime.gcl`:
 | Permission | What it grants                                     |
 | ---------- | -------------------------------------------------- |
 | `public`   | Anonymous access. Default for an anonymous caller. |
-| `api`      | Call `@expose`d functions and read `webroot`.      |
+| `api`      | Call `@expose`d functions. (`webroot` is public.)  |
 | `admin`    | Full administrative access.                        |
 | `debug`    | Low-level graph manipulation.                      |
 

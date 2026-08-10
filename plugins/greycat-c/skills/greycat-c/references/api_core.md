@@ -127,17 +127,19 @@ A tagged union that can hold any GreyCat value. Always paired with a `gc_type_t`
 ```c
 typedef struct {
     union {
+        u64_t u64;                 // gc_type_geo, gc_type_node, etc.
         bool b;                    // gc_type_bool
         u8_t byte[8];              // Raw byte access
         u32_t u32;                 // 32-bit unsigned
         i64_t i64;                 // gc_type_int, gc_type_time, gc_type_duration
-        u64_t u64;                 // gc_type_geo, gc_type_node, etc.
         f64_t f64;                 // gc_type_float
         gc_slot_tuple_u32_t tu32;  // gc_type_static_field (enum: .left=type, .right=value)
         gc_object_t *object;       // gc_type_object (String, Array, Map, Tensor, etc.)
     };
 } gc_slot_t;
 ```
+
+> **Breaking in 8.2: field order changed.** `u64` is now the *first* union member (previously `b` was first), to stop a non-designated initializer from silently truncating through `bool`. Always use a designated initializer (`(gc_slot_t){.i64 = x}`, `(gc_slot_t){.object = p}`, as every example in this doc does) — code relying on positional `(gc_slot_t){x}` now targets `.u64` instead of `.b`. Zero-initialization (`(gc_slot_t){0}` / `= {0}`) is unaffected either way, since it zeroes the whole union.
 
 ### gc_slot_tuple_u32_t — Enum / Static Field Pair
 
@@ -352,6 +354,7 @@ typedef struct {
 | `gc_machine__get_param_type` | `gc_type_t gc_machine__get_param_type(const gc_machine_t *ctx, u32_t offset)` | Get the type of a function parameter |
 | `gc_machine__get_param_nb` | `u32_t gc_machine__get_param_nb(const gc_machine_t *ctx)` | Get the number of parameters passed |
 | `gc_machine__this` | `gc_slot_t gc_machine__this(gc_machine_t *self)` | Get the `this` (self) object for instance methods |
+| `gc_machine__this_type` | `gc_type_t gc_machine__this_type(gc_machine_t *self)` | **New in 8.2.** Type tag of the receiver `gc_machine__this` returns — the counterpart to `gc_machine__get_param_type`. Returns `gc_type_undefined` when the current frame has no receiver (a module-level function), which is also the case where `gc_machine__this` must not be called. |
 
 #### Result & Return
 

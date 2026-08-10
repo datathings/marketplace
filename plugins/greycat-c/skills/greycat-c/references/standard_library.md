@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.1**. The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.2** (no GCL-visible stdlib changes since 8.1 — this cycle's changes were C-header-only; see [SKILL.md](../SKILL.md)). The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
 - **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, OpenAPI export, MCP server endpoints

@@ -1,6 +1,6 @@
 {
   "name": "greycat",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Full-stack GreyCat development for its graph-native language, persistence, APIs, parallel processing, and frontend integration.",
   "author": {
     "name": "Datathings",
