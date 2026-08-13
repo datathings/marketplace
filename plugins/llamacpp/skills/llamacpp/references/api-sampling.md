@@ -51,6 +51,11 @@ struct llama_sampler * llama_sampler_clone(const struct llama_sampler * smpl);
 Clone a sampler.
 
 ```c
+void llama_sampler_copy(const struct llama_sampler * src, struct llama_sampler * dst);
+```
+Copy mutable state from `src` into `dst` in place, while `dst` keeps its own references to the current backend sampling graph. `src` and `dst` must have the same type and configuration. Added in b10416 for backend (GPU) sampling, where a sampler's compute-graph bindings must survive a state copy.
+
+```c
 void llama_sampler_free(struct llama_sampler * smpl);
 ```
 Free a sampler. **Important:** Do not free if added to a chain via `llama_sampler_chain_add()`.
@@ -267,7 +272,7 @@ Apply repetition penalties. **Note:** Avoid using on full vocabulary (slow). App
 
 **Parameters:**
 - `n_vocab`: Vocabulary size, e.g. `llama_vocab_n_tokens(vocab)`
-- `penalty_last_n`: Last n tokens to penalize (0 = disabled, -1 = context size)
+- `penalty_last_n`: Last n tokens to penalize (0 = disabled; negative values are clamped to 0). As of b10416, `-1` no longer means "context size" — history-based samplers no longer resolve a "full-context window", since backend sampling can construct them before a `llama_context` (and its resolved context length) exists. Pass an explicit positive value.
 - `penalty_repeat`: Repeat penalty (must be > 0.0, 1.0 = disabled)
 - `penalty_freq`: Frequency penalty (must be finite, 0.0 = disabled)
 - `penalty_present`: Presence penalty (must be finite, 0.0 = disabled)
@@ -277,7 +282,6 @@ Apply repetition penalties. **Note:** Avoid using on full vocabulary (slow). App
 ```c
 struct llama_sampler * llama_sampler_init_dry(
     const struct llama_vocab * vocab,
-    int32_t n_ctx_train,
     float dry_multiplier,
     float dry_base,
     int32_t dry_allowed_length,
@@ -286,6 +290,17 @@ struct llama_sampler * llama_sampler_init_dry(
     size_t num_breakers);
 ```
 DRY (Don't Repeat Yourself) sampler.
+
+**Parameters:**
+- `vocab`: Vocabulary
+- `dry_multiplier`: Penalty multiplier (0.0 = disabled)
+- `dry_base`: Repeat penalty base
+- `dry_allowed_length`: Longest sequence repetition allowed before penalizing
+- `dry_penalty_last_n`: Last n tokens to penalize (0 = disable penalty; negative values are clamped to 0)
+- `seq_breakers`: Strings that reset the repetition search (e.g. punctuation)
+- `num_breakers`: Number of entries in `seq_breakers`
+
+**Breaking change (b10416):** the `int32_t n_ctx_train` parameter (previously the 2nd argument, right after `vocab`) was removed. History-based samplers no longer resolve a "full-context window" from training context size — pass an explicit `dry_penalty_last_n` instead.
 
 **Reference:** https://github.com/oobabooga/text-generation-webui/pull/5677
 
@@ -371,6 +386,8 @@ Backend sampling allows sampling operations to be performed directly on the GPU 
 
 **Note:** Use only if the `llama_context` was created with at least one `llama_sampler_seq_config`.
 
+**Multi-output backend sampling (b10416+):** a sequence can sample more than one output per step by setting `llama_context_params.n_outputs_max_per_seq` above 1 (see [api-context.md](api-context.md)). Use `llama_sampler_copy()` to duplicate sampler state without losing its bound compute graph, and `llama_get_sampled_token_ith()`'s multi-output note below when reading results.
+
 ### Configuration Struct
 
 ```c
@@ -403,6 +420,8 @@ llama_token llama_get_sampled_token_ith(
     int32_t i);
 ```
 Get the backend sampled token for the i-th token. Returns `LLAMA_TOKEN_NULL` if no token was sampled.
+
+**Multi-output note (b10416+):** with multiple outputs per sequence (`llama_context_params.n_outputs_max_per_seq > 1`), sampler state advances when a token is *accepted*, not when it is read through this function. When accepting multiple outputs, accept a contiguous prefix in output order (no gaps).
 
 ```c
 float * llama_get_sampled_probs_ith(struct llama_context * ctx, int32_t i);
@@ -439,8 +458,12 @@ Data structure for backend sampling operations.
 **Interface methods for backend sampling:**
 
 ```c
-// Return true if the backend supports all ops needed by the sampler
-bool (*backend_init)(struct llama_sampler * smpl, ggml_backend_buffer_type_t buft);
+// Return true if the backend supports all ops needed by the sampler and can
+// handle up to n_outputs_max_per_seq outputs per sequence. Called once per sampler.
+bool (*backend_init)(
+    struct llama_sampler       * smpl,
+    ggml_backend_buffer_type_t   buft,
+    uint32_t                     n_outputs_max_per_seq);
 
 // Called after backend_apply()
 void (*backend_accept)(
@@ -458,7 +481,16 @@ void (*backend_apply)(
 
 // Called before graph execution to set inputs for the current ubatch
 void (*backend_set_input)(struct llama_sampler * smpl);
+
+// Called before rebuilding a sampling graph to clear any internal sampler state (b10416+)
+void (*backend_reset)(struct llama_sampler * smpl);
+
+// Copy mutable state from src into dst while keeping dst's references to the
+// current sampling graph. src and dst must have the same type and configuration. (b10416+)
+void (*copy_state)(const struct llama_sampler * src, struct llama_sampler * dst);
 ```
+
+**Note:** `backend_init()` gained the `n_outputs_max_per_seq` parameter in b10416 to support multi-output backend sampling (multiple sampled tokens per sequence per step). The `backend_reset` and `copy_state` callbacks are also new in b10416 — implementers of a custom backend-sampling `llama_sampler_i` should provide them (both may be NULL if the sampler holds no state that needs resetting/copying).
 
 **Usage Example:**
 ```c

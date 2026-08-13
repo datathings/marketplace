@@ -1,6 +1,6 @@
 {
   "name": "ggml",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "ggml C tensor library reference for computation graphs, GGUF I/O, quantization, multi-backend inference, and ML training.",
   "author": {
     "name": "Datathings",

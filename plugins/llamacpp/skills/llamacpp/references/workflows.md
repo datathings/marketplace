@@ -942,11 +942,12 @@ int main() {
     );
 
     // Add DRY sampler (reduces repetition)
+    // Note: as of b10416, llama_sampler_init_dry() no longer takes n_ctx_train;
+    // pass dry_penalty_last_n explicitly instead of resolving it from context size.
     const char * seq_breakers[] = {"\n", ".", "?", "!", ",", ":", ";", ")"};
     llama_sampler_chain_add(sampler,
         llama_sampler_init_dry(
             vocab,
-            llama_model_n_ctx_train(model),
             0.8,    // dry_multiplier
             1.75,   // dry_base
             2,      // dry_allowed_length

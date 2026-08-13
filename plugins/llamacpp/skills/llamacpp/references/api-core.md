@@ -111,6 +111,12 @@ void llama_detach_threadpool(struct llama_context * ctx);
 ```
 Detach threadpool from context.
 
+### llama_version
+```c
+const char * llama_version(void);
+```
+Get the llama.cpp library version string (from the CMake-generated semantic version).
+
 ---
 
 ## Parameter Helpers
@@ -245,14 +251,15 @@ llama_model_free(model);
 
 ```c
 enum llama_load_mode {
-    LLAMA_LOAD_MODE_NONE       = 0, // no special loading mode
-    LLAMA_LOAD_MODE_MMAP       = 1, // memory map the model
-    LLAMA_LOAD_MODE_MLOCK      = 2, // force system to keep model in RAM rather than swapping or compressing
-    LLAMA_LOAD_MODE_MMAP_MLOCK = 3, // mmap + force system to keep model in RAM rather than swapping or compressing
-    LLAMA_LOAD_MODE_DIRECT_IO  = 4, // use direct I/O if available
+    LLAMA_LOAD_MODE_AUTO       = -1, // auto-detect based on device capabilities
+    LLAMA_LOAD_MODE_NONE       =  0, // no special loading mode
+    LLAMA_LOAD_MODE_MMAP       =  1, // memory map the model
+    LLAMA_LOAD_MODE_MLOCK      =  2, // force system to keep model in RAM rather than swapping or compressing
+    LLAMA_LOAD_MODE_MMAP_MLOCK =  3, // mmap + force system to keep model in RAM rather than swapping or compressing
+    LLAMA_LOAD_MODE_DIRECT_IO  =  4, // use direct I/O if available
 };
 ```
-Controls how the model file is loaded into memory. Set via `llama_model_params.load_mode` (replaces the removed `use_mmap`, `use_direct_io`, and `use_mlock` boolean fields).
+Controls how the model file is loaded into memory. Set via `llama_model_params.load_mode` (replaces the removed `use_mmap`, `use_direct_io`, and `use_mlock` boolean fields). `LLAMA_LOAD_MODE_AUTO` (the default) picks a mode based on device capabilities — e.g. it avoids mmap on iGPUs, where mmap'd weights can hurt performance.
 
 ### llama_load_mode_name
 ```c

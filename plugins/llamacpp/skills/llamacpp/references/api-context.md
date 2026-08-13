@@ -42,6 +42,8 @@ if (!ctx) {
 
 - `n_outputs_max` (`uint32_t`) - Maximum number of outputs in a ubatch (`0` = `n_batch`). Capping this lets the context reserve less output VRAM when you only ever read a few logits/embeddings per batch (e.g. one output per sequence during generation). Added in b9704. Default: 0.
 
+- `n_outputs_max_per_seq` (`uint32_t`) - Maximum number of outputs per sequence (`0` = `n_outputs_max`). Used by backend (multi-output) sampling so a single sequence can sample more than one output per step. Added in b10416. Default: 0.
+
 - `defrag_thold` (float) - [DEPRECATED] Defragment the KV cache if holes/size > threshold, <= 0 disabled. This parameter is deprecated and should not be used in new code.
 
 **Backend Sampling parameters [EXPERIMENTAL]:**
@@ -371,7 +373,7 @@ size_t llama_state_seq_load_file(
     size_t n_token_capacity,
     size_t * n_token_count_out);
 ```
-Load sequence state from file.
+Load sequence state from file. If `tokens_out` is NULL, only the token count is reported through `n_token_count_out` and no state is loaded — use this to size a buffer before a real load.
 
 ### llama_state_seq_flags
 

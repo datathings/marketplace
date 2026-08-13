@@ -359,7 +359,7 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `devices`: NULL-terminated list of devices for offloading
 - `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
 - `split_mode`: How to split the model across GPUs
-- `load_mode`: How to load the model (`enum llama_load_mode`: `LLAMA_LOAD_MODE_NONE`/`MMAP`/`MLOCK`/`MMAP_MLOCK`/`DIRECT_IO`; replaces the removed `use_mmap`/`use_direct_io`/`use_mlock` booleans — see [api-core.md](api-core.md#load-mode))
+- `load_mode`: How to load the model (`enum llama_load_mode`: `LLAMA_LOAD_MODE_AUTO`/`NONE`/`MMAP`/`MLOCK`/`MMAP_MLOCK`/`DIRECT_IO`; replaces the removed `use_mmap`/`use_direct_io`/`use_mlock` booleans — see [api-core.md](api-core.md#load-mode)). Default: `LLAMA_LOAD_MODE_AUTO` (auto-detects based on device capabilities, e.g. avoids mmap on iGPUs).
 - `vocab_only`: Only load vocabulary, no weights
 - `check_tensors`: Validate model tensor data
 - `use_extra_bufts`: Use extra buffer types (for weight repacking)
@@ -374,6 +374,7 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `n_ubatch`: Physical maximum batch size
 - `n_seq_max`: Max number of sequences
 - `n_outputs_max`: Max outputs in a ubatch (0 = n_batch); cap to save output VRAM (b9704+)
+- `n_outputs_max_per_seq`: Max outputs per sequence (0 = `n_outputs_max`); relevant to backend (multi-output) sampling (b10416+)
 - `n_threads`: Threads for generation
 - `n_threads_batch`: Threads for batch processing
 - `embeddings`: Extract embeddings (together with logits)

@@ -65,14 +65,14 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (343 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (350 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (241 lines) - Model properties, architecture detection, metadata enums
-- **[api-context.md](references/api-context.md)** (419 lines) - Context, memory (KV cache), state management
+- **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (420 lines) - Batch operations, inference, tokenization, chat
-- **[api-sampling.md](references/api-sampling.md)** (492 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (397 lines) - LoRA adapters, performance, training, constants
+- **[api-sampling.md](references/api-sampling.md)** (524 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
+- **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 202 active functions (b10258) across 6 organized files
+**Total:** 204 active functions (b10416) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -148,18 +148,39 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,312 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,354 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
   - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
   - [api-sampling.md](references/api-sampling.md) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
-- **[references/workflows.md](references/workflows.md)** (1,618 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
+- **[references/workflows.md](references/workflows.md)** (1,619 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b10258
+## What's New in b10416
 
-**b10258** (183 commits since b10075) — model loading and sampling API changes:
+**b10416** (158 commits since b10258) — multi-output backend sampling, versioning, and a DRY sampler signature change:
+
+**BREAKING:**
+- `llama_sampler_init_dry()` no longer takes the `int32_t n_ctx_train` parameter (previously the 2nd argument, right after `vocab`). Update all call sites — see [api-sampling.md](references/api-sampling.md#dry-sampler).
+
+**New multi-output backend sampling [EXPERIMENTAL]:**
+- `llama_context_params.n_outputs_max_per_seq` (`uint32_t`) — max sampled outputs per sequence in a ubatch (0 = `n_outputs_max`).
+- `llama_sampler_i.backend_init()` gained a `uint32_t n_outputs_max_per_seq` parameter; new `backend_reset()` / `copy_state()` callbacks for authors of custom backend samplers.
+- `llama_sampler_copy()` — copy mutable sampler state between two same-type/config samplers without losing the destination's bound compute graph.
+- `llama_get_sampled_token_ith()`: with multiple outputs, sampler state now advances on token *acceptance*, not on read; accept a contiguous prefix in output order (no gaps).
+
+**New load-mode default:**
+- `LLAMA_LOAD_MODE_AUTO` (`-1`) is the new default for `llama_model_params.load_mode` (was `LLAMA_LOAD_MODE_MMAP`). Auto-detects based on device capabilities — e.g. avoids mmap on iGPUs.
+
+**New:**
+- `llama_version()` — returns the llama.cpp library version string (from CMake's new semantic-versioning setup).
+
+**Doc correction (no code change):** `llama_sampler_init_penalties()`'s `penalty_last_n` doc previously said "-1 = context size"; that was never accurate — negative values are clamped to 0 (disabled). History-based samplers (DRY, penalties) no longer resolve a "full-context window" from training context size, since backend sampling constructs samplers before a `llama_context` (and its resolved context length) exists.
+
+**Not in llama.h/llama-cpp.h, mentioned for awareness:** `mtmd` gained Qwen3-TTS support — a breaking change to the `llama-tts` CLI binary (outside this skill's C API scope).
+
+**Previously (b10258, 183 commits since b10075):**
 
 **BREAKING:**
 - `llama_sampler_init_penalties()` gained a new required first parameter `n_vocab` (source it via `llama_vocab_n_tokens(vocab)`). Update all call sites.
