@@ -1,6 +1,6 @@
 {
   "name": "llamacpp",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "llama.cpp C and C++ API reference for model loading, local inference, embeddings, chat, sampling, state management, and GGUF models.",
   "author": {
     "name": "Datathings",

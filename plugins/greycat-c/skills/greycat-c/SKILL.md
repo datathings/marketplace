@@ -5,8 +5,9 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.2** (headers re-verified 2026-08-10 against upstream `4b8c829aa`). Changes since 8.1:
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.2** (headers re-verified 2026-08-24 against upstream `0ab6059ca`). Changes since 8.1:
 
+- **New: CLI hooks on `gc_program_library`.** Two optional `gc_hook_function_t *` fields — `install` and `codegen` — with setters `gc_program_library__set_install_hook(lib, hook)` and `gc_program_library__set_codegen_hook(lib, hook)`. The install hook runs at the end of a successful `greycat install` (after the project is rebuilt and linked) for every library that registers one; returning `false` fails the command. The codegen hook makes the library itself a generator for `greycat codegen <lang>`, dispatched by matching `<lang>` against library names (the built-in `c`/`ts`/`java`/`rust`/`python2` generators stay native to the CLI). Both are purely additive — a `NULL` hook opts out. See [plugin_development.md](references/plugin_development.md), [api_core.md](references/api_core.md).
 - **New: resolved host configuration exposed to native libraries.** `gc/env.h` defines `gc_env_slot_t` (tagged-by-convention union: `bool`/`i64_t`/`u64_t`/`f64_t`/`char *`) and `gc_env_options_offset_t` (one variant per CLI/`.env`-resolved option, e.g. `gc_env_options__port`, `gc_env_options__ca_path`, terminated by the length marker `gc_env_options_len`). The new `gc_host__options(host)` returns a `const gc_env_slot_t *` array indexed by that enum, valid for the life of the host. `gc/ca.h`'s new `gc_ssl_ca__pem_bundle(u64_t *len)` hands out the resolved TLS trust chain (system CA store + `ca_path`) as a PEM byte string, owned by the runtime — for libraries that verify their own TLS connections and want to honor the same trust config as the host. Both headers are pulled in automatically via `greycat.h`. Full detail: [api_runtime_storage.md](references/api_runtime_storage.md).
 - **New: `gc_machine__this_type(self)`** — the `gc_type_t` counterpart to `gc_machine__this`; returns `gc_type_undefined` (and must not be called) when the current frame has no receiver. **New: `gc_abi__finalize_ex(abi)`** — releases everything a load allocated but not `abi` itself, for callers that own a `gc_abi_t` inline rather than through `gc_abi__create`. Both added for the Rust SDK rewrite. See [api_core.md](references/api_core.md), [api_runtime_storage.md](references/api_runtime_storage.md).
 - **Breaking: `gc_slot_t` union field order changed.** `u64_t u64` is now the *first* member (previously `bool b` was first), to stop positional (non-designated) initializers from silently truncating through `bool`. Any code using a non-designated `gc_slot_t` initializer (`(gc_slot_t){x}` with no `.field =`) now targets `.u64` instead of `.b` — designated initializers (`{.i64 = x}`, `{.object = p}`, etc., used throughout this SDK's own examples) are unaffected. See [api_core.md](references/api_core.md).
@@ -163,6 +164,8 @@ void gc_text_normalizer_TextNormalizer__rejoinHyphenatedWords(gc_machine_t *ctx)
 ```c
 gc_program_library__set_lib_hooks(lib, lib_start, lib_stop);
 gc_program_library__set_worker_hooks(lib, worker_start, worker_stop);
+gc_program_library__set_install_hook(lib, lib_install);   // optional: end of `greycat install`
+gc_program_library__set_codegen_hook(lib, lib_codegen);   // optional: `greycat codegen <lang>`
 ```
 
 ## Detailed Reference

@@ -772,6 +772,8 @@ struct gc_program_library {
     gc_hook_function_t *stop;          // Called on library stop
     gc_hook_function_t *worker_start;  // Called on each worker start
     gc_hook_function_t *worker_stop;   // Called on each worker stop
+    gc_hook_function_t *codegen;       // Called by `greycat codegen <lang>` (lib acts as generator)
+    gc_hook_function_t *install;       // Called at the end of `greycat install`
 };
 ```
 
@@ -1059,6 +1061,8 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program__finalize(program)` | Finalize and free a program created with `gc_program__create` / `gc_program__create_from_abi`. |
 | `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks. |
 | `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks. |
+| `gc_program_library__set_codegen_hook(lib, hook)` | Set the library's code-generation hook, invoked by `greycat codegen <lang>` when `<lang>` names this library. |
+| `gc_program_library__set_install_hook(lib, hook)` | Set the library's post-install hook, invoked at the end of `greycat install`. |
 | `gc_lib_std__link(prg, lib)` | Link the standard library to a program. |
 
 #### Internal Map Operations

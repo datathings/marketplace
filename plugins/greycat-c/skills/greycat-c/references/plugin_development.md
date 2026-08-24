@@ -341,6 +341,10 @@ bool gc_lib_my_plugin__link_native(gc_program_t *prog, gc_program_library_t *lib
     // Set worker-level hooks (called for each worker thread)
     gc_program_library__set_worker_hooks(lib, worker_start, worker_stop);
 
+    // Optional CLI hooks (see "CLI Hooks" below) — omit if unused
+    gc_program_library__set_install_hook(lib, lib_install);
+    gc_program_library__set_codegen_hook(lib, lib_codegen);
+
     // Configure custom types (see next section)
     gc_program_type__configure(prog, gc_mymod_Model,
                                sizeof(gc_mymod_model_t),
@@ -400,6 +404,54 @@ static bool worker_stop(gc_unused gc_program_library_t *lib,
     return true;
 }
 ```
+
+### CLI Hooks (Install & Codegen)
+
+Two optional hooks let a native library extend the `greycat` CLI itself. Both use the same
+`gc_hook_function_t` signature as the lifecycle hooks and are registered individually:
+
+```c
+gc_program_library__set_install_hook(lib, lib_install);
+gc_program_library__set_codegen_hook(lib, lib_codegen);
+```
+
+Neither is required — a `NULL` hook simply means the library opts out.
+
+**Install hook** — runs at the very end of a successful `greycat install`, after dependencies are
+fetched, the project is rebuilt/reloaded, and the program is linked. Every linked library that
+registers one is invoked, in library order. Returning `false` aborts the command with
+`library install error for <lib>` and a runtime error code. Use it for post-install setup that
+needs the linked program: fetching model weights, provisioning `files/`, compiling assets.
+
+```c
+static bool lib_install(gc_unused gc_program_library_t *lib,
+                        gc_program_t *prog,
+                        gc_unused void **user_data) {
+    (void) prog;
+    // Post-install work; return false to fail `greycat install`.
+    return true;
+}
+```
+
+**Codegen hook** — makes the library itself a generator for `greycat codegen <lang>`. Dispatch is
+by name: `<lang>` is resolved as a symbol and matched against library names, so a library named
+`python` backs `greycat codegen python`. It is also tried during bare `greycat codegen`
+(auto-detection). A `NULL` codegen hook means "this generator is unavailable" — the auto-detect
+path skips it silently, while an explicit request reports the link failure. Returning `false`
+yields `library codegen error for <lang>`.
+
+```c
+static bool lib_codegen(gc_unused gc_program_library_t *lib,
+                        gc_program_t *prog,
+                        gc_unused void **user_data) {
+    (void) prog;
+    // Emit bindings for the compiled program; return false on failure.
+    return true;
+}
+```
+
+The built-in `c`, `ts`, `java`, `rust` and legacy `python2` generators are native to the CLI and do
+**not** go through this hook.
 
 ## Custom Type Configuration
 
