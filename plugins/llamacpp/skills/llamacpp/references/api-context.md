@@ -312,7 +312,9 @@ bool llama_state_load_file(
     size_t n_token_capacity,
     size_t * n_token_count_out);
 ```
-Load session from file.
+Load session from file. Returns `false` if the file's magic or version does not match the running build.
+
+**Version bump (b10665):** `LLAMA_SESSION_VERSION` is now `10` (was `9`) and `LLAMA_STATE_SEQ_VERSION` is now `3` (was `2`). Session and sequence-state files written by older builds are rejected — always check the return value and fall back to re-ingesting the prompt rather than assuming a cached session loaded.
 
 ### llama_state_save_file
 ```c

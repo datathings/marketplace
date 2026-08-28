@@ -176,7 +176,13 @@ Conventions:
 - `lib/` is populated by `greycat install` — gitignored. `lib/installed` is the install cache, do not commit.
 - `src/` for application code.
 - `files/` and `gcdata/` are runtime-managed and gitignored.
-- `webroot/` for public assets served by the HTTP server; some libraries extract files into it on install.
+- `webroot/` for public assets served by the HTTP server. A library can ship its own assets in
+  `lib/<name>/webroot/`, served at `/` under the same rules; the project `webroot/` is searched first and
+  shadows them. See [runtime.md](runtime.md) for the resolution order.
+  Commit it or not depending on who writes it: hand-authored assets are sources and belong in git, but a
+  `webroot/` produced by a frontend bundler is generated output and is gitignored like any build directory
+  (see [webapp.md](webapp.md), where `vp build` populates it). Either way the deployed server needs a
+  populated `webroot/`, so a gitignored one has to be built on the deploy host or shipped as an artifact.
 
 See [cli.md](cli.md) for `greycat install` mechanics and [runtime.md](runtime.md) for what each directory holds at runtime.
 

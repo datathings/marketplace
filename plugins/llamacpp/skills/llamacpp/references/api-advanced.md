@@ -334,14 +334,16 @@ Run a training epoch.
 #define LLAMA_FILE_MAGIC_GGSQ 0x67677371u // 'ggsq'
 
 #define LLAMA_SESSION_MAGIC   LLAMA_FILE_MAGIC_GGSN
-#define LLAMA_SESSION_VERSION 9
+#define LLAMA_SESSION_VERSION 10
 
 #define LLAMA_STATE_SEQ_MAGIC   LLAMA_FILE_MAGIC_GGSQ
-#define LLAMA_STATE_SEQ_VERSION 2
+#define LLAMA_STATE_SEQ_VERSION 3
 
 // State sequence flags
 #define LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY 1  // work only with partial states (SWA KV cache or recurrent cache)
 ```
+
+**Breaking change (b10665):** `LLAMA_SESSION_VERSION` was bumped 9 → 10 and `LLAMA_STATE_SEQ_VERSION` 2 → 3 (recurrent-state rollback support in `ggml_ssm_scan` changed the serialized layout). Session and sequence-state files written by earlier builds are rejected on load — `llama_state_load_file()` / `llama_state_seq_load_file()` will fail on them. Regenerate any cached prompt/session files after upgrading.
 
 ## Key Data Structures
 
@@ -360,6 +362,7 @@ Model loading parameters (get defaults via `llama_model_default_params()`):
 - `n_gpu_layers`: Number of layers to store in VRAM (-1 = all layers)
 - `split_mode`: How to split the model across GPUs
 - `load_mode`: How to load the model (`enum llama_load_mode`: `LLAMA_LOAD_MODE_AUTO`/`NONE`/`MMAP`/`MLOCK`/`MMAP_MLOCK`/`DIRECT_IO`; replaces the removed `use_mmap`/`use_direct_io`/`use_mlock` booleans — see [api-core.md](api-core.md#load-mode)). Default: `LLAMA_LOAD_MODE_AUTO` (auto-detects based on device capabilities, e.g. avoids mmap on iGPUs).
+- `tensor_read_lazy`: On-demand reading of rows for tensors marked by the arch (`enum llama_tensor_read_lazy`: `LLAMA_TENSOR_READ_LAZY_OFF`/`AUTO`/`ON`; requires an mmap load mode — see [api-core.md](api-core.md#lazy-tensor-reading)) (b10665+)
 - `vocab_only`: Only load vocabulary, no weights
 - `check_tensors`: Validate model tensor data
 - `use_extra_bufts`: Use extra buffer types (for weight repacking)

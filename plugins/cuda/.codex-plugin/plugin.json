@@ -1,6 +1,6 @@
 {
   "name": "cuda",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "NVIDIA CUDA C and C++ reference for the Runtime API, GPU kernels, cuBLAS, cuFFT, cuSPARSE, cuRAND, cuSolver, and Thrust.",
   "author": {
     "name": "Datathings",

@@ -138,7 +138,7 @@ Started by `greycat serve` / `greycat dev`. Routes:
 | `POST /<module>::<Type>::<fn>` | Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`.               |
 | `GET /files/...`               | Read from `<project>/files/`. Per-user subdirectory + ACL.                                                                                                                   |
 | `POST/PUT /files/...`          | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.                                                                                    |
-| `GET /...` (anything else)     | Static assets from `<project>/webroot/`. Unknown paths return 404 — no automatic SPA fallback.                                                                               |
+| `GET /...` (anything else)     | Static assets, resolved against `<project>/webroot/` then each `lib/<name>/webroot/` (see below). Unknown paths return 404 — no automatic SPA fallback.                       |
 | `GET /` with no path           | Serves `webroot/index.html` if present, else a built-in placeholder.                                                                                                         |
 
 ### Authentication
@@ -299,9 +299,25 @@ Output goes to stdout. `--logfile` also mirrors to a file next to `gcdata/`.
 ```
 
 - `files/<user_name>/` — per-user upload area. Reachable via `GET/PUT/POST /files/<user_name>`. Access enforced by user grants — `greycat user grant alice rw root` lets `alice` read/write `files/root/`.
-- `webroot/` — public static assets. Served at `/` without authentication. Unknown paths return 404 (no automatic SPA fallback to `index.html` — handle deep links explicitly if your router needs it). `webroot/` is also the recommended bundle output target — see [webapp.md](webapp.md).
+- `webroot/` — public static assets. Served at `/` without authentication. Unknown paths return 404 (no automatic SPA fallback to `index.html` — handle deep links explicitly if your router needs it). `webroot/` is also the recommended bundle output target, in which case it is generated rather than committed — see [webapp.md](webapp.md).
 
 `Runtime::on_files_put(handler)` registers a GCL callback that fires for every successful upload (receives the file path).
+
+### Static asset resolution order
+
+A library can ship assets of its own in `lib/<name>/webroot/`, which are served at `/` exactly like the project's.
+A request for a static path is tried against each root in turn and the first one that has the file wins:
+
+1. `<project>/webroot/` - the project always goes first, so it can shadow any path a library ships.
+2. `<project>/lib/<name>/webroot/`, one per library that has such a directory, in the order the `@library`
+   pragmas are declared in `project.gcl`.
+
+Two consequences worth planning around. A library's assets survive anything done to the project `webroot/`,
+so a bundler clearing its own output directory cannot break them. And the set of roots is resolved once when
+the server starts: creating a `webroot/` (or reinstalling a library) while the server runs needs a restart to
+take effect.
+
+`--webroot` moves only the project root; library roots are always `lib/<name>/webroot/`.
 
 `File::baseDir()` returns the project's `files/` path; `File::userDir()` returns the current caller's subdirectory.
 

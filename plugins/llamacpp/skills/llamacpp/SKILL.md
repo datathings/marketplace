@@ -65,14 +65,14 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (350 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (372 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (241 lines) - Model properties, architecture detection, metadata enums
-- **[api-context.md](references/api-context.md)** (421 lines) - Context, memory (KV cache), state management
+- **[api-context.md](references/api-context.md)** (423 lines) - Context, memory (KV cache), state management
 - **[api-inference.md](references/api-inference.md)** (420 lines) - Batch operations, inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (524 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (398 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (401 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 204 active functions (b10416) across 6 organized files
+**Total:** 204 active functions (b10665) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -157,9 +157,20 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,619 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b10416
+## What's New in b10665
 
-**b10416** (158 commits since b10258) — multi-output backend sampling, versioning, and a DRY sampler signature change:
+**b10665** (249 commits since b10416) — no functions added, removed, or re-signatured. The public C API changed only in struct fields, one new enum, and the state-file versions:
+
+**BREAKING (data, not code):**
+- `LLAMA_SESSION_VERSION` 9 → 10 and `LLAMA_STATE_SEQ_VERSION` 2 → 3 (recurrent-state rollback in `ggml_ssm_scan` changed the serialized layout). Session/sequence-state files from older builds are rejected — `llama_state_load_file()` / `llama_state_seq_load_file()` fail on them. Regenerate cached sessions; check the return value and fall back to re-ingesting the prompt.
+
+**New lazy tensor reading:**
+- `enum llama_tensor_read_lazy` (`LLAMA_TENSOR_READ_LAZY_OFF`/`AUTO`/`ON`) + `llama_model_params.tensor_read_lazy`. Faults in rows of arch-marked tensors on demand instead of reading them whole at load — cuts resident memory and load latency for models with very large sparsely-used tensors. `AUTO` applies only to marked tensors > 4 GiB; both `AUTO` and `ON` **require an mmap load mode**. See [api-core.md](references/api-core.md#lazy-tensor-reading).
+
+**New quantizer memory cap:**
+- `llama_model_quantize_params.max_buf_size` (`size_t`) — max bytes of tensor rows held in memory at once, `0` = default (8 GiB). Lower it to quantize very large models on memory-constrained machines.
+
+**Previously (b10416, 158 commits since b10258)** — multi-output backend sampling, versioning, and a DRY sampler signature change:
 
 **BREAKING:**
 - `llama_sampler_init_dry()` no longer takes the `int32_t n_ctx_train` parameter (previously the 2nd argument, right after `vocab`). Update all call sites — see [api-sampling.md](references/api-sampling.md#dry-sampler).

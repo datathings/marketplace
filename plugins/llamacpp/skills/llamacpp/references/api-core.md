@@ -280,6 +280,25 @@ params.load_mode = LLAMA_LOAD_MODE_MMAP;
 struct llama_model * model = llama_model_load_from_file("model.gguf", params);
 ```
 
+### Lazy Tensor Reading
+
+```c
+enum llama_tensor_read_lazy {
+    LLAMA_TENSOR_READ_LAZY_OFF  = 0, // always read the whole tensor up front
+    LLAMA_TENSOR_READ_LAZY_AUTO = 1, // lazy only for marked tensors larger than 4 GiB (requires mmap)
+    LLAMA_TENSOR_READ_LAZY_ON   = 2, // read the rows of tensors marked by the arch on demand (requires mmap)
+};
+```
+Added in b10665. Set via `llama_model_params.tensor_read_lazy`. When enabled, rows of tensors the architecture marks as lazily readable are faulted in on demand instead of being read in full at load time — this cuts resident memory and load latency for models with very large sparsely-used tensors (e.g. huge token-embedding matrices). `AUTO` and `ON` both **require an mmap-based load mode**; with a non-mmap `load_mode` the setting has no effect.
+
+**Usage:**
+```c
+struct llama_model_params params = llama_model_default_params();
+params.load_mode        = LLAMA_LOAD_MODE_MMAP;
+params.tensor_read_lazy = LLAMA_TENSOR_READ_LAZY_AUTO;  // lazy for marked tensors > 4 GiB
+struct llama_model * model = llama_model_load_from_file("model.gguf", params);
+```
+
 ### llama_model_quantize
 ```c
 uint32_t llama_model_quantize(
@@ -323,10 +342,13 @@ typedef struct llama_model_quantize_params {
     const struct llama_model_kv_override * kv_overrides;        // kv overrides
     const struct llama_model_tensor_override * tt_overrides;    // tensor type overrides
     const int32_t * prune_layers;                               // layer indices to prune
+    size_t max_buf_size;                                        // max bytes of tensor rows kept in memory at once, 0 = default (8 GiB)
 } llama_model_quantize_params;
 ```
 
 **Note:** The quantization params struct uses properly typed pointers instead of `void *`. The `tensor_types` field was renamed to `tt_overrides`.
+
+**`max_buf_size` (b10665+):** caps how many bytes of tensor rows the quantizer keeps resident at once. `0` selects the default of 8 GiB. Lower it to quantize very large models on memory-constrained machines; the quantizer then streams rows in smaller chunks.
 
 ### Enum Values
 

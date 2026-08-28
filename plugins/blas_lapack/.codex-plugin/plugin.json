@@ -1,6 +1,6 @@
 {
   "name": "blas_lapack",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "CBLAS and LAPACKE C API reference for vector and matrix operations, solvers, eigenvalues, SVD, least squares, and factorizations.",
   "author": {
     "name": "Datathings",

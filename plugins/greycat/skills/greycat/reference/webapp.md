@@ -66,7 +66,7 @@ everything Web-Awesome-specific - component choice, slots, events, page shells, 
 my-project/
 |-- project.gcl              # @include("src") - GreyCat backend entrypoint
 |-- src/                     # GreyCat backend sources (classic, unchanged)
-|-- webroot/                 # build output, served at / (gitignored)
+|-- webroot/                 # vp build output, served at / (gitignored because generated)
 |-- vite.config.ts           # frontend build -> webroot
 |-- tsconfig.json
 |-- package.json             # vite-plus, lit, @awesome.me/webawesome, @greycat/web
@@ -85,6 +85,12 @@ my-project/
   declared in both `vite.config.ts` and `tsconfig.json` so the bundler and the type checker agree.
 - **`webroot/` is the public root.** Everything in it is served at the matching URL. Unknown paths return 404 -
   there is no SPA fallback. MPA sidesteps this: every page is a real file, so refresh and deep links resolve.
+- **`webroot/` is generated here, so it is gitignored.** That is specific to using a bundler: in a project
+  with no `app/`, `webroot/` is hand-authored and committed like any other source. See
+  [project.md](project.md).
+- **Clearing `webroot/` only clears your own output.** Assets a library serves live in `lib/<name>/webroot/`
+  and are resolved separately, so wiping the bundle output cannot remove them. See
+  [runtime.md](runtime.md).
 
 ## Backend vs frontend: what `app/` signals
 

@@ -248,6 +248,8 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 - [ ] `greycat fmt --mode=check` and `greycat lint` both exit `0` on the deploy commit. See [lang.md](lang.md).
 - [ ] `greycat build` produces a `project.gcp` artifact (or ship the source tree with `lib/` populated).
 - [ ] Ship `project.gcl`, `src/`, `lib/`, `webroot/`, and `bin/greycat` (or have the deploy host run `greycat install` once).
+- [ ] If `webroot/` is bundler output and therefore gitignored, build it on the deploy host or ship it as a
+      separate artifact - it is not in the source tree. See [webapp.md](webapp.md).
 - [ ] Provision a writable `gcdata/` (this is the durable state).
 - [ ] Provision a writable `files/` if the app accepts uploads.
 - [ ] Configure with `.env` (or systemd `Environment=`): `GREYCAT_PORT`, `GREYCAT_LOG`, `GREYCAT_CACHE`, `GREYCAT_STORE`, `GREYCAT_BACKUP_PATH`, `GREYCAT_TZ`.

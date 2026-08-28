@@ -28,6 +28,7 @@ The patterns that keep GreyCat code correct, and the mistakes that an agent fami
 | `import foo from "bar"`                             | Add `@library` / `@include` to `project.gcl`       | No import statements.                                         |
 | `switch (x) { case … }`                             | Chained `if`, or `type::enum_offset(x)`            | No `switch` / `match`.                                        |
 | `interface Foo { ... }`                             | `abstract type Foo { ... }`                        | No `interface` keyword.                                       |
+| `type Type { x: int = 42; }`                        | `type Type { x: int; }`                            | Instance field have no initializer.                           |
 | `let x = ...`                                       | `var x = ...`                                      | Only `var`.                                                   |
 | `const PI = 3.14`                                   | `static pi: float = 3.14;` inside a type           | No `const`; use `static` attributes.                          |
 | `T extends Bound` generic                           | `<T>` (no bounds)                                  | Generics are unbounded.                                       |

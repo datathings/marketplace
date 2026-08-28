@@ -10,7 +10,7 @@ The stdlib ships under `lib/std/` (split into `core.gcl`, `io.gcl`, `runtime.gcl
 - Time and duration
 - Geographic types (geo, GeoBox, GeoCircle, GeoPoly)
 - IO (Reader / Writer / File)
-- HTTP and networking
+- Networking (Url, Smtp, S3)
 - Crypto and UUID
 - Tensor and vector index
 - Runtime introspection (Runtime, System, Task, Scheduler, Identity)
@@ -502,22 +502,12 @@ while (reader.can_read()) {
 - `geo` is two columns wide (lat then lng). Account for that when matching column order.
 - A greedy `Array<U>` field MUST be the last attribute — there's no way to delimit where it stops otherwise.
 
-## HTTP and networking
+## Networking
 
-### Http<T>
-
-```gcl
-var client = Http<JsonResponse> { };
-client.get("https://api.example.com/users", null);
-client.post("https://api.example.com/users", body, headers_map);
-client.put("https://api.example.com/users/1", body, headers_map);
-client.getFile("https://example.com/file.bin", "/tmp/out.bin", null);
-
-// Raw form
-var req = HttpRequest { method: HttpMethod::GET, url: "...", headers: m, body: null, timeout: 30s };
-var resp = client.send(req);
-resp.status_code;   resp.content;   resp.error_msg;
-```
+`std` has no HTTP client. `Http<T>`, `HttpRequest`, `HttpResponse<T>`,
+`HttpMethod` and `HttpReader<T>` ship in the separate `http` library: add
+`@library("http", "<version>");` to `project.gcl`, run `greycat install`, and
+read `lib/http/README.md` for the API. See [libraries.md](libraries.md).
 
 ### Url
 
@@ -693,7 +683,7 @@ Assert::isNotNull(v);
 Whenever a signature in this file looks stale or you need a method that isn't listed:
 
 1. `lib/std/core.gcl` — primitives, value types, node tags, error types, time / duration.
-2. `lib/std/io.gcl` — readers, writers, files, http, smtp, s3, csv, json.
+2. `lib/std/io.gcl` — readers, writers, files, url, smtp, s3, csv, json.
 3. `lib/std/runtime.gcl` — runtime, system, tasks, scheduler, identity, debug.
 4. `lib/std/util.gcl` — queues, stacks, sliding windows, gaussian, quantizers, histograms, crypto, uuid.
 

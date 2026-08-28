@@ -11,6 +11,7 @@ For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the w
 | `std`         | Required. Core types, collections, time/duration, IO, runtime, util (`Crypto`, `Random`, `Uuid`, sliding windows, ...). |
 | `lang`        | Language tooling behind `greycat lint` / `greycat fmt` / `greycat lsp`. Ships with a global GreyCat install; pin it here to hold a project to one toolchain version. See [lang.md](lang.md). |
 | `explorer`    | Graph UI + admin tool served at `/explorer` — dev convenience.                                            |
+| `http`        | HTTP/HTTPS client over libcurl: `Http<T>` (`get` / `post` / `put` / `getFile` / `send` / `chunked`), `HttpRequest`, `HttpResponse<T>`, `HttpMethod`, and `HttpReader<T>` for SSE / line-delimited streams. Not part of `std`. |
 | `ai`          | LLM inference (llama.cpp): `Model`, `LLM`, `ChatMessage`, embeddings, LoRA.                               |
 | `algebra`     | `PCA`, `FFT`, neural nets, k-means, time-series decomposition, climate (UTCI).                            |
 | `kafka`       | Typed Kafka producer/consumer: `KafkaReader<T>`, `KafkaWriter<T>`, `KafkaConf`.                           |
@@ -30,6 +31,29 @@ For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the w
 | `openid`      | OIDC single sign-on: `OidcProvider`, `Openid`, redirect + PKCE flow. *(Pro license required.)*            |
 
 Run `greycat install` after editing `project.gcl` to fetch/refresh the resolved versions into `<project>/lib/<name>/`.
+
+## After install, load the library's own skill
+
+`greycat install` unpacks a library into `<project>/lib/<name>/`. Most libraries
+ship their own agent skill there, and it is the authoritative reference for that
+library:
+
+- `lib/<name>/skills/SKILL.md` - the library skill. Read it into context before
+  writing any code against the library. It is written against the exact version
+  installed, so it supersedes the one-line summary in the catalog above and
+  anything inferred from the type names.
+- `lib/<name>/README.md` - prose overview. Read it when there is no skill.
+- `lib/<name>/<name>.gcl` - the declarations themselves; every type and method
+  carries a `///` doc comment. The last resort, and always the ground truth.
+
+A library may also carry `lib/<name>/webroot/`, static assets served at `/` alongside the
+project's own `webroot/`. See [runtime.md](runtime.md) for the resolution order.
+
+`std` follows the same layout: the installed copy carries `lib/std/skills/SKILL.md`
+plus a `skills/reference/` directory beside it - this very file is one of its pages.
+
+Not every entry in the catalog is a GCL library: some ship only static assets and
+`lang` installs a shared object, so there is no skill to read for those.
 
 ## Branch and version
 

@@ -390,6 +390,7 @@ typedef struct {
 | `gc_strftime_safe` | `size_t gc_strftime_safe(char *s, size_t maxsize, const char *format, const gc_tm_t *t, i32_t utc_offset)` | Format a time with a `strftime`-style format string. |
 | `gc_dtz_time__print` | `u32_t gc_dtz_time__print(i64_t epoch_us, u32_t tz, const char *format_c_str, char *out, u32_t out_cap)` | Format a timestamp with timezone into a char buffer. Returns bytes written. |
 | `gc_dtz_time__parse` | `bool gc_dtz_time__parse(const char *str, u32_t len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string with timezone context into a UTC epoch (microseconds). Returns `true` on success. |
+| `gc_dtz_time__parse_format` | `bool gc_dtz_time__parse_format(const char *str, u32_t len, const char *format, u32_t format_len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string against an explicit `format` (the counterpart of `gc_dtz_time__print`). The format leaves the instant naive, so `tz` is the zone it is read in. Returns `false` when the input does not match the format, or names an instant the zone does not have. |
 
 ### Helper Macros
 
