@@ -740,7 +740,7 @@ gc_object__field_to_type(field)
 | `gc_object__mark` | `void gc_object__mark(gc_object_t *self)` | Mark the object as reachable (prevent GC collection) |
 | `gc_object__un_mark` | `void gc_object__un_mark(gc_object_t *self, gc_machine_t *ctx)` | Unmark the object (allow GC to collect it if unreachable) |
 | `gc_object__declare_dirty` | `void gc_object__declare_dirty(gc_object_t *self)` | Mark the object as modified (for persistence layer) |
-| `gc_object__is_instance_of` | `bool gc_object__is_instance_of(const gc_object_t *self, u32_t of_type, gc_machine_t *ctx)` | Check if the object is an instance of a given type (supports inheritance) |
+| `gc_object__is_instance_of` | `bool gc_object__is_instance_of(const gc_object_t *self, u32_t of_type, gc_machine_t *ctx)` | Check if the object is an instance of a given type (supports inheritance and monomorphization — a `Box<String>` instance tests true against the generic declaration `Box`) |
 | `gc_object__finalize` | `void gc_object__finalize(gc_object_t *self, gc_machine_t *ctx)` | Finalize (destroy) the object |
 | `gc_object__clone` | `gc_object_t *gc_object__clone(gc_object_t *self, gc_machine_t *ctx)` | Deep-clone `self`, returning a new (marked) object; the caller owns the mark and must `gc_object__un_mark` it. |
 

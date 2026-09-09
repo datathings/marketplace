@@ -59,11 +59,34 @@ Not every entry in the catalog is a GCL library: some ship only static assets an
 
 Every library is published on two branches: **`stable`** (the default - use it unless you have a reason not to) and **`dev`**. Keep every `@library` on the same branch as `std`: if `std` is pinned to a `dev` version, pin the other libraries to `dev` too. Mixing branches across libraries is advanced usage; 99% of projects keep them uniform, following `std`.
 
-Resolve a branch's latest version by reading its `latest` marker:
+### Let `greycat install` resolve the version
+
+Do not resolve a version by hand and paste it into `project.gcl`. `greycat install --bump` rewrites every pin in the file to the newest release and installs it in one step, and it moves every library at once, which is what keeps them on one branch:
+
+```bash
+greycat install --bump                     # newest patch of each pin, same branch it already names
+greycat install --bump=latest              # newest release on the branch, any major.minor
+greycat install --bump --branch=stable     # move the whole project onto stable
+greycat install --bump --dry-run           # preview; project.gcl is not touched
+```
+
+`--branch` requires `--bump`. Adding a library still means writing the pragma first. A placeholder version needs the `latest` bound to move, because the default `patch` bound refuses to leave the `major.minor` the placeholder names:
+
+```gcl
+@library("kafka", "0.0.0-dev");   // then: greycat install --bump=latest
+```
+
+Give the placeholder the branch suffix the rest of the project uses (`-dev` above), or pass `--branch` - without one there is no branch to search.
+
+Full semantics (bounds, branch switching, why a pin was skipped) in [cli.md, `greycat install`](cli.md#greycat-install).
+
+### Reading a version without touching the project
+
+`curl` on the `latest` marker is still the way to answer "what is the newest X" - for a report, for a non-GCL artifact like the web SDK tarball ([webapp.md](webapp.md)), or when the project is not on this machine:
 
 ```bash
 curl https://get.greycat.io/files/<lib>/stable/latest   # -> 7.8/7.8.25-stable   (default branch)
 curl https://get.greycat.io/files/<lib>/dev/latest      # -> 8.0/8.0.39-dev
 ```
 
-The portion after the `/` (e.g. `7.8.25-stable`) is the version string to use in `@library("<lib>", "<version>")`. **Exception:** `std` is published under URL path `core` - fetch with `https://get.greycat.io/files/core/stable/latest`.
+The portion after the `/` (e.g. `7.8.25-stable`) is the version string used in `@library("<lib>", "<version>")`. **Exception:** `std` is published under URL path `core` - fetch with `https://get.greycat.io/files/core/stable/latest`.

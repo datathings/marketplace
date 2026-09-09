@@ -1,6 +1,6 @@
 {
   "name": "greycat-c",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "GreyCat C API and GCL Standard Library reference for native development, tensors, scheduling, I/O, and plugin implementation.",
   "author": {
     "name": "Datathings",

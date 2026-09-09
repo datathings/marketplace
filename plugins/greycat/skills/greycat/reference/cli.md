@@ -98,9 +98,55 @@ These three delegate to the `lang` library, loaded from `lib/lang/` or `~/.greyc
 
 ### `greycat install`
 
-Reads `@library` pragmas from `project.gcl` and downloads each library + the matching core binary into `lib/<name>/` and `bin/`. Skips libraries already at the requested version (tracked in `lib/installed`). `--force` re-downloads everything.
+Reads every `@library` pragma in the project closure (normally all in `project.gcl`) and downloads each library + the matching core binary into `lib/<name>/` and `bin/`. Skips libraries already at the requested version (tracked in `lib/installed`).
 
 Downloads from `https://get.greycat.io/files/<lib>/<branch>/<major.minor>/<target>/<version>.zip`. `std` resolves under `core/`.
+
+| Option                    | Meaning                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `[PROJECT]`               | Positional. A `project.gcl` path, or a directory holding one. Defaults to the current directory.                     |
+| `--bump[=patch\|latest]`  | Rewrite this project's `@library` pins to the newest release, then install what it wrote. Default bound is `patch`.  |
+| `--branch=<name>`         | Branch to bump onto (`stable`, `dev`, ...). **Requires `--bump`.** Defaults to the branch each pin already names.    |
+| `--force`                 | Re-download and re-extract every library, ignoring the cache and `lib/installed`.                                    |
+| `--dry-run`               | Print what would be installed (or bumped) and exit. Writes nothing.                                                 |
+| `--check`                 | Exit non-zero when anything is missing or out of date, without installing. For CI.                                  |
+| `--prune`                 | Delete libraries that are installed but no longer declared.                                                         |
+| `--offline`               | Install only from the local cache, never the network.                                                               |
+| `--jobs=<n>`              | Concurrent downloads (default `4`).                                                                                 |
+
+#### Moving version pins with `--bump`
+
+`--bump` is how a project moves onto a newer release. It rewrites the version literals in `project.gcl` in place and then installs what it wrote, so there is no `curl .../latest` + hand-edit round trip to get wrong. `curl` remains fine for *reading* a version without touching the project (see [libraries.md](libraries.md)).
+
+```sh
+greycat install --bump                          # newest patch, same branch as each pin
+greycat install --bump=latest                   # newest release on the branch, any major.minor
+greycat install --bump --branch=stable          # move onto stable, newest patch there
+greycat install --bump=latest --branch=dev      # newest dev, whatever its major.minor
+greycat install --bump --dry-run                # preview; project.gcl is not touched
+```
+
+Rules it follows:
+
+- **Bound.** `patch` (the default) keeps the declared `major.minor`: `8.1.0-dev` -> `8.1.145-dev`. `latest` takes the newest on the branch: `8.1.0-dev` -> `8.2.160-dev`.
+- **Branch.** Read from the pin's own prerelease suffix: `8.2.0-dev` follows `dev`, `7.8.25-stable` follows `stable`. `--branch` overrides it.
+- **Scope.** Only this project's declarations are rewritten. Pins inside an installed library under `lib/` belong to that library's author and are never touched.
+- **Direction.** Within one branch a pin only moves forward. Switching branch may move it *backwards* (`8.2.0-dev` -> `8.1.150-stable`), because `stable` trails `dev`. That is the point of the switch, not a bug.
+- **Unsuffixed pins.** `@library("std", "8.2")` names no branch, so there is nothing to follow: it is reported `no branch in the version; name one with --branch`. Adding `--branch=dev` resolves it to `8.2.160-dev`.
+
+Every library gets one line, present tense, whether it moved or not:
+
+```
+    resolving   std
+    update      std 8.1.0-dev -> 8.1.145-dev
+```
+
+```
+    resolving   std
+    up to date  std 8.2.160-dev
+```
+
+A pin that could not move says why, including what the looser bound would have given: `nothing newer on dev in this minor; --bump=latest would give 8.2.160-dev`.
 
 ### `greycat codegen [lang]`
 
@@ -165,7 +211,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | Option / env                            | Default            | Applies to                          | Meaning                                                                                                                                                                                                                            |
 | --------------------------------------- | ------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--log` / `GREYCAT_LOG`                 | `info`             | `run`, `serve`, `dev`, …            | Log level: `none`, `error`, `warn`, `info`, `perf`, `trace`.                                                                                                                                                                       |
-| `--logfile` / `GREYCAT_LOGFILE`         | `false`            | `run`, `serve`                      | Mirror logs to a file (alongside stdout).                                                                                                                                                                                          |
+| `--logfile` / `GREYCAT_LOGFILE`         | `false`            | `run`, `serve`                      | Not consulted by the runtime. Logs always go to `files/root/log.csv` (see [runtime.md](runtime.md)); stdout carries them only on a TTY.                                                                                             |
 | `--cache` / `GREYCAT_CACHE`             | 75% of host memory | `run`, `serve`                      | Worker object-cache size. Suffixes: `K`/`M`/`G`/`T` (binary), `KB`/`MB`/`GB`/`TB` (decimal), `KiB`/`MiB`/`GiB`/`TiB`.                                                                                                              |
 | `--store` / `GREYCAT_STORE`             | 1 GB               | `run`, `serve`                      | Per-zone storage cap.                                                                                                                                                                                                              |
 | `--port` / `GREYCAT_PORT`               | `8080`             | `serve`, `dev`                      | HTTP port. Set to `0` to pick a random free port (printed at startup).                                                                                                                                                             |
@@ -190,7 +236,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--request_ttl`                         | `20s`              | `serve`                             | Force-close requests that exceed this lifetime.                                                                                                                                                                                    |
 | `--mcp_content` / `GREYCAT_MCP_CONTENT` | `both`             | `serve`, `dev`                      | How an MCP `tools/call` ships its payload: `both` (spec-recommended duplication), `structured` (`structuredContent` only, empty `content`), `text` (serialized `content` only, and no `outputSchema` is advertised).                |
 | `--mcp_instructions`                    | none               | `serve`, `dev`                      | Usage guidance returned to MCP clients as `instructions` in the `initialize` result.                                                                                                                                               |
-| `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version.                                                                                                                                                                       |
+| `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version. `install` has its own option set (`--bump`, `--branch`, `--check`, ...); see [`greycat install`](#greycat-install) above.                                             |
 | `--with=<cmd>`                          | none               | `dev`                               | Watch-build command to spawn alongside the server.                                                                                                                                                                                 |
 | `--worlds` / `GREYCAT_WORLDS`           | `1`                | `run`, `serve`                      | Number of parallel graph "worlds" (branching state) — see [runtime.md § many-worlds](runtime.md). Worker count is multiplied accordingly.                                                                                          |
 

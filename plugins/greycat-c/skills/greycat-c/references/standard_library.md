@@ -499,24 +499,30 @@ enum MergeStrategy { strict; first_wins; last_wins; }
 
 ### Logging
 
-Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace.
+Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace. It is also the record shape of `files/root/log.csv`, the file the runtime always appends to (see the C-API skill's `gc/log.h` notes).
 ```gcl
 enum LogLevel { error; warn; info; perf; trace; }
 
 @volatile
 type Log {
   level: LogLevel;
-  time: time;
+  @format(DurationUnit::microseconds)
+  time: time;               // raw epoch microseconds, as written by the log writer
   user_id: int?;
   id: int?;
   id2: int?;
-  src: function?;
+  src: function?;            // innermost non-native frame, qualified name (e.g. `project::emit`)
   data: any?;
 }
 
 info("Application started");
 error("Failed to connect: ${error_message}");
 trace("Processing item ${id}");
+```
+
+Reading `files/root/log.csv` back with `CsvReader<Log>` needs a format that neutralizes quoting, since the `data` payload is written unescaped:
+```gcl
+var reader = CsvReader<Log> { path: "files/root/log.csv", format: CsvFormat { string_delimiter: '\0' } };
 ```
 
 #### LogDataUsage / RuntimeUsage

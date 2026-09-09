@@ -64,10 +64,10 @@ For a frontend-bundled project, swap `serve` for `dev` to also spawn the VitePlu
 ## The edit / install / run loop
 
 1. **Edit `.gcl`** under `src/` (or wherever your `@include` covers).
-2. **`greycat lint`** — fastest signal. Catches `unused-local`, `possibly-null`, `arrow-on-non-deref`, non-exhaustive enum chains, and dozens of other shape issues the runtime accepts silently. See [lang.md](lang.md).
+2. **`greycat lint`** — fastest signal. Catches `unused-local`, `possibly-null`, `arrow-on-non-deref`, `unreachable`, and dozens of other shape issues the runtime accepts silently. See [lang.md](lang.md).
 3. **`greycat fmt`** — canonical formatting. The formatter is opinionated and unconfigurable.
 4. **Restart the server.** GreyCat does not currently hot-reload schema changes — `serve` rebuilds the project at startup. Save → `Ctrl+C` → `serve` again.
-5. **`greycat install`** only when `project.gcl`'s `@library` pragmas change. Library cache lives in `lib/installed`.
+5. **`greycat install`** only when `project.gcl`'s `@library` pragmas change. Library cache lives in `lib/installed`. To move onto newer releases, `greycat install --bump` rewrites the pins for you - see [cli.md, `greycat install`](cli.md#greycat-install).
 6. **`greycat codegen`** if external SDKs need to pick up new endpoint signatures.
 
 For one-off scripts (data import, migration), use `greycat run [function]` — no server, just executes and exits.
@@ -260,8 +260,12 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 
 | Task                             | How                                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Pin a new stdlib version         | Bump `@library("std", "X.Y.Z")` in `project.gcl`, then `greycat install`.                                     |
-| Add a third-party library        | Add `@library("name", "version");` then `greycat install`.                                                    |
+| Move every pin to the newest patch | `greycat install --bump` (add `--dry-run` to preview).                                                       |
+| Move the project onto another branch | `greycat install --bump --branch=stable` (or `dev`). May move versions backwards - stable trails dev.     |
+| Cross a major.minor              | `greycat install --bump=latest`. The default `patch` bound stays inside the declared `major.minor`.           |
+| Pin one exact version            | Edit `@library("std", "X.Y.Z-branch")` in `project.gcl`, then `greycat install`.                              |
+| Add a third-party library        | Add `@library("name", "version");` then `greycat install`. With a placeholder version, `--bump=latest`.       |
+| Drop a library                   | Remove its `@library` pragma, then `greycat install --prune`.                                                 |
 | Roll back to a known graph state | `greycat restore <archive>`. Stop the server first.                                                           |
 | Inspect a `.gcb` file from disk  | `greycat print path/to/file.gcb` (use `--format=json` for JSON).                                              |
 | Inspect the compiled bytecode    | `greycat bytecode`.                                                                                           |

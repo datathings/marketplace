@@ -14,7 +14,7 @@ GreyCat has no `import` / `use` / `include` statements at the source level. Visi
 
 ## The entrypoint
 
-Every GreyCat project has a single entrypoint named `project.gcl` at the project root. All `@library` and `@include` pragmas **must** appear in this file — no other module may carry them. The entrypoint pins the stdlib version and lists what's part of the project:
+Every GreyCat project has a single entrypoint named `project.gcl` at the project root. `@include` pragmas **must** appear in this file — no other module may carry one. `@library` (like `@permission` and `@role`) is accepted in any module of the closure, but the convention is to keep every dependency in the entrypoint, which pins the stdlib version and lists what's part of the project:
 
 ```gcl
 // project.gcl
@@ -23,7 +23,7 @@ Every GreyCat project has a single entrypoint named `project.gcl` at the project
 @include("models");
 ```
 
-The runtime / lang starts loading from the entrypoint. It parses the file, walks every `@library` / `@include` pragma, loads each module in the closure, and recursively follows pragmas in loaded modules. Cycle protection is built in — loading the same path twice is a no-op.
+The runtime / lang starts loading from the entrypoint. It parses the file, walks every `@library` / `@include` pragma, and loads each module in the closure, following the `@library` pragmas it finds in those modules in turn. A module reached twice is an error (`already declared module`), so `@include` roots must not overlap.
 
 **Never flat-walk a directory for `.gcl` files.** If a file is not reachable from the entrypoint's pragma closure, it is not part of the project. The CLI and LSP both refuse to analyze unreachable files (the LSP reports them as `orphan-module` advisories).
 
@@ -34,11 +34,11 @@ Declares a dependency on a library named `name` at version `version`. Resolution
 1. Look for `<project>/lib/<name>/` and use it if present.
 2. For `name == "std"` only: fall back to `<GREYCAT_HOME>/lib/std/` (the runtime install).
 
-Inside `<project>/lib/<name>/`, the loader looks for a `project.gcl` (the library's own entrypoint) and recursively follows its pragmas. So libraries can themselves have `@library` / `@include` pragmas — the closure is whole-graph.
+A library directory has no entrypoint: every `.gcl` file under `<project>/lib/<name>/` is loaded recursively. A library must therefore not contain a `project.gcl` of its own — it would collide with the consuming project's entrypoint module (`already declared module`). Library modules may carry their own `@library` pragmas, so transitive dependencies resolve and the closure stays whole-graph.
 
 The version string is recorded but not used for resolution-time conflict detection — the loader trusts whatever lives at the resolved path. Mismatches surface as lang errors at use sites (missing types, signature drift).
 
-`@library` pragmas **must** appear in `project.gcl`. Placing them in any other module is a hard error.
+`@library` is valid in any module of the closure, and `greycat install` resolves the libraries it finds anywhere in that closure. Declare them in `project.gcl` anyway: a pin buried in `src/` is invisible to a reader scanning the entrypoint for the dependency set.
 
 For the catalog of publishable libraries (what each one pulls in) and how to discover a library's latest version, see [libraries.md](libraries.md). Run `greycat install` after editing `project.gcl` to fetch/refresh the resolved versions into `<project>/lib/<name>/`.
 
@@ -51,7 +51,7 @@ Declares that every `.gcl` file under `<project>/<path>/` (recursively) is part 
 @include("models/user");         // loads everything under <project>/models/user/
 ```
 
-Multiple `@include` pragmas stack additively. The argument is a directory path relative to the file containing the pragma — typically `project.gcl`.
+Multiple `@include` pragmas stack additively; their roots must not overlap, since loading a module twice is an error. The argument is a directory path relative to the entrypoint, and `@include` is rejected outside the entrypoint.
 
 ## Cross-module visibility
 
@@ -141,7 +141,7 @@ A typical GreyCat project:
 
 ```
 my-project/
-├── project.gcl              # @library + @include pragmas (the ONLY file with pragmas)
+├── project.gcl              # @library + @include pragmas (@include is entrypoint-only)
 ├── .env                     # optional: GREYCAT_* config picked up at startup
 ├── bin/                     # populated by `greycat install` — gitignored
 │   └── greycat              # the pinned core binary for this project's std version

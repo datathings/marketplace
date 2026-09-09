@@ -46,7 +46,7 @@ Declares a dependency on a library named `name` at version `version`. Resolution
 1. `<project_dir>/lib/<name>/` — vendored copy.
 2. For `name == "std"` only: the GreyCat home's `lib/std/` — the runtime install.
 
-**MUST** appear in `project.gcl` (the entrypoint).
+Valid in any module of the closure; by convention declared in `project.gcl` (the entrypoint) so the dependency set is readable in one place.
 
 ```gcl
 @library("std", "1.2.3");
@@ -55,14 +55,14 @@ Declares a dependency on a library named `name` at version `version`. Resolution
 
 ### `@include("path")`
 
-Recursively loads every `.gcl` file under `<project_dir>/<path>/`.
+Recursively loads every `.gcl` file under `<project_dir>/<path>/`. **MUST** appear in `project.gcl` (the entrypoint); anywhere else it is a syntax error.
 
 ```gcl
 @include("src");
 @include("models/user");
 ```
 
-Cycles are detected and stopped (loading order does not affect resolution — visibility is whole-graph).
+Include roots must not overlap: reaching the same module twice is an `already declared module` error. Loading order does not affect resolution — visibility is whole-graph.
 
 ### `@permission("name", "description")`
 

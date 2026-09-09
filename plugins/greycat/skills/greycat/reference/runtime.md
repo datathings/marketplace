@@ -282,9 +282,32 @@ perf("...");
 trace("...");
 ```
 
-Output goes to stdout. `--logfile` also mirrors to a file next to `gcdata/`.
+`println(value)`, `print(value)`, `pprint(value)` are unconditional: they always write to stdout regardless of log level.
 
-`println(value)`, `print(value)`, `pprint(value)` are unconditional: they always write regardless of log level.
+### Where log records go
+
+Every record that passes the level check is appended to `files/root/log.csv`, in every command that opens the store (`run`, `serve`, `dev`, `test`, `backup`, ...). That file is always written and is never rotated or truncated. `--logfile` / `GREYCAT_LOGFILE` is not consulted.
+
+stdout receives a copy only:
+
+- when stdout is a TTY - the coloured, human-readable form;
+- before the store is open - the CSV form, which is why the `Compiled in ...` and `Upgraded to version ...` startup lines appear even when redirected.
+
+A server whose stdout is redirected (`> out.txt`, systemd, docker, CI) therefore emits those startup lines and then goes quiet. The records are not lost - read the file:
+
+```sh
+tail -f files/root/log.csv
+grep '^warn,\|^error,' files/root/log.csv
+grep ',app::my_endpoint,' files/root/log.csv
+```
+
+A record is `<level>,<timestamp_us>,<caller columns>,<message>`. The caller is the user id, task and function for GCL frames, or `system` for records the runtime emits outside any frame:
+
+```
+info,1788271802495956,1,2,0,app::main,FROM_MAIN
+warn,1788271802495974,1,2,0,app::main,A_WARNING
+info,1788266269187765,,,,system,,Compiled in 3ms390us
+```
 
 ## File uploads and static assets
 
@@ -330,5 +353,6 @@ take effect.
 | 422 Unprocessable                             | Client SDK is built against an older ABI — regenerate with `greycat codegen`.  |
 | Storage grows continuously                    | Check `--defrag_ratio` and run `greycat defrag` manually.                      |
 | `serve` won't start: "lock held"              | Another GreyCat process owns `gcdata/lock`. Stop it.                           |
+| Nothing logged once `serve` output is redirected | Expected: stdout only carries the TTY form. Read `files/root/log.csv`.       |
 | `install` fails to fetch                      | Check version pin in `project.gcl`; verify network access to `get.greycat.io`. |
 | `Identity::current()` throws on a public call | Function is not `@permission("public")`; anonymous callers fail it.            |

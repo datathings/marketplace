@@ -7,9 +7,9 @@ description: Build, run, and edit GreyCat projects. GreyCat is a statically-type
 
 GreyCat is **one language and one runtime in one binary**. A project lives in a directory rooted at `project.gcl`. The `greycat` binary compiles it, runs it, serves it as an HTTP server, manages users, and stores its state in `gcdata/`. There is no separate database, queue, or web server.
 
-`.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@library` / `@include` pragmas (which **must** appear in that file only) form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat lint` and formatted by `greycat fmt`.
+`.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@include` pragmas (valid in that file only) plus the `@library` pragmas of every module they reach form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat lint` and formatted by `greycat fmt`.
 
-Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with an `@library` pragma and `greycat install`.
+Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with an `@library` pragma and `greycat install`. Let `greycat install --bump` (optionally `--branch=<name>`) resolve and write the version pins; do not `curl` the registry and hand-edit `project.gcl`.
 
 ## Anti-hallucination rule
 
@@ -45,7 +45,7 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 A `.gcl` module is a flat sequence of declarations and pragmas. No top-level expressions. No imports — visibility is governed by the project graph.
 
 ```gcl
-@library("std", "1.2.3");          // pragma: depend on std at this version (project.gcl only)
+@library("std", "1.2.3");          // pragma: depend on std at this version
 
 /// Doc comment for the type.
 type Point<T> extends Shape {      // generic, inheriting
@@ -76,7 +76,7 @@ fn ping(): String {
 
 ```
 my-project/
-├── project.gcl              # @library + @include pragmas — the ONLY file allowed to carry them
+├── project.gcl              # @library + @include pragmas — the only file where @include is allowed
 ├── .env                     # optional GREYCAT_* config picked up at startup
 ├── bin/                     # `greycat install` populates with the pinned core binary
 ├── lib/                     # `greycat install` populates from @library pragmas
@@ -93,7 +93,7 @@ Everything in `bin/`, `lib/`, `gcdata/`, and usually `files/` is gitignored. The
 ## CLI in one minute
 
 ```sh
-greycat install     # download libraries and the pinned core binary from project.gcl
+greycat install     # download libs + pinned core binary; --bump first rewrites @library pins
 greycat serve       # build + run as long-lived HTTP server (port 8080 by default)
 greycat dev         # serve + spawn a frontend watcher (vp/vite/--with=<cmd>)
 greycat run [fn]    # build + run `fn` (default: `main`). One-shot.
@@ -321,7 +321,7 @@ true   false   null   this
 60s     2hour_42ms                  // duration (compound suffix)
 
 'a'                                 // char
-'\n'   'é'   '\xff'                 // char escapes
+'\n'   '\0'   '\\'   'é'            // char escapes, and a UTF-8 char
 '2025-05-22T16:47:42Z'              // time literal (ISO 8601 inside '...')
 
 "hello"
@@ -353,7 +353,7 @@ ttl: duration?;
 
 `@deref` and `@iterable` also exist as type-shape annotations, but they are tooling hints on the stdlib node tags only — adding them to a user type does NOT opt the type into `->` or `for-in`.
 
-Module pragmas (must terminate with `;`, **must appear in `project.gcl`**):
+Module pragmas (must terminate with `;`; `@include` **must appear in `project.gcl`**, the others may sit in any module):
 
 ```gcl
 @library("std", "1.2.3");                     // bring std at this version into scope
@@ -377,7 +377,7 @@ See [reference/annotations.md](reference/annotations.md) for the full list and s
 
 ## Project structure
 
-Every project has a single entrypoint named `project.gcl`. All `@library` and `@include` pragmas **must** appear in this file.
+Every project has a single entrypoint named `project.gcl`. `@include` pragmas **must** appear in this file. `@library`, `@permission` and `@role` are accepted in any module of the closure, but keep them in `project.gcl` too so the dependency set is readable in one place.
 
 ```gcl
 // project.gcl
@@ -473,13 +473,14 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat lint` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
 11. **Don't commit `gcdata/`, `bin/`, or `lib/`.** They are runtime / install state, not source. `gcdata/` is the durable application state — back it up but never check it in.
 12. **Default `@expose` to authenticated. `@permission("public")` requires user opt-in.** A bare `@expose` already requires the `api` permission (any authenticated caller). Reaching for `@permission("public")` because "the frontend doesn't have auth wired up yet" hands every anonymous caller on the network the same write access. Only add it when the user explicitly asks for an anonymous endpoint (typical examples: `login`, an unauthenticated health probe). If the answer is "I made it public so the demo would work," remove it and wire login instead. See [reference/idioms.md § HTTP / @expose patterns](reference/idioms.md).
-13. **Never run `greycat serve --user=<name>` / `GREYCAT_USER=<name>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<name>` to mint a short-lived token and pass it via header as `Authorization: <TOKEN>` (**no `Bearer`**) / cookie. See [reference/runtime.md § Identity and permissions](reference/runtime.md).
+13. **Never hand-edit a version pin you resolved with `curl`.** `greycat install --bump` (bound `patch` by default, `latest` to cross a `major.minor`) rewrites every `@library` pin in `project.gcl` and installs what it wrote; `--branch=<name>` moves the whole project onto another branch. Reach for `curl .../latest` only to *read* a version, or for non-GCL artifacts like the web SDK tarball. See [reference/libraries.md](reference/libraries.md).
+14. **Never run `greycat serve --user=<name>` / `GREYCAT_USER=<name>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<name>` to mint a short-lived token and pass it via header as `Authorization: <TOKEN>` (**no `Bearer`**) / cookie. See [reference/runtime.md § Identity and permissions](reference/runtime.md).
 
 ## Verifying syntax assumptions
 
 When uncertain whether a construct is valid GreyCat:
 
-1. **Run `greycat lint`** — fastest oracle, catches shape drift the runtime accepts silently (unused locals, non-exhaustive enum chains, redundant null-checks, `->` on non-deref receivers, …). See [reference/lang.md](reference/lang.md).
+1. **Run `greycat lint`** — fastest oracle, catches shape drift the runtime accepts silently (unused locals, unreachable branches, redundant null-checks, `->` on non-deref receivers, …). See [reference/lang.md](reference/lang.md).
 2. Search the stdlib (`lib/std/*.gcl`) for real examples of the construct.
 3. Run `greycat run` against a minimal `project.gcl` — the runtime is the oracle for valid programs.
    After any non-trivial `.gcl` edit, run `greycat fmt --mode=check` + `greycat lint` as the definition of done — `greycat build` happily produces a `.gcp` from code that still has warnings or formatting drift.

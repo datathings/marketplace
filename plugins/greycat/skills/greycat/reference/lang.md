@@ -2,7 +2,7 @@
 
 Three `greycat` commands cover static analysis: `lint` (checks), `fmt` (formatter), `lsp` (language
 server). Where `greycat build` answers "does this program load?", they answer "is this program _clean_?" -
-catching unused locals, redundant null-checks, non-exhaustive enum chains, and dozens of other shape issues.
+catching unused locals, redundant null-checks, unreachable branches, and dozens of other shape issues.
 
 They are served by the `lang` library, which `greycat` loads from `<cwd>/lib/lang/` first, then
 `~/.greycat/lib/lang/`. A global GreyCat install ships it; a project pins its own with
@@ -87,8 +87,8 @@ Run `greycat lint --list-rules` for the live set. Rules to know:
   runtime throws on a `null` operand. Equality (`==` / `!=`) is exempt.
 - **`redundant-nullable-access`** / **`redundant-non-null-assertion`** / **`redundant-coalesce`** - `?.`, `!!`,
   or `??` on a value already known to be non-null. Cleanup hints.
-- **`non-exhaustive`** - chained `if (x == E::A) ... else if (x == E::B) ...` over an enum that misses a
-  variant and has no `else`. The GCL replacement for `switch` exhaustiveness checks.
+- **`unreachable`** - a statement no control-flow path reaches: code after `return` / `throw` / `break`, or
+  the final `else` of an `if` chain that already tests every field of an enum.
 - **`decidable-condition`** / **`exhaustive-is-check`** - `while (true) {}` and other statically decidable
   conditions; an `is` check every value matches, leaving a branch unreachable. Suppress when intentional.
 - **`unused-catch-param`** / **`catch-empty-parens`** - `catch (e)` that never reads `e` (auto-fix drops the

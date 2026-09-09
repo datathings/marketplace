@@ -5,7 +5,12 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.2** (headers re-verified 2026-08-28 against upstream `e1e7edf54`). Changes since 8.1:
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.3** (headers re-verified 2026-09-09 against upstream `0dc6e7632`). Changes since 8.2:
+
+- **`gc_object__is_instance_of` now accounts for monomorphization** — a `Box<String>` instance now tests true against the generic declaration `Box`, not just exact-type/inheritance matches as before. Signature unchanged. See [api_memory_text.md](references/api_memory_text.md).
+- **Stdlib: `runtime::Log.time` is explicitly `@format(DurationUnit::microseconds)`** — the field was always written as raw epoch microseconds by the log writer, now the type declares it instead of leaving it implicit. Reading `files/root/log.csv` with `CsvReader<runtime::Log>` needs `CsvFormat { string_delimiter: '\0' }`, since the payload column is written unescaped. See [standard_library.md](references/standard_library.md).
+
+Previously, in 8.2 (headers re-verified 2026-08-28 against upstream `e1e7edf54`):
 
 - **New: `gc_dtz_time__parse_format(str, len, format, format_len, tz, out_epoch_us)`** — parses a date/time string against an explicit format, the counterpart of `gc_dtz_time__print` and the custom-format arm of `gc_dtz_time__parse`. A format leaves the instant naive, so `tz` is the zone it is read in; returns `false` when the input does not match the format, or names an instant the zone does not have. See [api_services.md](references/api_services.md).
 - **New: CLI hooks on `gc_program_library`.** Two optional `gc_hook_function_t *` fields — `install` and `codegen` — with setters `gc_program_library__set_install_hook(lib, hook)` and `gc_program_library__set_codegen_hook(lib, hook)`. The install hook runs at the end of a successful `greycat install` (after the project is rebuilt and linked) for every library that registers one; returning `false` fails the command. The codegen hook makes the library itself a generator for `greycat codegen <lang>`, dispatched by matching `<lang>` against library names (the built-in `c`/`ts`/`java`/`rust`/`python2` generators stay native to the CLI). Both are purely additive — a `NULL` hook opts out. See [plugin_development.md](references/plugin_development.md), [api_core.md](references/api_core.md).

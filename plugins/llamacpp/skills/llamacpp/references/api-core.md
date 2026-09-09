@@ -283,19 +283,19 @@ struct llama_model * model = llama_model_load_from_file("model.gguf", params);
 ### Lazy Tensor Reading
 
 ```c
-enum llama_tensor_read_lazy {
-    LLAMA_TENSOR_READ_LAZY_OFF  = 0, // always read the whole tensor up front
-    LLAMA_TENSOR_READ_LAZY_AUTO = 1, // lazy only for marked tensors larger than 4 GiB (requires mmap)
-    LLAMA_TENSOR_READ_LAZY_ON   = 2, // read the rows of tensors marked by the arch on demand (requires mmap)
+enum llama_lazy_mode {
+    LLAMA_LAZY_MODE_OFF  = 0, // always read the whole tensor up front
+    LLAMA_LAZY_MODE_AUTO = 1, // lazy only for marked tensors larger than 4 GiB (requires mmap)
+    LLAMA_LAZY_MODE_ON   = 2, // read the rows of tensors marked by the arch on demand (requires mmap)
 };
 ```
-Added in b10665. Set via `llama_model_params.tensor_read_lazy`. When enabled, rows of tensors the architecture marks as lazily readable are faulted in on demand instead of being read in full at load time — this cuts resident memory and load latency for models with very large sparsely-used tensors (e.g. huge token-embedding matrices). `AUTO` and `ON` both **require an mmap-based load mode**; with a non-mmap `load_mode` the setting has no effect.
+Added in b10665 (as `llama_tensor_read_lazy`); renamed to `llama_lazy_mode` in b10868. Set via `llama_model_params.lazy_mode`. When enabled, rows of tensors the architecture marks as lazily readable are faulted in on demand instead of being read in full at load time — this cuts resident memory and load latency for models with very large sparsely-used tensors (e.g. huge token-embedding matrices). `AUTO` and `ON` both **require an mmap-based load mode**; with a non-mmap `load_mode` the setting has no effect.
 
 **Usage:**
 ```c
 struct llama_model_params params = llama_model_default_params();
-params.load_mode        = LLAMA_LOAD_MODE_MMAP;
-params.tensor_read_lazy = LLAMA_TENSOR_READ_LAZY_AUTO;  // lazy for marked tensors > 4 GiB
+params.load_mode = LLAMA_LOAD_MODE_MMAP;
+params.lazy_mode = LLAMA_LAZY_MODE_AUTO;  // lazy for marked tensors > 4 GiB
 struct llama_model * model = llama_model_load_from_file("model.gguf", params);
 ```
 
