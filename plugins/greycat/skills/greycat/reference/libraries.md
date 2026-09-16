@@ -90,3 +90,5 @@ curl https://get.greycat.io/files/<lib>/dev/latest      # -> 8.0/8.0.39-dev
 ```
 
 The portion after the `/` (e.g. `7.8.25-stable`) is the version string used in `@library("<lib>", "<version>")`. **Exception:** `std` is published under URL path `core` - fetch with `https://get.greycat.io/files/core/stable/latest`.
+
+A machine can point the CLI at another registry, and store that registry's token once, through `GREYCAT_REGISTRY` or the `~/.greycat/registries` file; see [cli.md](cli.md#registries).

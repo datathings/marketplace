@@ -49,6 +49,9 @@ typedef struct {
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_crypto__sha256` | `void gc_crypto__sha256(gc_crypto_sha256_t *sha, const void *p, size_t size)` | Compute SHA-256 hash of `p` (one-shot) |
+| `gc_crypto__sha256_init` | `void gc_crypto__sha256_init(gc_crypto_sha256_ctx_t *ctx)` | **New in 8.3.** Start an incremental SHA-256 hash, for input that isn't contiguous in memory (a file read chunk by chunk, a stream). |
+| `gc_crypto__sha256_update` | `void gc_crypto__sha256_update(gc_crypto_sha256_ctx_t *ctx, const void *p, size_t size)` | **New in 8.3.** Feed the next chunk into an incremental hash. Call any number of times. |
+| `gc_crypto__sha256_done` | `void gc_crypto__sha256_done(gc_crypto_sha256_ctx_t *ctx, gc_crypto_sha256_t *res)` | **New in 8.3.** Finish an incremental hash, writing the 32-byte digest to `res`. Invalidates `ctx` — `_init` it again before hashing again. |
 
 ### HMAC-SHA-256
 
@@ -101,6 +104,24 @@ u32_t encoded_len =
 gc_string_t *res = gc_string__create_from(buf->data, encoded_len, ctx);
 gc_machine__set_result(ctx, (gc_slot_t) {.object = (gc_object_t *) res}, gc_type_object);
 gc_object__un_mark((gc_object_t *) res, ctx);
+```
+
+#### SHA-256 incremental hash (chunked input)
+
+`gc_crypto__sha256_init` / `_update` / `_done` hash input that isn't contiguous in memory — grounded in `std::io::File.sha256` (`src/std/io/file.c`), which streams a file through a fixed-size scratch buffer instead of loading it whole:
+
+```c
+gc_crypto_sha256_ctx_t hash;
+gc_crypto__sha256_init(&hash);
+
+i64_t nbytes;
+while ((nbytes = read_next_chunk(fp, chunk->data, chunk_cap)) > 0) {
+    gc_crypto__sha256_update(&hash, chunk->data, (size_t) nbytes);
+}
+
+gc_crypto_sha256_t sha256;
+gc_crypto__sha256_done(&hash, &sha256);
+// sha256.u.u8 now holds the 32-byte digest, same shape as the one-shot result above.
 ```
 
 #### Base64 encode / decode through the gen buffer
@@ -330,9 +351,6 @@ Calendar conversion, timezone handling, ISO 8601 parsing, and formatting. GreyCa
 | `GC_ADJUSTED_EPOCH_WDAY` | 3 | 0000-03-01 was a Wednesday |
 | `GC_MIN_YEAR` | `INT32_MIN + 1900` | Minimum representable year |
 | `GC_MAX_YEAR` | `(i64_t) INT32_MAX + 1900` | Maximum representable year |
-| `GC_MKTIME_MAX_TM_YEAR` | 10000 | Maximum absolute `tm_year` (year − 1900) supported by `gc_mktime_safe` |
-| `GC_MKTIME_MIN_YEAR` | `GC_YEAR_BASE - GC_MKTIME_MAX_TM_YEAR` (= -8100) | Inclusive lower year bound for which `gc_mktime_safe` returns a valid epoch |
-| `GC_MKTIME_MAX_YEAR` | `GC_YEAR_BASE + GC_MKTIME_MAX_TM_YEAR` (= 11900) | Inclusive upper year bound for which `gc_mktime_safe` returns a valid epoch |
 
 **Timezone conversion status codes:**
 
@@ -382,6 +400,7 @@ typedef struct {
 | `gc_time__tm_from_time` | `gc_tm_t gc_time__tm_from_time(i64_t time, u32_t timezone)` | Convert a GreyCat timestamp to calendar fields |
 | `gc_gmtime_r_safe` | `void gc_gmtime_r_safe(i64_t tim_p, gc_tm_t *__restrict res)` | Convert a timestamp to UTC calendar (safe, no timezone) |
 | `gc_mktime_safe` | `i64_t gc_mktime_safe(gc_tm_t *tim_p)` | Convert calendar fields to a timestamp |
+| `gc_time__split_us` | `static inline i64_t gc_time__split_us(i64_t epoch_us, i32_t *us_offset)` | **New in 8.3.** Floor-divide a microsecond epoch into a whole-second count (return value) and a non-negative sub-second remainder (`*us_offset`) — the shape `gc_gmtime_r_safe` / `gc__print_iso` expect. Plain `/`/`%` truncates toward zero and yields a negative remainder for pre-1970 instants carrying a sub-second part; every caller must use this instead. `static inline` in the header, so no linking is needed. |
 | `gc_dtz_utc_to_time_zone` | `i32_t gc_dtz_utc_to_time_zone(u32_t time_zone, i64_t utc_epoch, i64_t *localized_epoch)` | Convert UTC epoch to a localized epoch. Returns `GC_DTZ_OK` on success. |
 | `gc_dtz_time_zone_to_utc` | `i32_t gc_dtz_time_zone_to_utc(u32_t time_zone, i64_t localized_epoch, i64_t *utc_epoch, u32_t *next_utc_offset)` | Convert localized epoch to UTC. |
 | `gc_dtz_first_day_of_week` | `u8_t gc_dtz_first_day_of_week(u32_t time_zone)` | Get the first day of the week for a timezone (0=Sunday..6=Saturday). |
@@ -391,6 +410,8 @@ typedef struct {
 | `gc_dtz_time__print` | `u32_t gc_dtz_time__print(i64_t epoch_us, u32_t tz, const char *format_c_str, char *out, u32_t out_cap)` | Format a timestamp with timezone into a char buffer. Returns bytes written. |
 | `gc_dtz_time__parse` | `bool gc_dtz_time__parse(const char *str, u32_t len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string with timezone context into a UTC epoch (microseconds). Returns `true` on success. |
 | `gc_dtz_time__parse_format` | `bool gc_dtz_time__parse_format(const char *str, u32_t len, const char *format, u32_t format_len, u32_t tz, i64_t *out_epoch_us)` | Parse a date/time string against an explicit `format` (the counterpart of `gc_dtz_time__print`). The format leaves the instant naive, so `tz` is the zone it is read in. Returns `false` when the input does not match the format, or names an instant the zone does not have. |
+
+> **Removed in 8.3 (breaking).** `GC_MKTIME_MAX_TM_YEAR`, `GC_MKTIME_MIN_YEAR`, and `GC_MKTIME_MAX_YEAR` are gone from `gc/time.h`, no replacement — code referencing any of the three no longer compiles. This isn't just dead-code cleanup: those macros documented `gc_mktime_safe`'s year-at-a-time loop and its ±10000-year cap; the loop was replaced by a constant-time closed-form inverse (`days_from_civil`), so `gc_mktime_safe`'s usable range widened to whatever `tm_year` can hold — fixing `time::min`/`time::max` failing to round-trip through `Date`.
 
 ### Helper Macros
 

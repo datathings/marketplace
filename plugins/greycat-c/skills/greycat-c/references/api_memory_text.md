@@ -303,8 +303,9 @@ typedef struct {
 | `gc_buffer__add_protected_symbol(buf, symb_off, prog)` | Append symbol with non-alphanumeric replaced by `_` |
 | `gc_buffer__add_escaped_symbol(buf, symb_off, prog)` | Append symbol with `"` escaped to `\"` |
 | `gc_buffer__add_function(self, fn_off, prog)` | Append a function's qualified name |
+| `gc_buffer__add_type_name_by_id(self, type_id, prog)` | Append a type as `module::Type`. A specialized generic carries its parameters in its own registered name, so `Array<int>` comes out as `core::Array<core::int>`. |
 
-> **Removed in 8.2 (breaking).** `gc_buffer__add_type_name`, `gc_buffer__add_type_name_by_id`, and `gc_buffer__add_type_qname` are no longer declared in `gc/buffer.h` — they were briefly `gc_sdk`-exported, then dropped again in the same release cycle, so they never shipped as stable public API. There is no replacement; code that called any of the three no longer compiles against this header.
+> **Removed in 8.2, two of the three still gone.** `gc_buffer__add_type_name` and `gc_buffer__add_type_qname` remain undeclared in `gc/buffer.h` — no replacement; code calling either still doesn't compile against this header. `gc_buffer__add_type_name_by_id` (the row above) was re-added in 8.3.
 
 ### Slot Serialization
 

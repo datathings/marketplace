@@ -61,7 +61,7 @@ Exits `0` only if there are no diagnostics at all. Any warning OR error produces
 | `--fix[=<RULE>]`    | Apply auto-fixable suggestions in place (max 5 passes). Bare `--fix` fixes everything; `--fix=<rule>[,<rule>]` fixes only the named rules.                 |
 | `--format <FORMAT>` | Diagnostic rendering: `compact` (one line per diagnostic), `pretty` (snippet + caret, default on a TTY), `csv` (per-file timings), `quiet` (summary only). |
 | `--level <LEVEL>`   | Minimum severity to print: `error`, `warning`, `hint` (default). Display-only - the summary totals and the exit code are unaffected.                       |
-| `--lint-libs`       | Also lint `lib/<name>/` modules. Off by default - project-only.                                                                                            |
+| `--lint-libs`       | Also lint installed `lib/<name>/` modules. Off by default; a versionless `@library` is linted like project source - see [project.md](project.md).         |
 | `--list-rules`      | Print every registered rule with a one-line summary, then exit. Use to discover newly added rules.                                                         |
 | `--no-suppressions` | Re-emit diagnostics silenced by `// gcl-lint-off ...` directives. Useful for auditing suppression debt.                                                    |
 | `--off <RULE>`      | Silence rule(s) globally. Repeatable or comma-list.                                                                                                       |
@@ -89,6 +89,9 @@ Run `greycat lint --list-rules` for the live set. Rules to know:
   or `??` on a value already known to be non-null. Cleanup hints.
 - **`unreachable`** - a statement no control-flow path reaches: code after `return` / `throw` / `break`, or
   the final `else` of an `if` chain that already tests every field of an enum.
+- **`impossible-condition`** - a condition tests an enum field already ruled out at that point: a repeated
+  arm in an `if` chain, or one that contradicts an enclosing narrow. The arm is dead, so `unreachable`
+  fires on it too - `--fix=unreachable` deletes it.
 - **`decidable-condition`** / **`exhaustive-is-check`** - `while (true) {}` and other statically decidable
   conditions; an `is` check every value matches, leaving a branch unreachable. Suppress when intentional.
 - **`unused-catch-param`** / **`catch-empty-parens`** - `catch (e)` that never reads `e` (auto-fix drops the
@@ -128,10 +131,10 @@ greycat fmt --mode=stdout          # format the entrypoint only, print to stdout
 
 ### Options
 
-| Flag         | Meaning                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| `--fmt-libs` | Also format files under `lib/<name>/`. Off by default - projects shouldn't reformat their deps. |
-| `--color`    | `auto` / `always` / `never`. Applies to `diff` mode output.                                    |
+| Flag         | Meaning                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--fmt-libs` | Also format installed `lib/<name>/` files. Off by default - projects shouldn't reformat their deps. A versionless `@library` is formatted like project source. |
+| `--color`    | `auto` / `always` / `never`. Applies to `diff` mode output.                                                                                                    |
 
 The formatter is opinionated and unconfigurable - there's no `.gclfmt` style file. Disagreements with its
 output are bugs to file, not knobs to tune.

@@ -1,6 +1,6 @@
 {
   "name": "pandapower",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "description": "pandapower Python reference for AC and DC power flow, optimal power flow, short-circuit analysis, state estimation, and visualization.",
   "author": {
     "name": "Datathings",

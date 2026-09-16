@@ -366,10 +366,14 @@ typedef enum {
     gc_env_options__lang,
     gc_env_options__mcp_content,
     gc_env_options__mcp_instructions,
+    gc_env_options__registry,
+    gc_env_options__registry_token,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
 ```
+
+**New in 8.3:** `gc_env_options__registry` / `gc_env_options__registry_token` hold the registry URL and auth token for resolving libraries/releases via `GREYCAT_REGISTRY` — a CLI-config detail, not a C API most plugin authors touch.
 
 ### Usage Examples
 

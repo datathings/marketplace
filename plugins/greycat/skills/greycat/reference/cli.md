@@ -11,6 +11,7 @@ Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `grey
 - Synopsis and binary discovery
 - Commands (`run`, `serve`, `build`, `test`, …)
 - Common options and environment variables
+- Registries and tokens
 - The `.env` file
 - Codegen targets and conventions
 - User administration
@@ -39,7 +40,7 @@ This is how a project pins a specific runtime version: `@library("std", "1.2.3")
 
 Scaffolds a new project. With a `name`, creates a `./<name>/` directory; without one, scaffolds into the current directory. Refuses to run when the target already contains a `project.gcl`.
 
-Writes `project.gcl` pinned to the latest `stable` `std` (resolved from `https://get.greycat.io/files/core/stable/latest`), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
+Writes `project.gcl` pinned to the latest `stable` `std` (resolved from the configured registry, see [Registries](#registries); by default `https://get.greycat.io/files/core/stable/latest`), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
 
 ```sh
 greycat new my-app     # into ./my-app/
@@ -100,7 +101,7 @@ These three delegate to the `lang` library, loaded from `lib/lang/` or `~/.greyc
 
 Reads every `@library` pragma in the project closure (normally all in `project.gcl`) and downloads each library + the matching core binary into `lib/<name>/` and `bin/`. Skips libraries already at the requested version (tracked in `lib/installed`).
 
-Downloads from `https://get.greycat.io/files/<lib>/<branch>/<major.minor>/<target>/<version>.zip`. `std` resolves under `core/`.
+Downloads from `https://get.greycat.io/files/<lib>/<branch>/<major.minor>/<target>/<version>.zip`. `std` resolves under `core/`. That is the legacy registry; see [Registries](#registries) to point the CLI at a JSON-RPC registry and to store its token once.
 
 | Option                    | Meaning                                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -228,7 +229,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--unsecure` / `GREYCAT_UNSECURE`       | `false`            | `serve`                             | Allow session tokens behind a non-HTTPS reverse proxy.                                                                                                                                                                             |
 | `--backup_path` / `GREYCAT_BACKUP_PATH` | `backup`           | `backup`, `restore`, `run`, `serve` | Where backups go.                                                                                                                                                                                                                  |
 | `--max_backup_files`                    | `3`                | `backup`, `run`, `serve`            | Max backup files retained in `backup_path`.                                                                                                                                                                                        |
-| `--defrag_ratio`                        | `1.0`              | `run`, `serve`                      | Fragmentation ratio target. Negative disables auto-defrag.                                                                                                                                                                         |
+| `--defrag_ratio`                        | `2.0`              | `run`, `serve`                      | Blocks held per live block tolerated across the whole store before a zone is defragged (`2.0` = half garbage). Must be `> 1.0` — `1.0` is a perfectly compacted store, so startup refuses anything in `(0, 1.0]`. `<= 0` disables auto-defrag.                                                                                                                                                                         |
 | `--ca_path` / `GREYCAT_CA_PATH`         | none               | `run`, `serve`, `test`              | Directory of extra CA certs to trust for outbound TLS.                                                                                                                                                                             |
 | `--keep_alive`                          | `false`            | `serve`                             | Enable HTTP keep-alive.                                                                                                                                                                                                            |
 | `--task_pool_capacity`                  | `10000`            | `serve`                             | Max queued tasks.                                                                                                                                                                                                                  |
@@ -237,6 +238,8 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--mcp_content` / `GREYCAT_MCP_CONTENT` | `both`             | `serve`, `dev`                      | How an MCP `tools/call` ships its payload: `both` (spec-recommended duplication), `structured` (`structuredContent` only, empty `content`), `text` (serialized `content` only, and no `outputSchema` is advertised).                |
 | `--mcp_instructions`                    | none               | `serve`, `dev`                      | Usage guidance returned to MCP clients as `instructions` in the `initialize` result.                                                                                                                                               |
 | `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version. `install` has its own option set (`--bump`, `--branch`, `--check`, ...); see [`greycat install`](#greycat-install) above.                                             |
+| `--registry` / `GREYCAT_REGISTRY`       | `legacy`           | `new`, `upgrade`, env-only `install` | Registry to resolve libraries and core releases from: `legacy` for `get.greycat.io`, otherwise the base URL of a JSON-RPC registry. See [Registries](#registries). |
+| `--registry_token`                      | none               | `new`, `upgrade`, env-only `install` | `GREYCAT_REGISTRY_TOKEN`. Token sent to that registry, for packages that are not anonymously readable. Shown as `<set>` by `-h`. |
 | `--with=<cmd>`                          | none               | `dev`                               | Watch-build command to spawn alongside the server.                                                                                                                                                                                 |
 | `--worlds` / `GREYCAT_WORLDS`           | `1`                | `run`, `serve`                      | Number of parallel graph "worlds" (branching state) — see [runtime.md § many-worlds](runtime.md). Worker count is multiplied accordingly.                                                                                          |
 
@@ -275,6 +278,30 @@ lsof -i :8080                             # who holds port 8080?
 ls -lh gcdata/backup/                     # what backups do we have?
 greycat stats                             # zone usage and cache hit rates
 ```
+
+## Registries
+
+`install`, `upgrade` and `new` resolve libraries and core releases from a registry. Unset, or `legacy`, means the historical file tree under `https://get.greycat.io/files/`. Any other value is the base URL of a GreyCat registry server, which answers `registry::resolve`, `registry::latest_version` and `registry::artifact_url` for libraries and their `asset_` counterparts for everything else (the `lang` tooling is published there as an asset).
+
+Two settings, resolved in this order:
+
+| Setting               | Flag (`new`, `upgrade`)     | Environment              | File key   |
+| --------------------- | --------------------------- | ------------------------ | ---------- |
+| Registry origin       | `--registry=<url>`          | `GREYCAT_REGISTRY`       | `default`  |
+| Token for that origin | `--registry_token=<token>`  | `GREYCAT_REGISTRY_TOKEN` | `<origin>` |
+
+The origin is settled first: flag, then environment, then the project `.env`, then the file's `default`. The token is then looked up for exactly that origin, and it is sent to that origin only, on RPC calls and on artifact downloads alike. `install`, `lint`, `fmt` and `lsp` forward their flags to the language tooling, so for them only the environment, `.env` and the file apply.
+
+The file is `<home>/registries`, where `<home>` is `$GREYCAT_HOME` or `~/.greycat`. It is what lets a configured machine work with no variables at all:
+
+```
+# ~/.greycat/registries
+default = https://registry.example.com
+https://registry.example.com = <token>
+https://greycat.corp.example = <token>
+```
+
+One `key = value` per line, `#` comments, trailing slashes ignored. It holds credentials: keep it `0600`; the CLI warns when other users can read it, and `greycat <command> -h` prints the token as `<set>`, never its value. Whatever the runtime resolves is exported to its own environment before any command runs, so the language tooling loaded in-process sees the same registry and token.
 
 ## The `.env` file
 

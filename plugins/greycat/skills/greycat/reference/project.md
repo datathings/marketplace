@@ -40,6 +40,17 @@ The version string is recorded but not used for resolution-time conflict detecti
 
 `@library` is valid in any module of the closure, and `greycat install` resolves the libraries it finds anywhere in that closure. Declare them in `project.gcl` anyway: a pin buried in `src/` is invisible to a reader scanning the entrypoint for the dependency set.
 
+### Versionless `@library("name")`
+
+Omitting the version declares that `lib/<name>/` is the project's own source rather than an installed copy. `greycat install` never fetches it, and `greycat lint` / `greycat fmt` treat its modules like project modules - they are covered by default, with no `--lint-libs` / `--fmt-libs`. This is the shape for a library developed in-tree rather than consumed from the registry.
+
+```gcl
+@library("std", "1.2.3");        // installed: fetched by `greycat install`, skipped by lint / fmt
+@library("shared");              // owned: lib/shared/ is yours, linted and formatted like src/
+```
+
+Only the entrypoint and `@include`d modules confer ownership - a library shipping its own versionless `@library` does not make that name owned in the consuming project. Adding a version pin hands the directory back to `install` and re-suppresses it from lint and fmt.
+
 For the catalog of publishable libraries (what each one pulls in) and how to discover a library's latest version, see [libraries.md](libraries.md). Run `greycat install` after editing `project.gcl` to fetch/refresh the resolved versions into `<project>/lib/<name>/`.
 
 ## `@include("path")`

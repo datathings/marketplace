@@ -346,6 +346,13 @@ typedef struct {
 
 ### Functions
 
+#### Lifecycle
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_machine__create` | `gc_machine_t *gc_machine__create(gc_host_t *host, gc_allocator_t *allocator, u64_t cache_size)` | **New in 8.3**, promoted from internal to public API. Allocate and initialize a standalone `gc_machine_t` bound to `host`, for code that needs a machine context outside the one a native function receives from the host — e.g. a per-thread machine in a request-handling loop (`src/server/http_thread.c`). `cache_size` sizes its private object cache. |
+| `gc_machine__destroy` | `void gc_machine__destroy(gc_machine_t *ctx)` | **New in 8.3.** Tear down and free a `gc_machine_t` created with `gc_machine__create`. Do not call this on the machine a native function receives as `ctx` — the host owns that one. |
+
 #### Parameter Access
 
 | Function | Signature | Description |
