@@ -21,10 +21,12 @@ Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `grey
 ## Synopsis
 
 ```sh
-greycat <command> [options] [param] [short]
+greycat [<command>] [options] [param] [short]
 ```
 
-Run without a command, or with `-h` / `--help`, to print the help screen with the current set of recognized options and environment variables. Help adapts to the command — `greycat serve -h` shows only the options that apply to `serve`.
+The command defaults to `serve`: bare `greycat` — and `greycat --port=8081`, i.e. options with no command in front of them — is `greycat serve`. An unrecognized command is still an error, not an implicit serve.
+
+Run with `-h` / `--help` to print the help screen with the current set of recognized options and environment variables. Help adapts to the command — `greycat serve -h` shows only the options that apply to `serve`.
 
 `-v` / `--version` prints the version. `-vv` / `--version-full` adds the git hash and target triple.
 
@@ -62,7 +64,7 @@ greycat run foo 42 "hello" '{"name":"John"}' # foo(42, "hello", Person { name: "
 
 ### `greycat serve`
 
-Builds the project, then serves it as a long-running HTTP/RPC server.
+Builds the project, then serves it as a long-running HTTP/RPC server. This is the default command — running `greycat` with no command does exactly this.
 
 - Binds `GREYCAT_PORT` (default `8080`).
 - If a `main` function exists with no parameters, it is enqueued as a startup task.
@@ -237,6 +239,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--request_ttl`                         | `20s`              | `serve`                             | Force-close requests that exceed this lifetime.                                                                                                                                                                                    |
 | `--mcp_content` / `GREYCAT_MCP_CONTENT` | `both`             | `serve`, `dev`                      | How an MCP `tools/call` ships its payload: `both` (spec-recommended duplication), `structured` (`structuredContent` only, empty `content`), `text` (serialized `content` only, and no `outputSchema` is advertised).                |
 | `--mcp_instructions`                    | none               | `serve`, `dev`                      | Usage guidance returned to MCP clients as `instructions` in the `initialize` result.                                                                                                                                               |
+| `--openapi` / `GREYCAT_OPENAPI`         | `true`             | `serve`, `dev`                      | Whether every `@expose`d function lands in the OpenAPI v3 document by default. `false` narrows the document to functions carrying `@tag("openapi")`.                                                                                |
 | `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version. `install` has its own option set (`--bump`, `--branch`, `--check`, ...); see [`greycat install`](#greycat-install) above.                                             |
 | `--registry` / `GREYCAT_REGISTRY`       | `legacy`           | `new`, `upgrade`, env-only `install` | Registry to resolve libraries and core releases from: `legacy` for `get.greycat.io`, otherwise the base URL of a JSON-RPC registry. See [Registries](#registries). |
 | `--registry_token`                      | none               | `new`, `upgrade`, env-only `install` | `GREYCAT_REGISTRY_TOKEN`. Token sent to that registry, for packages that are not anonymously readable. Shown as `<set>` by `-h`. |
@@ -328,7 +331,7 @@ Generated SDKs land at standard paths in the project:
 | `rust`   | Crate-shaped output near `Cargo.toml`.                                 |
 | `java`   | Maven/Gradle output near `pom.xml` / `gradle.properties`.              |
 
-Codegen reads `@expose`, `@permission`, and `@tag` from the project's compiled program. `@tag("openapi")` and `@tag("mcp")` mark functions for inclusion in the OpenAPI spec exposed at runtime and in the MCP tool list respectively.
+Codegen reads `@expose`, `@permission`, and `@tag` from the project's compiled program. `@tag("mcp")` marks functions for inclusion in the MCP tool list; `@tag("openapi")` does the same for the OpenAPI spec, though by default every `@expose`d function is in it already (see `--openapi` below).
 
 ## OpenAPI and MCP
 
@@ -336,7 +339,9 @@ A served project exposes:
 
 - **JSON-RPC** at `POST /` — call any `@expose`d function by method `"<module>.<fn_name>"` and a JSON `params` array or object.
 - **Path-RPC** at `POST /<module>::<fn_name>` — body is a JSON array of positional args.
-- **OpenAPI v3** — call `runtime::OpenApi::v3` (stdlib `Runtime::OpenApi::v3`) to get the spec from the live program. `@tag("openapi")` marks which functions appear in it.
+- **OpenAPI v3** — call `runtime::OpenApi::v3` (stdlib `Runtime::OpenApi::v3`) to get the spec from the live program. `--openapi` / `GREYCAT_OPENAPI` decides what lands in it: `true` (the default) puts every `@expose`d function in the document, `false` narrows it to the ones carrying `@tag("openapi")`.
+
+  Paths are then filtered by the caller's permissions, exactly as MCP `tools/list` is — the document only lists functions that caller could actually invoke, and `components/schemas` only carries the types those functions reference. That is why the endpoint is itself `@permission("public")`: an anonymous caller reaches it but sees only the `@permission("public")` endpoints, while a `role=user` token sees the `api` ones and an admin sees everything. A build step that wants the unfiltered document should generate it from `greycat run`, which runs with every permission bit set.
 - **MCP** — `tools/list` returns every function tagged `@tag("mcp")`; `tools/call` invokes them with named arguments matching the function's parameter names. By default a result is shipped twice, as `structuredContent` and as serialized `content` text; `--mcp_content` narrows that to one. `--mcp_instructions` sets the `instructions` hint clients may feed to the model.
 
   Argument binding is deliberately lenient, because the callers are language models: for a **nullable** parameter the strings `"null"` / `"None"` / `"nil"` / `""` bind `null`, and for an object or array parameter a string holding a whole JSON document is re-parsed. Both only apply after strict parsing has already failed, so a `String?` parameter still receives `"None"` verbatim. This applies to every JSON-bodied call — JSON-RPC, path-RPC and task arguments — not only to MCP tools.

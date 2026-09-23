@@ -666,13 +666,14 @@ type License {
 
 ### OpenAPI Integration
 
-`OpenApi` exposes a single static method that exports all exposed functions as an OpenAPI v3 spec.
+`OpenApi` exposes a single static method that exports exposed functions as an OpenAPI v3 spec.
 ```gcl
 type OpenApi {
-  // @expose @permission("api") static native fn v3(): OpenApiV3
+  // @expose @permission("public") static native fn v3(): OpenApiV3
 }
 var spec = OpenApi::v3();
 ```
+**As of 8.4:** with `GREYCAT_OPENAPI` / `--openapi` (default `true`) every `@expose`d function is included, not just `@tag("openapi")` ones (set it `false` to narrow back). Paths — and the `components/schemas` they pull in — are filtered by the **caller's permissions**, like MCP `tools/list`: anonymous callers see only `@permission("public")` functions, `user` sees `api`, `admin` sees everything. `greycat run` has every permission bit, so a build-time spec is complete.
 
 ### Model Context Protocol (MCP)
 

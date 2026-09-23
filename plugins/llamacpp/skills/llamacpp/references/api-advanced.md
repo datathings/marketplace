@@ -23,6 +23,14 @@ struct llama_adapter_lora * llama_adapter_lora_init(
 ```
 Load a LoRA adapter from file. The adapter is valid as long as the associated model is not freed. Can be loaded before or after context creation.
 
+### llama_adapter_lora_init_from_file_ptr
+```c
+struct llama_adapter_lora * llama_adapter_lora_init_from_file_ptr(
+    struct llama_model * model,
+    FILE * file);
+```
+**New in b11120.** Load a LoRA adapter from an open `FILE` pointer, reading from its current position (so the adapter GGUF can be embedded in a larger file). Same lifetime rules as `llama_adapter_lora_init`. Returns NULL on failure.
+
 ### llama_adapter_lora_free
 ```c
 void llama_adapter_lora_free(struct llama_adapter_lora * adapter);

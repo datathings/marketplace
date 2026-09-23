@@ -111,7 +111,7 @@ Notes:
 
 - `@expose` makes it reachable at `POST /<module>::echo` (here `/api::echo`) and via JSON-RPC method `"api.echo"`.
 - Without `@permission`, the function requires the `api` permission (any authenticated caller) — that is the right default. Add `@permission("admin")` (or a custom permission declared in `project.gcl`) to narrow it further. **Do not** add `@permission("public")` unless the user explicitly asked for an anonymous-access endpoint; making a write-capable endpoint public exposes it to every caller on the network.
-- `@tag("openapi")` includes it in the spec returned by `OpenApi::v3`. `@tag("mcp")` exposes it as an MCP tool.
+- `@tag("mcp")` exposes it as an MCP tool. `@tag("openapi")` pins it into the spec returned by `OpenApi::v3` — only needed under `--openapi=false`, since by default every `@expose`d function is in the spec.
 - `/// @param <name> <description>` doc-comment lines surface in the generated OpenAPI / MCP schemas.
 - Request/response types are **views shaped for the caller**, not graph records: give them `@volatile` so persisting one is a runtime error. Clients get them from `greycat codegen` and should never restate them by hand — see [webapp.md](webapp.md) "The backend owns the types".
 

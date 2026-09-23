@@ -200,6 +200,8 @@ fn restart() { /*...*/ }                          // narrowed: admins only
 fn ping(): String { return "pong"; }              // anonymous — use only when the endpoint must serve anonymous traffic
 ```
 
+A handful of stdlib endpoints are `@permission("public")` because they filter their *own* output by the caller's permission mask rather than gating the call: MCP `tools/list` and `runtime::OpenApi::v3` both drop every function the caller could not invoke, so reaching them anonymously discloses only the `public` endpoints. That pattern — public entry point, per-item filtering inside — is the only reason to make a listing endpoint public; a function that returns data rather than a filtered catalogue still needs a real permission.
+
 Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`. CLI equivalents under `greycat user`.
 
 ### The `--user=<name>` impersonation flag — footgun, do not promote

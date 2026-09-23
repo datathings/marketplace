@@ -309,6 +309,8 @@ typedef struct {
 
 ### Slot Serialization
 
+**As of 8.4 all four are `gc_sdk`-exported** (previously declared without the export macro, so they could fail to link from a plugin shared library on strict-visibility builds).
+
 | Function | Description |
 |----------|-------------|
 | `gc_buffer__add_slot(self, slot, type, prog)` | Append a slot value as text |

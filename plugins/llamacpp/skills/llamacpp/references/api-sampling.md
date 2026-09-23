@@ -93,9 +93,9 @@ Get the i-th sampler in the chain. Returns NULL if:
 - if i == -1, returns the chain itself (can be used to check if the sampler is a chain)
 
 ```c
-int llama_sampler_chain_n(const struct llama_sampler * chain);
+int32_t llama_sampler_chain_n(const struct llama_sampler * chain);
 ```
-Get the number of samplers in the chain.
+Get the number of samplers in the chain. (Return type was `int` before b11120.)
 
 ```c
 struct llama_sampler * llama_sampler_chain_remove(

@@ -156,7 +156,7 @@ Attaches one or more named tags to an `@expose`d function. Tags drive runtime di
 
 ```gcl
 @expose
-@tag("openapi")              // include in the OpenAPI v3 spec
+@tag("openapi")              // keeps the function in the spec even under --openapi=false
 fn list_users(): Array<User> {}
 
 @expose
@@ -170,7 +170,7 @@ Recognized tag names today:
 
 | Tag       | Behavior                                                                                       |
 | --------- | ---------------------------------------------------------------------------------------------- |
-| `openapi` | Function appears in the OpenAPI v3 document returned by `OpenApi::v3()`.                       |
+| `openapi` | Function appears in the OpenAPI v3 document returned by `OpenApi::v3()` even when `GREYCAT_OPENAPI=false`. Redundant under the default `GREYCAT_OPENAPI=true`, where every `@expose`d function is already in the document. |
 | `mcp`     | Function appears in MCP `tools/list` and is callable via MCP `tools/call`.                     |
 
 Tags are additive — stacking `@tag("mcp", "openapi")` is equivalent to `@tag("mcp")` + `@tag("openapi")`. Unknown tag names parse fine and are exposed reflectively, but have no built-in semantics.

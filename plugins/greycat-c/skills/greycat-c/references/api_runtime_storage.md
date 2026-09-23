@@ -368,12 +368,15 @@ typedef enum {
     gc_env_options__mcp_instructions,
     gc_env_options__registry,
     gc_env_options__registry_token,
+    gc_env_options__openapi,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
 ```
 
 **New in 8.3:** `gc_env_options__registry` / `gc_env_options__registry_token` hold the registry URL and auth token for resolving libraries/releases via `GREYCAT_REGISTRY` — a CLI-config detail, not a C API most plugin authors touch.
+
+**New in 8.4:** `gc_env_options__openapi` (bool, `GREYCAT_OPENAPI` / `--openapi`, default `true`) — when on, the `OpenApi::v3()` document includes every `@expose`d function (filtered by the caller's permissions); when off, only `@tag("openapi")` ones.
 
 ### Usage Examples
 

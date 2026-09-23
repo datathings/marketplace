@@ -5,7 +5,14 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.3** (headers re-verified 2026-09-16 against upstream `024068c6e`). Changes since 8.2:
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.4** (headers re-verified 2026-09-23 against upstream `16875a614`). Changes since 8.3 (all additive, no breaking changes):
+
+- **New: `gc_map__get_key(map, key, key_type, *stored_key_type, prog)`** — returns the map's *own* (deep-copied-on-insert) key object for a deep-equal probe key; borrowed, not marked. Needed to alias the key object the VM hands out when iterating a map (fix behind task suspend/resume of retained map keys). See [api_collections.md](references/api_collections.md).
+- **New: `gc_time__join_us(epoch_s, us_offset)`** — `static inline` inverse of `gc_time__split_us`, recombining seconds + sub-second µs in `u64_t` to avoid signed-overflow UB at `time::min`. Use it instead of open-coding `s * 1000000 + us`. See [api_services.md](references/api_services.md).
+- **`gc_slot__save` / `_save_value` / `_load` / `_load_value` are now `gc_sdk`-exported** (reliably linkable from plugins). Signatures unchanged. See [api_memory_text.md](references/api_memory_text.md).
+- **`gc_env_options_offset_t` gained `gc_env_options__openapi`** (`GREYCAT_OPENAPI` / `--openapi`, default on). **Stdlib: `OpenApi::v3()` is now `@permission("public")`** and, by default, documents every `@expose`d function (not just `@tag("openapi")`), filtered by the caller's permissions. See [api_runtime_storage.md](references/api_runtime_storage.md), [standard_library.md](references/standard_library.md).
+
+Previously, in 8.3 (headers re-verified 2026-09-16 against upstream `024068c6e`):
 
 - **Breaking: `gc_mktime_safe`'s year-bound macros removed (`GC_MKTIME_MAX_TM_YEAR`, `GC_MKTIME_MIN_YEAR`, `GC_MKTIME_MAX_YEAR`).** No replacement — code referencing any of the three no longer compiles. Not just dead-code cleanup: the year-at-a-time loop those macros bounded (±10000 years) was replaced by a constant-time closed-form inverse, so `gc_mktime_safe`'s usable range widened to whatever `tm_year` can hold, fixing `time::min`/`time::max` round-tripping through `Date` (`ffa41d71d`). See [api_services.md](references/api_services.md).
 - **New: `gc_time__split_us(epoch_us, *us_offset)`.** `static inline` helper (no linking needed) that floor-divides a microsecond epoch into a whole-second count and a non-negative sub-second remainder — the shape `gc_gmtime_r_safe`/`gc__print_iso` expect. Hand-rolled `/`/`%` truncates toward zero, so it produced a negative remainder (rendering as `.-500`) for pre-1970 instants with a sub-second part; this is the fix behind GreyCat now reading back the ISO timestamps it writes (`b12f39d05`). See [api_services.md](references/api_services.md).

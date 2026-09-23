@@ -190,7 +190,7 @@ struct llama_model * llama_model_load_from_file_ptr(
     FILE * file,
     struct llama_model_params params);
 ```
-Load a model from an open `FILE` pointer. Returns NULL on failure.
+Load a model from an open `FILE` pointer. Returns NULL on failure. The GGUF is read from the file's **current position**, so it can be embedded in a larger file (b11120+: the GGUF data section is aligned relative to the GGUF start, not the file). For mmap, the data section's absolute file offset must be aligned to the CPU tensor alignment (32 bytes).
 
 **Parameters:**
 - `file`: Open FILE pointer to the GGUF model

@@ -183,6 +183,7 @@ typedef struct {
 | `gc_map__init` | `void gc_map__init(gc_map_t *self, u64_t capacity, const gc_machine_t *ctx)` | Initialize the map with a given capacity (allocates storage via the call's allocator). |
 | `gc_map__set` | `void gc_map__set(gc_map_t *self_map, gc_slot_t key, gc_type_t key_type, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert or update a key-value pair. |
 | `gc_map__get` | `gc_slot_t gc_map__get(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *value_type, const gc_program_t *prog)` | Lookup a value by key. Writes value type to `*value_type`. |
+| `gc_map__get_key` | `gc_slot_t gc_map__get_key(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *stored_key_type, const gc_program_t *prog)` | **New in 8.4.** Return the map's **own** key object for the entry whose key deep-equals `key`, writing its type to `*stored_key_type`. `key` is only a lookup probe; the result is the deep copy the map made on insertion (the same object the VM pushes when the map is iterated). The returned slot is borrowed (not marked/copied). Absent key → null slot and `*stored_key_type = gc_type_null`. |
 | `gc_map__contains` | `bool gc_map__contains(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, const gc_program_t *prog)` | Check if a key exists in the map. |
 | `gc_map__remove` | `bool gc_map__remove(gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_machine_t *ctx)` | Remove an entry by key. Returns `true` if the key was found and removed. |
 
@@ -227,6 +228,20 @@ if (value_type == gc_type_int) {
                 (gc_slot_t) {.object = (gc_object_t *) key}, gc_type_object,
                 (gc_slot_t) {.i64 = 1}, gc_type_int,
                 ctx);
+}
+```
+
+#### Recover the map's stored key (`gc_map__get_key`)
+
+`gc_map__set` deep-copies object keys (e.g. `String`), so the key you pass in is not the one the map holds. When you need the *stored* key — to alias the object the program sees while iterating the map — probe with any deep-equal key:
+
+```c
+gc_type_t stored_type = gc_type_null;
+gc_slot_t stored = gc_map__get_key(map,
+                                   (gc_slot_t) {.object = (gc_object_t *) probe}, gc_type_object,
+                                   &stored_type, gc_machine__program(ctx));
+if (stored_type != gc_type_null) {
+    // stored.object is the map's own copy; borrowed — mark it if you keep it past the call
 }
 ```
 

@@ -72,7 +72,7 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (524 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (401 lines) - LoRA adapters, performance, training, constants
 
-**Total:** 204 active functions (b10868) across 6 organized files
+**Total:** 205 active functions (b11120) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -157,9 +157,16 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
 - **[references/workflows.md](references/workflows.md)** (1,619 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
 
-## What's New in b10868
+## What's New in b11120
 
-**b10868** (203 commits since b10665) — no functions added or removed; the only public C API change is a rename:
+**b11120** (252 commits since b10868) — small, non-breaking C API changes:
+
+- **New:** `llama_adapter_lora_init_from_file_ptr(model, FILE *)` — load a LoRA adapter from an open `FILE*` at its current position (mirrors `llama_model_load_from_file_ptr`). See [api-advanced.md](references/api-advanced.md#llama_adapter_lora_init_from_file_ptr).
+- **GGUF-in-a-larger-file:** `llama_model_load_from_file_ptr()` reads from the current file position; the GGUF data section is now aligned relative to the GGUF start. For mmap, its absolute offset must be 32-byte aligned.
+- `llama_sampler_chain_n()` now returns `int32_t` (was `int`) — ABI-identical on all mainstream platforms.
+- New `LLAMA_VOCAB_TYPE_TEST = 7` (dummy tokenizer for tests).
+
+**Previously (b10868, 203 commits since b10665)** — no functions added or removed; the only public C API change is a rename:
 
 **BREAKING (rename, not behavior):**
 - `enum llama_tensor_read_lazy` → `enum llama_lazy_mode`; its constants `LLAMA_TENSOR_READ_LAZY_OFF`/`AUTO`/`ON` → `LLAMA_LAZY_MODE_OFF`/`AUTO`/`ON`; and `llama_model_params.tensor_read_lazy` → `llama_model_params.lazy_mode`. Behavior is unchanged — update call sites setting the old field/enum names. See [api-core.md](references/api-core.md#lazy-tensor-reading).
