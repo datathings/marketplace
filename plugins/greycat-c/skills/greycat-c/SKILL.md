@@ -1,16 +1,19 @@
 ---
 name: greycat-c
-description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/Identity/Security/System/License/OpenAPI/MCP), std::io (CSV/JSON/XML/HTTP/Email/FileWalker/S3), std::util (Queue/Stack/SlidingWindow/TimeWindow/Gaussian/Histogram/Quantizers/Random/Uuid/Crypto); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
+description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Native C development with gc_machine_t context, tensors, objects, memory management, crypto, I/O; (2) GCL Standard Library modules - std::core (Date/Time/Tuple/geospatial types), std::runtime (Scheduler/Task/Logger/Identity/Security/System/Request/License/OpenAPI/MCP), std::io (CSV/JSON/HTTP/Email/FileWalker), std::util (Queue/Stack/SlidingWindow/TimeWindow/Gaussian/Histogram/Quantizers/Random/Uuid/Crypto); (3) Plugin development patterns - lifecycle hooks, type configuration, nativegen, module-level and type-level function linking, global state, thread safety, conditional logging. Keywords: GreyCat, GCL, native functions, tensors, task automation, scheduler, plugin development."
 ---
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.4** (headers re-verified 2026-09-23 against upstream `16875a614`). Changes since 8.3 (all additive, no breaking changes):
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **8.4** (headers re-verified 2026-09-25 against upstream `2289e00b8`). Changes since 8.3 (C API all additive; one **breaking stdlib** change):
 
 - **New: `gc_map__get_key(map, key, key_type, *stored_key_type, prog)`** — returns the map's *own* (deep-copied-on-insert) key object for a deep-equal probe key; borrowed, not marked. Needed to alias the key object the VM hands out when iterating a map (fix behind task suspend/resume of retained map keys). See [api_collections.md](references/api_collections.md).
 - **New: `gc_time__join_us(epoch_s, us_offset)`** — `static inline` inverse of `gc_time__split_us`, recombining seconds + sub-second µs in `u64_t` to avoid signed-overflow UB at `time::min`. Use it instead of open-coding `s * 1000000 + us`. See [api_services.md](references/api_services.md).
 - **`gc_slot__save` / `_save_value` / `_load` / `_load_value` are now `gc_sdk`-exported** (reliably linkable from plugins). Signatures unchanged. See [api_memory_text.md](references/api_memory_text.md).
 - **`gc_env_options_offset_t` gained `gc_env_options__openapi`** (`GREYCAT_OPENAPI` / `--openapi`, default on). **Stdlib: `OpenApi::v3()` is now `@permission("public")`** and, by default, documents every `@expose`d function (not just `@tag("openapi")`), filtered by the caller's permissions. See [api_runtime_storage.md](references/api_runtime_storage.md), [standard_library.md](references/standard_library.md).
+- **New: `gc_program_type__inherits(prog, type, target_type_id)`** — `true` if `type` inherits `target_type_id` at any depth, matching a bare generic through its monomorphized parent (like `gc_program__is_type`). **`gc_program_function` gained `bool is_raw`** (`@raw`: exposed result written as `text/plain`, not JSON). See [api_core.md](references/api_core.md).
+- **New: `GC_ARRAY_CELL_SIZE`** (bytes per element of the single slots+types block) in [api_collections.md](references/api_collections.md); `gc_buffer_write_check` gained an inline fast path (same semantics) — [api_memory_text.md](references/api_memory_text.md).
+- **Breaking (stdlib): `XmlReader<T>` and `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` removed from `std::io`.** XML moved unchanged to the `xml` library (`@library("xml", ...)`); S3 is a rewrite in the `s3` library (`s3::Client`, `sigv4::Credentials`, different method names) — existing S3 code must be rewritten. **New stdlib:** `runtime::Request` (`header` / `headers` / `uri` / `body` of the HTTP request being served — `null` outside a request; `authorization`/`cookie` hidden) and `Crypto::equals_constant_time(a, b)` for webhook signature checks. See [standard_library.md](references/standard_library.md).
 
 Previously, in 8.3 (headers re-verified 2026-09-16 against upstream `024068c6e`):
 
@@ -45,7 +48,7 @@ Previously, in 8.1 (headers re-verified 2026-08-04 against upstream `78e57676d`)
 - **`gc_block_t` gained `u64_t node_ref`** (new in 8.1) — the node reference the block backs, used by suspend/resume serialization to relocate the block's entries. See [api_runtime_storage.md](references/api_runtime_storage.md).
 - **Iterator params** `gc_program_iterator_param_t`: `from=0`, `to=1`, `nullable=2`, `from_excl=3`, `to_excl=4` (no `limit`). Geo epsilon constant is `GC_CORE_GEO_EPS`.
 - **Tensor struct rename (breaking).** The tensor structs are now `gc_tensor_t` / `gc_tensor_descriptor_t` (formerly `gc_core_tensor_t` / `gc_core_tensor_descriptor_t`); the `gc_core_tensor__*` and `gc_core_tensor_descriptor__*` **function** names are unchanged, and `gc_machine__init_tensor` now takes/returns the renamed types. Plugin code that referenced the old struct typedefs must be updated. Full tensor API: [api_collections.md](references/api_collections.md).
-- **Stdlib (GreyCat 8.0) breaking changes.** Security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). GCL logging is via module-level `info` / `warn` / `error` / `perf` / `trace` functions — `Log` is a parse record, not a callable namespace. Remaining 8.0 surface (S3 object storage, the `HttpMethod`/`HttpRequest`/`HttpResponse` model (`HttpRequest.headers` is `Map<String, String>?`, `HttpResponse.headers` is `Map<String, String>`), `Csv::analyze(Array<String>)`, `Uuid` v4/v7, periodicity field shapes, `LogLevel`/`TaskStatus`/`LicenseType` enums): [standard_library.md](references/standard_library.md).
+- **Stdlib (GreyCat 8.0) breaking changes.** Security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). GCL logging is via module-level `info` / `warn` / `error` / `perf` / `trace` functions — `Log` is a parse record, not a callable namespace. Remaining 8.0 surface (the `HttpMethod`/`HttpRequest`/`HttpResponse` model (`HttpRequest.headers` is `Map<String, String>?`, `HttpResponse.headers` is `Map<String, String>`), `Csv::analyze(Array<String>)`, `Uuid` v4/v7, periodicity field shapes, `LogLevel`/`TaskStatus`/`LicenseType` enums): [standard_library.md](references/standard_library.md).
 - **`ProgressTracker.update(nb)` is now absolute, not incremental (breaking).** It sets the step counter to `nb` rather than adding `nb` to it. New fields `speed_smoothed` (EMA of the per-update pace) and `smoothing` (EMA weight, default `ProgressTracker.DEFAULT_SMOOTHING = 0.1`) drive a more reactive `remaining` estimate. Also new since the last sync: `HttpRequest.max_response_size` (caps chunked/unbounded response reads) and `Task::live(ids)` / `Task::tasks(ids)` (bulk liveness check / bulk fetch by id).
 - **`TensorDistance` gained `lorentz` and `poincare`** (hyperbolic distances — Lorentz/hyperboloid model and Poincaré ball model, both curvature fixed at -1). **`Identity.set_role(name, role)`** is a new admin-only static native — it returns nothing (`void`), not `bool`.
 - **Other 8.0→8.1 signature/field changes.** `gc_common__parse_number`'s `str_len` param widened `u32_t *` → `u64_t *` (its sibling `gc_common__parse_sign_number` is still `u32_t *` — the two now disagree, match the local variable's type to the callee). `gc_buffer_read_vu64_size_checked` added (the `u64_t` counterpart of the existing `_vu32_` variant), joined later in 8.1 by `gc_buffer_read_vi64_size_checked` (zig-zag signed) and the `GC_VU64_MAX_BYTES` (= 9) worst-case varint width constant. `gc_object__clone`, `gc_array__fill`, and `gc_array__ensure_capacity` (replaced `gc_array__init`; now grow-only/idempotent, rounds to a power of two, preserves contents) round out the collections/memory surface. Stdlib: `Task.duration: duration?` was replaced by `Task.completion: time?`, `Task` gained `user_name: String`, and `nodeGeo<T>` gained `search(center: geo, max: int): Array<SearchResult<geo,T>>`.
@@ -131,8 +134,8 @@ The C API reference is split by domain — each file below is linked directly (o
 ## Module Organization
 
 - **std::core** - Fundamental types (Date, Time, Duration, Tuple, Error, geospatial types, enumerations)
-- **std::runtime** - Scheduler, Task, Job, Logger, Identity/Security, System, ChildProcess, License, OpenAPI, MCP
-- **std::io** - Text/Binary I/O, CSV, JSON, XML, HTTP client, Email/SMTP, FileWalker, S3 object storage
+- **std::runtime** - Scheduler, Task, Job, Logger, Identity/Security, System, ChildProcess, Request (current HTTP request), License, OpenAPI, MCP
+- **std::io** - Text/Binary I/O, CSV, JSON, HTTP client, Email/SMTP, FileWalker (XML and S3 moved to the `xml` / `s3` libraries in 8.4)
 - **std::util** - Collections (Queue, Stack, SlidingWindow, TimeWindow), Statistics (Gaussian, Histogram, GaussianProfile), Quantizers (Linear/Log/Custom/Multi), Assert, ProgressTracker, Crypto, Uuid, Random
 
 ## Detailed Reference
@@ -141,8 +144,8 @@ The C API reference is split by domain — each file below is linked directly (o
 
 **Load when working with:**
 - Task scheduling and automation (Scheduler with periodicities)
-- File I/O operations (CSV, JSON, XML, binary files)
-- HTTP integration and REST APIs, S3 object storage
+- File I/O operations (CSV, JSON, binary files)
+- HTTP integration and REST APIs, webhook request inspection (`Request`)
 - Statistical analysis and data processing
 - Identity, security, and authentication
 - System operations and logging

@@ -698,6 +698,7 @@ struct gc_program_function {
     bool is_exposed;                // Exposed via HTTP (@expose annotation)
     bool is_test;                   // Test function
     bool is_abstract;               // Abstract method
+    bool is_raw;                    // New in 8.4: @raw — exposed result written as text/plain, not JSON
     u64_t permissions_mask;         // Required permissions bitmask
     gc_program_src_id_t source;     // Source location
     gc_program_function_body_t *body;  // Native function pointer (NULL for GCL functions)
@@ -1023,6 +1024,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_type__configure(prog, type_id, header_bytes, native_finalize)` | Configure native type (header size and destructor). |
 | `gc_program_type__abi_type_id(prog, type_id)` | Get the ABI type ID for a program type. |
 | `gc_program__is_type(prog, source_type_id, target_type_id)` | Return `true` if `source_type_id` is (or is a monomorphized form of) `target_type_id`. |
+| `gc_sdk bool gc_program_type__inherits(const gc_program_t *prog, const gc_program_type_t *type, u32_t target_type_id)` | **New in 8.4.** `true` if `type` inherits `target_type_id` at any depth of its flattened chain. `extends Box<int>` records the monomorphized parent, so a bare generic `target_type_id` (`Box`) is matched through the specialization, as `gc_program__is_type` does. |
 
 #### Function Introspection
 

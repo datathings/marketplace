@@ -36,6 +36,7 @@ typedef struct {
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `GC_ARRAY_INITIAL_CAPACITY` | 8 | Default initial capacity for new arrays |
+| `GC_ARRAY_CELL_SIZE` | `(sizeof(gc_slot_t) + sizeof(u8_t))` | **New in 8.4.** Bytes per element of the single slots+types allocation block: the `types` array lives right after the `capacity` slots. |
 
 ### Functions
 

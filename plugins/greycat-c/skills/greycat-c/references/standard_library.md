@@ -2,11 +2,11 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.2** (no GCL-visible stdlib changes since 8.1 — this cycle's changes were C-header-only; see [SKILL.md](../SKILL.md)). The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
-- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, OpenAPI export, MCP server endpoints
-- **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications, S3 object storage
+- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Request`), OpenAPI export, MCP server endpoints
+- **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications
 - **util** - Data structures (Queue/Stack/SlidingWindow/TimeWindow), statistical analysis, data binning (quantizers), testing (Assert), monitoring (ProgressTracker), cryptography, UUID
 
 > Signatures below are copied verbatim from the `.gcl` source. `native` means the implementation is provided by the runtime. `@expose` marks a function reachable over the API; `@permission("...")` is the required permission. `private` members are omitted.
@@ -31,6 +31,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Task & Job Management](#task--job-management)
   - [Logging](#logging)
   - [System Information](#system-information)
+  - [Current HTTP Request](#current-http-request) - Request
   - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
@@ -39,12 +40,11 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
 - [std::io - Input/Output](#io-module-stdio)
   - [Readers & Writers](#readers--writers) - Writer, Reader, GcbWriter/Reader, TextWriter/Reader, BinReader
   - [JSON I/O](#json-io) - JsonWriter, JsonReader, Json
-  - [XML I/O](#xml-io) - XmlReader
+  - [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)
   - [CSV I/O](#csv-io) - CsvWriter, CsvReader, CsvFormat, Csv analysis
   - [File System](#file-system) - File, FileWalker
   - [HTTP Client](#http-client) - Http, HttpRequest, HttpResponse, HttpMethod, Url
   - [Email](#email) - Email, Smtp
-  - [S3 Object Storage](#s3-object-storage) - S3, S3Bucket, S3Object, S3BasicCredentials
 
 - [std::util - Utilities](#util-module-stdutil)
   - [Collections](#collections) - Queue, Stack, SlidingWindow, TimeWindow
@@ -575,6 +575,32 @@ println("Version: ${info.version}, arch: ${info.arch}");
 Runtime::sleep(1s);
 ```
 
+### Current HTTP Request
+
+#### Request (new in 8.4)
+Reaches the parts of the HTTP request being served that `@expose` does not bind as arguments — headers, raw target, raw body — e.g. to authenticate a non-GreyCat caller (webhook signature, proxy claim). Every method returns `null` (or an empty map) outside a request: `greycat run`, scheduler runs and `task: true` calls have no request to read.
+```gcl
+@volatile
+type Request {
+  static native fn header(name: String): String?;   // case-insensitive; `authorization` and `cookie` always null
+  static native fn headers(): Map<String, String>;  // names lowercased; excludes authorization/cookie; empty outside a request
+  static native fn uri(): String?;                  // path + query as received, percent-encoding intact -> Url::parse(...).params
+  static native fn body(): String?;                 // raw body before parsing; null if none, streamed to file (/files upload), or no request
+}
+
+@expose
+@permission("public")
+fn on_event(event: Event) {
+  var sent = Request::header("x-signature");
+  var body = Request::body();
+  if (sent == null || body == null) { throw "unsigned request"; }
+  var expected = Crypto::sha256_hmac_hex(body, System::getEnv("SHARED_SECRET") ?? "");
+  if (!Crypto::equals_constant_time(sent, expected)) { throw "bad signature"; }
+  handle(event);
+}
+```
+Verify signatures over `Request::body()`, never a re-serialized object (different bytes). Use `Request::uri()` when binding loses information (repeated `?tag=a&tag=b`, or keys colliding once `.`/`-` map to `_`). Pair with `@raw` on the function to answer a bare `text/plain` token (webhook handshakes, health probes).
+
 #### System
 ```gcl
 type System {
@@ -752,13 +778,12 @@ var obj  = Json<Person> {}.parse("{\"name\":\"Alice\",\"age\":30}");
 var text = Json::to_string(obj);
 ```
 
-### XML I/O
+### XML and S3 moved out of std
 
-#### XmlReader<T>
-```gcl
-var reader = XmlReader<Config> { path: "/config/settings.xml" };
-while (reader.can_read()) { apply_config(reader.read()); }
-```
+**Breaking (8.4, upstream `51646da7e`).** `XmlReader<T>` and the S3 client (`S3`, `S3Bucket`, `S3Object`, `S3BasicCredentials`) are no longer part of `std::io`; the C sources, native registrations and `gc_io_xml_reader_t` struct are gone from the runtime.
+
+- **XML** — `XmlReader<T>` moved unchanged (`read` / `can_read` / `available`) into the `xml` library, which also adds a `select` field, an `XmlElement` tree API (`XmlElement::parse(source)` / `XmlElement::load(path)`) and `Xml<T>` (`parse` / `load`). Call sites only need `@library("xml", ...)` in `project.gcl`.
+- **S3** — rewritten as the pure-GCL `s3` library (over `http` + `xml`); names do **not** line up, so code must be rewritten: `S3` → `s3::Client`, `S3Bucket` → `s3::Bucket`, credentials → `sigv4::Credentials` (`access_key_id` / `secret_access_key`), `list_objects` takes a request object, `get_object(bucket, key, filepath)` → `get_object_to_file`. Adds multipart upload, presigned URLs, copy, head, batch delete.
 
 ### CSV I/O
 
@@ -943,41 +968,6 @@ smtp.send(Email {
   body: "<h1>Report</h1>",
   body_is_html: true
 });
-```
-
-### S3 Object Storage
-
-#### S3, S3Bucket, S3Object, S3BasicCredentials
-```gcl
-type S3Object   { key: String; last_modified: time; size: int; etag: String; }
-type S3Bucket   { name: String; creation_date: time; }
-type S3BasicCredentials { access_key: String; secret_key: String; }
-
-type S3 {
-  host: String;
-  region: String;
-  credentials: S3BasicCredentials;
-  force_path_style: bool?;
-  // native fns:
-  //   list_objects(bucket, prefix: String?, start_after: String?, max_keys: int?): Array<S3Object>
-  //   get_object(bucket, key, filepath)
-  //   put_object(bucket, filepath, key)
-  //   delete_object(bucket, key)
-  //   create_bucket(bucket)
-  //   list_buckets(prefix: String?): Array<S3Bucket>
-}
-
-var s3 = S3 {
-  host: "localhost:9000", region: "us-east-1",
-  credentials: S3BasicCredentials { access_key: "AKIA...", secret_key: "secret" },
-  force_path_style: true
-};
-s3.create_bucket("my-bucket");
-s3.put_object("my-bucket", "/local/file.txt", "virtual/path/file.txt");
-var objects = s3.list_objects("my-bucket", "prefix/", null, 1000);
-for (_, obj in objects) { println("${obj.key} (${obj.size} bytes, etag=${obj.etag})"); }
-s3.get_object("my-bucket", "virtual/path/file.txt", "/local/download.txt");
-var buckets = s3.list_buckets(null);     // Array<S3Bucket>
 ```
 
 ## Util Module (std::util)
@@ -1190,12 +1180,14 @@ type Crypto {
   //   sha256(content): String, sha256hex(content): String,
   //   sha256_sign_pkcs1(input, key_path): String, sha256_sign_pkcs1_hex(input, key_path): String,
   //   sha256_hmac_hex(input, key): String,
+  //   equals_constant_time(a: String, b: String): bool,   // new in 8.4: timing-safe compare (lengths compared directly)
   //   base64_encode/decode(v): String, base64url_encode/decode(v): String,
   //   hex_encode/decode(v): String, url_encode/decode(v): String
 }
 var digest = Crypto::sha256hex("sensitive data");
 var b64    = Crypto::base64_encode("hello");
 var mac    = Crypto::sha256_hmac_hex(payload, secret_key);
+var ok     = Crypto::equals_constant_time(received_mac, mac);   // never use == for signature checks
 var sig    = Crypto::sha256_sign_pkcs1("data", "/keys/private.pem");
 ```
 

@@ -153,6 +153,33 @@ No token = anonymous (`user_id = 0`, role `public`). Anonymous callers only reac
 
 Tokens are HMAC-signed and live in-memory; restart issues fresh ones. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<name>` from the CLI.
 
+### Where arguments come from
+
+A call carries its arguments in the body or in the query string, and which one is used
+depends on whether a body is there — not on the method.
+
+| Request | Binds from |
+| --- | --- |
+| Body present, no query (or a query that names no parameter) | the body |
+| Query names a parameter, no body | the query |
+| Both | **400** — the call is refused, not resolved by precedence |
+
+A query parameter binds to the parameter of the same name, through the same binder a JSON
+object body goes through, so type checking and "a parameter nothing names is null" behave
+identically either way. The value's type follows the *parameter's declared type*, not the
+shape of the text: `?to=33612345678` is the `String` where `to` is a `String` and the `int`
+where it is an `int`. A key that is not a legal identifier binds through `.` and `-` read
+as `_`, so `user-id` and `filter.kind` reach parameters named `user_id` and `filter_kind`.
+A `+` is a space.
+
+A key naming no parameter is ignored, which is what keeps `?authorization=<token>` and
+other non-binding query strings as harmless as they have always been — and is why they do
+not trip the conflict above.
+
+Refusing the both-at-once case is deliberate. The two sources can disagree, and any
+precedence rule silently discards half of what the caller sent; that failure is invisible
+from the outside, where an error is not.
+
 ### Response shapes
 
 JSON-RPC follows the standard `{jsonrpc, id, result | error}` envelope. Path-RPC returns the raw JSON-encoded result, or the GCB-encoded result when the caller asked for it via `Accept: application/octet-stream`.

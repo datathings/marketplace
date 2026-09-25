@@ -498,7 +498,7 @@ gc_buffer__finalize(buf);
 
 #### Inline binary writing (LEB128 varints)
 
-The `static inline gc_buffer_write_*` helpers do NOT grow the buffer themselves — you must reserve worst-case capacity with `gc_buffer_write_check(buf, len)` first (a `vu64` is at most 9 bytes), then write. After a batch of inline writes, sync `buf->size` from the advanced cursor. `gc_buffer_write_ptr` is NULL-safe and copies raw bytes:
+The `static inline gc_buffer_write_*` helpers do NOT grow the buffer themselves — you must reserve worst-case capacity with `gc_buffer_write_check(buf, len)` first (a `vu64` is at most 9 bytes), then write. After a batch of inline writes, sync `buf->size` from the advanced cursor. Since 8.4 `gc_buffer_write_check` has an inlined fast path: when `buf->data` is non-NULL and `(current - data) + len + 1 < capacity` it just sets `buf->size = (current - data) + len` and returns without calling `gc_buffer__prepare` (same semantics, cheaper per call — calling it per value in a hot loop is fine). `gc_buffer_write_ptr` is NULL-safe and copies raw bytes:
 
 ```c
 const u64_t reserved_bin_len = sizeof(u64_t) * nb_zones;

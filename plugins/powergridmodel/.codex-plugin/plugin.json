@@ -1,6 +1,6 @@
 {
   "name": "powergridmodel",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "description": "power-grid-model Python reference for distribution power flow, state estimation, short-circuit calculation, and batch analysis.",
   "author": {
     "name": "Datathings",

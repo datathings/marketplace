@@ -20,6 +20,8 @@ For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the w
 | `ftp`         | FTP/FTPS client: `Ftp`, `FtpEntry`.                                                                       |
 | `ssh`         | SSH and SFTP: `Sftp`, `SftpFile`, `SshPasswordAuth`, `SshKeyAuth`.                                        |
 | `osm`         | OpenStreetMap toolkit: Overpass API client + Overpass-QL builder, ring math on `geo` / `GeoBox` / `GeoPoly`, opt-in persistent graph (`OsmNode` / `OsmWay` / `OsmRelation`), GPS edge snapping, elevation enrichment. |
+| `xml`         | XML: `XmlElement` for a parsed tree, `XmlReader<T>` for streaming a document too large to hold whole. Was `io::XmlReader` in `std` until 8.4. |
+| `s3`          | S3 client (AWS and compatible: MinIO, Ceph, R2, B2, Wasabi), SigV4-signed. Pure GCL over `http` + `xml`. Was `io::S3` in `std` until 8.4, with a different API. |
 | `useragent`   | User-agent string parsing: `UserAgent::parse`.                                                            |
 | `finance`     | IBAN parsing / validation (ISO 13616): `Iban::parse`.                                                     |
 | `powerflow`   | Power flow analysis (Newton–Raphson): `PowerNetwork`, `PowerBusResult`, `PowerLineResult`.                |

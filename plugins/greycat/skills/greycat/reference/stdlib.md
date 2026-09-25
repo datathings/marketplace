@@ -10,7 +10,7 @@ The stdlib ships under `lib/std/` (split into `core.gcl`, `io.gcl`, `runtime.gcl
 - Time and duration
 - Geographic types (geo, GeoBox, GeoCircle, GeoPoly)
 - IO (Reader / Writer / File)
-- Networking (Url, Smtp, S3)
+- Networking (Url, Smtp)
 - Crypto and UUID
 - Tensor and vector index
 - Runtime introspection (Runtime, System, Task, Scheduler, Identity)
@@ -404,7 +404,6 @@ Concrete subtypes:
 | `TextWriter<T>` / `TextReader`    | UTF-8 line-based                                   |
 | `JsonWriter<T>` / `JsonReader<T>` | NDJSON (line-separated JSON)                       |
 | `CsvWriter<T>` / `CsvReader<T>`   | CSV (config via `CsvFormat`)                       |
-| `XmlReader<T>`                    | XML                                                |
 | `BinReader`                       | Raw `i32` / `i64` / `f32` / `f64` / `Tensor` reads |
 
 ### File
@@ -504,11 +503,6 @@ while (reader.can_read()) {
 
 ## Networking
 
-`std` has no HTTP client. `Http<T>`, `HttpRequest`, `HttpResponse<T>`,
-`HttpMethod` and `HttpReader<T>` ship in the separate `http` library: add
-`@library("http", "<version>");` to `project.gcl`, run `greycat install`, and
-read `lib/http/README.md` for the API. See [libraries.md](libraries.md).
-
 ### Url
 
 ```gcl
@@ -523,10 +517,59 @@ Url::encode(m);                             // "name=John&age=42"
 
 `Url::encode` accepts any value: strings are percent-encoded, objects and `Map`s are flattened to `key=value&key=value` x-www-form-urlencoded form.
 
-### Smtp / S3
+### Request — the incoming HTTP request
+
+Reaches the parts of a request `@expose` does not pass as arguments. Every method
+answers `null` outside a request (`greycat run`, the scheduler, a `task: true` call),
+because the request is gone by then.
+
+```gcl
+Request::header("x-signature");           // String?, name matched case-insensitively
+Request::headers();                       // Map<String, String>, names lowercased
+Request::body();                          // String?, the bytes exactly as they arrived
+Request::uri();                           // String?, path + query, percent-encoding intact
+```
+
+`Request::uri()` is the escape hatch for a query the argument binder cannot express — a
+repeated key (`?tag=a&tag=b`, where binding keeps the last), or two keys that collide once
+`.` and `-` are read as `_`. `Url::parse` takes it and returns `params` already decoded:
+
+```gcl
+var params = Url::parse(Request::uri() ?? "").params;
+params?.get("tag");
+```
+
+`authorization` and `cookie` are withheld from both `header` and `headers`: they carry the
+caller's own GreyCat token, which the function is already running under.
+
+What it is for is authenticating a caller that holds no GreyCat token and signs its payload
+instead, which is how a signed webhook works. Verify against `Request::body()`, not
+against the parsed argument: a payload re-serialized from the object is different bytes and
+will not match.
+
+```gcl
+@expose
+@permission("public")
+fn on_event(event: Event) {
+    var sent = Request::header("x-signature");
+    var body = Request::body();
+    if (sent == null || body == null) {
+        throw "unsigned request";
+    }
+    var expected = Crypto::sha256_hmac_hex(body, System::getEnv("SHARED_SECRET") ?? "");
+    if (!Crypto::equals_constant_time(sent, expected)) {
+        throw "bad signature";
+    }
+    handle(event);
+}
+```
+
+Pair it with `@raw` when the provider also expects a bare token echoed back — see
+[annotations.md](annotations.md).
+
+### Smtp
 
 `Smtp` for sending email (with `Email`, `SmtpMode`, `SmtpAuth`).
-`S3` for object storage (with `S3Object`, `S3Bucket`, `S3BasicCredentials`).
 
 See [io.gcl](../../../../lib/std/io.gcl) for full signatures.
 
@@ -536,6 +579,7 @@ See [io.gcl](../../../../lib/std/io.gcl) for full signatures.
 Crypto::sha1(content);             Crypto::sha1hex(content);
 Crypto::sha256(content);           Crypto::sha256hex(content);
 Crypto::sha256_hmac_hex(input, key);
+Crypto::equals_constant_time(a, b);  // compare digests with this, never ==
 Crypto::sha256_sign_pkcs1(input, key_path);
 Crypto::sha256_sign_pkcs1_hex(input, key_path);
 Crypto::base64_encode(content);    Crypto::base64_decode(content);
