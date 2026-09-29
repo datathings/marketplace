@@ -1,6 +1,6 @@
 {
   "name": "opencl",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "description": "OpenCL C and C++ reference for cross-platform GPU and CPU parallel computing, device management, memory, kernels, events, and profiling.",
   "author": {
     "name": "Datathings",

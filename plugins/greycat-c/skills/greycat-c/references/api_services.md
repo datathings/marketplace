@@ -402,6 +402,8 @@ typedef struct {
 | `gc_mktime_safe` | `i64_t gc_mktime_safe(gc_tm_t *tim_p)` | Convert calendar fields to a timestamp |
 | `gc_time__split_us` | `static inline i64_t gc_time__split_us(i64_t epoch_us, i32_t *us_offset)` | **New in 8.3.** Floor-divide a microsecond epoch into a whole-second count (return value) and a non-negative sub-second remainder (`*us_offset`) — the shape `gc_gmtime_r_safe` / `gc__print_iso` expect. Plain `/`/`%` truncates toward zero and yields a negative remainder for pre-1970 instants carrying a sub-second part; every caller must use this instead. `static inline` in the header, so no linking is needed. |
 | `gc_time__join_us` | `static inline i64_t gc_time__join_us(i64_t epoch_s, i64_t us_offset)` | **New in 8.4.** Inverse of `gc_time__split_us`: recombine a second count and sub-second offset into a microsecond epoch. Does the arithmetic in `u64_t` so it cannot hit signed-overflow UB (at `time::min` the naive `s * 1000000 + us` overflows twice and is only right by wraparound). Every caller must use this instead of open-coding the expression. `static inline`, no linking needed. |
+| `gc_time__join_us_checked` | `static inline bool gc_time__join_us_checked(i64_t epoch_s, i64_t us_offset, i64_t *out)` | **New in 8.4.** `gc_time__join_us` for an instant read from outside (a parsed string, a `Date`) that may lie outside `[time::min, time::max]`: returns `false` there instead of wrapping around, else writes the microsecond epoch to `*out`. `us_offset` is normalised first (any value a parser accumulated is fine). Overflow-free for every input, `time::min` included, and wasm-safe (no `__builtin_mul_overflow` on `u64`). Use it on untrusted input; `gc_time__join_us` only for values already known in range. `static inline`. |
+| `gc_time__utc_offset` | `static inline i32_t gc_time__utc_offset(i64_t epoch_us, i64_t localized_epoch_s)` | **New in 8.4.** UTC offset, in seconds, of the calendar `localized_epoch_s` renders for `epoch_us` (i.e. `localized_epoch_s - gc_time__split_us(epoch_us, …)`). Floors the second like the calendar does — a truncating `epoch_us / 1000000` is one second off on pre-1970 instants with a sub-second part (and turned UTC into `-0000`). Use it to derive the `utc_offset` for `gc_strftime_safe`. `static inline`. |
 | `gc_dtz_utc_to_time_zone` | `i32_t gc_dtz_utc_to_time_zone(u32_t time_zone, i64_t utc_epoch, i64_t *localized_epoch)` | Convert UTC epoch to a localized epoch. Returns `GC_DTZ_OK` on success. |
 | `gc_dtz_time_zone_to_utc` | `i32_t gc_dtz_time_zone_to_utc(u32_t time_zone, i64_t localized_epoch, i64_t *utc_epoch, u32_t *next_utc_offset)` | Convert localized epoch to UTC. |
 | `gc_dtz_first_day_of_week` | `u8_t gc_dtz_first_day_of_week(u32_t time_zone)` | Get the first day of the week for a timezone (0=Sunday..6=Saturday). |
@@ -425,30 +427,31 @@ GC_MODULO(x, y)           // True modulo (not C remainder)
 
 ### Usage Examples
 
-All twelve functions are listed in the table above with byte-accurate signatures, but the section has no runnable code. The snippets below are grounded in the real runtime call sites. The recurring idiom: epochs are split into a whole-second part (passed through the calendar/timezone helpers) and a microsecond remainder (`tm_us_offset`) recombined as `utc_epoch * 1000000L + tm_us_offset`.
+The snippets below are grounded in the real runtime call sites. The recurring idiom: epochs are split into a whole-second part (passed through the calendar/timezone helpers) and a microsecond remainder (`tm_us_offset`) recombined with `gc_time__join_us(utc_epoch, tm_us_offset)` (or `gc_time__join_us_checked` when the instant came from outside and may be out of range). Split with `gc_time__split_us`, never with `/` and `%`.
 
 **Render a microsecond timestamp to ISO 8601 (timezone-aware).** This is the `gc_buffer__add_time` pattern: shift the second-granularity epoch into the target timezone, expand it into calendar fields, carry the sub-second remainder, then emit.
 
 ```c
 // epoch_us: microseconds since Unix epoch; tz: timezone id from options
-const i64_t epoch_s = epoch_us / GC_MICROSECONDS_IN_SECOND;
+i32_t us_offset;
+const i64_t epoch_s = gc_time__split_us(epoch_us, &us_offset);   // floor split, never `/` and `%`
 i64_t aligned_epoch_s;
 gc_dtz_utc_to_time_zone(tz, epoch_s, &aligned_epoch_s);
 
 gc_tm_t t = {0};
 gc_gmtime_r_safe(aligned_epoch_s, &t);
-t.tm_us_offset = (i32_t) (epoch_us % GC_MICROSECONDS_IN_SECOND);
+t.tm_us_offset = us_offset;
 
 gc__print_iso(buffer, &t, epoch_us, aligned_epoch_s); // appends e.g. 2026-06-22T14:30:00.000000+02:00 into the gc_buffer_t
 ```
 
-**Format a timestamp with a strftime-style pattern.** Grounded in `gc_dtz_time__print`. `gc_time__tm_from_time` already folds the timezone shift into the returned calendar, so `gc_mktime_safe` reproduces the localized second-count and the difference against the UTC second-count yields the offset that `gc_strftime_safe` needs for `%z`-style fields.
+**Format a timestamp with a strftime-style pattern.** Grounded in `gc_dtz_time__print`. `gc_time__tm_from_time` already folds the timezone shift into the returned calendar, so `gc_mktime_safe` reproduces the localized second-count and the difference against the (floored) UTC second-count — `gc_time__utc_offset` — yields the offset that `gc_strftime_safe` needs for `%z`-style fields.
 
 ```c
 char out[128];
 gc_tm_t calendar = gc_time__tm_from_time(epoch_us, tz);
 i64_t localized_epoch_s = gc_mktime_safe(&calendar);
-i32_t utc_offset = (i32_t) (localized_epoch_s - (epoch_us / GC_MICROSECONDS_IN_SECOND));
+i32_t utc_offset = gc_time__utc_offset(epoch_us, localized_epoch_s);   // 8.4: floors; never open-code epoch_us / 1e6
 size_t n = gc_strftime_safe(out, sizeof(out), "%Y-%m-%d %H:%M:%S", &calendar, utc_offset);
 // n bytes written into out (output is truncated to fit maxsize)
 ```
@@ -474,7 +477,10 @@ if (tz_offsets.parsed) {
         return false; // local time does not exist in this timezone
     }
 }
-i64_t epoch_us = utc_epoch_s * 1000000L + tm.tm_us_offset; // recombine sub-second part
+i64_t epoch_us;
+if (!gc_time__join_us_checked(utc_epoch_s, tm.tm_us_offset, &epoch_us)) {
+    return false; // outside [time::min, time::max] -- 8.4: reject instead of wrapping
+}
 ```
 
 **Current epoch and first day of week.** `gc_time__now` returns microseconds since epoch directly (note: it is a stub returning 0 on `__wasm__` builds). `gc_dtz_first_day_of_week` drives locale-aware week-bucketing in calendar arithmetic.
@@ -704,9 +710,17 @@ typedef struct gc_sort_slot {
 } gc_sort_slot_t;
 
 void gc_sort__piposort(gc_sort_slot_t *array, u64_t nmemb, gc_type_t t, bool asc, gc_allocator_t *allocator);
+
+/// Reads the sort key of element `i`. A `gc_type_null` tag marks a null key.
+typedef void gc_sort_key_fn(void *ctx, u64_t i, gc_slot_t *slot, gc_type_t *type);   // New in 8.4
+
+/// Fills `out` (at least `count` entries) with the permutation that sorts the elements `0..count` by their key.
+void gc_sort__by_key(gc_sort_slot_t *out, u64_t count, gc_sort_key_fn *key, void *key_ctx, bool asc, gc_allocator_t *allocator);   // New in 8.4
 ```
 
-A stable sort implementation for arrays of sort slots. The trailing `gc_allocator_t *allocator` parameter is used for temporary workspace.
+A stable sort implementation for arrays of sort slots. The trailing `gc_allocator_t *allocator` parameter is used for temporary workspace. Neither function is `gc_sdk`-exported.
+
+**New in 8.4: `gc_sort__by_key`** — the key-preparation step of `Table::sort` / `Array::sort`, extracted so callers don't hand-roll the type unification. You supply a `gc_sort_key_fn` callback (called with your `key_ctx` for each `i` in `0..count`); it fills `out` with the sorting permutation (`out[k].index` = original position of the k-th element). Semantics match the 8.4 stdlib sort: **non-null keys first, ordered by `asc`; null keys follow in input order** (whatever `asc`); keys of a single type sort as that type; an `int`/`float` mix sorts numerically as floats; any other mix sorts by raw bits.
 
 ### License
 
@@ -821,7 +835,26 @@ if (!gc__deep_equals(a, a_t, b, b_t, prog)) {
 u64_t encoded_key = gc_slot__hash(key, key_type, prog);
 ```
 
-**Sorting with `gc_sort__piposort`.** Build a `gc_sort_slot_t[]` where `.value` is the raw `u64` sort key (read from `slot.u64`) and `.index` is the original position. `t` is the unified element type (`gc_type_undefined` if rows mix types). The trailing allocator supplies temporary workspace; allocate the array from the same allocator. This is the `Table::sort` / array-sort pattern.
+**Sorting with `gc_sort__by_key` (preferred in 8.4).** Let the SDK unify key types and place nulls; you only provide a key reader.
+
+```c
+typedef struct { const gc_table_t *t; i64_t col; } row_key_ctx_t;
+
+static void row_key(void *kctx, u64_t i, gc_slot_t *slot, gc_type_t *type) {
+    const row_key_ctx_t *k = kctx;
+    if (!gc_table__get_cell(k->t, (i64_t) i, k->col, slot, type)) {
+        *type = gc_type_null;                            // gc_type_null => null key (sorted last)
+    }
+}
+
+gc_sort_slot_t *perm = gc_alloc__calloc(allocator, sizeof(gc_sort_slot_t) * n);
+if (perm == NULL) { gc_machine__set_runtime_error(ctx, "out of memory"); return; }
+row_key_ctx_t kctx = {self, col};
+gc_sort__by_key(perm, n, row_key, &kctx, asc, allocator);
+// perm[k].index = original row to place at position k (nulls last)
+```
+
+**Sorting with `gc_sort__piposort`.** Build a `gc_sort_slot_t[]` where `.value` is the raw `u64` sort key (read from `slot.u64`) and `.index` is the original position. `t` is the unified element type (`gc_type_undefined` if rows mix types). The trailing allocator supplies temporary workspace; allocate the array from the same allocator. This is the pre-8.4 `Table::sort` pattern (raw-bits fallback on mixed types, no null placement); prefer `gc_sort__by_key` above for stdlib-consistent ordering.
 
 ```c
 const u64_t n = self->rows;

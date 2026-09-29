@@ -2,11 +2,11 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). Also breaking in 8.4: `Array.sort` / `sort_by` / `Table.sort` place null keys last in both orders, and the runtime log moved from `files/root/log.csv` to the `log` stream (`files/root/streams/log.ndjson`). New: `io::Stream<T>` and the `Task::events()` SSE endpoint. The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
 - **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Request`), OpenAPI export, MCP server endpoints
-- **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications
+- **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications, append-only batched write streams (`Stream<T>`)
 - **util** - Data structures (Queue/Stack/SlidingWindow/TimeWindow), statistical analysis, data binning (quantizers), testing (Assert), monitoring (ProgressTracker), cryptography, UUID
 
 > Signatures below are copied verbatim from the `.gcl` source. `native` means the implementation is provided by the runtime. `@expose` marks a function reachable over the API; `@permission("...")` is the required permission. `private` members are omitted.
@@ -45,6 +45,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [File System](#file-system) - File, FileWalker
   - [HTTP Client](#http-client) - Http, HttpRequest, HttpResponse, HttpMethod, Url
   - [Email](#email) - Email, Smtp
+  - [Stream](#stream) - Stream<T> (new in 8.4)
 
 - [std::util - Utilities](#util-module-stdutil)
   - [Collections](#collections) - Queue, Stack, SlidingWindow, TimeWindow
@@ -152,6 +153,7 @@ var back = date.to_time(null);
 //   index_of(value), remove(i): T, remove_first(): T, remove_last(): T,
 //   set_capacity(value), range_equals(start, end, v)
 ```
+**Sort semantics (8.4, breaking):** `sort` / `sort_by` put null elements (or null field values) **last whatever the order**, keeping their relative order (they used to go first in both orders). A mix of `int` and `float` sorts numerically as floats (ints beyond 2^53 lose precision in the comparison only) instead of by raw bits.
 
 #### Map<K, V>
 ```gcl
@@ -175,6 +177,7 @@ Two-dimensional structure of values of any type.
 // @expose @permission("debug") static native fn applyMappings(table, mappings: Array<TableColumnMapping>): Table
 type TableColumnMapping { column: int; extractors: Array<any>; }
 ```
+`sort(col, order)` (8.4): rows with a null cell go **last whatever the order**, keeping their relative order; mixed `int`/`float` cells sort numerically as floats; a nullable single-typed column keeps sorting as that type (one null used to demote the whole column to a raw-bits comparison).
 
 ### Nodes
 
@@ -479,12 +482,15 @@ type Task {
   //   no_history(v: bool)
   //   running(): Array<Task>             (@expose @reserved)
   //   history(offset, max): Array<Task>  (@expose @reserved)
+  //   events()                           (@expose @reserved; new in 8.4 — SSE, see below)
   //   cancel(task_id): bool              (@expose @reserved)
   //   is_running(task_id): bool          (@expose)
   //   live(ids): Array<bool>             (@expose; one bool per id, false for unknown/inaccessible)
   //   tasks(ids): Array<Task?>           (@expose; null entries for unknown/inaccessible tasks)
 }
 ```
+
+**`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. Every root task the caller may see (same rule as `running` / `history`) emits `event: task-progress` frames while it reports progress and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
 
 #### Job<T> & await
 ```gcl
@@ -499,15 +505,14 @@ enum MergeStrategy { strict; first_wins; last_wins; }
 
 ### Logging
 
-Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace. It is also the record shape of `files/root/log.csv`, the file the runtime always appends to (see the C-API skill's `gc/log.h` notes).
+Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace. **As of 8.4 it is the record shape of the `log` [stream](#stream) — `files/root/streams/log.ndjson`, one JSON object per line — which replaced `files/root/log.csv`** (see the C-API skill's `gc/log.h` / `gc/stream.h` notes).
 ```gcl
 enum LogLevel { error; warn; info; perf; trace; }
 
 @volatile
 type Log {
   level: LogLevel;
-  @format(DurationUnit::microseconds)
-  time: time;               // raw epoch microseconds, as written by the log writer
+  time: time;
   user_id: int?;
   id: int?;
   id2: int?;
@@ -520,10 +525,13 @@ error("Failed to connect: ${error_message}");
 trace("Processing item ${id}");
 ```
 
-Reading `files/root/log.csv` back with `CsvReader<Log>` needs a format that neutralizes quoting, since the `data` payload is written unescaped:
+Read the log back as root with `Stream::get("log", Log).reader(from)`, or with any `JsonReader<Log>`. `src`, `user_id`, `id` and `id2` are null for records the runtime emits outside any task. A record whose `src` names a function the reading program no longer defines fails to parse — when writer and reader are different programs, read the file as `JsonReader<Map<String, any?>>`:
 ```gcl
-var reader = CsvReader<Log> { path: "files/root/log.csv", format: CsvFormat { string_delimiter: '\0' } };
+var r = Stream::get("log", Log).reader(0);          // as root
+while (r.can_read()) { var rec = r.read(); }
+var raw = JsonReader<Map<String, any?>> { path: "files/root/streams/log.ndjson" };
 ```
+**Breaking in 8.4:** `files/root/log.csv` is no longer written, and `Log.time` lost its `@format(DurationUnit::microseconds)` annotation (8.3's `CsvReader<Log>` + `CsvFormat { string_delimiter: '\0' }` recipe no longer applies).
 
 #### LogDataUsage / RuntimeUsage
 ```gcl
@@ -968,6 +976,44 @@ smtp.send(Email {
   body: "<h1>Report</h1>",
   body_is_html: true
 });
+```
+
+### Stream
+
+#### Stream<T> (new in 8.4)
+An append-only buffer that absorbs a high-rate, concurrent write stream of `T` values and hands them to GreyCat in batches, at a bounded pace, instead of one graph transaction per write. Records live in `files/<user>/streams/<name>.ndjson` (one JSON line each) and survive restarts; the registry is in-memory, so **register again at startup** (re-registering a name whose file already holds records reattaches and fires the callback once). Names are unique per user; `/` separates hierarchy levels (empty, `.`, `..` segments, leading/trailing `/`, and `\` are rejected). The consumer owns its checkpoint: persist the offset next to the data it produced, and keep the callback idempotent (a re-run may see already-processed values). C API: `gc/stream.h` (see the C-API skill's api_runtime_storage.md).
+```gcl
+type Stream<T> {
+  native fn last_written_pos(): int;       // offset just past the last value appended
+  native fn name(): String;
+  native static fn new<T>(name: String, type: typeof T, callback: function, max_dephasing: duration, durable: bool): Stream<T>;
+  native static fn get<T>(name: String, type: typeof T): Stream<T>;   // type must match registration
+  native fn reader(from: int): JsonReader<T>;   // values in [from, last_written_pos() at call time)
+  native fn write(value: T);               // concurrent-safe; an object must be exactly T (no subtype)
+}
+```
+- `callback` fires at most `max_dephasing` after a `write()` (one callback per burst); it must be a top-level function — lambdas don't capture their environment.
+- `durable: true` fsyncs every `write()` (returns once on disk); `false` appends without fsync (log-file profile; a crash can lose the unsynced tail, a torn last line is repaired on next registration).
+
+```gcl
+type Event { id: int; payload: String; }
+type IngestState { pos: int; }
+var ingest: node<IngestState?>;
+
+fn on_events() {
+  var s = Stream::get("ingest/events", Event);
+  var state = ingest.resolve() ?? IngestState { pos: 0 };
+  var end = s.last_written_pos();          // capture before draining
+  var r = s.reader(state.pos);
+  while (r.can_read()) { handle(r.read()); }
+  state.pos = end;
+  ingest.set(state);
+}
+
+fn start() {
+  var s = Stream::new("ingest/events", Event, on_events, 500ms, true);
+  s.write(Event { id: 1, payload: "hello" });
+}
 ```
 
 ## Util Module (std::util)

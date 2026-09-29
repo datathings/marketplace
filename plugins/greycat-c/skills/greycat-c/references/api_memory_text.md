@@ -303,6 +303,7 @@ typedef struct {
 | `gc_buffer__add_protected_symbol(buf, symb_off, prog)` | Append symbol with non-alphanumeric replaced by `_` |
 | `gc_buffer__add_escaped_symbol(buf, symb_off, prog)` | Append symbol with `"` escaped to `\"` |
 | `gc_buffer__add_function(self, fn_off, prog)` | Append a function's qualified name |
+| `gc_buffer__add_function_name(self, fn, prog)` | **New in 8.4.** `gc_sdk void gc_buffer__add_function_name(gc_buffer_t *self, const gc_program_function_t *fn, const gc_program_t *prog)` — writes the *bare* name of a function (no `module::Type::` prefix), or `GC_PROGRAM_LAMBDA_NAME` (`"<lambda>"`) for a lambda, which has none. Takes the descriptor pointer, not an offset (`buffer.h` now forward-declares `gc_program_function_t`). |
 | `gc_buffer__add_type_name_by_id(self, type_id, prog)` | Append a type as `module::Type`. A specialized generic carries its parameters in its own registered name, so `Array<int>` comes out as `core::Array<core::int>`. |
 
 > **Removed in 8.2, two of the three still gone.** `gc_buffer__add_type_name` and `gc_buffer__add_type_qname` remain undeclared in `gc/buffer.h` — no replacement; code calling either still doesn't compile against this header. `gc_buffer__add_type_name_by_id` (the row above) was re-added in 8.3.

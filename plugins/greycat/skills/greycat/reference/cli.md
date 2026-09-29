@@ -62,6 +62,16 @@ greycat run                                  # runs main()
 greycat run foo 42 "hello" '{"name":"John"}' # foo(42, "hello", Person { name: "John" })
 ```
 
+### `greycat call <function> [json args...]`
+
+Calls an `@expose`d function **on a running server** as a task, waits for it, and prints the result. Nothing is built or opened locally: the server owns `gcdata/`, so `call` works while `serve` is up, from any directory.
+
+- Each argument is one JSON value passed as-is: `greycat call api::add 2 3`, `greycat call api::echo '"hello"'`, `greycat call api::ingest '{"name":"John"}'`.
+- `--url` (`GREYCAT_URL`) selects the server, default `http://localhost:<port>` from `--port`.
+- `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
+- On a TTY a progress line shows the task status, elapsed time, and percentage when the function reports `Task::add_steps`. Piped output carries only the result.
+- The result prints as JSON, one value per line. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, or the token is rejected. Ctrl-C cancels the remote task.
+
 ### `greycat serve`
 
 Builds the project, then serves it as a long-running HTTP/RPC server. This is the default command — running `greycat` with no command does exactly this.
@@ -237,6 +247,8 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--task_pool_capacity`                  | `10000`            | `serve`                             | Max queued tasks.                                                                                                                                                                                                                  |
 | `--request_pool_capacity`               | `8192`             | `serve`                             | Max connections served at once. A kept-alive connection holds a slot for its whole idle window, so this bounds concurrent *connections*, not just in-flight requests; past it, new arrivals wait in the listen backlog.                                                                                                                                                                                                          |
 | `--request_ttl`                         | `20s`              | `serve`                             | Force-close requests that exceed this lifetime.                                                                                                                                                                                    |
+| `--max_sse` / `GREYCAT_MAX_SSE`         | `2048`             | `serve`                             | Cap on open task event streams (`GET /runtime::Task::events`); each holds a request pool slot. Past it a caller gets `429`.                                                                                                       |
+| `--max_sse_per_user` / `GREYCAT_MAX_SSE_PER_USER` | `16`     | `serve`                             | Cap on open task event streams per user. Past it a caller gets `429`.                                                                                                                                                             |
 | `--mcp_content` / `GREYCAT_MCP_CONTENT` | `both`             | `serve`, `dev`                      | How an MCP `tools/call` ships its payload: `both` (spec-recommended duplication), `structured` (`structuredContent` only, empty `content`), `text` (serialized `content` only, and no `outputSchema` is advertised).                |
 | `--mcp_instructions`                    | none               | `serve`, `dev`                      | Usage guidance returned to MCP clients as `instructions` in the `initialize` result.                                                                                                                                               |
 | `--openapi` / `GREYCAT_OPENAPI`         | `true`             | `serve`, `dev`                      | Whether every `@expose`d function lands in the OpenAPI v3 document by default. `false` narrows the document to functions carrying `@tag("openapi")`.                                                                                |

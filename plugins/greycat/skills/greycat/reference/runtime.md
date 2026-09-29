@@ -37,7 +37,7 @@ Everything is in-process. There is no separate database, queue, or web server to
 | `program`                   | The compiled program. Updated on each compatible rebuild.                       |
 | `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds.    |
 | `history/`                  | Task history (recent task records — for the `Task::history` API).               |
-| `security/`                 | LMDB-backed user / role / grant database, plus the server's private key.        |
+| `security/`                 | User / role / grant database (LMDB), the server's private key, the root `password` minted on first boot, and a root `token` (valid one year) re-minted on every `serve`. |
 | `lock`                      | Process lock — prevents two workers from opening the same store simultaneously. |
 
 **`gcdata/` is the durable state of the application.** Back it up; do not check it into git. Deleting it resets the project to a blank graph.
@@ -56,7 +56,7 @@ When you change a type's shape (rename, reorder, change attribute types) and reb
 
 A **task** is a function call run on a worker thread. Two ways to spawn:
 
-- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended.
+- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended. `greycat call <fn> [args]` does exactly this from the shell (see [cli.md](cli.md)).
 - **Programmatic** — `Scheduler::add(fn, periodicity, ...)` schedules a periodic task; the startup `main()` is enqueued as a task on `serve` boot.
 
 A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and **only run in parallel inside a task context** — calling `await` from a one-shot `greycat run` script runs them serially.
@@ -136,6 +136,7 @@ Started by `greycat serve` / `greycat dev`. Routes:
 | `POST /`                       | JSON-RPC 2.0 entrypoint. `method` is the FQN with `.` separators: `"<module>.<fn>"`, or `"<module>.<Type>.<fn>"` for a static method. Body: `{jsonrpc, method, params, id}`. |
 | `POST /<module>::<fn>`         | Path-RPC to a free-standing function. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type).                                               |
 | `POST /<module>::<Type>::<fn>` | Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`.               |
+| `GET /runtime::Task::events`   | Server-Sent Events stream of task events for the caller (see [Task events](#task-events-over-sse)). Authenticated callers only.                                             |
 | `GET /files/...`               | Read from `<project>/files/`. Per-user subdirectory + ACL.                                                                                                                   |
 | `POST/PUT /files/...`          | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.                                                                                    |
 | `GET /...` (anything else)     | Static assets, resolved against `<project>/webroot/` then each `lib/<name>/webroot/` (see below). Unknown paths return 404 — no automatic SPA fallback.                       |
@@ -278,6 +279,35 @@ fn main() {
 ```
 
 Inside a task: `Task::id()`, `Task::parentId()`, `Task::expected_steps(n)`, `Task::add_steps(k)`, `Task::no_history(true)` to opt out of the history log.
+
+### Task events over SSE
+
+`GET /runtime::Task::events` keeps the connection open and pushes one frame per task event, instead of the client polling `Task::running` / `Task::history`. The caller must be authenticated (cookie `greycat=<token>` is what a browser `EventSource` sends; `Authorization: <token>` works for `curl` and `fetch`); an anonymous request gets `401`. The response is `Content-Type: text/event-stream` with `Connection: close` and no length: the stream ends with the connection.
+
+Frames, every `data:` line being the `runtime::Task` in the same JSON shape `Task::running` returns:
+
+```
+event: task-progress
+data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","creation":"2026-09-28T10:19:09.949Z","start":"2026-09-28T10:19:09.949Z","status":"running","progress":0.5}
+
+event: task-complete
+data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","creation":"2026-09-28T10:19:09.949Z","start":"2026-09-28T10:19:09.949Z","completion":"2026-09-28T10:19:11.002Z","status":"ended"}
+```
+
+- Send `Accept: application/octet-stream` on the request and every `data:` line is instead the base64 of the binary response form (ABI header, then the GCB `Task`), which is what the web SDK asks for. JSON is the default.
+- `task-progress` fires when the whole percentage of `Task::add_steps` over `Task::expected_steps` changes, never more often.
+- `task-complete` fires once per root task, whatever its final status (`ended`, `error`, `cancelled`). Jobs spawned by `await` are not reported on their own.
+- Who receives a frame is decided per task with the rule `Task::running` uses: the task's owner, an admin, or a user the owner granted read access to.
+- `: connected` is sent on open and `: ping` every 15 s; both are comments an `EventSource` ignores. A subscriber whose token has expired, or that stops reading, is closed, and so is one that writes anything on the connection after its request: the stream is one-way.
+- Every open stream holds a request pool slot for as long as it lives, so `--max_sse` (default 2048) and `--max_sse_per_user` (default 16) cap them; a caller past either gets `429 Too Many Requests` and should poll and retry later.
+- There are no `id:` lines, so a reconnecting client cannot resume; fetch `Task::history` to catch up.
+- Not available on Windows, where the endpoint answers `503`.
+
+```js
+const events = new EventSource("/runtime::Task::events");   // cookie auth
+events.addEventListener("task-complete", (e) => console.log(JSON.parse(e.data)));
+events.addEventListener("task-progress", (e) => console.log(JSON.parse(e.data).progress));
+```
 
 ## Backups and many-worlds
 

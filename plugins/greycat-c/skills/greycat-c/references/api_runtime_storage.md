@@ -1,4 +1,4 @@
-# GreyCat C SDK — Runtime & Storage: Host/Scheduler, Block, ABI, I/O & Nodes
+# GreyCat C SDK — Runtime & Storage: Host/Scheduler, Block, ABI, I/O, Streams & Nodes
 
 Runtime orchestration (tasks, periodic scheduler, plugin-global allocator), persistent storage blocks, the ABI/serialization layer, file I/O, and graph node resolution. The `u64_t node_ref` node API is uniform across `node`/`nodeTime`/`nodeList`/`nodeGeo`/`nodeIndex` — only key encoding differs per variant.
 
@@ -12,6 +12,7 @@ _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL
 - [gc/block.h — Storage Blocks](#gcblock-h)
 - [gc/abi.h — ABI (Application Binary Interface)](#gcabi-h)
 - [gc/io.h — File I/O](#gcio-h)
+- [gc/stream.h — Streams (io::Stream C API)](#gcstream-h)
 - [gc/node.h — Node Resolution](#gcnode-h)
 
 ---
@@ -369,6 +370,10 @@ typedef enum {
     gc_env_options__registry,
     gc_env_options__registry_token,
     gc_env_options__openapi,
+    gc_env_options__max_sse,
+    gc_env_options__max_sse_per_user,
+    gc_env_options__url,
+    gc_env_options__token,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -377,6 +382,15 @@ typedef enum {
 **New in 8.3:** `gc_env_options__registry` / `gc_env_options__registry_token` hold the registry URL and auth token for resolving libraries/releases via `GREYCAT_REGISTRY` — a CLI-config detail, not a C API most plugin authors touch.
 
 **New in 8.4:** `gc_env_options__openapi` (bool, `GREYCAT_OPENAPI` / `--openapi`, default `true`) — when on, the `OpenApi::v3()` document includes every `@expose`d function (filtered by the caller's permissions); when off, only `@tag("openapi")` ones.
+
+**Also new in 8.4 (appended after `openapi`, so `gc_env_options_len` grew by 4):**
+
+| Variant | Slot | CLI / env | Default | Meaning |
+|---------|------|-----------|---------|---------|
+| `gc_env_options__max_sse` | `.i64` | `--max_sse` / `GREYCAT_MAX_SSE` | `2048` | Cap on open task event streams (`GET /runtime::Task::events`, SSE); each holds a request pool slot. Past it the caller gets `429`. `serve` only. |
+| `gc_env_options__max_sse_per_user` | `.i64` | `--max_sse_per_user` / `GREYCAT_MAX_SSE_PER_USER` | `16` | Per-user cap on open task event streams. |
+| `gc_env_options__url` | `.str` | `--url` / `GREYCAT_URL` | `NULL` (→ `http://localhost:<port>`) | Server targeted by the new `greycat call` CLI command. |
+| `gc_env_options__token` | `.str` | `--token` / `GREYCAT_TOKEN` | `NULL` (→ root token in `gcdata/security/token`) | Token `greycat call` sends as `Authorization`. |
 
 ### Usage Examples
 
@@ -911,6 +925,69 @@ gc_io_file__sync(out_fd); // flush buffered data to disk (fsync)
 close(out_fd);
 ```
 
+
+---
+
+<a id="gcstream-h"></a>
+## gc/stream.h — Streams (io::Stream C API)
+
+**New in 8.4.** Public C API behind the GCL `io::Stream<T>` type (the GCL natives are now thin wrappers over it; see [standard_library.md](standard_library.md#stream)). A stream is an append-only, per-user NDJSON file — `files/<user>/streams/<name>.ndjson`, `/` in the name maps to directories — that absorbs high-rate concurrent writes and wakes an optional callback task at most `max_dephasing_us` after a write. The runtime's own log is one: `"log"`, registered as root at host init. Every function is `gc_sdk`-exported.
+
+> **Not pulled in by `greycat.h`** — `#include "gc/stream.h"` explicitly (it includes `gc/buffer.h` and `gc/type.h`).
+
+### Opaque Type
+
+```c
+/// A registered io::Stream. Opaque; entries live for the host's lifetime and never move.
+typedef struct gc_stream gc_stream_t;
+```
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_stream__register` | `gc_sdk gc_stream_t *gc_stream__register(gc_host_t *host, u32_t user_id, u64_t permissions, const char *name, u32_t name_len, u32_t type_id, u32_t callback_fn_off, i64_t max_dephasing_us, bool durable, gc_buffer_t *err)` | Register `name` for `user_id` and return its entry. Re-registering the same (user, name) with the same `type_id` returns the existing entry **as is** — the first registration's callback, `max_dephasing_us` and `durable` stay in force, the new ones are silently ignored; a different `type_id` is an error. `callback_fn_off` 0 = no callback (drain deadline never armed, never wakes the worker thread). `durable` = fsync per append. `user_id`/`permissions` are **trusted** (in-process API — never feed it request input). Returns `nullptr` on error with the reason in `err` (cleared first). |
+| `gc_stream__find` | `gc_sdk gc_stream_t *gc_stream__find(gc_host_t *host, u32_t user_id, const char *name, u32_t name_len)` | The entry registered in this process for (user_id, name), or `nullptr`. |
+| `gc_stream__append` | `gc_sdk bool gc_stream__append(gc_stream_t *s, const char *record, u64_t len)` | Append one pre-serialized record: `len` bytes **ending with `'\n'`**, one write under the stream's lock, fsynced if durable. The caller guarantees it is one JSON value of the stream's type + newline (not checked). On failure returns `false` with `errno` set (`EINVAL` when the last byte is not `'\n'`) and truncates the file back to the last accounted byte, so a partial record never prefixes the next one. |
+| `gc_stream__write` | `gc_sdk bool gc_stream__write(gc_stream_t *s, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | JSON-serialize `value` with `ctx`'s scratch buffer and append it. An object whose type is not exactly the stream's type is refused; that and any other failure set a runtime error on `ctx` and return `false`. |
+| `gc_stream__last_written_pos` | `gc_sdk i64_t gc_stream__last_written_pos(gc_stream_t *s)` | Bytes appended (and, if durable, fsynced) so far — the upper bound `gc_stream__reader` uses. |
+| `gc_stream__name` | `gc_sdk const char *gc_stream__name(const gc_stream_t *s, u32_t *len)` | Registered name; length through `*len`. |
+| `gc_stream__path` | `gc_sdk const char *gc_stream__path(const gc_stream_t *s, u32_t *len)` | File path, cwd-relative, NUL-terminated; length through `*len`. |
+| `gc_stream__type` | `gc_sdk u32_t gc_stream__type(const gc_stream_t *s)` | The stream's record type id. |
+| `gc_stream__reader` | `gc_sdk gc_object_t *gc_stream__reader(gc_stream_t *s, i64_t from, gc_machine_t *ctx)` | A `JsonReader<T>` object over `[from, last_written_pos at call time)` — what GCL `reader()` returns. Returned **marked** (like `gc_machine__create_object`): store it, then `gc_object__un_mark`. |
+
+### Usage Example
+
+**Append records from a native function, then hand back a reader.** `type_id` is the stream's record type (e.g. a nativegen-generated type constant); the user/permissions must come from trusted plugin state, never from request input.
+
+```c
+#include "gc/stream.h"
+
+gc_host_t *host = gc_machine__get_host(ctx);
+gc_buffer_t *err = gc_machine__get_buffer(ctx);
+gc_stream_t *s = gc_stream__find(host, user_id, "ingest/events", 13);
+if (s == nullptr) {
+    s = gc_stream__register(host, user_id, permissions, "ingest/events", 13, type_id,
+                            0 /* no callback */, 0, true /* durable */, err);
+    if (s == nullptr) {
+        gc_machine__set_runtime_error(ctx, "stream registration failed");  // reason is in err
+        return;
+    }
+}
+// Serialize an object of exactly the stream's type (error already set on ctx on failure)
+if (!gc_stream__write(s, (gc_slot_t) {.object = event}, gc_type_object, ctx)) {
+    return;
+}
+// Or append pre-serialized NDJSON: must end with '\n'
+static const char rec[] = "{\"id\":1}\n";
+if (!gc_stream__append(s, rec, sizeof(rec) - 1)) { /* errno set */ }
+
+gc_object_t *reader = gc_stream__reader(s, 0, ctx);   // marked
+if (reader != nullptr) {
+    gc_machine__set_result(ctx, (gc_slot_t) {.object = reader}, gc_type_object);
+    gc_object__un_mark(reader, ctx);
+}
+```
 
 ---
 

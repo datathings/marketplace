@@ -679,8 +679,13 @@ struct gc_program_type {
 Function descriptor:
 
 ```c
+/// Display name of a lambda, which is compiled without a name.
+#define GC_PROGRAM_LAMBDA_NAME "<lambda>"   // New in 8.4
+
 struct gc_program_function {
-    u32_t name_off;                 // Symbol offset for the function name
+    u32_t name_off;                 // Symbol offset for the function name. 0 is NOT a symbol to resolve:
+                                    // it marks a lambda, and the reserved function slot 0 that native
+                                    // trampoline frames point to (use GC_PROGRAM_LAMBDA_NAME for display)
     u32_t type_off;                 // Owning type offset (0 for module-level functions)
     u32_t mod_off;                  // Module offset
     u32_t op_off;                   // Bytecode start offset
@@ -1269,7 +1274,7 @@ if (symb_off != 0) {
 <a id="gclog-h"></a>
 ## gc/log.h — Logging
 
-Structured logging from both VM (machine) and host contexts. Emitted records are decorated with the level, ISO timestamp, user/task ids, and (when emitted from a VM frame) the current `module::Type::fn`. CSV records are appended to the host log file. Calls return immediately when `level` exceeds the configured threshold, so it is safe to use the convenience helpers in hot paths.
+Structured logging from both VM (machine) and host contexts. Emitted records are decorated with the level, ISO timestamp, user/task ids, and (when emitted from a VM frame) the current `module::Type::fn`. Records are appended to the host log. **As of 8.4 the runtime writes them to the `log` stream — `files/root/streams/log.ndjson`, one JSON `runtime::Log` object per line — via `gc/stream.h`** (registered at host init as root, non-durable, no callback), replacing `files/root/log.csv`; the `gc/log.h` header comment still says "CSV record" but that is stale. Calls return immediately when `level` exceeds the configured threshold, so it is safe to use the convenience helpers in hot paths.
 
 ### Log Levels
 
