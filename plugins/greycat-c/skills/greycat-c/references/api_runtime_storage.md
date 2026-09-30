@@ -337,7 +337,8 @@ typedef enum {
     gc_env_options__usage_step,
     gc_env_options__store,
     gc_env_options__http_threads,
-    gc_env_options__req_workers,
+    /// Formerly `req_workers`: same slot, so the numbering below is unchanged.
+    gc_env_options__workers_small,
     gc_env_options__workers,
     gc_env_options__worlds,
     gc_env_options__port,
@@ -374,6 +375,7 @@ typedef enum {
     gc_env_options__max_sse_per_user,
     gc_env_options__url,
     gc_env_options__token,
+    gc_env_options__workers_large,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -391,6 +393,14 @@ typedef enum {
 | `gc_env_options__max_sse_per_user` | `.i64` | `--max_sse_per_user` / `GREYCAT_MAX_SSE_PER_USER` | `16` | Per-user cap on open task event streams. |
 | `gc_env_options__url` | `.str` | `--url` / `GREYCAT_URL` | `NULL` (→ `http://localhost:<port>`) | Server targeted by the new `greycat call` CLI command. |
 | `gc_env_options__token` | `.str` | `--token` / `GREYCAT_TOKEN` | `NULL` (→ root token in `gcdata/security/token`) | Token `greycat call` sends as `Authorization`. |
+
+**Tiered worker pools (upstream `a5c27b348`):** every RPC call (path-RPC or JSON-RPC) now runs as a task on a worker pool, so it has a task id, shows in `Task::running()` / `Task::history`, emits SSE task events and can be stopped with `Task::cancel`.
+
+| Variant | CLI / env | Default | Meaning |
+|---------|-----------|---------|---------|
+| `gc_env_options__workers_small` | `--workers_small` / `GREYCAT_WORKERS_SMALL` | `2` | **Renamed from `gc_env_options__req_workers`** (same slot/value; source-breaking only for code naming the old enumerator; CLI `--req_workers` is gone). Task workers for the small class, which RPC requests run as; added to `--workers`. `serve` only. |
+| `gc_env_options__workers_large` | `--workers_large` / `GREYCAT_WORKERS_LARGE` | `0` | **New, appended before `gc_env_options_len`.** How many of `--workers` serve the large class (the rest serve regular tasks); idle large workers also drain regular and small tasks. Sub-tasks spawned by `await` run in their parent's class. `run`, `serve`, `test`. |
+| `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples
 

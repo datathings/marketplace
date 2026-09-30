@@ -517,25 +517,25 @@ Url::encode(m);                             // "name=John&age=42"
 
 `Url::encode` accepts any value: strings are percent-encoded, objects and `Map`s are flattened to `key=value&key=value` x-www-form-urlencoded form.
 
-### Request — the incoming HTTP request
+### Task — the HTTP request the current task answers
 
-Reaches the parts of a request `@expose` does not pass as arguments. Every method
-answers `null` outside a request (`greycat run`, the scheduler, a `task: true` call),
-because the request is gone by then.
+Every RPC call runs as a task, and these reach the parts of its request `@expose` does not
+pass as arguments. All four answer `null` for a task that answers no request (`greycat run`,
+the scheduler, a `task: true` call, an `await` job).
 
 ```gcl
-Request::header("x-signature");           // String?, name matched case-insensitively
-Request::headers();                       // Map<String, String>, names lowercased
-Request::body();                          // String?, the bytes exactly as they arrived
-Request::uri();                           // String?, path + query, percent-encoding intact
+Task::header("x-signature");              // String?, name matched case-insensitively
+Task::headers();                          // Map<String, String>?, names lowercased
+Task::body();                             // String?, the bytes exactly as they arrived
+Task::uri();                              // String?, path + query, percent-encoding intact
 ```
 
-`Request::uri()` is the escape hatch for a query the argument binder cannot express — a
+`Task::uri()` is the escape hatch for a query the argument binder cannot express — a
 repeated key (`?tag=a&tag=b`, where binding keeps the last), or two keys that collide once
 `.` and `-` are read as `_`. `Url::parse` takes it and returns `params` already decoded:
 
 ```gcl
-var params = Url::parse(Request::uri() ?? "").params;
+var params = Url::parse(Task::uri() ?? "").params;
 params?.get("tag");
 ```
 
@@ -543,7 +543,7 @@ params?.get("tag");
 caller's own GreyCat token, which the function is already running under.
 
 What it is for is authenticating a caller that holds no GreyCat token and signs its payload
-instead, which is how a signed webhook works. Verify against `Request::body()`, not
+instead, which is how a signed webhook works. Verify against `Task::body()`, not
 against the parsed argument: a payload re-serialized from the object is different bytes and
 will not match.
 
@@ -551,8 +551,8 @@ will not match.
 @expose
 @permission("public")
 fn on_event(event: Event) {
-    var sent = Request::header("x-signature");
-    var body = Request::body();
+    var sent = Task::header("x-signature");
+    var body = Task::body();
     if (sent == null || body == null) {
         throw "unsigned request";
     }

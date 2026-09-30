@@ -46,6 +46,7 @@ This is the core API reference covering initialization, parameters, and model lo
 
 **Inference:**
 - `llama_decode()` - Process token batch
+- `llama_batch_ext_init()` + `llama_process()` - Extended batch API (b11284+)
 - `llama_get_logits_ith()` - Get token probabilities
 - `llama_get_embeddings_ith()` - Extract embeddings
 
@@ -86,7 +87,7 @@ Free backend resources. Call once at the end of the program. Currently only used
 ```c
 void llama_numa_init(enum ggml_numa_strategy numa);
 ```
-Optional: Initialize NUMA optimizations.
+Optional: enable NUMA optimizations. The header marks it "TODO: deprecate and make part of `llama_backend_init()`" (b11284) — still active and not deprecated, but expect it to be folded into `llama_backend_init()` in the future.
 
 **Parameters:**
 - `numa`: NUMA strategy to use (from ggml)

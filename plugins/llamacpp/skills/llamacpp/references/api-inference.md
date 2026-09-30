@@ -56,6 +56,87 @@ void llama_batch_free(struct llama_batch batch);
 ```
 Free a batch allocated with `llama_batch_init()`.
 
+### Extended Batch API (b11284+)
+
+An opaque, context-bound batch builder, processed with `llama_process()`. Replaces manual `llama_batch` field filling, supports multiple positions per token (M-RoPE) and mixed token/embedding entries. Used internally by `mtmd`, speculative decoding and the server.
+
+```c
+enum llama_process_type {
+    LLAMA_PROCESS_TYPE_ENCODE,
+    LLAMA_PROCESS_TYPE_DECODE,
+};
+
+struct llama_batch_ext;   // opaque
+
+struct llama_embd {
+    const float * data;
+    size_t n_rows; // number of embedding rows in data
+    size_t n_embd; // size of one row
+};
+```
+
+#### llama_batch_ext_init / llama_batch_ext_free / llama_batch_ext_clear
+```c
+struct llama_batch_ext * llama_batch_ext_init (struct llama_context * ctx);
+void                     llama_batch_ext_free (struct llama_batch_ext * batch);
+void                     llama_batch_ext_clear(struct llama_batch_ext * batch);
+```
+Create a batch bound to `ctx` (capacity = `llama_n_batch(ctx)` tokens, valid seq ids = `[0, llama_n_seq_max(ctx))`), free it, or empty it for reuse. C++: use `llama_batch_ext_ptr` from `llama-cpp.h`.
+
+#### llama_batch_ext_add / llama_batch_ext_add_token / llama_batch_ext_add_embd
+```c
+int32_t llama_batch_ext_add      (struct llama_batch_ext * batch, llama_seq_id seq_id);
+int32_t llama_batch_ext_add_token(struct llama_batch_ext * batch, llama_seq_id seq_id, llama_token id);
+int32_t llama_batch_ext_add_embd (struct llama_batch_ext * batch, llama_seq_id seq_id, struct llama_embd embd);
+```
+Append an entry for `seq_id`. `_add` uses defaults (`id = LLAMA_TOKEN_NULL`, `embd = nullptr`); `_add_token`/`_add_embd` set a token ID or an input embedding.
+
+- **Position is NOT set** — the caller must call `llama_batch_ext_set_pos()` for every entry.
+- **Returns:** the batch index (`>= 0`) used by the `_set_*` functions. On error: `-1` batch is full, `-2` token is invalid (`id == LLAMA_TOKEN_NULL` or invalid embd), `-3` invalid sequence id.
+
+#### llama_batch_ext_add_seq
+```c
+bool llama_batch_ext_add_seq(
+    struct llama_batch_ext * batch,
+    int32_t idx,
+    llama_seq_id seq_id);
+```
+Add the entry at `idx` to another sequence (position stays the same). Call **before** the other `_set_*()` functions.
+
+#### llama_batch_ext_set_embd_token / llama_batch_ext_set_embd_state
+```c
+bool llama_batch_ext_set_embd_token(struct llama_batch_ext * batch, int32_t idx, struct llama_embd embd);
+bool llama_batch_ext_set_embd_state(struct llama_batch_ext * batch, int32_t idx, struct llama_embd embd);
+```
+`_set_embd_token`: set the token embedding of entry `idx` (after `_add_token()` to have both an ID and an embedding). `_set_embd_state`: set an extra hidden "state" embedding carried over from a previous stage (e.g. MTP: N layers of the target model; Qwen3 VL deepstack: N layers of the vision encoder) — currently a stub in b11284 that returns `false`.
+
+#### llama_batch_ext_set_output_embd / llama_batch_ext_set_output_logits
+```c
+bool llama_batch_ext_set_output_embd  (struct llama_batch_ext * batch, int32_t idx, bool value);
+bool llama_batch_ext_set_output_logits(struct llama_batch_ext * batch, int32_t idx, bool value);
+```
+Request outputs for entry `idx`. For now the two are equivalent (both set the same output flag).
+
+#### llama_batch_ext_set_pos
+```c
+bool llama_batch_ext_set_pos(
+    struct llama_batch_ext * batch,
+    int32_t idx,
+    const llama_pos * pos);
+```
+Set the position of entry `idx`. For M-RoPE models, embedding entries need multiple positions per token (pass an array); text tokens need a single position. Returns `false` on invalid `idx` or NULL `pos`.
+
+#### llama_process
+```c
+int32_t llama_process(
+    struct llama_context * ctx,
+    enum llama_process_type type,
+    struct llama_batch_ext * batch);
+```
+Run the batch through the encoder (`LLAMA_PROCESS_TYPE_ENCODE`) or decoder (`LLAMA_PROCESS_TYPE_DECODE`). **Return values are the same as `llama_decode()`.**
+
+**Reading outputs:** batch_ext-specific `get_embeddings()`/`get_logits()` are still a TODO in the header. Use the regular context getters with the batch index — `llama_get_logits_ith(ctx, idx)` / `llama_get_embeddings_ith(ctx, idx)` (this is what llama.cpp's own speculative decoding does). See [workflows.md](workflows.md#16-extended-batch-api-llama_process).
+
 ---
 
 ## Inference & Decoding
@@ -133,6 +214,12 @@ Set whether the context outputs embeddings or not.
 void llama_set_causal_attn(struct llama_context * ctx, bool causal_attn);
 ```
 Set whether to use causal attention or not. If set to true, the model will only attend to past tokens.
+
+### llama_get_causal_attn
+```c
+bool llama_get_causal_attn(const struct llama_context * ctx);
+```
+**New in b11284.** Returns whether the context is currently using causal attention.
 
 ### llama_set_abort_callback
 ```c

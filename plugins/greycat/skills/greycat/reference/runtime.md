@@ -90,7 +90,9 @@ try {
 Worker pool sizes:
 
 - `--workers` (`GREYCAT_WORKERS`) — task workers. Default = CPU count.
-- `--req_workers` — request workers (JSON-RPC dispatch threads).
+- `--workers_small` (`GREYCAT_WORKERS_SMALL`) — task workers for the small class. Every RPC request (path-RPC or JSON-RPC) runs as a small task on them, so long background tasks never starve requests. Added to `--workers`. An RPC task is a task like any other: it has an id, shows in `Task::running()` and `Task::history`, emits SSE task events and can be stopped with `Task::cancel`; only its arguments and result travel over the connection. An `await` inside it suspends it like any task, freeing the worker while its jobs run.
+- `--workers_large` — how many of `--workers` serve the large class; the rest serve regular tasks. A worker runs its own class first and, when that queue is empty, any lighter class, so large workers also drain regular and small tasks. Sub-tasks spawned by `await` run in their parent's class.
+- `--request_ttl` — an RPC request still queued or running after this long is cancelled like any task, and answers `503` with an error saying the time-to-live ran out. A `Task::cancel` call says so instead. Background tasks are not subject to it.
 - `--http_threads` — IO threads for socket accept / read / write.
 
 ### Task lifecycle

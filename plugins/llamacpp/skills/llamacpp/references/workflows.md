@@ -27,6 +27,9 @@ Complete working examples for common llama.cpp tasks. This document combines wor
 14. [Interactive Chat Application](#14-interactive-chat-application)
 15. [Streaming Generation](#15-streaming-generation)
 
+### New API (16)
+16. [Extended Batch API (llama_process)](#16-extended-batch-api-llama_process)
+
 ### Reference
 - [Best Practices](#best-practices)
 - [Compilation](#compilation)
@@ -1528,6 +1531,90 @@ int main(int argc, char ** argv) {
 - Real-time token delivery
 - Performance measurement
 - Multiple streaming targets
+
+---
+
+## 16. Extended Batch API (llama_process)
+
+Prompt decode + greedy generation with the b11284+ extended batch API. Positions are **never** auto-assigned: call `llama_batch_ext_set_pos()` for every entry. Outputs are off unless requested with `llama_batch_ext_set_output_logits()`.
+
+```c
+#include "llama.h"
+#include <stdio.h>
+#include <string.h>
+
+int main() {
+    llama_backend_init();
+
+    struct llama_model * model = llama_model_load_from_file("model.gguf", llama_model_default_params());
+    struct llama_context_params cparams = llama_context_default_params();
+    cparams.n_ctx = 2048;
+    struct llama_context * ctx = llama_init_from_model(model, cparams);
+    const struct llama_vocab * vocab = llama_model_get_vocab(model);
+
+    const char * prompt = "The capital of France is";
+    llama_token tokens[256];
+    int n_prompt = llama_tokenize(vocab, prompt, strlen(prompt), tokens, 256, true, false);
+    if (n_prompt < 0) { fprintf(stderr, "tokenize failed\n"); return 1; }
+
+    // Capacity is llama_n_batch(ctx); seq ids must be < llama_n_seq_max(ctx)
+    struct llama_batch_ext * batch = llama_batch_ext_init(ctx);
+    const llama_seq_id seq = 0;
+    llama_pos n_past = 0;
+
+    // 1. Prompt: add tokens, set positions, request logits for the last one only
+    int32_t idx = -1;
+    for (int i = 0; i < n_prompt; i++) {
+        idx = llama_batch_ext_add_token(batch, seq, tokens[i]);
+        if (idx < 0) { fprintf(stderr, "add failed: %d\n", idx); return 1; } // -1 full, -2 bad token, -3 bad seq
+        llama_pos pos = n_past++;
+        llama_batch_ext_set_pos(batch, idx, &pos);
+    }
+    llama_batch_ext_set_output_logits(batch, idx, true);
+
+    if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) { // same return codes as llama_decode()
+        fprintf(stderr, "llama_process failed\n");
+        return 1;
+    }
+
+    // 2. Generate: batch_ext has no get_logits() yet (TODO in llama.h) — use the context getters
+    struct llama_sampler * smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
+
+    int32_t out_idx = idx;               // batch index of the entry whose logits we requested
+    for (int n = 0; n < 32; n++) {
+        llama_token tok = llama_sampler_sample(smpl, ctx, out_idx); // reads llama_get_logits_ith(ctx, out_idx)
+        if (llama_vocab_is_eog(vocab, tok)) break;
+
+        char buf[128];
+        int len = llama_token_to_piece(vocab, tok, buf, sizeof(buf), 0, true);
+        printf("%.*s", len, buf);
+        fflush(stdout);
+
+        llama_batch_ext_clear(batch);    // reuse the same batch
+        out_idx = llama_batch_ext_add_token(batch, seq, tok);
+        llama_pos pos = n_past++;
+        llama_batch_ext_set_pos(batch, out_idx, &pos);
+        llama_batch_ext_set_output_logits(batch, out_idx, true);
+
+        if (llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) break;
+    }
+    printf("\n");
+
+    llama_sampler_free(smpl);
+    llama_batch_ext_free(batch);
+    llama_free(ctx);
+    llama_model_free(model);
+    llama_backend_free();
+    return 0;
+}
+```
+
+**Notes:**
+- Multi-sequence: add an entry once, then `llama_batch_ext_add_seq(batch, idx, other_seq)` **before** any `_set_*()` call.
+- Embedding input (e.g. multimodal): `llama_batch_ext_add_embd(batch, seq, (struct llama_embd){ data, 1, n_embd })`; for M-RoPE models pass an array of positions to `llama_batch_ext_set_pos()`.
+- Encoder: `llama_process(ctx, LLAMA_PROCESS_TYPE_ENCODE, batch)`.
+- C++: `llama_batch_ext_ptr batch(llama_batch_ext_init(ctx));` (from `llama-cpp.h`).
 
 ---
 

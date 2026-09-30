@@ -8,6 +8,7 @@ This file covers:
 - Training - Fine-tuning and training functions
 - Important Constants - Key constants and enums
 - Key Data Structures - Core struct definitions
+- C++ RAII Wrappers - `llama-cpp.h` smart-pointer typedefs
 
 For complete API navigation, see [api-core.md](api-core.md).
 
@@ -407,3 +408,19 @@ Context parameters (get defaults via `llama_context_default_params()`):
 Used for sampling:
 - `llama_token_data`: Contains token ID, logit, and probability
 - `llama_token_data_array`: Array of token data with selection index and sorted flag
+
+## C++ RAII Wrappers (llama-cpp.h)
+
+C++-only header with `std::unique_ptr` typedefs whose deleters call the matching free function:
+
+```cpp
+#include "llama-cpp.h"
+
+typedef std::unique_ptr<llama_model, llama_model_deleter> llama_model_ptr;                  // llama_model_free
+typedef std::unique_ptr<llama_context, llama_context_deleter> llama_context_ptr;            // llama_free
+typedef std::unique_ptr<llama_sampler, llama_sampler_deleter> llama_sampler_ptr;            // llama_sampler_free
+typedef std::unique_ptr<llama_adapter_lora, llama_adapter_lora_deleter> llama_adapter_lora_ptr; // llama_adapter_lora_free
+typedef std::unique_ptr<llama_batch_ext, llama_batch_ext_deleter> llama_batch_ext_ptr;      // llama_batch_ext_free (b11284+)
+```
+
+**Usage:** `llama_batch_ext_ptr batch(llama_batch_ext_init(ctx)); llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get());` — declare the context pointer before objects that depend on it so destruction order is correct.

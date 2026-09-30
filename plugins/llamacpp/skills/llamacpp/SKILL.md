@@ -44,6 +44,7 @@ Use this skill when:
 - **`llama_model`**: Loaded model weights and architecture
 - **`llama_context`**: Inference state (KV cache, compute buffers)
 - **`llama_batch`**: Input tokens and positions for processing
+- **`llama_batch_ext`**: Opaque extended batch builder, processed by `llama_process()` (b11284+)
 - **`llama_sampler`**: Token sampling configuration
 - **`llama_vocab`**: Vocabulary and tokenizer
 - **`llama_memory_t`**: KV cache memory handle
@@ -65,24 +66,26 @@ For detailed API documentation, the complete API is split across 6 files for eff
 
 **API Files:**
 
-- **[api-core.md](references/api-core.md)** (372 lines) - Initialization, parameters, model loading, quantization structs
+- **[api-core.md](references/api-core.md)** (373 lines) - Initialization, parameters, model loading, quantization structs
 - **[api-model-info.md](references/api-model-info.md)** (241 lines) - Model properties, architecture detection, metadata enums
 - **[api-context.md](references/api-context.md)** (423 lines) - Context, memory (KV cache), state management
-- **[api-inference.md](references/api-inference.md)** (420 lines) - Batch operations, inference, tokenization, chat
+- **[api-inference.md](references/api-inference.md)** (507 lines) - Batch operations (incl. extended batch API), inference, tokenization, chat
 - **[api-sampling.md](references/api-sampling.md)** (524 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-- **[api-advanced.md](references/api-advanced.md)** (401 lines) - LoRA adapters, performance, training, constants
+- **[api-advanced.md](references/api-advanced.md)** (426 lines) - LoRA adapters, performance, training, constants, C++ RAII wrappers
 
-**Total:** 205 active functions (b11120) across 6 organized files
+**Total:** 219 active functions (b11284) across 6 organized files
 
 ### Quick Function Lookup
 
 Most common: `llama_backend_init()`, `llama_model_load_from_file()`, `llama_init_from_model()`, `llama_tokenize()`, `llama_decode()`, `llama_sampler_sample()`, `llama_vocab_is_eog()`, `llama_memory_clear()`
 
+Extended batch (b11284+): `llama_batch_ext_init()`, `llama_batch_ext_add_token()`, `llama_batch_ext_set_pos()`, `llama_batch_ext_set_output_logits()`, `llama_process()`
+
 See **[references/api-core.md](references/api-core.md)** for the full API index linking to all function signatures.
 
 ## Common Workflows
 
-See **[references/workflows.md](references/workflows.md)** for 13 complete working examples: basic text generation, chat, embeddings, batch processing, multi-sequence, LoRA, state save/load, custom sampling (XTC/DRY), encoder-decoder models, model detection, and memory management patterns.
+See **[references/workflows.md](references/workflows.md)** for 16 complete working examples: basic text generation, chat, embeddings, batch processing, multi-sequence, LoRA, state save/load, custom sampling (XTC/DRY), encoder-decoder models, model detection, memory management patterns, streaming, and the extended batch API (`llama_process`).
 
 
 ## Best Practices
@@ -148,18 +151,25 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
 
 ## Resources
 
-- **API Reference** (6 files, 2,354 lines total) - Complete API reference split by category for targeted loading:
+- **API Reference** (6 files, 2,494 lines total) - Complete API reference split by category for targeted loading:
   - [api-core.md](references/api-core.md) - Initialization, parameters, model loading, quantization structs
   - [api-model-info.md](references/api-model-info.md) - Model properties, architecture detection, metadata enums
   - [api-context.md](references/api-context.md) - Context, memory, state management
-  - [api-inference.md](references/api-inference.md) - Batch, inference, tokenization, chat
+  - [api-inference.md](references/api-inference.md) - Batch (incl. `llama_batch_ext`), inference, tokenization, chat
   - [api-sampling.md](references/api-sampling.md) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
-  - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants
-- **[references/workflows.md](references/workflows.md)** (1,619 lines) - 15 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), and production applications (interactive chat, streaming).
+  - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants, C++ RAII (`llama-cpp.h`)
+- **[references/workflows.md](references/workflows.md)** (1,706 lines) - 16 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), production applications (interactive chat, streaming), and the extended batch API.
 
-## What's New in b11120
+## What's New in b11284
 
-**b11120** (252 commits since b10868) — small, non-breaking C API changes:
+**b11284** (164 commits since b11120) — additive, non-breaking: 14 new functions, nothing removed, no signature changes.
+
+- **New extended batch API** — opaque `struct llama_batch_ext` + `llama_process(ctx, type, batch)` with `enum llama_process_type` (`LLAMA_PROCESS_TYPE_ENCODE`/`DECODE`); return codes match `llama_decode()`. Builder: `llama_batch_ext_init(ctx)`/`_free`/`_clear`, `_add(batch, seq_id)`/`_add_token`/`_add_embd` (return batch index, or `-1` full / `-2` invalid token / `-3` invalid seq id), `_add_seq`, `_set_embd_token`, `_set_embd_state` (stub), `_set_output_embd`/`_set_output_logits` (equivalent for now), `_set_pos` (**caller must set positions**; M-RoPE embedding entries take multiple positions). New `struct llama_embd { data, n_rows, n_embd }`. batch_ext get_logits/get_embeddings are TODO — read outputs with `llama_get_logits_ith(ctx, idx)`. `llama_decode()` now converts `llama_batch` to this internally. See [api-inference.md](references/api-inference.md#extended-batch-api-b11284) and [workflow 16](references/workflows.md#16-extended-batch-api-llama_process).
+- **C++:** `llama_batch_ext_ptr` (+ `llama_batch_ext_deleter`) in `llama-cpp.h`.
+- **New:** `llama_get_causal_attn(ctx)` — getter paired with `llama_set_causal_attn()`.
+- **Heads-up:** `llama_numa_init()` marked "TODO: deprecate and make part of `llama_backend_init()`" (not deprecated yet).
+
+**Previously (b11120, 252 commits since b10868)** — small, non-breaking C API changes:
 
 - **New:** `llama_adapter_lora_init_from_file_ptr(model, FILE *)` — load a LoRA adapter from an open `FILE*` at its current position (mirrors `llama_model_load_from_file_ptr`). See [api-advanced.md](references/api-advanced.md#llama_adapter_lora_init_from_file_ptr).
 - **GGUF-in-a-larger-file:** `llama_model_load_from_file_ptr()` reads from the current file position; the GGUF data section is now aligned relative to the GGUF start. For mmap, its absolute offset must be 32-byte aligned.
@@ -255,7 +265,7 @@ If you're updating old code:
 - Use `llama_init_from_model()` instead of `llama_new_context_with_model()`
 - Use `llama_vocab_*()` functions instead of `llama_token_*()`
 - Use `llama_state_*()` functions instead of deprecated state functions
-- Use `llama_set_adapters_lora()` instead of `llama_set_adapter_lora()` for LoRA adapters
+- Use `llama_set_adapters_lora()` instead of the removed `llama_set_adapter_lora()` for LoRA adapters
 - Use `llama_vocab_bos()` instead of `llama_vocab_cls()` (CLS is equivalent to BOS)
 - Use `llama_sampler_init_grammar_lazy_patterns()` instead of `llama_sampler_init_grammar_lazy()`
 - Perform warmup runs manually instead of calling deprecated `llama_set_warmup()` (deprecated in b9704)

@@ -5,7 +5,7 @@
 The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). Also breaking in 8.4: `Array.sort` / `sort_by` / `Table.sort` place null keys last in both orders, and the runtime log moved from `files/root/log.csv` to the `log` stream (`files/root/streams/log.ndjson`). New: `io::Stream<T>` and the `Task::events()` SSE endpoint. The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
-- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Request`), OpenAPI export, MCP server endpoints
+- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Task::header`/`headers`/`uri`/`body`), OpenAPI export, MCP server endpoints
 - **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications, append-only batched write streams (`Stream<T>`)
 - **util** - Data structures (Queue/Stack/SlidingWindow/TimeWindow), statistical analysis, data binning (quantizers), testing (Assert), monitoring (ProgressTracker), cryptography, UUID
 
@@ -31,7 +31,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Task & Job Management](#task--job-management)
   - [Logging](#logging)
   - [System Information](#system-information)
-  - [Current HTTP Request](#current-http-request) - Request
+  - [Current HTTP Request](#current-http-request) - Task::header/headers/uri/body
   - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
@@ -480,6 +480,10 @@ type Task {
   //   parentId(): int
   //   id(): int
   //   no_history(v: bool)
+  //   header(name: String): String?        (HTTP request the current task answers; see Current HTTP Request)
+  //   headers(): Map<String, String>?
+  //   uri(): String?
+  //   body(): String?
   //   running(): Array<Task>             (@expose @reserved)
   //   history(offset, max): Array<Task>  (@expose @reserved)
   //   events()                           (@expose @reserved; new in 8.4 — SSE, see below)
@@ -491,6 +495,8 @@ type Task {
 ```
 
 **`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. Every root task the caller may see (same rule as `running` / `history`) emits `event: task-progress` frames while it reports progress and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
+
+**RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is now the task dir for RPC calls too (`/files/<user_id>/tasks/<task_id>/`; the old `requests/<timestamp>/` dir is gone).
 
 #### Job<T> & await
 ```gcl
@@ -585,29 +591,29 @@ Runtime::sleep(1s);
 
 ### Current HTTP Request
 
-#### Request (new in 8.4)
-Reaches the parts of the HTTP request being served that `@expose` does not bind as arguments — headers, raw target, raw body — e.g. to authenticate a non-GreyCat caller (webhook signature, proxy claim). Every method returns `null` (or an empty map) outside a request: `greycat run`, scheduler runs and `task: true` calls have no request to read.
+#### Task::header / headers / uri / body (moved from `Request` in 8.4)
+**Breaking:** the 8.4 `type Request` is gone — its four static methods now live on `Task`, since every RPC call runs as a task. `Request::x(...)` → `Task::x(...)`; `headers()` now returns `Map<String, String>?` (`null`, not an empty map, when no request). They reach the parts of the HTTP request the current task answers that `@expose` does not bind as arguments — headers, raw target, raw body — e.g. to authenticate a non-GreyCat caller (webhook signature, proxy claim). All four return `null` for a task that answers no request: `task: true` calls, `greycat run`, scheduler runs, `await` jobs.
 ```gcl
-@volatile
-type Request {
-  static native fn header(name: String): String?;   // case-insensitive; `authorization` and `cookie` always null
-  static native fn headers(): Map<String, String>;  // names lowercased; excludes authorization/cookie; empty outside a request
-  static native fn uri(): String?;                  // path + query as received, percent-encoding intact -> Url::parse(...).params
-  static native fn body(): String?;                 // raw body before parsing; null if none, streamed to file (/files upload), or no request
+type Task {
+  // ...
+  static native fn header(name: String): String?;    // case-insensitive; `authorization` and `cookie` always null
+  static native fn headers(): Map<String, String>?;  // names lowercased; excludes authorization/cookie; null when no request
+  static native fn uri(): String?;                   // path + query as received, percent-encoding intact -> Url::parse(...).params
+  static native fn body(): String?;                  // raw body before parsing; null if none, streamed to file (/files upload), or no request
 }
 
 @expose
 @permission("public")
 fn on_event(event: Event) {
-  var sent = Request::header("x-signature");
-  var body = Request::body();
+  var sent = Task::header("x-signature");
+  var body = Task::body();
   if (sent == null || body == null) { throw "unsigned request"; }
   var expected = Crypto::sha256_hmac_hex(body, System::getEnv("SHARED_SECRET") ?? "");
   if (!Crypto::equals_constant_time(sent, expected)) { throw "bad signature"; }
   handle(event);
 }
 ```
-Verify signatures over `Request::body()`, never a re-serialized object (different bytes). Use `Request::uri()` when binding loses information (repeated `?tag=a&tag=b`, or keys colliding once `.`/`-` map to `_`). Pair with `@raw` on the function to answer a bare `text/plain` token (webhook handshakes, health probes).
+Verify signatures over `Task::body()`, never a re-serialized object (different bytes). Use `Task::uri()` when binding loses information (repeated `?tag=a&tag=b`, or keys colliding once `.`/`-` map to `_`). Pair with `@raw` on the function to answer a bare `text/plain` token (webhook handshakes, health probes).
 
 #### System
 ```gcl
