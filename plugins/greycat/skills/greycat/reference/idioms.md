@@ -43,7 +43,7 @@ The patterns that keep GreyCat code correct, and the mistakes that an agent fami
 Rule of thumb:
 
 - **`.`** — accessing a value's **own** field or method.
-- **`->`** — the value is a `@deref`-tagged tag (node family), and you want the **inner** payload.
+- **`->`** — the value is a `node` or `nodeTime`, and you want the **inner** payload.
 - **`::`** — static / namespaced access (static methods/attrs, enum entries, FQNs).
 
 ```gcl
@@ -55,8 +55,7 @@ fn examples(u: User, n: node<User>) {
 
     n.resolve();               // n's OWN method (the deref method)
     n->name;                   // == n.resolve().name — payload field
-    n->password;               // ERROR (different reason — read-public still works
-                               // here; just illustrating chain)
+    n->password;               // OK: private attrs are read-public
     User::counter;             // static (if declared)
     time::now();               // stdlib types are at top level — no `std::` prefix
 }
@@ -97,7 +96,7 @@ var grid = [[1, 2], [3, 4]];  // Array<Array<int>>  (inferred when no `null`)
 var empty = Array<float> {};  // empty: must construct explicitly — no element to infer from
 ```
 
-**Caveat — annotation enforcement on `var`.** The runtime currently drops the type decorator on `var` declarations, so a mismatched annotation like `var x: Array<int> = ["a"];` will not be rejected at runtime. The lang is stricter but is not yet wired into the runtime. To get reliable type checking on collections, prefer **function parameters** (where the lang always enforces):
+**Caveat — annotation enforcement on `var`.** The runtime drops the type decorator on `var` declarations, so a mismatched annotation like `var x: Array<int> = ["a"];` is not rejected at runtime; only `greycat lint` catches it. To get reliable type checking on collections, prefer **function parameters** (where the lang always enforces):
 
 ```gcl
 fn take_ints(_: Array<int>) {}
@@ -227,7 +226,7 @@ take(ints);                        // ERROR
 take([1, 2, 3]);                   // ERROR — literal infers as Array<int>, not Array<int?>
 ```
 
-Raw-form node tags (`nodeTime` without `<T>`) are sugar for `nodeTime<any?>`, so `Array<nodeTime<float>>` flows into `Array<nodeTime>`.
+Raw-form node tags (`nodeTime` without `<T>`) are sugar for `nodeTime<any?>`: a `nodeTime<float>` flows into a `nodeTime` slot, but `Array<nodeTime<float>>` does not flow into `Array<nodeTime>`.
 
 If you need to call a function that takes `Array<int?>` and you have `Array<int>`, you must either:
 
@@ -256,7 +255,7 @@ fn process(thing: any?) {
 }
 ```
 
-A bare `thing as User` without an `is` check is allowed but will behave unpredictably if the value isn't actually a `User` (the runtime does no enforcement; subsequent member access reads through to garbage). Reserve unchecked `as` for cases where the type is provably known by external invariant.
+A bare `thing as User` without an `is` check is allowed but will behave unpredictably if the value isn't actually a `User` (the runtime does no enforcement on object casts; the first mismatched member access throws). Reserve unchecked `as` for cases where the type is provably known by external invariant.
 
 ## HTTP / `@expose` patterns
 
@@ -522,7 +521,7 @@ The most common reasons GreyCat code "looks wrong":
 2. The lang complains about `null` flowing into a non-null type — narrow with `if (x != null) { ... }`, or coalesce with `??`, or force with `!!`.
 3. A function returns `any?` and the next call doesn't compile — cast (`(result as int) + 1`).
 4. `Array<int>` won't flow into a `Array<int?>` parameter — declare the local as `Array<int?>` upfront.
-5. A method exists in stdlib but the bare name doesn't resolve — the type is private to its module; use FQN (`std::core::SomeType`).
+5. A method exists in stdlib but the bare name doesn't resolve — the type is private to its module; use FQN (`core::SomeType`).
 6. Construction looks "wrong" because you reflexively wrote `Type::new(...)` — use `Type { ... }`.
 
 When the lang / runtime disagree with this skill, trust the runtime. Run `greycat run` against a minimal `project.gcl` to settle disputes.

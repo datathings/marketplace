@@ -40,7 +40,7 @@ Primitives are passed by value. `String` behaves as a value semantically (immuta
 Every type reference is non-null by default. Appending `?` makes it nullable.
 
 ```gcl
-var a: int;              // declared non-null int — must be assigned before any read
+var a: int;              // declared non-null int: reads as null until assigned (not checked)
 var b: int?;             // declared nullable; reads as null until assigned
 var c: int = null;       // ERROR — null is not assignable to int
 var d: int? = null;      // ok
@@ -150,7 +150,7 @@ fn main() {
 }
 ```
 
-This holds for **every** generic, including built-ins: `Map<K, V>`, `Set<T>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeTime<T>`, etc.
+This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeTime<T>`, etc.
 
 ### "Raw" forms
 
@@ -161,7 +161,7 @@ static native fn sample(refs: Array<nodeTime>, ...): Table;
 //                                  ^^^^^^^^ no <T>
 ```
 
-This is the **raw form**, accepted only in source positions where the runtime erases the parameter. **You cannot assign `nodeTime<float>` to `nodeTime` in user code** — it is only valid as a declared parameter type in stdlib `native` signatures.
+This is the **raw form**. A `nodeTime<float>` flows into a raw `nodeTime` slot (parameter or var), but not when nested: `Array<nodeTime<float>>` is not assignable to `Array<nodeTime>`.
 
 ## Inheritance and `extends`
 
@@ -211,16 +211,16 @@ fn describe(x: any?) {
 - `is T` accepts the same `T` syntax as a declaration (including generics, nullability, FQN).
 - It returns `bool`.
 - In the then-branch, the LHS value's type is narrowed to `T`.
-- Type tests on generic-parametric subtypes (`x is Box<int>`) work at the lang level; the runtime performs an erasure-style check.
+- Type tests on generic types compare the generic arguments exactly: a `Box<String>` is not `Box<int>`, nor raw `Box`.
 
 ## The `as` operator
 
-`as T` is a cast. It re-types the expression to `T` without producing a runtime check — the runtime **drops `as` entirely**.
+`as T` is a cast. Casts to primitives (`int`, `float`, `bool`, ...) are checked at runtime and throw on a mismatch; `int` <-> `float` converts. Casts to `String`, user and other object types are **dropped**: no runtime check.
 
 ```gcl
 fn handle(raw: any?) {
-    var s = raw as String;     // lang accepts; runtime does not verify
-    println(s.size());          // if raw was not a String, behavior is undefined
+    var u = raw as User;       // lang accepts; runtime does not verify
+    println(u.name);           // if raw was not a User, member access throws at runtime
 }
 ```
 
@@ -275,7 +275,7 @@ var f = fn (r: Foo) { r.method(); };  // call later with the receiver: `f(obj);`
 | `any?` | Top type including null. Common return type for "anything."                                                                           |
 | `null` | The meta-type of the `null` literal. Rarely written in source; useful for `is null` and reflective APIs.                              |
 
-`any` is **not** a generic parameter. `Array<any>` is a concrete type (the array can hold heterogeneous non-null values); it is not the supertype of every `Array<T>`.
+`any` is **not** a generic parameter. `Array<any>` is a concrete type (the array can hold heterogeneous non-null values), and it accepts any `Array<T>` (the `any` exception to invariance).
 
 ## `typeof` and `type` reflection
 
@@ -301,7 +301,7 @@ some_type.nb_enum_values()   // enum entry count
 
 | Relationship                   | Direction                                                      |
 | ------------------------------ | -------------------------------------------------------------- |
-| `T` → `T?`                     | Implicit. (Non-null narrows to nullable.)                      |
+| `T` → `T?`                     | Implicit. (Non-null widens to nullable.)                       |
 | `T?` → `T`                     | Requires `!!`, `??`, or null-flow narrowing.                   |
 | `Sub` → `Super`                | Implicit (one `extends` step).                                 |
 | `Super` → `Sub`                | Requires `as Sub`. Best paired with `is Sub` first.            |

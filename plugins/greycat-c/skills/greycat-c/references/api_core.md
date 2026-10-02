@@ -1070,8 +1070,9 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | Function | Description |
 |----------|-------------|
 | `gc_program__create_module(program, mod_name_offset, result_offset)` | Create a new module in the program. Returns `true` on success, writes offset to `*result_offset`. |
+| `gc_program__create_function(program, mod_offset, type_offset, function_name_offset, result_offset)` | **Newly public (upstream `e7630e693`).** Create a function in module `mod_offset` (`type_offset == 0`) or as a method of type `type_offset`. Returns `false` (offset of the existing one in `*result_offset`) when a function of that name already exists; otherwise `true` with the new offset in `*result_offset`. |
 | `gc_program__create(abi, allocator)` | Create an empty program bound to the given ABI and allocator. |
-| `gc_program__create_from_abi(abi, allocator)` | Create a populated program from an ABI definition. |
+| `gc_program__create_from_abi(abi, allocator)` | Create a populated program from an ABI definition. As of upstream `e7630e693` it rebuilds symbols, type offsets, inheritance and the `@expose`d functions (params, return types) from the ABI. |
 | `gc_program__finalize(program)` | Finalize and free a program created with `gc_program__create` / `gc_program__create_from_abi`. |
 | `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks. |
 | `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks. |

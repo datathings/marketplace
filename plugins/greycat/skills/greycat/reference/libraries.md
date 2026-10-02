@@ -70,9 +70,10 @@ greycat install --bump                     # newest patch of each pin, same bran
 greycat install --bump=latest              # newest release on the branch, any major.minor
 greycat install --bump --branch=stable     # move the whole project onto stable
 greycat install --bump --dry-run           # preview; project.gcl is not touched
+greycat install kafka                      # declare kafka (newest on the std pin's branch) and install
 ```
 
-`--branch` requires `--bump`. Adding a library still means writing the pragma first. A placeholder version needs the `latest` bound to move, because the default `patch` bound refuses to leave the `major.minor` the placeholder names:
+Add a library with `greycat install <name>` (or `<name>@<version>`): it writes the `@library` pragma into the entrypoint, then installs. A hand-written placeholder version needs the `latest` bound to move, because the default `patch` bound refuses to leave the `major.minor` the placeholder names:
 
 ```gcl
 @library("kafka", "0.0.0-dev");   // then: greycat install --bump=latest

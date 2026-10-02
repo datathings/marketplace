@@ -424,6 +424,7 @@ type PeriodicOptions {
   activated: bool?;       // default true
   start: time?;           // default time::now()
   max_duration: duration?;// force-cancel after this; null = unlimited
+  task_class: TaskClass?; // worker class each run executes in; default regular (new, upstream `e7630e693`)
 }
 Scheduler::add(health_check, FixedPeriodicity { every: 5min },
   PeriodicOptions { start: time::now() + 1hour, max_duration: 30s });
@@ -479,6 +480,7 @@ type Task {
   //   add_steps(steps: int)
   //   parentId(): int
   //   id(): int
+  //   task_class(): TaskClass             (class the current task/job runs in, after fallback; new)
   //   no_history(v: bool)
   //   header(name: String): String?        (HTTP request the current task answers; see Current HTTP Request)
   //   headers(): Map<String, String>?
@@ -494,15 +496,21 @@ type Task {
 }
 ```
 
-**`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. Every root task the caller may see (same rule as `running` / `history`) emits `event: task-progress` frames while it reports progress and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
+**`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. Every root task the caller may see (same rule as `running` / `history`) emits one `event: task-started` frame when its code starts running (not again on resume from `await`; new, upstream `e7630e693`), `event: task-progress` frames while it reports progress and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
 
 **RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is now the task dir for RPC calls too (`/files/<user_id>/tasks/<task_id>/`; the old `requests/<timestamp>/` dir is gone).
+
+**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `regular`; a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `regular`; unknown value → `400`). **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
+```gcl
+enum TaskClass { small; regular; large; }
+```
 
 #### Job<T> & await
 ```gcl
 type Job<T> {
   function: core::function;
   arguments: Array<any?>?;
+  task_class: TaskClass?;   // null: regular for spawn, the awaiting task's class for await (new)
   // native fn result(): T
 }
 enum MergeStrategy { strict; first_wins; last_wins; }
@@ -520,8 +528,8 @@ type Log {
   level: LogLevel;
   time: time;
   user_id: int?;
-  id: int?;
-  id2: int?;
+  task_id: int?;            // Task::id; for an await job, the awaiting task (was `id`)
+  job_id: int?;             // job's index in its await; null for the task itself (was `id2`)
   src: function?;            // innermost non-native frame, qualified name (e.g. `project::emit`)
   data: any?;
 }
@@ -531,7 +539,7 @@ error("Failed to connect: ${error_message}");
 trace("Processing item ${id}");
 ```
 
-Read the log back as root with `Stream::get("log", Log).reader(from)`, or with any `JsonReader<Log>`. `src`, `user_id`, `id` and `id2` are null for records the runtime emits outside any task. A record whose `src` names a function the reading program no longer defines fails to parse — when writer and reader are different programs, read the file as `JsonReader<Map<String, any?>>`:
+Read the log back as root with `Stream::get("log", Log).reader(from)`, or with any `JsonReader<Log>`. `src`, `user_id`, `task_id` and `job_id` are null for records the runtime emits outside any task. Objects in `data` are written with their `_type` and read back as that type (or as a `Map` when the reader does not define it / it no longer matches; see `JsonReader::type_tag`). **Breaking (upstream `e7630e693`):** `Log.id` / `Log.id2` renamed `task_id` / `job_id`, in the stream JSON too. A record whose `src` names a function the reading program no longer defines fails to parse — when writer and reader are different programs, read the file as `JsonReader<Map<String, any?>>`:
 ```gcl
 var r = Stream::get("log", Log).reader(0);          // as root
 while (r.can_read()) { var rec = r.read(); }
@@ -539,23 +547,42 @@ var raw = JsonReader<Map<String, any?>> { path: "files/root/streams/log.ndjson" 
 ```
 **Breaking in 8.4:** `files/root/log.csv` is no longer written, and `Log.time` lost its `@format(DurationUnit::microseconds)` annotation (8.3's `CsvReader<Log>` + `CsvFormat { string_delimiter: '\0' }` recipe no longer applies).
 
-#### LogDataUsage / RuntimeUsage
+#### TaskPerf / HostPerf (perf records)
+**Breaking (upstream `e7630e693`):** `LogDataUsage` renamed `TaskPerf` (logged once per task, not per transaction); `RuntimeUsage`, `WorkerUsage`, `ZoneUsage`, `Runtime::usage()`, `RuntimeUsage::collect()` and the `runtime::usages` time series are **removed** — host stats are now the `HostPerf` record. Both are only logged at `perf` / `trace`, as the `data` of a `perf` `Log` in the `log` stream (`task_id` null for `HostPerf`). `--usage_step` → `--host_perf_step` (default 60s).
 ```gcl
 @volatile
-type LogDataUsage {
-  read_bytes: int; read_hits: int; read_wasted: int;
-  write_bytes: int; write_hits: int;
-  cache_bytes: int; cache_hits: int;
+type TaskPerf {   // one per task and per await job, once ended and committed
+  wait: duration; exec: duration; run: duration; suspended: duration; commit: duration;
+  awaits: int; jobs: int; fusion_conflicts: int; catches: int;
+  read_bytes: int; read_hits: int; read_wasted: int; write_bytes: int; write_hits: int;
+  dirty_blocks: int; dirty_evictions: int;
+  cache_bytes: int; cache_hits: int; cache_misses: int; cache_evictions: int; cache_blocks: int;
+  memory: int; cache_budget: int;
+  task_class: String; borrowed: int; queued: int;
+  args_bytes: int; result_bytes: int; status: TaskStatus;
 }
 
-type RuntimeUsage {
-  os_total_bytes: int; os_used_bytes: int;
-  proc_virt_bytes: int; proc_res_bytes: int; proc_shr_bytes: int;
-  global_memory: int; memory_drift: int;
-  workers: Array<WorkerUsage>; zones: Array<ZoneUsage>;
-  // static native fn collect()
+@volatile
+type HostPerf {   // every --host_perf_step; counters cover `period`, the rest are point values
+  period: duration; cores: int; load: float; cpu_user: duration; cpu_system: duration;
+  os_memory_total: int; os_memory_used: int;
+  process_resident: int; process_virtual: int; process_shared: int;
+  malloc_total: int; memory_drift: int;
+  io_read: int; io_write: int; store_read: int; store_write: int;
+  disk_free: int; disk_meta: int; tasks_live: int;
+  http_connections: int; sse_subscribers: int; http_bytes_in: int; http_bytes_out: int;
+  files_served: int; files_pushed: int; http_max_in: int; http_max_out: int; http_max_file: int;
+  top_out: Array<HostPerfUser>; top_in: Array<HostPerfUser>; top_files: Array<HostPerfUser>;
+  small: HostPerfClass; regular: HostPerfClass; large: HostPerfClass;
+  zones: HostPerfZones;
 }
+@volatile type HostPerfUser { user_id: int; bytes_in: int; bytes_out: int; files_served: int; files_pushed: int; }
+@volatile type HostPerfClass { workers: int; busy: float; queued: int; idle: int;
+  ended: int; errors: int; cancelled: int; timeouts: int; memory: int; cache_budget: int; }
+@volatile type HostPerfZones { count: int; used: int; size: int; committed_blocks: int;
+  reserved_blocks: int; written_blocks: int; bin_cache: int; worst_zone: int; worst_ratio: float; defrag: bool; }
 ```
+Signals: `wait + exec` = caller latency; `exec = run + suspended`; `dirty_evictions` / `cache_evictions` > 0 → cache budget too small. Read back from the stream, `TaskPerf` data is typed; `HostPerf` data is a `Map<any?, any?>`.
 
 ### System Information
 
@@ -577,7 +604,7 @@ type RuntimeInfo {
 }
 
 type Runtime {
-  // @expose @permission("debug"): info(): RuntimeInfo, usage(): RuntimeUsage, root(): any
+  // @expose @permission("debug"): info(): RuntimeInfo, root(): any   (usage() removed upstream `e7630e693`)
   // @expose @reserved @permission("api"): abi()
   // static native fns: sbi_tree(node: any?): Array<Tuple<int, int>>?, sleep(d: duration), backup_delta(), defrag(),
   //   on_files_put(handler: function?)
@@ -599,7 +626,7 @@ type Task {
   static native fn header(name: String): String?;    // case-insensitive; `authorization` and `cookie` always null
   static native fn headers(): Map<String, String>?;  // names lowercased; excludes authorization/cookie; null when no request
   static native fn uri(): String?;                   // path + query as received, percent-encoding intact -> Url::parse(...).params
-  static native fn body(): String?;                  // raw body before parsing; null if none, streamed to file (/files upload), or no request
+  static native fn body(): String?;                  // raw body before parsing; null if none, streamed to file (/files upload or args over --max_args_memory), or no request
 }
 
 @expose
@@ -772,6 +799,15 @@ type BinReader {
 
 #### JsonWriter<T> / JsonReader<T>
 NDJSON (one JSON value per line). `JsonWriter` adds `writeln(v: T)`.
+
+**`type_tag` (new, upstream `e7630e693`).** `JsonWriter.type_tag: bool?` — when true every object (nested included) is written with `"_type":"<fqn>"`, not only subtypes. `JsonReader.type_tag` / `Json.type_tag: JsonTypeTag?` — read tagged objects as that type where `any` is expected (null: read as `Map`; where a concrete type is expected `_type` is ignored, as are undeclared fields).
+```gcl
+enum JsonTypeTag {
+  lenient;  // never throws on `_type`: an object that does not read as the named type is a Map (`_type` kept)
+  strict;   // throws when `_type` is not a string, names a native type/enum, or the object does not parse as it
+}
+var r = JsonReader<any> { path: "files/root/streams/log.ndjson", type_tag: JsonTypeTag::lenient };
+```
 ```gcl
 var writer = JsonWriter<Person> { path: "/data/people.json" };
 writer.writeln(person1);
@@ -785,6 +821,7 @@ while (reader.can_read()) { process(reader.read()); }
 Parse / serialize JSON strings.
 ```gcl
 type Json<T> {
+  type_tag: JsonTypeTag?;   // same as JsonReader::type_tag, for parse (new)
   // native fn parse(data: String): T
   // static native fn to_string(value: any?): String
 }

@@ -4,10 +4,10 @@ Every annotation, every modifier, with semantics and where each one is valid.
 
 ## Contents
 
-- Module pragmas (`@library`, `@include`, `@permission`, `@role`)
+- Module pragmas (`@library`, `@include`, `@permission`, `@role`, `@function_permission`)
 - Declaration annotations (`@expose`, `@permission`, `@reserved`, `@test`, `@tag`, `@raw`)
 - Type-shape annotations (`@volatile`)
-- Attribute annotations (`@format`)
+- Attribute annotations (`@format`, `@precision`)
 - Modifiers (`private`, `static`, `abstract`, `native`)
 - `private` semantics in depth — the most-misused modifier
 
@@ -20,7 +20,7 @@ Every annotation, every modifier, with semantics and where each one is valid.
 @name("string")          // single string arg
 @name("a", "b", "c")     // multiple string args
 @name(123)               // numeric arg
-@name(MyEnum::variant)   // enum arg (e.g. @format)
+@name(MyEnum::field)     // enum arg (e.g. @format)
 ```
 
 Annotations precede the declaration they modify. Multiple annotations can stack (one per line is conventional):
@@ -87,6 +87,15 @@ Declares a named role as a set of permissions.
 @role("user", "public", "api");
 ```
 
+### `@function_permission("mod::fn", "perm1", ...)`
+
+Grants permissions to an existing function, named by its FQN, from module level. Each permission must be declared by an `@permission` pragma.
+
+```gcl
+@permission("audit", "read audit logs");
+@function_permission("mymod::read_logs", "audit");
+```
+
 ## Declaration annotations
 
 ### `@expose` / `@expose("path")`
@@ -115,7 +124,7 @@ fn mcp_initialize(params: McpInitializeParams): McpInitializeResult {}
 // stdlib uses this for the MCP protocol
 ```
 
-A function with `@expose` is reachable from outside the runtime. It is alive even if no other code calls it — the `unused-fn` lint accounts for this.
+A function with `@expose` is reachable from outside the runtime, even if no other code calls it.
 
 ### `@permission("name")`
 
@@ -148,7 +157,7 @@ Hint that the function has a **server-side implementation only** — no GCL-leve
 native fn cancel(task_id: int): bool;   // body lives in the server binary
 ```
 
-Slated for removal in a future release — prefer non-reserved alternatives where they exist.
+Deprecated — prefer non-reserved alternatives where they exist.
 
 ### `@raw`
 
@@ -241,7 +250,7 @@ fn echo(msg: String): String {
 }
 ```
 
-Recognized tag names today:
+Recognized tag names:
 
 | Tag       | Behavior                                                                                       |
 | --------- | ---------------------------------------------------------------------------------------------- |
@@ -317,7 +326,7 @@ Attempting to persist a `@volatile` value (writing it into a `node<T>` or a grap
 
 ### `@format(unit)`
 
-Serialization hint for `duration` / `time` attributes. Two forms:
+Serialization hint for `duration` / `time` attributes. Three forms:
 
 **Enum form** — encode in a given unit instead of the default (microseconds):
 
@@ -337,18 +346,38 @@ type Row {
 }
 ```
 
-Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch milliseconds. Used on stdlib types like `McpTask.pollInterval`. Custom formats may be lang-version-dependent.
+**String + time zone form** - the pattern, plus the time zone the CSV column is read and written in:
+
+```gcl
+type Row {
+    @format("%d/%m/%y %H:%M", TimeZone::"Europe/Paris") t: time;
+}
+```
+
+Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch milliseconds. Used on stdlib types like `McpTask.pollInterval`.
+
+### `@precision(step)`
+
+Stores a `float` attribute truncated to a fixed decimal step. `step` is a float literal power of ten from `1.0` down to `0.0000000001`.
+
+```gcl
+type Reading {
+    @precision(0.01) value: float;   // Reading { value: 1.239 }.value == 1.23
+}
+```
+
+Only for non-negative values: a negative value is stored corrupted.
 
 ## Modifiers
 
-Modifiers precede the declaration keyword (or, for attributes, the attribute name). Multiple modifiers can stack in any order.
+Modifiers precede the declaration keyword (or, for attributes, the attribute name). Their order is fixed: `private abstract native type T`, `static private attr: T`; any other order is a syntax error.
 
-| Modifier   | On `type`                                                        | On `fn` / method                                   | On attribute                   |
-| ---------- | ---------------------------------------------------------------- | -------------------------------------------------- | ------------------------------ |
-| `private`  | Visible cross-module only via FQN                                | Callable cross-module only via FQN                 | Read-public, write-private     |
-| `static`   | —                                                                | Class-level (no `this`); accessed via `Type::name` | Class-level (one shared value) |
-| `abstract` | Cannot be instantiated; subtypes must implement abstract methods | No body; subtypes must provide one                 | —                              |
-| `native`   | Runtime-implemented; no body                                     | No body                                            | —                              |
+| Modifier   | On `type`                                                        | On `fn` / method                                                         | On attribute                   |
+| ---------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
+| `private`  | Visible cross-module only via FQN                                | Top-level fn: callable cross-module only via FQN. Not allowed on methods | Read-public, write-private     |
+| `static`   | —                                                                | Class-level (no `this`); accessed via `Type::name`. Methods only         | Class-level (one shared value) |
+| `abstract` | Cannot be instantiated; subtypes must implement abstract methods | Methods only. No body; subtypes must provide one. Not with `static`      | —                              |
+| `native`   | Runtime-implemented; no body                                     | No body                                                                  | —                              |
 
 ### `private` — full semantics
 
@@ -376,10 +405,10 @@ var x: mymod::Internal = ...;  // OK — FQN works
 `type Foo { private attr: int;}`
 
 - **Reading:** unrestricted. Anyone, anywhere, can do `foo.attr`.
-- **Writing:** only the type's **constructor** (object-init expression) can write the value.
+- **Writing:** allowed in the object literal and through `this` in the type's own methods. Any other write throws at runtime.
   - `Foo { attr: 1 }` — OK.
-  - `foo.attr = 2;` — ERROR (regardless of which module).
-  - Methods inside `Foo` cannot reassign `attr` either. The init expression is the only write site.
+  - `this.attr = 2;` inside a method of `Foo` - OK.
+  - `foo.attr = 2;` where `foo` is another instance, or from a top-level fn, `static fn` or lambda - ERROR (regardless of which module).
 
 ```gcl
 type User {
@@ -389,7 +418,7 @@ type User {
 
 var u = User { name: "alice", password_hash: "$2a$..." };   // OK
 println(u.password_hash);                                   // OK — read is public
-u.password_hash = "new_hash";                               // ERROR — write is private
+u.password_hash = "new_hash";                               // ERROR: not written through `this`
 ```
 
 #### What `private` is NOT
@@ -398,13 +427,6 @@ u.password_hash = "new_hash";                               // ERROR — write i
 - It is **not** "Rust pub(crate)" (since same-module access is unrestricted).
 - It is **not** a way to hide member-shape from same-module callers.
 - It is **not** a way to gate inherited members.
-
-When gating logic on `is_private`, only two checks are legitimate:
-
-1. **Resolver bare-name cross-module lookup:** "did this name resolve via a bare ident?" → if yes and the decl is private, error.
-2. **Assignment LHS member-access on a private attr from outside the constructor:** error.
-
-Anything else (filtering members from `type_members`, hiding from supertype walks, blocking from same-module use sites) is a bug.
 
 ### `static`
 
@@ -428,7 +450,7 @@ Static methods cannot access instance attributes (no `this`).
 
 ### `abstract`
 
-A type marked `abstract` cannot be instantiated directly. Within an `abstract type`, methods may be declared without a body (`abstract fn foo();`) — concrete subtypes are required to provide one.
+A type marked `abstract` cannot be instantiated directly. An `abstract fn foo();` method has no body; concrete subtypes are required to provide one. Calling it when no subtype overrides it throws `foo is abstract`.
 
 ```gcl
 abstract type Shape {
@@ -480,7 +502,6 @@ The formatter normalizes this order.
 
 Several lint rules are tied to annotations:
 
-- `@expose` keeps a decl alive — the `unused-fn` lint doesn't fire on exposed functions.
-- `@permission("name")` without a corresponding `@permission(...)` module pragma declaring that name fires an unknown-permission lint.
+- `@permission("name")` without a corresponding `@permission(...)` module pragma declaring that name is a compile error (`permission not defined`).
 
 Run `greycat lint --list-rules` to see the current set.

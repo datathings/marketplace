@@ -4,7 +4,7 @@ The `greycat` binary is one executable that compiles, runs, serves, and administ
 
 This reference is what the agent reaches for when the user says "build it", "serve it", "install the deps", "back it up", "generate the client", etc.
 
-Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `greycat lsp`. See [lang.md](lang.md) for the rule list, formatter modes, and suppression directives.
+Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `greycat lsp`, `greycat doc`. See [lang.md](lang.md) for the rule list, formatter modes, suppression directives, and the API reference generator.
 
 ## Contents
 
@@ -53,24 +53,34 @@ Follow with `greycat install`.
 
 ### `greycat run [function]`
 
-Builds the project, then executes `function` (defaults to `main`). Each argument after `function` is JSON-parsed and bound to the matching parameter, coerced best-effort to its declared type, so primitives and complex objects both pass through. Used for one-off scripts, data processing, migrations.
+Builds the project, then executes `function` (defaults to `main`). Used for one-off scripts, data processing, migrations.
+
+Arguments are positional, one per parameter, and are checked against the signature before anything starts:
+
+- A `String` or `char` parameter takes its argument verbatim, no quoting needed.
+- Any other parameter reads its argument as JSON against the declared type: `42`, `true`, `[1, 2.5]`, `{"name":"John"}`, `null`.
+- Where an object is expected without a precise type (`any`, an abstract type), a `"_type"` field names its type: `'{"_type":"api::Circle","radius":2}'`. A `_type` naming a type the program does not define leaves a `Map`; one that does not read as that type is an error.
+- Trailing arguments may be omitted when their parameters are nullable; they bind `null`. Too many arguments, a missing non-nullable one, or one that does not read as its type fails with a message naming the parameter.
 
 Given `type Person { name: String; }` and `fn foo(a: int, b: String, p: Person) {}`:
 
 ```sh
 greycat run                                  # runs main()
-greycat run foo 42 "hello" '{"name":"John"}' # foo(42, "hello", Person { name: "John" })
+greycat run foo 42 hello '{"name":"John"}'   # foo(42, "hello", Person { name: "John" })
 ```
 
-### `greycat call <function> [json args...]`
+The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it.
+
+### `greycat call <function> [args...]`
 
 Calls an `@expose`d function **on a running server** as a task, waits for it, and prints the result. Nothing is built or opened locally: the server owns `gcdata/`, so `call` works while `serve` is up, from any directory.
 
-- Each argument is one JSON value passed as-is: `greycat call api::add 2 3`, `greycat call api::echo '"hello"'`, `greycat call api::ingest '{"name":"John"}'`.
+- `call` first downloads the server's ABI (`runtime::Runtime::abi`) and resolves `function` and its signature from it. Arguments follow the same rules as [`greycat run`](#greycat-run-function), checked against that signature before the call is made: `greycat call api::add 2 3`, `greycat call api::greet John`, `greycat call api::area '{"_type":"api::Circle","radius":2}'`.
+- Arguments and result travel as GCB, the binary encoding of that ABI. The ABI carries the full parameter types, generics included: `'[1, "a"]'` for an `Array<float>` parameter fails before the call is made.
 - `--url` (`GREYCAT_URL`) selects the server, default `http://localhost:<port>` from `--port`.
 - `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
-- On a TTY a progress line shows the task status, elapsed time, and percentage when the function reports `Task::add_steps`. Piped output carries only the result.
-- The result prints as JSON, one value per line. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, or the token is rejected. Ctrl-C cancels the remote task.
+- The task is followed through the server's event stream (`runtime::Task::events`). When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
+- The result prints like `run`'s: GCL notation, or JSON with `--format=json`; `--pretty` indents it. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, an argument does not read, or the token is rejected. Ctrl-C cancels the remote task.
 
 ### `greycat serve`
 
@@ -98,16 +108,16 @@ Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `pr
 
 Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. See [annotations.md § @test](annotations.md).
 
-### `greycat lint` / `greycat fmt` / `greycat lsp`
+### `greycat lint` / `greycat fmt` / `greycat lsp` / `greycat doc`
 
-Static analysis over the entrypoint's `@library` / `@include` closure: `lint` reports diagnostics (`--fix` applies auto-fixes), `fmt` rewrites `.gcl` files canonically (`--mode=check` is the CI gate), `lsp` runs the language server over stdio.
+Static analysis over the entrypoint's `@library` / `@include` closure: `lint` reports diagnostics (`--fix` applies auto-fixes), `fmt` rewrites `.gcl` files canonically (`--mode=check` is the CI gate), `lsp` runs the language server over stdio, `doc` prints an API reference of the project's declarations.
 
 ```sh
 greycat fmt --mode=check   # exit non-zero on formatting drift
-greycat lint               # exit non-zero on any diagnostic
+greycat lint               # exit non-zero on any error or warning
 ```
 
-These three delegate to the `lang` library, loaded from `lib/lang/` or `~/.greycat/lib/lang/`. When it is absent they exit `127`; reinstall greycat, or pin the library with `@library("lang", "<version>");` and run `greycat install`. Full reference in [lang.md](lang.md).
+These delegate to the `lang` library, loaded from `lib/lang/` or `~/.greycat/lib/lang/`. When it is absent they exit `127`; reinstall greycat, or pin the library with `@library("lang", "<version>");` and run `greycat install`. Full reference in [lang.md](lang.md).
 
 ### `greycat install`
 
@@ -117,15 +127,18 @@ Downloads from `https://get.greycat.io/files/<lib>/<branch>/<major.minor>/<targe
 
 | Option                    | Meaning                                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `[PROJECT]`               | Positional. A `project.gcl` path, or a directory holding one. Defaults to the current directory.                     |
+| `[LIB]...`                | Positional. Libraries to declare in the entrypoint and install, as `name` or `name@version`. A bare name resolves to the newest release on the branch and major.minor of the `std` pin. Without any, installs what the project declares. |
+| `--project=<path>`        | A `project.gcl`, a linked `project.gcp`, or a directory holding one. Defaults to the current directory, where `project.gcl` wins. A `project.gcp` cannot be edited, so `--bump` and `[LIB]...` need the sources. |
 | `--bump[=patch\|latest]`  | Rewrite this project's `@library` pins to the newest release, then install what it wrote. Default bound is `patch`.  |
-| `--branch=<name>`         | Branch to bump onto (`stable`, `dev`, ...). **Requires `--bump`.** Defaults to the branch each pin already names.    |
+| `--branch=<name>`         | Branch to resolve on (`stable`, `dev`, ...). With `--bump`, defaults to the branch each pin already names; with `[LIB]...`, to the branch of the `std` pin. |
 | `--force`                 | Re-download and re-extract every library, ignoring the cache and `lib/installed`.                                    |
 | `--dry-run`               | Print what would be installed (or bumped) and exit. Writes nothing.                                                 |
 | `--check`                 | Exit non-zero when anything is missing or out of date, without installing. For CI.                                  |
 | `--prune`                 | Delete libraries that are installed but no longer declared.                                                         |
 | `--offline`               | Install only from the local cache, never the network.                                                               |
 | `--jobs=<n>`              | Concurrent downloads (default `4`).                                                                                 |
+| `--ca_path=<dir>`         | Extra CA certificates to trust for TLS, on top of the system store.                                                 |
+| `--color=<when>`          | `auto` (default), `always`, `never`.                                                                                |
 
 #### Moving version pins with `--bump`
 
@@ -248,6 +261,8 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--task_pool_capacity`                  | `10000`            | `serve`                             | Max queued tasks.                                                                                                                                                                                                                  |
 | `--request_pool_capacity`               | `8192`             | `serve`                             | Max connections served at once. A kept-alive connection holds a slot for its whole idle window, so this bounds concurrent *connections*, not just in-flight requests; past it, new arrivals wait in the listen backlog.                                                                                                                                                                                                          |
 | `--request_ttl`                         | `20s`              | `serve`                             | Cancel an RPC request still queued or running after this long; it answers 503 with the reason.                                                                                                                                     |
+| `--max_args_memory`                     | `1 MiB`            | `serve`                             | RPC arguments larger than this are streamed to the task's arguments file instead of held in memory; `Task::body()` is then `null`.                                                                                                 |
+| `--host_perf_step` / `GREYCAT_HOST_PERF_STEP`| `60s`              | `serve`                             | Period of the `HostPerf` record logged at the `perf` level: host CPU, memory, disk, zones and worker classes.                                                                                                                      |
 | `--max_sse` / `GREYCAT_MAX_SSE`         | `2048`             | `serve`                             | Cap on open task event streams (`GET /runtime::Task::events`); each holds a request pool slot. Past it a caller gets `429`.                                                                                                       |
 | `--max_sse_per_user` / `GREYCAT_MAX_SSE_PER_USER` | `16`     | `serve`                             | Cap on open task event streams per user. Past it a caller gets `429`.                                                                                                                                                             |
 | `--mcp_content` / `GREYCAT_MCP_CONTENT` | `both`             | `serve`, `dev`                      | How an MCP `tools/call` ships its payload: `both` (spec-recommended duplication), `structured` (`structuredContent` only, empty `content`), `text` (serialized `content` only, and no `outputSchema` is advertised).                |

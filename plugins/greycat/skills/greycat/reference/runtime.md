@@ -44,7 +44,7 @@ Everything is in-process. There is no separate database, queue, or web server to
 
 ### Graph-persisted vs transient
 
-A type is graph-persistent (its values can be saved into `gcdata/`) unless it is tagged `@volatile`. Stdlib runtime types like `Log`, `RuntimeInfo`, `RuntimeUsage`, `Identity`, `Task` are `@volatile` — they describe live process state and cannot be stored.
+A type is graph-persistent (its values can be saved into `gcdata/`) unless it is tagged `@volatile`. Stdlib runtime types like `Log`, `RuntimeInfo`, `HostPerf`, `TaskPerf`, `Identity`, `Task` are `@volatile` — they describe live process state and cannot be stored.
 
 User types holding `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeGeo<T>`, or `node<T>` attributes get persisted lazily as the program writes to those node tags. See [stdlib.md § Node tags](stdlib.md).
 
@@ -56,7 +56,7 @@ When you change a type's shape (rename, reorder, change attribute types) and reb
 
 A **task** is a function call run on a worker thread. Two ways to spawn:
 
-- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended. `greycat call <fn> [args]` does exactly this from the shell (see [cli.md](cli.md)).
+- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` (or `task: small` / `task: regular` / `task: large` to pick the worker class; `true` is `regular`, any other value is answered `400`) — the server returns the `task_id` immediately. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended. `greycat call <fn> [args]` does this from the shell, following the task through `Task::events` rather than polling (see [cli.md](cli.md)).
 - **Programmatic** — `Scheduler::add(fn, periodicity, ...)` schedules a periodic task; the startup `main()` is enqueued as a task on `serve` boot.
 
 A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and **only run in parallel inside a task context** — calling `await` from a one-shot `greycat run` script runs them serially.
@@ -91,7 +91,8 @@ Worker pool sizes:
 
 - `--workers` (`GREYCAT_WORKERS`) — task workers. Default = CPU count.
 - `--workers_small` (`GREYCAT_WORKERS_SMALL`) — task workers for the small class. Every RPC request (path-RPC or JSON-RPC) runs as a small task on them, so long background tasks never starve requests. Added to `--workers`. An RPC task is a task like any other: it has an id, shows in `Task::running()` and `Task::history`, emits SSE task events and can be stopped with `Task::cancel`; only its arguments and result travel over the connection. An `await` inside it suspends it like any task, freeing the worker while its jobs run.
-- `--workers_large` — how many of `--workers` serve the large class; the rest serve regular tasks. A worker runs its own class first and, when that queue is empty, any lighter class, so large workers also drain regular and small tasks. Sub-tasks spawned by `await` run in their parent's class.
+- `--workers_large` — how many of `--workers` serve the large class; the rest serve regular tasks. A worker runs its own class first and, when that queue is empty, any lighter class, so large workers also drain regular and small tasks. Only sync RPC calls run outside `regular` by default (`small`); choose it where the task starts: `Job { function: f, task_class: TaskClass::large }` for `spawn` (default `regular`) and for each `await` job (default: the parent's class), `PeriodicOptions { task_class: TaskClass::large }` for the scheduler (default `regular`), and the `task` header's value for RPC. MCP calls run `regular`. A class with no workers runs in the nearest class that has some; `Task::task_class()` answers the class a task actually runs in.
+- `--max_args_memory` (default 1 MiB) — an RPC call whose arguments are larger is streamed to its task's arguments file while it is read, like a `task: true` call, instead of being held in memory for as long as the call runs. Its headers stay readable; `Task::body()` answers `null`. JSON-RPC envelopes stay in memory, since their method and params are only found by parsing them.
 - `--request_ttl` — an RPC request still queued or running after this long is cancelled like any task, and answers `503` with an error saying the time-to-live ran out. A `Task::cancel` call says so instead. Background tasks are not subject to it.
 - `--http_threads` — IO threads for socket accept / read / write.
 
@@ -289,6 +290,9 @@ Inside a task: `Task::id()`, `Task::parentId()`, `Task::expected_steps(n)`, `Tas
 Frames, every `data:` line being the `runtime::Task` in the same JSON shape `Task::running` returns:
 
 ```
+event: task-started
+data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","creation":"2026-09-28T10:19:09.949Z","start":"2026-09-28T10:19:09.949Z","status":"running"}
+
 event: task-progress
 data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","creation":"2026-09-28T10:19:09.949Z","start":"2026-09-28T10:19:09.949Z","status":"running","progress":0.5}
 
@@ -297,6 +301,7 @@ data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","c
 ```
 
 - Send `Accept: application/octet-stream` on the request and every `data:` line is instead the base64 of the binary response form (ABI header, then the GCB `Task`), which is what the web SDK asks for. JSON is the default.
+- `task-started` fires once per root task, when its code starts running on a worker; the gap between `creation` and `start` is the time it waited in the queue. A task resuming from an `await` is not reported again, and one cancelled while still queued never starts: it only gets `task-complete`.
 - `task-progress` fires when the whole percentage of `Task::add_steps` over `Task::expected_steps` changes, never more often.
 - `task-complete` fires once per root task, whatever its final status (`ended`, `error`, `cancelled`). Jobs spawned by `await` are not reported on their own.
 - Who receives a frame is decided per task with the rule `Task::running` uses: the task's owner, an admin, or a user the owner granted read access to.
@@ -307,6 +312,7 @@ data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","c
 
 ```js
 const events = new EventSource("/runtime::Task::events");   // cookie auth
+events.addEventListener("task-started", (e) => console.log(JSON.parse(e.data).start));
 events.addEventListener("task-complete", (e) => console.log(JSON.parse(e.data)));
 events.addEventListener("task-progress", (e) => console.log(JSON.parse(e.data).progress));
 ```
@@ -344,6 +350,90 @@ trace("...");
 ```
 
 `println(value)`, `print(value)`, `pprint(value)` are unconditional: they always write to stdout regardless of log level.
+
+### Task performance records (`TaskPerf`)
+
+At `perf` and `trace` (`--log=perf`), every task -- RPC calls, `task: true` calls, scheduled tasks, `greycat run`, and each `await` job -- logs one `TaskPerf` record once it ended and its transaction committed. Nothing is built or written at the default `info` level.
+
+**Where to find them.** A record is the `data` of a `Log` of level `perf` in the `log` stream, `files/root/streams/log.ndjson`. The enclosing `Log` gives what a dashboard groups by:
+
+- `task_id` -- the task id (`Task::id`), shared by a task and its `await` jobs;
+- `job_id` -- `null` for the task itself, the job's index in its `await` for an `await` job;
+- `src` -- the function the task ran, the key for per-endpoint figures;
+- `user_id` -- the caller;
+- `time` -- when the record was written, right after the task ended.
+
+**Units and scope.** Durations are microseconds, byte counts are bytes, everything else is a count. A task's figures cover all its runs -- a task suspended in an `await` runs once before and once after each suspension, maybe on different workers -- but not its jobs, which log their own record: add a task's jobs (same `task_id`) to get the total work of an `await` tree. Read back from the stream, `data` is a `TaskPerf`: the log tags every object in `data` with its `_type`, and the `log` stream reader rebuilds it (a program that does not define the type gets a `Map` keyed by the field names below).
+
+**Fields.**
+
+- `wait`, `exec`, `run`, `suspended`, `commit` -- time queued before a worker first picked it up; from then to the end; actually on a worker; parked in `await`; and committing.
+- `awaits`, `jobs`, `fusion_conflicts` -- `await` suspensions, the jobs they spawned, and jobs whose transaction could not be merged.
+- `catches` -- exceptions that reached a `catch`.
+- `read_bytes` / `read_hits` / `read_wasted` and `write_bytes` / `write_hits` -- store zone traffic.
+- `dirty_blocks`, `dirty_evictions` -- distinct blocks in the committed transaction (the size of the commit), and dirty blocks the object cache had to write out before the commit to stay within budget. A non-zero `dirty_evictions` means memory is missing for the task. (`write_hits` counts batched zone writes, not blocks.)
+- `cache_bytes` / `cache_hits` -- blocks served from the zones' binary cache instead of disk.
+- `cache_misses`, `cache_evictions` -- blocks the object cache had to load, and blocks it evicted to stay within budget (non-zero: the budget is too small for the task).
+- `cache_blocks`, `memory` and `cache_budget` -- the worker's object cache when the task ended, against its budget, to judge whether `--cache` and the worker count fit the workload.
+- `task_class`, `borrowed`, `queued` -- its class, runs taken by a heavier class, and times it waited in a queue instead of going straight to an idle worker.
+- `args_bytes`, `result_bytes`, `status` -- argument and result sizes, and how it ended.
+
+**Derived signals.**
+
+- Latency seen by a caller: `wait` + `exec`. A high `wait` with `queued` > 0 is a saturated pool; with `borrowed` > 0 the task's class had no idle worker and a heavier one took it.
+- Where `exec` goes: `run` on a worker, of which `commit` committing, and `suspended` parked in `await`. `exec` = `run` + `suspended`.
+- Memory: `dirty_evictions` > 0, or `cache_evictions` > 0, means the worker's object cache budget (`cache_budget`, that is `--cache` divided by the worker count) is too small for the task; `memory` against `cache_budget` shows how close the task came to it. `dirty_evictions` / `dirty_blocks` is the share of the commit that left memory early.
+- Store access: `cache_misses` blocks were loaded, `cache_hits` of them from the zones' binary cache and `read_hits` from disk; `read_wasted` / `read_bytes` is read amplification.
+- Exceptions: `catches` counts throws that reached a `catch`; a throw unwinds and builds an `Error`, so a high count on a hot endpoint costs time.
+- Outcome: `status` as in `Task::history` -- `ended`, `error` (a `--request_ttl` expiry included) or `cancelled` (a `Task::cancel`).
+
+**Cost.** Every counter is bumped off the hot paths only: on a store read or write, a cache miss or eviction, a caught exception, a suspension, or once per run. Measured against a build without them, RPC throughput and store-heavy tasks are unchanged within noise, and `--log=perf` costs no measurable time. It does cost log volume: a record is about 550 bytes, so at a high RPC rate it adds up to megabytes per second.
+
+**Dashboard example.** Tasks, total time and memory-starved tasks per function, read from the `log` stream:
+
+```gcl
+/// Tasks, total time and memory-starved tasks per function, from the `perf` records.
+fn perf_by_function(): Map<String, Array<int>> {
+    var by_fn = Map<String, Array<int>> {};
+    var reader = Stream::get("log", Log).reader(0);
+    while (reader.can_read()) {
+        var record = reader.read();
+        if (record.level == LogLevel::perf && record.data is TaskPerf) {
+            var perf = record.data as TaskPerf;
+            if (record.job_id == null) {
+                var key = "${record.src}";
+                var agg = by_fn.get(key) ?? [0, 0, 0, 0];
+                agg[0] = agg[0] + 1;
+                agg[1] = agg[1] + perf.wait.to(DurationUnit::microseconds);
+                agg[2] = agg[2] + perf.exec.to(DurationUnit::microseconds);
+                if (perf.dirty_evictions > 0) {
+                    agg[3] = agg[3] + 1;
+                }
+                by_fn.set(key, agg);
+            }
+        }
+    }
+    return by_fn;
+}
+```
+
+### Host performance records (`HostPerf`)
+
+At `perf` and `trace`, the server also logs one `HostPerf` record every `--host_perf_step` (`GREYCAT_HOST_PERF_STEP`, default `60s`), the only setting. It is the `data` of a `perf` `Log` with no task (`task_id` null) and describes the hosting platform, aggregated:
+
+- `period` -- time since the previous record; `cores`, `load` -- the host's cores and one-minute load average;
+- `cpu_user`, `cpu_system` -- CPU time the process used during `period` (divide by `period` and `cores` for the share of the machine);
+- `os_memory_total` / `os_memory_used`, `process_resident` / `process_virtual` / `process_shared`, `malloc_total`, `memory_drift` -- host and process memory, and what the runtime does not account for;
+- `io_read` / `io_write` -- storage bytes the OS accounted to the process during `period`; `store_read` / `store_write` -- bytes the workers moved to and from the store zones;
+- `disk_free`, `disk_meta` -- free space where `gcdata/` lives, and the metadata database's size;
+- `tasks_live`, `http_connections`, `sse_subscribers` -- task slots in use, open connections, open event streams;
+- `http_bytes_in` / `http_bytes_out` -- bytes read from and written to HTTP clients during `period`; `files_served` / `files_pushed` -- files sent in full (`/files` downloads, webroot assets) and received in full (`/files` uploads);
+- `http_max_in` / `http_max_out` / `http_max_file` -- the period's largest single request in and out, and largest file served or pushed;
+- `top_out`, `top_in`, `top_files` -- the 3 heaviest users of the period by bytes sent to them, by bytes received from them, and by files served and pushed, each a `HostPerfUser` with `user_id`, `bytes_in`, `bytes_out`, `files_served`, `files_pushed`. A request is charged to its user when it ends (an event stream open longer than a period, when it closes); anonymous and refused requests go to user `0`. Each IO thread keeps its 64 heaviest users of the period, so a lighter user beyond that leaves the lists but never the totals;
+- `small`, `regular`, `large` -- one `HostPerfClass` per worker class: `workers`, `busy` (share of the class's time spent running tasks, 0 to 1), `queued` and `idle` at record time, `ended` / `errors` / `cancelled` / `timeouts` during `period`, and `memory` against `cache_budget`;
+- `zones` -- a `HostPerfZones` summary: zones in use, total `size`, `committed_blocks` / `reserved_blocks` / `written_blocks` (`written` over `committed` is fragmentation), `bin_cache`, the most fragmented zone and its ratio, and whether a defrag is selected.
+
+Counters cover `period`; the rest are values at record time. A record is about 2 KB, about 3 MB a day at the default step. Taking a sample costs well under a millisecond of the serve loop's time, even with 130 workers. It is built from counters and a few syscalls, once per step, by the serve loop: beyond an atomic add per task run and one per ended task, the only per-request work is the HTTP traffic counting: a relaxed add next to each socket read or write into a slot the IO thread owns, so threads never contend, and one lookup in that thread's user table when the request ends. Below `perf` the loop does one comparison per second; measured against a build without any of it, RPC throughput and file serving are unchanged within noise. Read back from the stream, `data` is a `Map<any?, any?>`; `HostPerf` in `lib/std/runtime.gcl` documents every field.
 
 ### Where log records go
 

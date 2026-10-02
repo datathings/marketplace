@@ -82,7 +82,7 @@ fn current(): User {                            // bare-name reference works
 }
 ```
 
-When two modules declare the same bare name, the lang reports an ambiguous-reference error and requires you to disambiguate via FQN.
+When two modules declare the same bare name, the lang reports an `ambiguous-symbol` error and requires you to disambiguate via FQN.
 
 ### `private` declarations
 

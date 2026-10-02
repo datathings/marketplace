@@ -110,12 +110,24 @@ typedef struct {
     } config;
 } gc_periodicity_t;
 
+/// Task classes, ordered by weight. A worker of class c runs tasks of any class <= c: large workers
+/// also drain regular and small tasks, regular workers also drain small ones.
+typedef enum {
+    gc_task_class_small = 0,
+    gc_task_class_regular = 1,
+    gc_task_class_large = 2,
+    gc_task_class__len = 3,
+} gc_task_class_t;
+
 typedef struct {
     bool immediate;            // default true
     bool activated;            // default true
+    u8_t task_class;           // gc_task_class_t; set it explicitly, `{}` gives small. Out of range runs as regular
     i64_t start_time_us;       // default: current time (µs since epoch)
     i64_t max_duration_us;     // 0 for unlimited
 } gc_periodic_options_t;
+// static_assert: sizeof == 24; task_class at offset 2 (the padding after `activated`),
+// start_time_us at 8, max_duration_us at 16 -- public SDK layout, unchanged by the new field.
 
 typedef struct {
     i64_t task_id;
@@ -140,6 +152,8 @@ typedef struct {
 | `gc_host__spawn_task_with_args` | `bool gc_host__spawn_task_with_args(gc_host_t *self, u32_t fn_off, const char *args_payload, u64_t args_payload_len, gc_format_t args_format, u32_t user_id, u64_t roles_flags, i64_t *created_task_id, gc_buffer_t *extra_buffer)` | Spawn a new task with serialized arguments. |
 | `gc_host__cancel_task` | `bool gc_host__cancel_task(gc_host_t *self, i64_t task_id, u32_t requester_id, u64_t requester_permissions, gc_task_t *out_task)` | Cancel a running or queued task. Thread-safe. `requester_id`/`requester_permissions` identify the caller (for permission checks); `out_task` is optional and, if non-NULL, receives a copy of the cancelled parent task when found. |
 | `gc_host__get_task_status` | `bool gc_host__get_task_status(gc_host_t *self, i64_t task_id, gc_task_status_t *status)` | Query the current status of a task. |
+| `gc_task__expected_steps` | `void gc_task__expected_steps(const gc_machine_t *ctx, i64_t total_expected_steps)` | **New (upstream `e7630e693`).** Set how many steps the task running `ctx` expects, as GCL `Task::expected_steps` does. A job reports to its parent task. No-op outside a task. |
+| `gc_task__add_steps` | `void gc_task__add_steps(gc_machine_t *ctx, i64_t steps)` | **New (upstream `e7630e693`).** Add steps done to the task running `ctx`, as GCL `Task::add_steps` does; notifies task event subscribers (SSE `task-progress`) when the whole percentage moved. No-op outside a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
 | `gc_host__options` | `const gc_env_slot_t *gc_host__options(const gc_host_t *self)` | **New in 8.2.** Configuration the process resolved from CLI flags, the environment, and the `.env` file — indexed by `gc_env_options_offset_t`, `gc_env_options_len` entries long. Settled before any library is linked and read-only afterwards, so the pointer stays valid for the lifetime of the host. See [gc/env.h](#gcenv-h). |
 
@@ -252,6 +266,7 @@ task.periodicity.config.fixed.every_us = 60LL * 1000 * 1000;
 
 task.options.immediate = true;   // also fire once right away
 task.options.activated = true;
+task.options.task_class = gc_task_class_regular;  // zero-init gives small: set it explicitly
 
 if (gc_scheduler__add(gc_host__scheduler(host), task, galloc)) {
     // Optional: materialize a runtime::PeriodicTask object for logging
@@ -334,7 +349,8 @@ typedef enum {
     gc_env_options__backup_path,
     gc_env_options__max_backup_files,
     gc_env_options__defrag_ratio,
-    gc_env_options__usage_step,
+    /// Formerly `usage_step`: same slot, so the numbering below is unchanged.
+    gc_env_options__host_perf_step,
     gc_env_options__store,
     gc_env_options__http_threads,
     /// Formerly `req_workers`: same slot, so the numbering below is unchanged.
@@ -376,6 +392,7 @@ typedef enum {
     gc_env_options__url,
     gc_env_options__token,
     gc_env_options__workers_large,
+    gc_env_options__max_args_memory,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -400,6 +417,8 @@ typedef enum {
 |---------|-----------|---------|---------|
 | `gc_env_options__workers_small` | `--workers_small` / `GREYCAT_WORKERS_SMALL` | `2` | **Renamed from `gc_env_options__req_workers`** (same slot/value; source-breaking only for code naming the old enumerator; CLI `--req_workers` is gone). Task workers for the small class, which RPC requests run as; added to `--workers`. `serve` only. |
 | `gc_env_options__workers_large` | `--workers_large` / `GREYCAT_WORKERS_LARGE` | `0` | **New, appended before `gc_env_options_len`.** How many of `--workers` serve the large class (the rest serve regular tasks); idle large workers also drain regular and small tasks. Sub-tasks spawned by `await` run in their parent's class. `run`, `serve`, `test`. |
+| `gc_env_options__host_perf_step` | `--host_perf_step` / `GREYCAT_HOST_PERF_STEP` | `60s` (was `10s`) | **Renamed from `gc_env_options__usage_step`** (upstream `e7630e693`; same slot/value — source-breaking only for code naming the old enumerator; `--usage_step` is refused, `GREYCAT_USAGE_STEP` ignored). Period of the `HostPerf` record logged at `perf`/`trace` level. |
+| `gc_env_options__max_args_memory` | `--max_args_memory` / `GREYCAT_MAX_ARGS_MEMORY` | `1 MiB` | **New (upstream `e7630e693`), appended before `gc_env_options_len`.** RPC arguments larger than this are streamed to the task's arguments file instead of held in memory (`Task::body()` is then `null`; headers stay readable). JSON-RPC envelopes always stay in memory. |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples
@@ -958,7 +977,7 @@ typedef struct gc_stream gc_stream_t;
 |----------|-----------|-------------|
 | `gc_stream__register` | `gc_sdk gc_stream_t *gc_stream__register(gc_host_t *host, u32_t user_id, u64_t permissions, const char *name, u32_t name_len, u32_t type_id, u32_t callback_fn_off, i64_t max_dephasing_us, bool durable, gc_buffer_t *err)` | Register `name` for `user_id` and return its entry. Re-registering the same (user, name) with the same `type_id` returns the existing entry **as is** — the first registration's callback, `max_dephasing_us` and `durable` stay in force, the new ones are silently ignored; a different `type_id` is an error. `callback_fn_off` 0 = no callback (drain deadline never armed, never wakes the worker thread). `durable` = fsync per append. `user_id`/`permissions` are **trusted** (in-process API — never feed it request input). Returns `nullptr` on error with the reason in `err` (cleared first). |
 | `gc_stream__find` | `gc_sdk gc_stream_t *gc_stream__find(gc_host_t *host, u32_t user_id, const char *name, u32_t name_len)` | The entry registered in this process for (user_id, name), or `nullptr`. |
-| `gc_stream__append` | `gc_sdk bool gc_stream__append(gc_stream_t *s, const char *record, u64_t len)` | Append one pre-serialized record: `len` bytes **ending with `'\n'`**, one write under the stream's lock, fsynced if durable. The caller guarantees it is one JSON value of the stream's type + newline (not checked). On failure returns `false` with `errno` set (`EINVAL` when the last byte is not `'\n'`) and truncates the file back to the last accounted byte, so a partial record never prefixes the next one. |
+| `gc_stream__append` | `gc_sdk bool gc_stream__append(gc_host_t *host, gc_stream_t *s, const char *record, u64_t len)` | **Signature changed (upstream `e7630e693`): new leading `host` param** — the host the stream was registered on; its stop flag interrupts a blocked write and its registry arms the callback. Append one pre-serialized record: `len` bytes **ending with `'\n'`**, one write under the stream's lock, fsynced if durable. The caller guarantees it is one JSON value of the stream's type + newline (not checked). On failure returns `false` with `errno` set (`EINVAL` when the last byte is not `'\n'`) and truncates the file back to the last accounted byte, so a partial record never prefixes the next one. |
 | `gc_stream__write` | `gc_sdk bool gc_stream__write(gc_stream_t *s, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | JSON-serialize `value` with `ctx`'s scratch buffer and append it. An object whose type is not exactly the stream's type is refused; that and any other failure set a runtime error on `ctx` and return `false`. |
 | `gc_stream__last_written_pos` | `gc_sdk i64_t gc_stream__last_written_pos(gc_stream_t *s)` | Bytes appended (and, if durable, fsynced) so far — the upper bound `gc_stream__reader` uses. |
 | `gc_stream__name` | `gc_sdk const char *gc_stream__name(const gc_stream_t *s, u32_t *len)` | Registered name; length through `*len`. |
@@ -990,7 +1009,7 @@ if (!gc_stream__write(s, (gc_slot_t) {.object = event}, gc_type_object, ctx)) {
 }
 // Or append pre-serialized NDJSON: must end with '\n'
 static const char rec[] = "{\"id\":1}\n";
-if (!gc_stream__append(s, rec, sizeof(rec) - 1)) { /* errno set */ }
+if (!gc_stream__append(host, s, rec, sizeof(rec) - 1)) { /* errno set */ }
 
 gc_object_t *reader = gc_stream__reader(s, 0, ctx);   // marked
 if (reader != nullptr) {

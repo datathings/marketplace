@@ -35,11 +35,11 @@ extends  private  static  abstract  native
 if  else  while  do  for  in  at
 return  throw  break  continue  breakpoint
 try  catch
-true  false  null  this  typeof
+true  false  null  typeof
 is  as
 ```
 
-The following are **contextual** keywords (recognized only at specific grammar positions; usable as identifiers elsewhere): `sampling`, `limit`, `skip` (inside `for-in`).
+`this` is not reserved: it is an identifier bound to the receiver inside methods. Don't reuse it as a name.
 
 Annotation names follow `@` and use the identifier regex.
 
@@ -79,10 +79,11 @@ Module-level vars are static singletons restricted to the stdlib node tags — n
 
 ```gcl
 @annotations
-modifiers fn name<G1, G2>(p1: T1, p2: T2): R { ... }
+modifiers fn name<G>(p1: T1, p2: T2): R { ... }
 modifiers fn name(p: T);              // native or abstract: body omitted
 
-// Modifiers: private, static, abstract, native (any subset, in any order)
+// Top-level fn modifiers: private, native. Method modifiers: static, native, abstract (no private; not both static and abstract).
+// Functions and methods take at most one generic parameter; types at most two.
 // Return type clause is optional (no clause = no return value).
 ```
 
@@ -94,7 +95,7 @@ modifiers type Name<G1, G2> extends Parent<G> {
     @annotations
     modifiers attr_name: T;
     @annotations
-    modifiers attr_name: T = init_expr;
+    static attr_name: T = init_expr;           // only static attrs may have an initializer
     "string-named-attr": T;                    // attr name can be a string literal
 
     @annotations
@@ -150,7 +151,6 @@ for (i: int, v: int in arr) { ... }             // with annotations
 for (k, v in map) { ... }                       // unpack key, value
 for (_, v in map) { ... }                       // `_` discards an unused key/index (silences unused-local)
 for (t, v in series[from..to]) { ... }          // range slice
-for (t, v in series[from..to] sampling expr limit n skip m) { ... }
 
 try { ... } catch (e) { ... }
 try { ... } catch { ... }                       // catch ident is optional
@@ -158,7 +158,7 @@ try { ... } catch { ... }                       // catch ident is optional
 at (time_value) { ... }                         // changes the scope `time::current()`, nodeTime resolve against the current time by default
 ```
 
-Every statement that isn't a block ends with `;` or an automatic semicolon at newline / `}` / EOF. The grammar accepts both forms, but always-writing `;` is conventional.
+Every statement that isn't a block ends with `;`. There is no automatic semicolon insertion: a missing `;` is a syntax error.
 
 ## Expressions
 
@@ -180,7 +180,7 @@ obj.field
 obj.method(args)
 obj?.field                                      // optional chaining
 obj?.method(args)
-obj->field                                      // deref-then-field (only on stdlib node tags: node, nodeTime, nodeList, nodeIndex, nodeGeo)
+obj->field                                      // deref-then-field (only on node, nodeTime)
 obj?->field
 Type::staticMember
 Module::Type::staticMember
@@ -208,7 +208,7 @@ foo(args)
 fn (p: T): R { body }                           // anonymous function
 
 // unary
--x   +x   !x   *x
+-x   !x   *x                                     // no unary +
 --x   ++x                                       // prefix
 x--   x++   x!!                                 // postfix; !! is "force non-null"
 
@@ -230,9 +230,9 @@ Highest binds tightest. All binary operators are left-associative unless noted.
 | Prec | Operator                           | Notes                                               |
 | ---- | ---------------------------------- | --------------------------------------------------- |
 | 13   | `. -> :: () [] ++ -- !!` (postfix) | Member, call, index, increment, force-non-null      |
-| 12   | `- ! + * ++ --` (prefix)           | Unary                                               |
-| 11   | `??`                               | Nullish coalesce                                    |
-| 10   | `^`                                | Power                                               |
+| 12   | `??`                               | Nullish coalesce; `-a ?? b` is `-(a ?? b)`          |
+| 11   | `- ! * ++ --` (prefix)             | Unary                                               |
+| 10   | `^`                                | Power, right-associative                            |
 | 9    | `* / %`                            |                                                     |
 | 8    | `+ -`                              |                                                     |
 | 7    | `< <= > >=`                        |                                                     |
@@ -274,13 +274,13 @@ Gotchas:
 3day_4hour_5min_6s  // compound duration (any chain)
 ```
 
-The lexer accepts any letter sequence as a suffix; the lang validates whether it names a real unit or typed-suffix kind. Bogus `42xyz` parses but errors semantically.
+The lexer accepts any letter sequence as a suffix; the lang validates whether it names a real unit or typed-suffix kind. Bogus suffixes like `42xyz` are a syntax error.
 
 ### Strings
 
 ```gcl
 "hello"
-"with newline\n"                    // standard escapes: \n \r \t \\ \" \' \xFF
+"with newline\n"                    // escapes: \n \r \t \a \b \f \v \uXXXX \u{1F600}; any other escaped char stands for itself (\\ \" \' \$)
 "interpolation: ${expr}"            // ${...} contains an arbitrary expression
 "nested: ${a + b * c}"
 ""                                  // empty string
@@ -315,7 +315,7 @@ GreyCat distinguishes two range forms based on whether bracket-inclusivity matte
 **Implicit (within `[ ]` slices):**
 
 ```gcl
-arr[a..b]           // [a..b] — inclusive lower, exclusive upper
+arr[a..b]           // inclusive at both ends
 arr[a..]            // open upper
 arr[..b]            // open lower
 arr[..]             // both open (rare)
@@ -377,7 +377,7 @@ typeof T                            // type-as-value (for type-reflection APIs)
 Point { x: 1, y: 2 }
 Point<int> { x: 1, y: 2 }                  // generic args are optional
 
-// Positional form is supported only for: Array, Map, node, geo
+// Positional / key:value form is supported only for: Array, Map, node, geo
 Array<int> { 1, 2, 3 }
 Map<String, int> { "a": 1, "b": 2 }
 node<String> { "text" }
@@ -405,4 +405,4 @@ These constructs do **not** parse in GreyCat — do not write them:
 - `const` — there is no const keyword; use `static` attributes for constants.
 - `null` as a member name — `null` is a keyword.
 - C-preprocessor directives.
-- Statement-level `<expr>` without `;` (every statement requires a terminator, automatic or explicit).
+- Statement-level `<expr>` without `;` (every statement requires `;`).

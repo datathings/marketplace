@@ -1,6 +1,6 @@
 ---
 name: greycat
-description: Build, run, and edit GreyCat projects. GreyCat is a statically-typed language plus runtime for graph-persistent, time-series-aware applications. Use when reading or writing `.gcl` source, when the user mentions GreyCat / project.gcl / nodeTime / nodeList / nodeIndex / nodeGeo / @expose / @library, or when the task involves running `greycat <command>`, deploying a project, or reasoning about gcdata/, lib/, files/, webroot/.
+description: Builds, runs, and edits GreyCat projects. GreyCat is a statically-typed language plus runtime for graph-persistent, time-series-aware applications. Use when reading or writing `.gcl` source, when the user mentions GreyCat / project.gcl / nodeTime / nodeList / nodeIndex / nodeGeo / @expose / @library, or when the task involves running `greycat <command>`, deploying a project, or reasoning about gcdata/, lib/, files/, webroot/.
 ---
 
 # GreyCat
@@ -9,7 +9,7 @@ GreyCat is **one language and one runtime in one binary**. A project lives in a 
 
 `.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@include` pragmas (valid in that file only) plus the `@library` pragmas of every module they reach form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat lint` and formatted by `greycat fmt`.
 
-Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with an `@library` pragma and `greycat install`. Let `greycat install --bump` (optionally `--branch=<name>`) resolve and write the version pins; do not `curl` the registry and hand-edit `project.gcl`.
+Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with `greycat install <name>`, which writes the `@library` pragma and installs it. Let `greycat install --bump` (optionally `--branch=<name>`) resolve and write the version pins; do not `curl` the registry and hand-edit `project.gcl`.
 
 ## Anti-hallucination rule
 
@@ -26,7 +26,7 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 - **[reference/syntax.md](reference/syntax.md)** — Complete grammar reference: every statement, every expression form, operator precedence, literals (string substitution, time `'…'`, typed-suffix numbers).
 - **[reference/types.md](reference/types.md)** — Type system in depth: nullability, narrowing, generic invariance, casting, inheritance, `is`/`as`.
 - **[reference/stdlib.md](reference/stdlib.md)** — Built-in types by category (collections, node types, time/duration/geo, IO, Url, S3, Crypto). Method signatures.
-- **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
+- **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@precision`, `@raw`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
 - **[reference/idioms.md](reference/idioms.md)** — Idiomatic patterns and common pitfalls (no ternary, no `void`, no `::new()`, `function` slot semantics, `private` semantics, generic invariance).
 
 **Tooling / project / runtime:**
@@ -34,7 +34,7 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 - **[reference/project.md](reference/project.md)** — Project model: entrypoint, `@library` / `@include` resolution, `lib/<name>/` layout, FQN, multi-project workspaces.
 - **[reference/libraries.md](reference/libraries.md)** — Catalog of publishable **domain libraries** (`kafka`, `mqtt`, `opcua`, `sql`, `ai`, `algebra`, `text_search`, ...) with what each pulls in, how to discover a library's latest version, and the per-library skill to load from `lib/<name>/skills/SKILL.md` after installing one. Check here before hand-rolling a domain integration.
 - **[reference/cli.md](reference/cli.md)** — `greycat` CLI: every command (`run`, `serve`, `dev`, `build`, `test`, `install`, `codegen`, `user`, `backup`, `restore`, …), every option, the `.env` file.
-- **[reference/lang.md](reference/lang.md)** — `greycat lint`, `greycat fmt`, `greycat lsp`: lint rules, suppression directives, formatter modes. The pre-commit / definition-of-done tooling.
+- **[reference/lang.md](reference/lang.md)** — `greycat lint`, `greycat fmt`, `greycat lsp`, `greycat doc`: lint rules, suppression directives, formatter modes and pragmas, API reference. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)** — What's alive in a running server: the graph store (`gcdata/`), workers and tasks, the HTTP server (JSON-RPC / path-RPC / `/files` / `webroot`), identity and permissions, the scheduler, backups, logging.
 - **[reference/workflow.md](reference/workflow.md)** — Operational recipes: bootstrap a project, add an endpoint, add a persisted type, write tests, evolve schemas, generate SDKs, deploy.
 - **[reference/webapp.md](reference/webapp.md)** — Bundling a webapp: the one prescribed stack (VitePlus + MPA + Lit shadow-DOM components with `static styles` + Web Awesome `wa-*` components themed by `--wa-*` tokens + `app/theme.css` brand overrides — Web Awesome ships its own agent skills to load alongside this one), `app/` sources bundled into `webroot/` via `greycat dev`, and calling the backend through the headless `@greycat/web/sdk` (`greycat codegen ts`, which owns every type crossing the wire).
@@ -49,7 +49,7 @@ A `.gcl` module is a flat sequence of declarations and pragmas. No top-level exp
 
 /// Doc comment for the type.
 type Point<T> extends Shape {      // generic, inheriting
-    x: T;                          // attribute (terminated by ; or newline)
+    x: T;                          // attribute (always terminated by ;)
     static ORIGIN_X: int = 0;      // only `static` attributes may have an initializer
     private label: String?;        // private attr = read-public, write-private
 
@@ -102,6 +102,7 @@ greycat build       # produce project.gcp (strips *_test.gcl)
 greycat lint        # static analysis of the .gcl closure (--fix applies auto-fixes)
 greycat fmt         # canonical formatting (--mode=check as a CI gate)
 greycat lsp         # language server over stdio, for editors
+greycat doc         # API reference of the project's declarations (--expose: endpoints only)
 greycat codegen     # generate typed client SDKs (c/ts/python/rust/java)
 greycat user list   # admin LMDB-backed user database
 greycat backup      # snapshot gcdata/ into ./backup/
@@ -138,7 +139,7 @@ type User {
     /// Doc on the attribute.
     id: int;
     name: String;
-    private password_hash: String;   // outside ctor: read-public, write-forbidden
+    private password_hash: String;   // read-public; writable only through `this` or in the object literal
     static MAX_NAME_LEN: int = 64;   // static (class-level) attribute — readonly
 
     fn rename(new_name: String) {
@@ -150,11 +151,11 @@ type User {
     }
 
     native fn hash_password();       // body provided by runtime
-    abstract fn validate(): bool;    // requires `abstract type`; no body
+    abstract fn validate(): bool;    // no body; calling it un-overridden throws
 }
 ```
 
-Trailing `;` between members is optional but always safe. Methods can omit return type (means "returns nothing").
+Every attribute ends with `;`; after a method body `;` is optional. Methods can omit return type (means "returns nothing").
 
 ## Types
 
@@ -223,7 +224,7 @@ Three distinct operators — pick by what's on the left:
 | Form                                    | Meaning                                                                       | When                                                                                                                             |
 | --------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `obj.field` / `obj.method()`            | Access the **value's own** field or method                                    | Always for user types and value types                                                                                            |
-| `n->field`                              | **Deref then access**: resolves the node payload, then `.field` on the result | Only on the stdlib node tags: `node<T>`, `nodeTime<T>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeGeo<T>`. User types cannot opt in. |
+| `n->field`                              | **Deref then access**: resolves the node payload, then `.field` on the result | Only on `node<T>` and `nodeTime<T>`. Other node tags and user types cannot use it.                                               |
 | `Type::member` / `Module::Type::member` | **Static / namespaced** access                                                | Static fields, static methods, enum entries, fully-qualified names                                                               |
 
 ```gcl
@@ -242,7 +243,7 @@ Color::red;                // enum entry
 MathConstants::pi;         // module-qualified static (defined in std/core)
 ```
 
-`->` is **not optional sugar for `.`** — it errors on any receiver other than a stdlib node tag.
+`->` is **not optional sugar for `.`** — it errors on any receiver other than `node` / `nodeTime` (on `nodeList`, `nodeIndex` and `nodeGeo` it throws at runtime).
 
 ### Optional chaining
 
@@ -259,7 +260,7 @@ arr?[i]                  // null if arr is null, else arr[i]
 ```gcl
 var x = 1;                        // type inferred from rhs
 var x: int = 1;                   // type annotated
-var x: int;                       // no init (non-null types must be assigned before use)
+var x: int;                       // no init: reads as `null` until assigned, even for a non-null type (not checked)
 
 if (cond) {} else if (cond) {} else {}
 while (cond) {}
@@ -270,7 +271,6 @@ for (k, v in arr) {}                    // iterate Array (k=index), Map (k=key)
 for (k, v in map) {}                    // unpack key/value pairs
 for (t, v in node[from..to]) {}         // time-window query on nodeTime
 for (k, v in idx) {}                    // iterate nodeIndex/nodeList
-for (t, v in series[from..to] limit 100 skip 10) {}  // sampling clauses on series slice
 
 return;          return expr;
 throw error;
@@ -279,16 +279,16 @@ try {} catch (e) {}                    // catch ident optional
 at (targetTime) {}                          // time-aware-scope binding
 ```
 
-There is **no ternary (`?:`)**, **no `switch`/`match`**, and **no `void` keyword**. A function with no `: T` return type "returns nothing"; calling it in an expression position is an error.
+There is **no ternary (`?:`)**, **no `switch`/`match`**, and **no `void` keyword**. A function with no `: T` return type "returns nothing"; using its call as a value yields `null`.
 
 ## Operators
 
 ```
 Precedence (high to low):
   postfix:  . -> :: () []  ++  --  !!         // member, call, offset, increment
-  prefix:   -  !  +  *  ++  --                // negation, deref-mul, increment
-  ??                                          // nullish coalescing (highest binary)
-  ^                                           // power
+  ??                                          // nullish coalescing (binds tighter than prefix)
+  prefix:   -  !  *  ++  --                   // negation, deref, increment
+  ^                                           // power (right-associative)
   * / %
   + -
   < <= > >=
@@ -302,6 +302,8 @@ Precedence (high to low):
 Notes:
 
 - `??` binds tighter than `^` — `count ?? 0 > 0` parses as `(count ?? 0) > 0`.
+- `??` also binds tighter than prefix operators - `-a ?? b` parses as `-(a ?? b)`.
+- `^` is right-associative - `2 ^ 3 ^ 2` is `2 ^ 9`.
 - `is T` and `as T` take a **type**, not an expression. `is` narrows on the then-branch.
 - `?=` is "assign only if LHS is null".
 - `++` / `--` exist in both prefix and postfix forms.
@@ -366,12 +368,14 @@ See [reference/annotations.md](reference/annotations.md) for the full list and s
 
 ## Modifiers
 
-| Modifier   | On decl                                                                | On attribute                                                  | On method                                               |
-| ---------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
-| `private`  | Cross-module access requires FQN (`mod::T`). Same-module unrestricted. | Read-public, write-private (only the constructor can assign). | Cross-module call requires FQN.                         |
-| `static`   | —                                                                      | Class-level attribute (one shared value).                     | Class-level fn; access via `Type::name()`.              |
-| `abstract` | Type cannot be instantiated.                                           | —                                                             | Method has no body; concrete subtypes must provide one. |
-| `native`   | Type/method body is implemented by the runtime.                        | —                                                             | Body must be absent.                                    |
+| Modifier   | On decl                                                                | On attribute                                                        | On method                                               |
+| ---------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
+| `private`  | Cross-module access requires FQN (`mod::T`). Same-module unrestricted. | Read-public; writable only through `this` or in the object literal. | Not allowed (syntax error).                             |
+| `static`   | —                                                                      | Class-level attribute (one shared value).                           | Class-level fn; access via `Type::name()`.              |
+| `abstract` | Type cannot be instantiated.                                           | —                                                                   | Method has no body; concrete subtypes must provide one. |
+| `native`   | Type/method body is implemented by the runtime.                        | —                                                                   | Body must be absent.                                    |
+
+Modifier order is fixed: `private abstract native type T`, `static private attr: T`.
 
 `private` is **not** "hidden." See [reference/annotations.md](reference/annotations.md) for the full semantics and a worked example.
 
@@ -466,10 +470,10 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 3. **No `::new()`.** Always `Type {}` or `Type<G> {}`. Unless an explicit `Type { static fn new(): Type { /*...*/ } }` exists.
 4. **`function` parameters are opaque.** Lambdas and static fn references carry their signature in source position (`var f = fn(a: int): int {...}` → `f: fn(int): int`), but once a value flows into a `function`-typed slot the signature is gone and calls through it are runtime-checked. Instance methods (`obj.method`, non-static `Foo::method`) are NOT first-class values; the workaround is a lambda that takes the receiver as a parameter (`fn (r: Foo) { r.method(); }`), since lambdas don't capture enclosing locals or `this`.
 5. **Generics are invariantly typed.** `Array<int?>` is not assignable to `Array<int>`. Same for `Map`, `nodeIndex`, etc.
-6. **`->` is reserved for stdlib node tags.** Only `node<T>`, `nodeTime<T>`, `nodeIndex<K,V>`, `nodeList<T>`, `nodeGeo<T>` support `->`. User types cannot opt in — use `.` instead.
+6. **`->` is reserved for `node` and `nodeTime`.** Only `node<T>` and `nodeTime<T>` support `->`; on `nodeList`, `nodeIndex` and `nodeGeo` it throws at runtime. User types cannot opt in — use `.` instead.
 7. **`private` ≠ "hidden."** A `private type` is still visible across modules via its fully-qualified name; only bare-name lookup is blocked. A `private attr` is read-public, write-private. Never gate same-module access on `private`.
 8. **No imports.** Visibility comes from the project graph (`@library` / `@include`), not from `import`/`use` statements.
-9. **`as` is unchecked at runtime.** The runtime drops `as T` entirely; the lang's static check is the only safety net.
+9. **`as` is unchecked for object types.** Casts to primitives (`int`, `float`, `bool`, ...) are checked at runtime, and `int` <-> `float` converts. Casts to `String`, user and other object types are dropped, so the lang's static check is the only safety net; a wrong cast throws on the first mismatched member access.
 10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat lint` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
 11. **Don't commit `gcdata/`, `bin/`, or `lib/`.** They are runtime / install state, not source. `gcdata/` is the durable application state — back it up but never check it in.
 12. **Default `@expose` to authenticated. `@permission("public")` requires user opt-in.** A bare `@expose` already requires the `api` permission (any authenticated caller). Reaching for `@permission("public")` because "the frontend doesn't have auth wired up yet" hands every anonymous caller on the network the same write access. Only add it when the user explicitly asks for an anonymous endpoint (typical examples: `login`, an unauthenticated health probe). If the answer is "I made it public so the demo would work," remove it and wire login instead. See [reference/idioms.md § HTTP / @expose patterns](reference/idioms.md).

@@ -65,7 +65,7 @@ For a frontend-bundled project, swap `serve` for `dev` to also spawn the VitePlu
 
 1. **Edit `.gcl`** under `src/` (or wherever your `@include` covers).
 2. **`greycat lint`** — fastest signal. Catches `unused-local`, `possibly-null`, `arrow-on-non-deref`, `unreachable`, and dozens of other shape issues the runtime accepts silently. See [lang.md](lang.md).
-3. **`greycat fmt`** — canonical formatting. The formatter is opinionated and unconfigurable.
+3. **`greycat fmt`** — canonical formatting. The formatter is opinionated; per-module `@fmt_*` pragmas tune only line width, indent and the final newline (see [lang.md](lang.md)).
 4. **Restart the server.** GreyCat does not currently hot-reload schema changes — `serve` rebuilds the project at startup. Save → `Ctrl+C` → `serve` again.
 5. **`greycat install`** only when `project.gcl`'s `@library` pragmas change. Library cache lives in `lib/installed`. To move onto newer releases, `greycat install --bump` rewrites the pins for you - see [cli.md, `greycat install`](cli.md#greycat-install).
 6. **`greycat codegen`** if external SDKs need to pick up new endpoint signatures.
@@ -254,7 +254,7 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 - [ ] Provision a writable `files/` if the app accepts uploads.
 - [ ] Configure with `.env` (or systemd `Environment=`): `GREYCAT_PORT`, `GREYCAT_LOG`, `GREYCAT_CACHE`, `GREYCAT_STORE`, `GREYCAT_BACKUP_PATH`, `GREYCAT_TZ`.
 - [ ] Schedule backups: either external (snapshot the `gcdata/` directory), or in-process via a scheduled `Runtime::backup_delta()`.
-- [ ] Set up monitoring on `Runtime::usage()` if the workload is heavy on memory or storage.
+- [ ] Run with `--log=perf` and chart the `HostPerf` and `TaskPerf` records of the `log` stream if the workload is heavy on memory or storage (see runtime.md § Logging).
 
 ## Common project chores
 

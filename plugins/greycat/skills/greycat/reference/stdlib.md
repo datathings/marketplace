@@ -64,7 +64,7 @@ for (k, v in m) { ... }            // iterate key/value pairs
 
 ### Set<T>
 
-GreyCat does not ship a built-in `Set` type as of this stdlib version — model sets as `Map<T, bool>` or a custom type.
+GreyCat has no built-in `Set` type — model sets as `Map<T, bool>` or a custom type.
 
 ### Tuple<T, U>
 
@@ -235,7 +235,7 @@ idx.get("alice");                  // User?
 idx.search("alice", 10);           // closest-neighbor search
 idx.remove("alice");
 idx.size();
-for (k, v in idx limit 100) { /* ... */ }
+for (k, v in idx) { /* ... */ }
 ```
 
 ### nodeGeo<T>
@@ -530,6 +530,14 @@ Task::body();                             // String?, the bytes exactly as they 
 Task::uri();                              // String?, path + query, percent-encoding intact
 ```
 
+`Task::task_class()` answers the class the current task or job runs in (it raises outside a task, never `null`);
+`spawn` and `await` jobs take a `task_class`:
+
+```gcl
+Task::task_class();                                         // TaskClass
+spawn(Job { function: f, task_class: TaskClass::large });   // also on each await job
+```
+
 `Task::uri()` is the escape hatch for a query the argument binder cannot express — a
 repeated key (`?tag=a&tag=b`, where binding keeps the last), or two keys that collide once
 `.` and `-` are read as `_`. `Url::parse` takes it and returns `params` already decoded:
@@ -618,7 +626,6 @@ vi.search(query_vector, 10);       // Array<SearchResult<Tensor, MyType>>
 
 ```gcl
 Runtime::info();                   // RuntimeInfo (version, license, threads, ...)
-Runtime::usage();                  // current memory/cache/io stats
 Runtime::sleep(1s);
 Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();

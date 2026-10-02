@@ -248,6 +248,7 @@ typedef struct {
     bool pretty;        // Pretty-print with indentation
     char dec_sep;       // Decimal separator character (e.g., '.' or ',')
     char th_sep;        // Thousands separator character
+    bool type_tag;      // With `json`: every user object carries its "_type":"<fqn>" discriminator, not only subtypes, down through nested fields and container elements (new)
     i32_t f_digit;      // Float digit precision
     i32_t level;        // Indentation level (for pretty printing)
     u64_t block_size;   // Block size hint
@@ -425,6 +426,7 @@ The buffer header defines ANSI color escape codes for terminal-colored output:
 | Constant | Color / Purpose |
 |----------|----------------|
 | `GC_COLOR_LIGHT_GREEN` | Light green |
+| `GC_COLOR_BRAND` | GreyCat lime `#c3f056` (24-bit `\033[38;2;195;240;86m`), the palette accent (new) |
 | `GC_COLOR_RESET` | Reset colors |
 | `GC_COLOR_LIGHT_GREY` | Light grey |
 | `GC_COLOR_BCYN` | Bold cyan |
