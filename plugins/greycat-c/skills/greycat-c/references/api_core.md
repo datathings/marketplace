@@ -618,7 +618,23 @@ struct gc_program {
     struct { ... } ops;                           // Bytecode operations and source maps
     gc_program_specialized_type_table_t s_types;  // Specialized (generic) types
     gc_block_t stub;                              // Stub block for volatile objects
+    gc_program_generic_type_table_t generic_types; // New: `Foo<T> {}` literals per fn, sorted by (fn_off, idx), each fn's entries contiguous from its generic_types_off
 };
+
+/// A `Foo<T> {}` literal in the body of fn `fn_off`, its `idx`-th: `type_desc` is the type it builds, `T` resolved
+/// for a fn monomorphized onto a specialization, erased for the generic's own fn.
+typedef struct gc_program_generic_type {
+    u32_t fn_off;
+    u32_t idx;
+    u32_t s_type_off;
+    u32_t type_desc;
+} gc_program_generic_type_t;
+
+typedef struct gc_program_generic_type_table {
+    gc_program_generic_type_t *data;
+    u32_t size;
+    u32_t capacity;
+} gc_program_generic_type_table_t;
 ```
 
 #### gc_object_type_t
@@ -711,6 +727,8 @@ struct gc_program_function {
     u32_t params_s_type_off[GC_ABI_FUNCTION_MAX_PARAMS];  // Parameter specialized type offsets
     u32_t signature_symbols[GC_ABI_FUNCTION_MAX_PARAMS];  // Parameter name symbols
     u32_t tags[gc_compiler_tags_max];                     // Compiler tags (max 2)
+    u32_t generic_types_off;        // Slice of gc_program_t.generic_types the body's `push_obj_g` ops index (new)
+    u32_t nb_generic_types;         // Number of entries in that slice (new)
 };
 ```
 
@@ -927,7 +945,7 @@ typedef struct gc_program_op {
 The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 
 <details>
-<summary>Full opcode list (85 opcodes, 0-84)</summary>
+<summary>Full opcode list (86 opcodes, 0-85)</summary>
 
 | Value | Name | Description |
 |-------|------|-------------|
@@ -977,6 +995,7 @@ The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 | 79-82 | `break` / `break_for_in` / `continue` / `continue_for_in` | Loop control flow |
 | 83 | `volatile_mod` | Volatile module access |
 | 84 | `jol` | Jump on log level greater than machine log level |
+| 85 | `push_obj_g` | `push_obj` of the type the fn's `operand`-th `Foo<T> {}` literal builds (new) |
 
 </details>
 

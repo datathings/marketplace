@@ -280,7 +280,6 @@ typedef struct {
 | `gc_buffer__add_escaped_char(self, c)` | Append a character with JSON escaping |
 | `gc_buffer__add_escaped_str(self, str, len)` | Append a string with JSON escaping |
 | `gc_buffer__add_str_escaped(self, c, len, sep)` | Append with escape using a custom separator |
-| `gc_buffer__add_str_doubled(self, c, len, sep)` | Append with doubled separator escaping |
 | `gc_buffer__add_ident_protected(self, c, len)` | Append with identifier-safe characters |
 | `gc_buffer__trim(self)` | Remove trailing whitespace |
 

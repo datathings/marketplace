@@ -182,19 +182,20 @@ greycat test test_echo          # run a single test by name
 
 ### Creating users
 
-`greycat run` boots the runtime - creating `gcdata/` and the user database on first use - and can execute any
-function, including a stdlib static. So the blessed one-shot way to create a login user is a single command,
-no server and no setup wrapper needed:
+`greycat user` and `greycat token` work on the project's store whether or not a server is running on it, and
+create the store on a brand-new project (see [cli.md](cli.md) "Store commands"). So a login user is a few
+commands, no setup wrapper needed:
 
 ```sh
-greycat run runtime::Identity::create alice user         # user "alice", role "user"
-greycat run runtime::Identity::set_password alice s3cret
+greycat user add alice user                              # user "alice", role "user"
+greycat run runtime::Identity::set_password alice s3cret # no server running
+greycat call runtime::Identity::set_password alice s3cret  # a server running
 greycat token --user=alice                               # mint their token
 ```
 
-Arguments after the function are JSON-parsed and bound to the parameters (see [cli.md](cli.md)), so `alice` /
-`user` bind to `Identity::create(name: String, role: String)`. The role must already exist - `user` and
-`admin` are built in; declare custom ones with `@role` in `project.gcl`.
+The role must already exist - `user` and `admin` are built in; declare custom ones with `@role` in
+`project.gcl`. `greycat run` and `greycat call` bind the arguments after the function to its parameters (see
+[cli.md](cli.md)), so any `runtime::Identity` function is one command away.
 
 For several users at once, wrap the calls in a function and run that:
 
@@ -270,7 +271,7 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 | Inspect a `.gcb` file from disk  | `greycat print path/to/file.gcb` (use `--format=json` for JSON).                                              |
 | Inspect the compiled bytecode    | `greycat bytecode`.                                                                                           |
 | Reset everything                 | `rm -rf gcdata/ bin/ lib/` then `greycat install` + `greycat serve`. **Data loss.**                           |
-| Add a new user                   | `greycat run runtime::Identity::create alice admin` then `greycat token --user=<name>`. See "Creating users". |
+| Add a new user                   | `greycat user add alice admin` then `greycat token --user=alice`. See "Creating users".                       |
 | See what's running               | `Task::running()` from GCL, or hit the corresponding admin endpoint over RPC.                                 |
 | Cancel a stuck task              | `Task::cancel(task_id)`.                                                                                      |
 | Run a one-shot migration script  | Write a function, then `greycat run my_migration_fn`.                                                         |

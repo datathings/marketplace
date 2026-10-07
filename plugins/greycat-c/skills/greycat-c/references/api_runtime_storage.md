@@ -111,10 +111,10 @@ typedef struct {
 } gc_periodicity_t;
 
 /// Task classes, ordered by weight. A worker of class c runs tasks of any class <= c: large workers
-/// also drain regular and small tasks, regular workers also drain small ones.
+/// also drain medium and small tasks, medium workers also drain small ones.
 typedef enum {
     gc_task_class_small = 0,
-    gc_task_class_regular = 1,
+    gc_task_class_medium = 1,
     gc_task_class_large = 2,
     gc_task_class__len = 3,
 } gc_task_class_t;
@@ -122,7 +122,7 @@ typedef enum {
 typedef struct {
     bool immediate;            // default true
     bool activated;            // default true
-    u8_t task_class;           // gc_task_class_t; set it explicitly, `{}` gives small. Out of range runs as regular
+    u8_t task_class;           // gc_task_class_t; set it explicitly, `{}` gives small. Out of range runs as medium
     i64_t start_time_us;       // default: current time (µs since epoch)
     i64_t max_duration_us;     // 0 for unlimited
 } gc_periodic_options_t;
@@ -266,7 +266,7 @@ task.periodicity.config.fixed.every_us = 60LL * 1000 * 1000;
 
 task.options.immediate = true;   // also fire once right away
 task.options.activated = true;
-task.options.task_class = gc_task_class_regular;  // zero-init gives small: set it explicitly
+task.options.task_class = gc_task_class_medium;  // zero-init gives small: set it explicitly
 
 if (gc_scheduler__add(gc_host__scheduler(host), task, galloc)) {
     // Optional: materialize a runtime::PeriodicTask object for logging
@@ -344,7 +344,8 @@ typedef union {
 typedef enum {
     gc_env_options__none = 0,
     gc_env_options__log,
-    gc_env_options__logfile,
+    /// Formerly `logfile`: same slot, so the numbering below is unchanged.
+    gc_env_options__reserved_2,
     gc_env_options__cache,
     gc_env_options__backup_path,
     gc_env_options__max_backup_files,
@@ -393,6 +394,9 @@ typedef enum {
     gc_env_options__token,
     gc_env_options__workers_large,
     gc_env_options__max_args_memory,
+    gc_env_options__cache_ratio_small,
+    gc_env_options__cache_ratio_large,
+    gc_env_options__task_class,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -402,7 +406,7 @@ typedef enum {
 
 **New in 8.4:** `gc_env_options__openapi` (bool, `GREYCAT_OPENAPI` / `--openapi`, default `true`) — when on, the `OpenApi::v3()` document includes every `@expose`d function (filtered by the caller's permissions); when off, only `@tag("openapi")` ones.
 
-**Also new in 8.4 (appended after `openapi`, so `gc_env_options_len` grew by 4):**
+**Also new in 8.4 (appended after `openapi`, so `gc_env_options_len` grew by 4 (3 more after that, see below)):**
 
 | Variant | Slot | CLI / env | Default | Meaning |
 |---------|------|-----------|---------|---------|
@@ -416,9 +420,13 @@ typedef enum {
 | Variant | CLI / env | Default | Meaning |
 |---------|-----------|---------|---------|
 | `gc_env_options__workers_small` | `--workers_small` / `GREYCAT_WORKERS_SMALL` | `2` | **Renamed from `gc_env_options__req_workers`** (same slot/value; source-breaking only for code naming the old enumerator; CLI `--req_workers` is gone). Task workers for the small class, which RPC requests run as; added to `--workers`. `serve` only. |
-| `gc_env_options__workers_large` | `--workers_large` / `GREYCAT_WORKERS_LARGE` | `0` | **New, appended before `gc_env_options_len`.** How many of `--workers` serve the large class (the rest serve regular tasks); idle large workers also drain regular and small tasks. Sub-tasks spawned by `await` run in their parent's class. `run`, `serve`, `test`. |
+| `gc_env_options__workers_large` | `--workers_large` / `GREYCAT_WORKERS_LARGE` | `0` | **New, appended before `gc_env_options_len`.** How many of `--workers` serve the large class (the rest serve medium tasks); idle large workers also drain medium and small tasks. Sub-tasks spawned by `await` run in their parent's class. `run`, `serve`, `test`. |
 | `gc_env_options__host_perf_step` | `--host_perf_step` / `GREYCAT_HOST_PERF_STEP` | `60s` (was `10s`) | **Renamed from `gc_env_options__usage_step`** (upstream `e7630e693`; same slot/value — source-breaking only for code naming the old enumerator; `--usage_step` is refused, `GREYCAT_USAGE_STEP` ignored). Period of the `HostPerf` record logged at `perf`/`trace` level. |
 | `gc_env_options__max_args_memory` | `--max_args_memory` / `GREYCAT_MAX_ARGS_MEMORY` | `1 MiB` | **New (upstream `e7630e693`), appended before `gc_env_options_len`.** RPC arguments larger than this are streamed to the task's arguments file instead of held in memory (`Task::body()` is then `null`; headers stay readable). JSON-RPC envelopes always stay in memory. |
+| `gc_env_options__cache_ratio_small` | `--cache_ratio_small` / `GREYCAT_CACHE_RATIO_SMALL` | `0.4` (`.f64`) | **New (upstream `dccdde5c0`), appended before `gc_env_options_len`.** Object cache of a small worker relative to a medium one (1 unit); must be > 0. |
+| `gc_env_options__cache_ratio_large` | `--cache_ratio_large` / `GREYCAT_CACHE_RATIO_LARGE` | `3.0` (`.f64`) | **New**, same. Object cache of a large worker relative to a medium one; must be > 0. The workers' cache (3/4 of `--cache`) is split by class by these ratios. |
+| `gc_env_options__task_class` | `--task_class` / `GREYCAT_TASK_CLASS` | `"medium"` (`small` / `medium` / `large`) | **New**, same. Worker class `greycat call` sends as the `task` header. |
+| `gc_env_options__reserved_2` | — | — | **Renamed from `gc_env_options__logfile`** (same slot). `--logfile` is **removed** from the CLI (the log is the `log` stream). Source-breaking only for code naming the old enumerator. |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples

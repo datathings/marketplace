@@ -280,13 +280,27 @@ The lexer accepts any letter sequence as a suffix; the lang validates whether it
 
 ```gcl
 "hello"
-"with newline\n"                    // escapes: \n \r \t \a \b \f \v \uXXXX \u{1F600}; any other escaped char stands for itself (\\ \" \' \$)
+"with newline\n"                    // escapes listed below
 "interpolation: ${expr}"            // ${...} contains an arbitrary expression
 "nested: ${a + b * c}"
 ""                                  // empty string
 ```
 
 Strings are double-quoted only. Single quotes are reserved for `char` and `time` literals.
+
+Strings and chars share one set of escapes. Any other escape, and a `\u` escape that does not name a
+codepoint (more than 6 digits, above `10FFFF`, a surrogate such as `\ud800`), is a compile error.
+
+| Escape | Meaning |
+| --- | --- |
+| `\n` `\r` `\t` | newline, carriage return, tab |
+| `\0` | NUL |
+| `\\` `\"` `\'` | backslash, double quote, single quote |
+| `\$` | a literal `$`, so `"\${x}"` is not an interpolation |
+| `\u{1F600}` | the codepoint with these 1 to 6 hex digits |
+| `\u00E9` | the codepoint with these exactly 4 hex digits |
+
+There is no `\a`, `\b`, `\e`, `\f`, `\v`, `\x..`, octal or `\U`. Write `\u{1b}` for ESC, for example.
 
 ### Chars
 
@@ -296,7 +310,8 @@ Strings are double-quoted only. Single quotes are reserved for `char` and `time`
 'é'            // unicode codepoint
 ```
 
-A `char` literal contains exactly one character (or escape).
+A `char` literal holds exactly one codepoint: one character or one escape. `'ab'`, `''` and
+`'e\u{301}'` (an `e` and a combining accent) are compile errors.
 
 ### Time literals
 

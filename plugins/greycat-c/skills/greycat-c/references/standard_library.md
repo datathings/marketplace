@@ -424,7 +424,7 @@ type PeriodicOptions {
   activated: bool?;       // default true
   start: time?;           // default time::now()
   max_duration: duration?;// force-cancel after this; null = unlimited
-  task_class: TaskClass?; // worker class each run executes in; default regular (new, upstream `e7630e693`)
+  task_class: TaskClass?; // worker class each run executes in; default medium
 }
 Scheduler::add(health_check, FixedPeriodicity { every: 5min },
   PeriodicOptions { start: time::now() + 1hour, max_duration: 30s });
@@ -475,6 +475,7 @@ type Task {
   completion: time?;
   status: TaskStatus;
   progress: float?;
+  task_class: TaskClass?;   // class the task runs in after fallback; null when read from history
   // static native fns:
   //   expected_steps(total_expected_steps: int)
   //   add_steps(steps: int)
@@ -490,19 +491,19 @@ type Task {
   //   history(offset, max): Array<Task>  (@expose @reserved)
   //   events()                           (@expose @reserved; new in 8.4 — SSE, see below)
   //   cancel(task_id): bool              (@expose @reserved)
-  //   is_running(task_id): bool          (@expose)
+  //   is_running(task_id): bool          (@expose @reserved)
   //   live(ids): Array<bool>             (@expose; one bool per id, false for unknown/inaccessible)
   //   tasks(ids): Array<Task?>           (@expose; null entries for unknown/inaccessible tasks)
 }
 ```
 
-**`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. Every root task the caller may see (same rule as `running` / `history`) emits one `event: task-started` frame when its code starts running (not again on resume from `await`; new, upstream `e7630e693`), `event: task-progress` frames while it reports progress and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
+**`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. **Only the caller's own tasks are streamed** (**breaking**, upstream `dccdde5c0`: whatever the role or grants; use `running` / `history` / `live` to watch others). Every root task the caller created emits one `event: task-started` frame when its code starts running (not again on resume from `await`), `event: task-progress` frames while it reports progress, `event: task-breakpoint` / `event: task-resumed` when it pauses on a `breakpoint` and goes on, and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
 
 **RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is now the task dir for RPC calls too (`/files/<user_id>/tasks/<task_id>/`; the old `requests/<timestamp>/` dir is gone).
 
-**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `regular`; a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `regular`; unknown value → `400`). **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
+**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `medium` (**`regular` renamed `medium`**, upstream `dccdde5c0`: `TaskClass::medium`, `gc_task_class_medium`, `HostPerf.medium`, `--task_class medium`); a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `medium`; unknown value → `400`; the `greycat call` CLI sends `--task_class`, default `medium`). `Task.task_class: TaskClass?` reports the class a live task runs in (`null` when read back from history). The workers' object cache (3/4 of `--cache`) is split by class: medium = 1 unit, small = `--cache_ratio_small` (0.4), large = `--cache_ratio_large` (3). A task request for a `@reserved` function is answered without a task (marked `task: none`), and a reserved stub called from GCL raises. **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
 ```gcl
-enum TaskClass { small; regular; large; }
+enum TaskClass { small; medium; large; }
 ```
 
 #### Job<T> & await
@@ -510,11 +511,11 @@ enum TaskClass { small; regular; large; }
 type Job<T> {
   function: core::function;
   arguments: Array<any?>?;
-  task_class: TaskClass?;   // null: regular for spawn, the awaiting task's class for await (new)
+  task_class: TaskClass?;   // null: medium for spawn, the awaiting task's class for await (new)
   // native fn result(): T
 }
-enum MergeStrategy { strict; first_wins; last_wins; }
-// native fn await(jobs: Array<Job>, strategy: MergeStrategy)
+// native fn await(jobs: Array<Job>)   // MergeStrategy removed (upstream `dccdde5c0`, breaking): merges are strict only,
+//   key-by-key for nodeTime/nodeIndex/nodeList/nodeGeo; the same key/field changed to different values throws and keeps nothing
 ```
 
 ### Logging
@@ -539,9 +540,9 @@ error("Failed to connect: ${error_message}");
 trace("Processing item ${id}");
 ```
 
-Read the log back as root with `Stream::get("log", Log).reader(from)`, or with any `JsonReader<Log>`. `src`, `user_id`, `task_id` and `job_id` are null for records the runtime emits outside any task. Objects in `data` are written with their `_type` and read back as that type (or as a `Map` when the reader does not define it / it no longer matches; see `JsonReader::type_tag`). **Breaking (upstream `e7630e693`):** `Log.id` / `Log.id2` renamed `task_id` / `job_id`, in the stream JSON too. A record whose `src` names a function the reading program no longer defines fails to parse — when writer and reader are different programs, read the file as `JsonReader<Map<String, any?>>`:
+Read the log back as root with `Stream<Log>::get("log").reader(from)`, or with any `JsonReader<Log>`. `src`, `user_id`, `task_id` and `job_id` are null for records the runtime emits outside any task. Objects in `data` are written with their `_type` and read back as that type (or as a `Map` when the reader does not define it / it no longer matches; see `JsonReader::type_tag`). **Breaking (upstream `e7630e693`):** `Log.id` / `Log.id2` renamed `task_id` / `job_id`, in the stream JSON too. A record whose `src` names a function the reading program no longer defines fails to parse — when writer and reader are different programs, read the file as `JsonReader<Map<String, any?>>`:
 ```gcl
-var r = Stream::get("log", Log).reader(0);          // as root
+var r = Stream<Log>::get("log").reader(0);          // as root
 while (r.can_read()) { var rec = r.read(); }
 var raw = JsonReader<Map<String, any?>> { path: "files/root/streams/log.ndjson" };
 ```
@@ -573,7 +574,7 @@ type HostPerf {   // every --host_perf_step; counters cover `period`, the rest a
   http_connections: int; sse_subscribers: int; http_bytes_in: int; http_bytes_out: int;
   files_served: int; files_pushed: int; http_max_in: int; http_max_out: int; http_max_file: int;
   top_out: Array<HostPerfUser>; top_in: Array<HostPerfUser>; top_files: Array<HostPerfUser>;
-  small: HostPerfClass; regular: HostPerfClass; large: HostPerfClass;
+  small: HostPerfClass; medium: HostPerfClass; large: HostPerfClass;
   zones: HostPerfZones;
 }
 @volatile type HostPerfUser { user_id: int; bytes_in: int; bytes_out: int; files_served: int; files_pushed: int; }
@@ -596,19 +597,22 @@ type RuntimeInfo {
   timezone: TimeZone;
   license: License;
   io_threads: int;
-  bg_threads: int;
-  fg_threads: int;
-  mem_total: int;
-  mem_worker: int;
+  mem_total: int;       // --cache; mem_workers = the part the task workers share, the rest backs the store zones
+  mem_workers: int;
+  small: RuntimeInfoClass; medium: RuntimeInfoClass; large: RuntimeInfoClass;
   disk_data_bytes: int;
 }
+// @volatile type RuntimeInfoClass { workers: int; mem_worker: int; cache_ratio: float; }   // per worker class
+// (breaking, upstream `dccdde5c0`: bg_threads / fg_threads removed, mem_worker -> mem_workers + per-class mem_worker)
 
 type Runtime {
   // @expose @permission("debug"): info(): RuntimeInfo, root(): any   (usage() removed upstream `e7630e693`)
   // @expose @reserved @permission("api"): abi()
   // static native fns: sbi_tree(node: any?): Array<Tuple<int, int>>?, sleep(d: duration), backup_delta(), defrag(),
   //   on_files_put(handler: function?)
-  // @expose @permission("admin"): backup_full()
+  // @expose @permission("admin"): backup_full(): String   (now returns the archive path)
+  // @expose @permission("admin"): store_stats(): StoreStats  (new; live blocks/bytes by type vs file bytes on disk, damaged blocks,
+  //   unreadable zones; reads every live block, as long as a full backup)
 }
 
 var info = Runtime::info();
@@ -696,6 +700,9 @@ type Identity {
   // @expose                       static native fn set_password(name: String, pass: String): bool
   // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
   // @expose                       static native fn set_role(name: String, role: String)
+  // @expose @permission("admin")  static native fn remove(name: String): bool   (new; public/root cannot be removed)
+  // @expose @permission("admin")  static native fn grant(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access added)
+  // @expose @permission("admin")  static native fn revoke(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access removed)
 }
 
 var me        = Identity::current();
@@ -800,7 +807,7 @@ type BinReader {
 #### JsonWriter<T> / JsonReader<T>
 NDJSON (one JSON value per line). `JsonWriter` adds `writeln(v: T)`.
 
-**`type_tag` (new, upstream `e7630e693`).** `JsonWriter.type_tag: bool?` — when true every object (nested included) is written with `"_type":"<fqn>"`, not only subtypes. `JsonReader.type_tag` / `Json.type_tag: JsonTypeTag?` — read tagged objects as that type where `any` is expected (null: read as `Map`; where a concrete type is expected `_type` is ignored, as are undeclared fields).
+**`type_tag` (new, upstream `e7630e693`).** `JsonWriter.type_tag: bool?` — when true every object (nested included) is written with `"_type":"<fqn>"`, not only subtypes. `JsonReader.type_tag` / `Json<T>::parse_tagged(data, type_tag)` — read tagged objects as that type where `any` is expected (null: read as `Map`; where a concrete type is expected `_type` is ignored, as are undeclared fields).
 ```gcl
 enum JsonTypeTag {
   lenient;  // never throws on `_type`: an object that does not read as the named type is a Map (`_type` kept)
@@ -821,11 +828,11 @@ while (reader.can_read()) { process(reader.read()); }
 Parse / serialize JSON strings.
 ```gcl
 type Json<T> {
-  type_tag: JsonTypeTag?;   // same as JsonReader::type_tag, for parse (new)
-  // native fn parse(data: String): T
+  // static native fn parse(data: String): T                                  (now static: `Json<T>::parse(data)`, builds no instance; breaking)
+  // static native fn parse_tagged(data: String, type_tag: JsonTypeTag): T    (replaces the `type_tag` field; see JsonReader::type_tag)
   // static native fn to_string(value: any?): String
 }
-var obj  = Json<Person> {}.parse("{\"name\":\"Alice\",\"age\":30}");
+var obj  = Json<Person>::parse("{\"name\":\"Alice\",\"age\":30}");
 var text = Json::to_string(obj);
 ```
 
@@ -1029,8 +1036,8 @@ An append-only buffer that absorbs a high-rate, concurrent write stream of `T` v
 type Stream<T> {
   native fn last_written_pos(): int;       // offset just past the last value appended
   native fn name(): String;
-  native static fn new<T>(name: String, type: typeof T, callback: function, max_dephasing: duration, durable: bool): Stream<T>;
-  native static fn get<T>(name: String, type: typeof T): Stream<T>;   // type must match registration
+  native static fn new(name: String, callback: function, max_dephasing: duration, durable: bool): Stream<T>;   // T from the call: Stream<Event>::new(...)
+  native static fn get(name: String): Stream<T>;   // Stream<Event>::get(name); T must match registration; a bare `Stream` raises
   native fn reader(from: int): JsonReader<T>;   // values in [from, last_written_pos() at call time)
   native fn write(value: T);               // concurrent-safe; an object must be exactly T (no subtype)
 }
@@ -1044,7 +1051,7 @@ type IngestState { pos: int; }
 var ingest: node<IngestState?>;
 
 fn on_events() {
-  var s = Stream::get("ingest/events", Event);
+  var s = Stream<Event>::get("ingest/events");
   var state = ingest.resolve() ?? IngestState { pos: 0 };
   var end = s.last_written_pos();          // capture before draining
   var r = s.reader(state.pos);
@@ -1054,7 +1061,7 @@ fn on_events() {
 }
 
 fn start() {
-  var s = Stream::new("ingest/events", Event, on_events, 500ms, true);
+  var s = Stream<Event>::new("ingest/events", on_events, 500ms, true);
   s.write(Event { id: 1, payload: "hello" });
 }
 ```

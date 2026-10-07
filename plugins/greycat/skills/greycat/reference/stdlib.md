@@ -440,7 +440,7 @@ while (!walker.isEmpty()) {
 
 ```gcl
 Json::to_string(any_value);            // serialize
-Json<MyType>{}.parse(json_str);        // typed deserialize
+Json<MyType>::parse(json_str);         // typed deserialize
 ```
 
 Typed reader for NDJSON streams. Works with polymorphism — the parser dispatches to the concrete subtype based on the JSON shape:
@@ -521,7 +521,7 @@ Url::encode(m);                             // "name=John&age=42"
 
 Every RPC call runs as a task, and these reach the parts of its request `@expose` does not
 pass as arguments. All four answer `null` for a task that answers no request (`greycat run`,
-the scheduler, a `task: true` call, an `await` job).
+the scheduler, a call with a `task` header, an `await` job).
 
 ```gcl
 Task::header("x-signature");              // String?, name matched case-insensitively
@@ -625,7 +625,7 @@ vi.search(query_vector, 10);       // Array<SearchResult<Tensor, MyType>>
 ## Runtime introspection
 
 ```gcl
-Runtime::info();                   // RuntimeInfo (version, license, threads, ...)
+Runtime::info();                   // RuntimeInfo (version, license, workers and cache per class, ...)
 Runtime::sleep(1s);
 Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();

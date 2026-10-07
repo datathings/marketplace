@@ -20,7 +20,7 @@ Playwright only for browser behavior.
 ```
 - [ ] Add @playwright/test to package.json; install with `vp install`
 - [ ] Install the browser: `pnpm exec playwright install chromium`
-- [ ] Create a login user (auth is the default) while no server holds the gcdata lock
+- [ ] Create a login user (auth is the default) with `greycat user add`
 - [ ] Add playwright.config.ts (webServer + a `setup` project for auth)
 - [ ] Write e2e/auth.setup.ts (log in once, save storageState)
 - [ ] Write specs that self-isolate their data
@@ -45,11 +45,13 @@ pnpm exec playwright install chromium   # download the browser binary
 ```
 
 **A real login user is required.** A bare `@expose` needs the `api` permission, so tests authenticate as a
-user. Create one when no server holds the `gcdata/` lock (before `greycat dev` starts):
+user. `greycat user add` creates one whether or not `greycat dev` is running. The password is set with `run`
+before the server starts, or with `call` while it runs:
 
 ```sh
-greycat run runtime::Identity::create e2e user
-greycat run runtime::Identity::set_password e2e <password>
+greycat user add e2e user
+greycat run runtime::Identity::set_password e2e <password>    # no server running
+greycat call runtime::Identity::set_password e2e <password>   # greycat dev running
 ```
 
 ## `playwright.config.ts`

@@ -148,7 +148,7 @@ Without `@permission`, an `@expose` function defaults to requiring `api` (authen
 
 ### `@reserved`
 
-Hint that the function has a **server-side implementation only** — no GCL-level body the VM can dispatch to. Calls go through the server's HTTP/RPC path; GCL code cannot invoke a `@reserved` function directly. Typically paired with `@expose` + `native` on stdlib introspection / admin endpoints.
+Marks a stdlib function the server answers from its HTTP thread, **without taking a task slot**, even for a call with a `task` header (the answer then carries the response header `task: none`). Some of them also have a native the VM runs when GCL code calls them (`Task::running`, `Task::cancel`, `Task::is_running`). The others raise a runtime error there. Typically paired with `@expose` + `native` on stdlib introspection / admin endpoints. A `@reserved` function the server has no answer for is answered `500`.
 
 ```gcl
 @expose

@@ -69,7 +69,7 @@ greycat run                                  # runs main()
 greycat run foo 42 hello '{"name":"John"}'   # foo(42, "hello", Person { name: "John" })
 ```
 
-The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it.
+The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it. When stderr is a TTY, a progress bar shows once the function has run 500ms, with the percentage it reports through `Task::expected_steps` / `Task::add_steps`.
 
 ### `greycat call <function> [args...]`
 
@@ -77,10 +77,21 @@ Calls an `@expose`d function **on a running server** as a task, waits for it, an
 
 - `call` first downloads the server's ABI (`runtime::Runtime::abi`) and resolves `function` and its signature from it. Arguments follow the same rules as [`greycat run`](#greycat-run-function), checked against that signature before the call is made: `greycat call api::add 2 3`, `greycat call api::greet John`, `greycat call api::area '{"_type":"api::Circle","radius":2}'`.
 - Arguments and result travel as GCB, the binary encoding of that ABI. The ABI carries the full parameter types, generics included: `'[1, "a"]'` for an `Array<float>` parameter fails before the call is made.
-- `--url` (`GREYCAT_URL`) selects the server, default `http://localhost:<port>` from `--port`.
+- `--url` (`GREYCAT_URL`) selects the server. Without it, the server is `http://localhost:<port>`: the `--port` given, else the port the server holding this project's store wrote to `gcdata/security/port`, else the default `8080`.
 - `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
+- `--task_class` (`GREYCAT_TASK_CLASS`) picks the worker class the server runs the task in: `small`, `medium` (the default) or `large`. A class the server has no workers for runs in the nearest one that has some.
 - The task is followed through the server's event stream (`runtime::Task::events`). When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
 - The result prints like `run`'s: GCL notation, or JSON with `--format=json`; `--pretty` indents it. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, an argument does not read, or the token is rejected. Ctrl-C cancels the remote task.
+- A `@reserved` function (`runtime::Task::history`, `runtime::Task::running`, ...) is answered by the server directly rather than as a task, and `call` reads that answer. `runtime::Task::events` (a stream of events) and `runtime::Runtime::abi` (the ABI file) answer with no value to print, so `call` refuses them.
+
+### Store commands: in place or through the server
+
+`backup`, `print`, `stats`, `token` and `user` work on the project's store, whether or not a server is running on it. Each runs one std function (`print` only needs the program):
+
+- **No server holds the store** (`gcdata/lock` is free): the command takes the lock and runs the function in this process, as root, like `greycat run`.
+- **A server holds it**, or `--url` is given: the command calls the function on that server, as [`greycat call`](#greycat-call-function-args) does, with the same `--url`, `--port` and `--token` options. Run from the project directory, it finds the server's port and root token under `gcdata/security/`, so it needs no flag.
+
+The output is the same either way. The server-side functions are `runtime::Runtime::backup_full`, `runtime::Runtime::store_stats`, `runtime::Identity::token` and the other `runtime::Identity` functions, all callable directly too.
 
 ### `greycat serve`
 
@@ -182,7 +193,7 @@ Set `GREYCAT_CORE=1` to generate bindings for the `std` library itself (used by 
 
 ### `greycat print <file.gcb>`
 
-Pretty-prints the content of a `.gcb` (GreyCat Binary) file. `--format=json` for JSON output. `--pretty` is a boolean flag (default on); unset `GREYCAT_PRETTY` env var for compact output.
+Pretty-prints the content of a `.gcb` (GreyCat Binary) file, decoded with the program of the store, or of the server holding it (see [Store commands](#store-commands-in-place-or-through-the-server)). A project with no store yet is built first. `--format=json` for JSON output. `--pretty` is a boolean flag (default on); unset `GREYCAT_PRETTY` env var for compact output.
 
 ### `greycat bytecode`
 
@@ -190,11 +201,11 @@ Builds the project and dumps its compiled bytecode to stdout. Diagnostic tool �
 
 ### `greycat defrag`
 
-Loads the program against the existing `gcdata/`, then compacts the data files. Reduces on-disk size after large deletes / overwrites.
+Loads the program against the existing `gcdata/`, then compacts the data files. Reduces on-disk size after large deletes / overwrites. Needs the store to itself: it fails while a server holds `gcdata/lock`, which compacts online on its own (`--defrag_ratio`).
 
 ### `greycat backup`
 
-Writes a full or incremental backup to `GREYCAT_BACKUP_PATH` (default `./backup/`). Use `Runtime::backup_full()` / `Runtime::backup_delta()` from GCL for in-process backups instead.
+Writes a full backup with `Runtime::backup_full()`, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)). The archive goes to the backup path of whichever runs it: `GREYCAT_BACKUP_PATH` (default `./backup/`). A backup that fails removes its partial archive. Use `Runtime::backup_full()` / `Runtime::backup_delta()` from GCL for in-process backups.
 
 ### `greycat restore <archive>`
 
@@ -202,11 +213,11 @@ Restores `gcdata/` from a backup archive. `--verify` validates archive integrity
 
 ### `greycat token`
 
-Issues a session token for a user (default user id `1` = `root`). `--user=<id>` to choose, `--validity=<duration>` to set TTL (e.g. `1day`, `60min`, `3600s` — short forms like `1h` are not accepted).
+Issues a session token with `Identity::token`, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)). `--user=<name|id>` chooses the user, default id `0` (`public`). `--validity=<duration>` sets the TTL (e.g. `1day`, `60min`, `3600s`; short forms like `1h` are not accepted), default the validity the store or server is configured with.
 
 ### `greycat user <subcmd> ...`
 
-User administration on the embedded LMDB-backed security DB.
+User administration with the `runtime::Identity` functions, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)).
 
 ```
 greycat user list                              list all users
@@ -220,11 +231,11 @@ greycat user revoke <name> r|w|rw <target>     remove a previously-granted acces
 
 Built-in users: `id=0` (`public`, anonymous), `id=1` (`root`, role `admin`). Built-in roles live in `lib/std/runtime.gcl`: `public`, `user`, `admin`.
 
-These subcommands operate on the security DB, which is created on the first `serve`/`run`. On a brand-new project they fail with `failed to open users database` until the runtime has booted once. To create the first user in one step, use `greycat run runtime::Identity::create <name> <role>`, which boots the runtime and creates the DB (see [workflow.md](workflow.md) "Creating users").
+On a brand-new project with no store yet, they build it first, so users can be set up before the first `serve`. Setting a password has no subcommand: `greycat run runtime::Identity::set_password <name> <password>` with no server running, `greycat call runtime::Identity::set_password <name> <password>` with one.
 
 ### `greycat stats`
 
-Prints storage and program stats (zone sizes, fragmentation, type counts). Read-only.
+Prints storage stats (live data, space on disk, fragmentation, size and count by type, damaged blocks) from `Runtime::store_stats()`, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)). Read-only. Exits non-zero when part of the store would not read.
 
 ### `greycat build-version` / `greycat build-version-full`
 
@@ -237,15 +248,16 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | Option / env                            | Default            | Applies to                          | Meaning                                                                                                                                                                                                                            |
 | --------------------------------------- | ------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--log` / `GREYCAT_LOG`                 | `info`             | `run`, `serve`, `dev`, …            | Log level: `none`, `error`, `warn`, `info`, `perf`, `trace`.                                                                                                                                                                       |
-| `--logfile` / `GREYCAT_LOGFILE`         | `false`            | `run`, `serve`                      | Not consulted by the runtime. Logs always go to `files/root/log.csv` (see [runtime.md](runtime.md)); stdout carries them only on a TTY.                                                                                             |
-| `--cache` / `GREYCAT_CACHE`             | 75% of host memory | `run`, `serve`                      | Worker object-cache size. Suffixes: `K`/`M`/`G`/`T` (binary), `KB`/`MB`/`GB`/`TB` (decimal), `KiB`/`MiB`/`GiB`/`TiB`.                                                                                                              |
+| `--cache` / `GREYCAT_CACHE`             | 75% of host memory | `run`, `serve`                      | Object cache size. 3/4 is shared by the task workers (see `--cache_ratio_small` / `--cache_ratio_large`), 1/4 backs the store zones. Suffixes: `K`/`M`/`G`/`T` (binary), `KB`/`MB`/`GB`/`TB` (decimal), `KiB`/`MiB`/`GiB`/`TiB`.                                                                                                              |
 | `--store` / `GREYCAT_STORE`             | 1 GB               | `run`, `serve`                      | Per-zone storage cap.                                                                                                                                                                                                              |
 | `--port` / `GREYCAT_PORT`               | `8080`             | `serve`, `dev`                      | HTTP port. Set to `0` to pick a random free port (printed at startup).                                                                                                                                                             |
 | `--webroot` / `GREYCAT_WEBROOT`         | `webroot`          | `serve`, `dev`                      | Project directory served at `/`. Library assets in `lib/<name>/webroot/` are served too and are not affected by this option.                                                                                                        |
-| `--workers` / `GREYCAT_WORKERS`         | host CPU count     | `run`, `serve`, `test`              | Number of GreyCat task workers.                                                                                                                                                                                                    |
-| `--workers_large` / `GREYCAT_WORKERS_LARGE`| `0`                | `run`, `serve`, `test`              | How many of `--workers` run large tasks; when idle they also run regular and small ones.                                                                                                                                           |
+| `--workers` / `GREYCAT_WORKERS`         | host CPU count     | `run`, `serve`, `test`              | Task workers in total, split into the small, medium and large classes; medium takes what small and large leave and keeps at least one. |
+| `--workers_large` / `GREYCAT_WORKERS_LARGE` | 10% of `--workers` | `run`, `serve`, `test`              | How many of `--workers` run large tasks (rounded half up, so none below 5 workers); when idle they also run medium and small ones. |
+| `--cache_ratio_small` / `GREYCAT_CACHE_RATIO_SMALL` | `0.4`              | `run`, `serve`, `test`              | Object cache of one small worker, relative to one medium worker. Must be > 0. |
+| `--cache_ratio_large` / `GREYCAT_CACHE_RATIO_LARGE` | `3`                | `run`, `serve`, `test`              | Object cache of one large worker, relative to one medium worker. Must be > 0. |
 | `--http_threads`                        | `3`                | `serve`                             | IO threads serving HTTP connections.                                                                                                                                                                                               |
-| `--workers_small` / `GREYCAT_WORKERS_SMALL` | `2`                | `serve`                             | Task workers for small tasks, which RPC requests run as. Added to `--workers`.                                                                                                                                                     |
+| `--workers_small` / `GREYCAT_WORKERS_SMALL` | 20% of `--workers` | `serve`                             | How many of `--workers` run small tasks, which RPC requests run as; rounded, at least 1 from 2 workers. `run` and `test` start none. |
 | `--user` / `GREYCAT_USER`               | `public`           | `run`, `serve`, `test`              | **Footgun.** Bypasses auth on every request, running it as `<name>`. Never propose this flag — use `greycat token` + a real `Authorization` header instead. See [runtime.md § the `--user=<name>` impersonation flag](runtime.md). |
 | `--validity` / `GREYCAT_VALIDITY`       | `24h`              | `serve`, `token`                    | TTL for session tokens.                                                                                                                                                                                                            |
 | `--tz` / `GREYCAT_TZ`                   | host TZ            | `run`, `serve`                      | Default IANA timezone (e.g. `Europe/Luxembourg`).                                                                                                                                                                                  |
