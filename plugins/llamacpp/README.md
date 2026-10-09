@@ -183,7 +183,7 @@ To update this skill for newer llama.cpp versions:
    ```bash
    cd llama.cpp
    git fetch --tags
-   LATEST_TAG=$(git tag --sort=-version:refname | grep "^b" | head -n 1)
+   LATEST_TAG=$(git tag --sort=-version:refname | grep -E "^b[0-9]+$" | head -n 1)
    git checkout "$LATEST_TAG"
    cd ..
    ```

@@ -343,16 +343,18 @@ Run a training epoch.
 #define LLAMA_FILE_MAGIC_GGSQ 0x67677371u // 'ggsq'
 
 #define LLAMA_SESSION_MAGIC   LLAMA_FILE_MAGIC_GGSN
-#define LLAMA_SESSION_VERSION 10
+#define LLAMA_SESSION_VERSION 11
 
 #define LLAMA_STATE_SEQ_MAGIC   LLAMA_FILE_MAGIC_GGSQ
-#define LLAMA_STATE_SEQ_VERSION 3
+#define LLAMA_STATE_SEQ_VERSION 4
 
 // State sequence flags
 #define LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY 1  // work only with partial states (SWA KV cache or recurrent cache)
 ```
 
-**Breaking change (b10665):** `LLAMA_SESSION_VERSION` was bumped 9 → 10 and `LLAMA_STATE_SEQ_VERSION` 2 → 3 (recurrent-state rollback support in `ggml_ssm_scan` changed the serialized layout). Session and sequence-state files written by earlier builds are rejected on load — `llama_state_load_file()` / `llama_state_seq_load_file()` will fail on them. Regenerate any cached prompt/session files after upgrading.
+**Breaking change (b11526):** `LLAMA_SESSION_VERSION` bumped 10 → 11 and `LLAMA_STATE_SEQ_VERSION` 3 → 4 — the KV-cache state now saves exact rotation metadata so restoring a mismatched KV cache rotation works. Files from earlier builds are rejected on load; regenerate them.
+
+**Earlier breaking change (b10665):** `LLAMA_SESSION_VERSION` was bumped 9 → 10 and `LLAMA_STATE_SEQ_VERSION` 2 → 3 (recurrent-state rollback support in `ggml_ssm_scan` changed the serialized layout). Session and sequence-state files written by earlier builds are rejected on load — `llama_state_load_file()` / `llama_state_seq_load_file()` will fail on them. Regenerate any cached prompt/session files after upgrading.
 
 ## Key Data Structures
 
@@ -398,6 +400,7 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `flash_attn_type`: Flash attention configuration
 - `defrag_thold`: [DEPRECATED] KV cache defrag threshold
 - `op_offload`: Offload host tensor operations to device
+- `moe_cache_size`: [EXPERIMENTAL] Device cache (bytes) for MoE experts kept in host memory, 0 = disabled (b11526+)
 - `swa_full`: Use full-size SWA cache
 - `kv_unified`: Use a unified buffer across input sequences
 - `samplers`: [EXPERIMENTAL] Backend sampler chain configuration

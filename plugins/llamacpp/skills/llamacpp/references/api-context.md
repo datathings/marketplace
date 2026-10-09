@@ -36,6 +36,8 @@ if (!ctx) {
 
 - `op_offload` (bool) - Offload host tensor operations to device for improved performance. Default: true.
 
+- `moe_cache_size` (`size_t`) - [EXPERIMENTAL] Device cache in bytes for MoE experts kept in host memory (e.g. when experts are overridden to CPU), split among the devices like the layers. Hot experts get cached on the GPU instead of being computed/streamed from host each step. `0` = disabled. Added in b11526. Default: 0.
+
 - `swa_full` (bool) - For models with Sliding Window Attention (SWA), allocate full context size instead of just the attention window. Set to true when you need to access tokens outside the SWA window. Check `llama_model_n_swa()` to detect if a model uses SWA. Default: false. Note: setting to false when `n_seq_max > 1` can cause bad performance.
 
 - `kv_unified` (bool) - Use a unified buffer across input sequences when computing attention. Try disabling when `n_seq_max > 1` for improved performance when sequences do not share a large prefix. Default: true.
@@ -314,7 +316,7 @@ bool llama_state_load_file(
 ```
 Load session from file. Returns `false` if the file's magic or version does not match the running build.
 
-**Version bump (b10665):** `LLAMA_SESSION_VERSION` is now `10` (was `9`) and `LLAMA_STATE_SEQ_VERSION` is now `3` (was `2`). Session and sequence-state files written by older builds are rejected — always check the return value and fall back to re-ingesting the prompt rather than assuming a cached session loaded.
+**Version bump (b11526):** `LLAMA_SESSION_VERSION` is now `11` (was `10`) and `LLAMA_STATE_SEQ_VERSION` is now `4` (was `3`) — the saved KV state now includes exact rotation metadata (previously bumped 9 → 10 / 2 → 3 in b10665). Session and sequence-state files written by older builds are rejected — always check the return value and fall back to re-ingesting the prompt rather than assuming a cached session loaded.
 
 ### llama_state_save_file
 ```c

@@ -27,8 +27,8 @@ git fetch --tags
 CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
 echo "Current tag: $CURRENT_TAG"
 
-# Stable releases use v#.#.# format (exclude RC tags)
-LATEST_TAG=$(git tag --sort=-version:refname | grep "^v" | grep -v "rc\|alpha\|beta" | head -n 1)
+# Stable releases use v#.#.# (or .postN) format — excludes RC tags
+LATEST_TAG=$(git tag --sort=-version:refname | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+|\.post[0-9]+)?$" | head -n 1)
 echo "Latest tag: $LATEST_TAG"
 
 if [ "$CURRENT_TAG" != "unknown" ] && [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then

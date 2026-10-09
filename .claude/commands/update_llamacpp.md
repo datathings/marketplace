@@ -30,7 +30,7 @@ CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
 echo "Current tag: $CURRENT_TAG"
 
 # Get latest b-series tag (stable releases use b#### format)
-LATEST_TAG=$(git tag --sort=-version:refname | grep "^b" | head -n 1)
+LATEST_TAG=$(git tag --sort=-version:refname | grep -E "^b[0-9]+$" | head -n 1)
 echo "Latest tag: $LATEST_TAG"
 
 # Preview changes between versions

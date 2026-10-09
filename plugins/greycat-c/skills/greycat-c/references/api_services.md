@@ -723,12 +723,12 @@ typedef void gc_sort_key_fn(void *ctx, u64_t i, gc_slot_t *slot, gc_type_t *type
 
 /// Fills `out` (at least `count` entries) with the permutation that sorts the elements `0..count` by their key: read
 /// `out[i].index`, as `out[i].value` is left holding an encoded key.
-void gc_sort__by_key(gc_sort_slot_t *out, u64_t count, gc_sort_key_fn *key, void *key_ctx, bool asc, gc_allocator_t *allocator);   // New in 8.4
+void gc_sort__by_key(gc_sort_slot_t *out, u64_t count, gc_sort_key_fn *key, void *key_ctx, bool asc, const gc_program_t *prog, gc_allocator_t *allocator);   // New in 8.4 (prog param added late in 8.4)
 ```
 
 A stable sort implementation for arrays of sort slots. The trailing `gc_allocator_t *allocator` parameter is used for temporary workspace. None of these sort functions is `gc_sdk`-exported.
 
-**New in 8.4: `gc_sort__by_key`** — the key-preparation step of `Table::sort` / `Array::sort`, extracted so callers don't hand-roll the type unification. You supply a `gc_sort_key_fn` callback (called with your `key_ctx` for each `i` in `0..count`); it fills `out` with the sorting permutation (`out[k].index` = original position of the k-th element; `out[k].value` is left holding an encoded key, don't read it). Semantics match the 8.4 stdlib sort: **non-null keys first, ordered by `asc`; null keys follow in input order** (whatever `asc`); keys of a single type sort as that type; an `int`/`float` mix sorts numerically as floats; any other mix sorts by raw bits.
+**New in 8.4: `gc_sort__by_key`** (since `e8eabaf84` it also takes `const gc_program_t *prog`, before the allocator, to resolve core type ids — breaking for early-8.4 callers) — the key-preparation step of `Table::sort` / `Array::sort`, extracted so callers don't hand-roll the type unification. You supply a `gc_sort_key_fn` callback (called with your `key_ctx` for each `i` in `0..count`); it fills `out` with the sorting permutation (`out[k].index` = original position of the k-th element; `out[k].value` is left holding an encoded key, don't read it). Semantics match the 8.4 stdlib sort: **non-null keys first, ordered by `asc`; null keys follow in input order** (whatever `asc`); keys of a single type sort as that type; an `int`/`float` mix sorts numerically as floats; any other mix sorts by raw bits.
 
 ### License
 
@@ -858,7 +858,7 @@ static void row_key(void *kctx, u64_t i, gc_slot_t *slot, gc_type_t *type) {
 gc_sort_slot_t *perm = gc_alloc__calloc(allocator, sizeof(gc_sort_slot_t) * n);
 if (perm == NULL) { gc_machine__set_runtime_error(ctx, "out of memory"); return; }
 row_key_ctx_t kctx = {self, col};
-gc_sort__by_key(perm, n, row_key, &kctx, asc, allocator);
+gc_sort__by_key(perm, n, row_key, &kctx, asc, gc_machine__program(ctx), allocator);
 // perm[k].index = original row to place at position k (nulls last)
 ```
 

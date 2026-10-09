@@ -13,6 +13,7 @@
 10. [Source Impedance Sweep](#source-impedance-sweep)
 11. [Columnar Output Format](#columnar-output-format)
 12. [Modeling Non-PGM Components](#modeling-non-pgm-components)
+13. [Voltage Regulation, Flat Start and Diagnostic Logging](#voltage-regulation-flat-start-and-diagnostic-logging)
 
 ---
 
@@ -511,3 +512,43 @@ psx['k'] = [1.0]; psx['theta'] = [np.deg2rad(30)]  # 30-degree phase shift
 ```
 
 **Note (PGM-internal slack bus):** source nodes are always treated as slack buses, one per electrically connected island. If an island has multiple sources, the tie-break for which one anchors the angle reference is implementation-defined (currently "first-occurring source") — don't rely on a specific source being chosen when multiple sources share an island.
+
+---
+
+## Voltage Regulation, Flat Start and Diagnostic Logging
+
+Since v1.13.193: PV control with enforced Q limits, `CalculationInitialization`, and the opt-in `Logger`.
+
+```python
+import logging
+from power_grid_model import (
+    PowerGridModel, CalculationInitialization, CalculationMethod, LoadGenType,
+    Logger, LoggerType, initialize_array,
+)
+
+# Generator on node 2 (from the basic example) held at 1.02 p.u., Q limited to +/-1 Mvar
+gen = initialize_array('input', 'sym_gen', 1)
+gen['id'] = [10]; gen['node'] = [2]; gen['status'] = [1]
+gen['type'] = [LoadGenType.const_power]          # required for regulated objects
+gen['p_specified'] = [1e6]; gen['q_specified'] = [0.0]
+
+vr = initialize_array('input', 'voltage_regulator', 1)
+vr['id'] = [11]; vr['regulated_object'] = [10]; vr['status'] = [1]
+vr['u_ref'] = [1.02]; vr['q_min'] = [-1e6]; vr['q_max'] = [1e6]
+
+model = PowerGridModel({**input_data, 'sym_gen': gen, 'voltage_regulator': vr})
+
+with Logger() as log, Logger(LoggerType.benchmark) as bench:
+    result = model.calculate_power_flow(
+        calculation_method=CalculationMethod.newton_raphson,   # only NR supports voltage regulation
+        calculation_initialization=CalculationInitialization.flat,  # try if NR diverges from the linear start
+    )
+
+print(result['sym_gen']['q'])                        # Q solved by the regulator
+print(result['voltage_regulator']['limit_violated']) # 0 none, 1 q_min reached, 2 q_max reached
+print(bench.output)                                  # per-phase timings
+
+# Route diagnostics to Python logging instead (flushed on exit)
+with Logger(python_logger=logging.getLogger("power_grid_model"), python_logging_level=logging.DEBUG):
+    model.calculate_power_flow()
+```

@@ -201,6 +201,7 @@ For several users at once, wrap the calls in a function and run that:
 
 ```gcl
 @expose
+@permission("admin")
 fn setup_users() {
     Identity::create("alice", "user");
     Identity::set_password("alice", "...");
@@ -210,6 +211,8 @@ fn setup_users() {
 ```sh
 greycat run setup_users
 ```
+
+Keep `@permission("admin")` on such a function. `Identity::create` is not permission-checked when GCL calls it, so without it any signed-in user could run it over HTTP. On an existing name, `create` also clears the password.
 
 The test harness in `test/server/` of this repo is a working reference.
 

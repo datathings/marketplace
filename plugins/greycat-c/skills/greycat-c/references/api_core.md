@@ -171,22 +171,27 @@ typedef union gc_f32_conv_t_ {
 | `likely(x)` | `__builtin_expect((x), 1)` — branch prediction hint (likely true) |
 | `unlikely(x)` | `__builtin_expect((x), 0)` — branch prediction hint (likely false) |
 
-### Well-Known Type IDs (extern globals)
+### Well-Known Core Type IDs (`prog->core`, per program)
 
-These globals are resolved at program startup and identify built-in GreyCat types by their program type offset.
+**Breaking (8.4, `e8eabaf84`):** the process-wide `extern u32_t gc_core_any` / `gc_core_geo` / `gc_core_String` / `gc_core_Buffer` / `gc_core_Array` / `gc_core_Tuple` / `gc_core_Map` / `gc_core_Table` / `gc_core_Tensor` / `gc_core_TensorType` globals were **removed from `gc/type.h`**. Core type ids differ from one program to the next, so they now live in `gc_program_t.core` (a `gc_program_core_types_t`, declared in `gc/program.h`), filled once per program by `gc_program__resolve_core_types`. `geo` has no replacement field. Read them through the program: `gc_machine__program(ctx)->core.Array`.
 
-| Variable | GreyCat Type |
-|----------|-------------|
-| `gc_core_any` | `any` (top type) |
-| `gc_core_geo` | `geo` |
-| `gc_core_String` | `String` (heap string object) |
-| `gc_core_Buffer` | `Buffer` |
-| `gc_core_Array` | `Array` |
-| `gc_core_Tuple` | `Tuple` |
-| `gc_core_Map` | `Map` |
-| `gc_core_Table` | `Table` |
-| `gc_core_Tensor` | `Tensor` |
-| `gc_core_TensorType` | `TensorType` (enum type for tensor element types) |
+```c
+typedef struct gc_program_core_types {
+    u32_t any;
+    u32_t String;
+    u32_t Buffer;
+    u32_t Array;
+    u32_t Tuple;
+    u32_t Map;
+    u32_t Table;
+    u32_t Tensor;
+    u32_t TensorType;   // enum type for tensor element types
+} gc_program_core_types_t;   // each 0 until resolved, or if the program doesn't declare the type
+```
+
+Name macros (`gc/program.h`) used to resolve them: `GC_CORE_MODULE_NAME` (`"core"`), `GC_CORE_TYPE_NAME_any`, `_String`, `_Buffer`, `_Array`, `_Tuple`, `_Map`, `_Table`, `_Tensor`, `_TensorType` (each the bare type name string).
+
+`gc/type.h` also **no longer includes `<stddef.h>`** — code that relied on it transitively for `size_t` / `NULL` / `offsetof` must include it itself (`gc/alloc.h` and `gc/crypto.h` now include it directly).
 
 ### Usage Examples
 
@@ -212,34 +217,34 @@ value.object = NULL;
 value_type = gc_type_undefined;
 ```
 
-#### Dispatching on a built-in type id (`gc_core_*` externs)
+#### Dispatching on a built-in type id (`prog->core`)
 
-The `gc_core_*` globals are resolved at program startup and let native code branch on the concrete built-in type of an object. This is exactly how the JSON reader routes an object's `type_id` to the right parser (`src/std/io/json_reader.c:2392`).
+`prog->core` holds the ids of the built-in types for the current program and lets native code branch on the concrete built-in type of an object. This is how the JSON reader routes an object's `type_id` to the right parser.
 
 ```c
 const gc_program_t *prog = gc_machine__program(ctx);
 const u32_t type_id = target_type_id;
 const gc_program_type_t *type = gc_program__get_program_type(prog, type_id);
 
-if (type_id == gc_core_String) {
+if (type_id == prog->core.String) {
     return parse_string(ctx);
 }
-if (type_id == gc_core_Map || gc_program_type__get_generic_id(type) == gc_core_Map) {
+if (type_id == prog->core.Map || gc_program_type__get_generic_id(type) == prog->core.Map) {
     return parse_map(ctx);            // raw Map or typed Map<K,V>
 }
-if (type_id == gc_core_Array || gc_program_type__get_generic_id(type) == gc_core_Array) {
+if (type_id == prog->core.Array || gc_program_type__get_generic_id(type) == prog->core.Array) {
     return parse_array(ctx);          // raw Array or typed Array<T>
 }
-if (type_id == gc_core_Tensor) {
+if (type_id == prog->core.Tensor) {
     return parse_tensor(ctx);
 }
 ```
 
-When you allocate a built-in collection directly, pass the corresponding `gc_core_*` id as the type id:
+When you allocate a built-in collection directly, pass the corresponding `prog->core` id as the type id:
 
 ```c
-// Create a fresh Array object (json_reader.c:584).
-gc_array_t *arr = (gc_array_t *) gc_machine__create_object(ctx, gc_core_Array);
+// Create a fresh Array object.
+gc_array_t *arr = (gc_array_t *) gc_machine__create_object(ctx, gc_machine__program(ctx)->core.Array);
 ```
 
 #### Reading and tagging values through `gc_slot_t` / `gc_type_t`
@@ -619,6 +624,7 @@ struct gc_program {
     gc_program_specialized_type_table_t s_types;  // Specialized (generic) types
     gc_block_t stub;                              // Stub block for volatile objects
     gc_program_generic_type_table_t generic_types; // New: `Foo<T> {}` literals per fn, sorted by (fn_off, idx), each fn's entries contiguous from its generic_types_off
+    gc_program_core_types_t core;                 // New: per-program core type ids (replaces the gc_core_* globals), see gc_program__resolve_core_types
 };
 
 /// A `Foo<T> {}` literal in the body of fn `fn_off`, its `idx`-th: `type_desc` is the type it builds, `T` resolved
@@ -1040,6 +1046,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | Function | Description |
 |----------|-------------|
 | `gc_program__get_program_type(prog, type_id)` | Get the full program type by ID. |
+| `gc_program__resolve_core_types(prog)` | **New.** Fills `prog->core` from the types the program declares under `core`. Call once the types are declared — `gc_program__create_from_abi` does, and the runtime does when it links std. Returns `false` if the module or a type is missing; ids it did resolve are kept. |
 | `gc_program_type__get_field(type, field_offset)` | Get a field descriptor by offset. |
 | `gc_program_type__get_field_by_key(type, key)` | Get a field descriptor by symbol key. |
 | `gc_program_type__get_g1_type_id(type)` / `gc_program_type__get_g2_type_id(type)` | Get generic type parameter IDs. |
@@ -1398,7 +1405,7 @@ if (gc_log__is_tty(host)) {
 - **Types:** `gc_{module}_{name}_t` (e.g., `gc_buffer_t`, `gc_tensor_t`)
 - **Functions:** `gc_{module}__{verb}` (e.g., `gc_buffer__add_str`, `gc_object__get_at`)
 - **Constants/Macros:** `GC_{MODULE}_{NAME}` (e.g., `GC_CORE_TENSOR_DIM_MAX`)
-- **Well-known type globals:** `gc_core_{TypeName}` (e.g., `gc_core_Array`)
+- **Well-known core type ids:** `prog->core.{TypeName}` (e.g., `prog->core.Array`; the old `gc_core_{TypeName}` globals are gone)
 - Double underscore `__` separates the type/module from the method name
 
 ### Native Function Pattern

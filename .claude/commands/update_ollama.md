@@ -29,8 +29,8 @@ git fetch --tags
 CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
 echo "Current tag: $CURRENT_TAG"
 
-# Get latest stable tag (format: v#.#.# — skip RC/alpha/beta)
-LATEST_TAG=$(git tag --sort=-version:refname | grep -v 'rc\|alpha\|beta' | head -n 1)
+# Get latest stable tag (format: v#.#.# — skips RC/alpha/beta/CI tags)
+LATEST_TAG=$(git tag --sort=-version:refname | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | head -n 1)
 echo "Latest tag: $LATEST_TAG"
 
 # Preview changes between versions

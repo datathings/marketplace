@@ -9,7 +9,7 @@ description: "Python library for steady-state distribution power system analysis
 
 `power-grid-model` is a high-performance C++ library with a Python interface for steady-state distribution power system analysis. It operates on numpy structured arrays via a dictionary-based data model and supports symmetric (single-phase equivalent) and asymmetric (full three-phase) calculations.
 
-**Version:** v1.13.134
+**Version:** v1.13.193
 **Language:** Python (C++ core)
 **License:** Mozilla Public License 2.0 (MPL-2.0)
 **Repo:** https://github.com/PowerGridModel/power-grid-model
@@ -55,7 +55,7 @@ result = model.calculate_power_flow()
 
 | Domain | File | Description |
 |--------|------|-------------|
-| Core API | [api-core.md](references/api-core.md) | `PowerGridModel`, `calculate_power_flow`, `calculate_state_estimation`, `calculate_short_circuit`, `initialize_array`, serialization |
+| Core API | [api-core.md](references/api-core.md) | `PowerGridModel`, `calculate_power_flow`, `calculate_state_estimation`, `calculate_short_circuit`, `initialize_array`, serialization, `Logger` |
 | Components | [api-components.md](references/api-components.md) | All component types (22 types including voltage_regulator), attributes, numpy dtypes, enumerations |
 | Validation | [api-validation.md](references/api-validation.md) | `validate_input_data`, `validate_batch_data`, `ValidationError`, `ValidationException` |
 | Batch | [api-batch.md](references/api-batch.md) | Dense/sparse batch format, Cartesian product, threading, error handling, output structure |
@@ -72,6 +72,7 @@ result = model.calculate_power_flow()
 - **Automatic tap changing:** see [workflows.md](references/workflows.md#automatic-tap-changing)
 - **Source impedance sweep:** see [workflows.md](references/workflows.md#source-impedance-sweep)
 - **Validation best practices:** see [workflows.md](references/workflows.md#validation-before-calculation)
+- **Voltage regulation, NR flat start, diagnostic logging:** see [workflows.md](references/workflows.md#voltage-regulation-flat-start-and-diagnostic-logging)
 - **Modeling components with no dedicated type** (ideal/phase-shifting transformer, grounding transformer, choke coil): see [workflows.md](references/workflows.md#modeling-non-pgm-components)
 
 ## Key Considerations
@@ -83,9 +84,13 @@ result = model.calculate_power_flow()
 - **Performance:** For batch time-series, use dense (independent) batches; for N-1 analysis, use sparse (dependent) batches. Enable `threading=0` for large batches to use all hardware cores.
 - **Asymmetric calculations** require zero-sequence parameters (`r0`, `x0`, `c0`, etc.) for lines and appropriate winding configurations for transformers. `generic_branch` does not support asymmetric mode.
 - **Source `sk`, `rx_ratio`, `z01_ratio` are now updatable** in batch calculations (since v1.13.54). This enables batch sweeps over source impedance parameters.
-- **Voltage regulators** regulate voltage at a node by adjusting the reactive power dispatch of connected load/gen appliances. They cannot coexist with transformer tap regulators in the same model.
+- **Voltage regulators** regulate voltage at a node by adjusting the reactive power dispatch of connected load/gen appliances (Newton-Raphson power flow only). They cannot coexist with transformer tap regulators in the same model.
 - **Deprecated (v1.13.65):** `MeasuredTerminalType.node` (value `9`, "node injection" power-sensor terminal type) emits a `DeprecationWarning` and will be removed in a future release. It does not represent a physical terminal; use one of the appliance/branch terminal types instead.
 - **Package version (since v1.13.70):** the C++ core version is exposed as `power_grid_model.__version__` (a string, derived from `PGM_version`). Use it for runtime version checks instead of relying on package metadata.
 - **Deprecated error classes (v1.13.87):** `InvalidBranch` and `InvalidBranch3` are deprecated and emit a `DeprecationWarning` on construction; they may be removed in a future release. Branches/lines whose `from_node == to_node` (a branch "into itself") are now handled by the solver core, so these errors are no longer raised by it.
 - **Self-looping branches allowed (since v1.13.107):** `from_node == to_node` is now valid input for `line`, `link`, `transformer`, `generic_branch`, and `asym_line` — the Python validator no longer raises `SameValueError` for it. `three_winding_transformer` (`branch3`) still requires `node_1`/`node_2`/`node_3` to be pairwise distinct.
 - **`asym_line` matrix constraints relaxed (since v1.13.107):** off-diagonal/mutual impedance and capacitance matrix entries now only require `>= 0` (previously strictly `> 0`), so decoupled/far-apart conductors can be modeled with zero mutual terms. Diagonal/self terms are still strictly `> 0`.
+- **Infinite-admittance links (since v1.13.167):** without node-injection power sensors, `link`s are ideal connections (linked nodes merged into topological nodes; link flows reconstructed afterwards) instead of a fixed `1e6 p.u.` admittance — results on linked nodes may shift slightly vs. older versions. With node-injection sensors the old fixed admittance is kept.
+- **Voltage-regulator Q limits enforced (since v1.13.193):** `q_min`/`q_max` now clamp Q and switch the node PV→PQ; `voltage_regulator` output `limit_violated` is `0` none / `1` `q_min` / `2` `q_max`. **Breaking:** the regulated load/gen must be `LoadGenType.const_power` (else `UnsupportedLoadGenTypeForVoltageRegulator`); validator also checks `q_max >= q_min`.
+- **NR initialization (since v1.13.193):** `calculate_power_flow(calculation_initialization=...)` with `CalculationInitialization` `default`(0, = `linear` for NR) / `flat`(1) / `linear`(2) / `average_source`(3). Try `flat` when NR diverges on meshed grids with remote generation.
+- **Diagnostic logger (since v1.13.193):** `with Logger(LoggerType.info, python_logger=None, python_logging_level=logging.INFO) as log:` (or `LoggerType.benchmark`) captures debug text / per-phase timings into `log.output`; opt-in, zero cost when unused.

@@ -15,6 +15,7 @@
 12. [Stream serialization](#stream-serialization)
 13. [self_test](#self_test)
 14. [__version__](#__version__)
+15. [Logger (diagnostic output)](#logger-diagnostic-output)
 
 ---
 
@@ -64,8 +65,16 @@ model_copy = model.copy()  # independent deep copy
 | `output_component_types` | `ComponentAttributeMapping` | `None` | Filter output; `None`=all, set of types, or dict for columnar |
 | `continue_on_batch_error` | `bool` | `False` | Continue when some batch scenarios fail |
 | `tap_changing_strategy` | `TapChangingStrategy\|str` | `disabled` | Automatic tap optimization strategy |
+| `calculation_initialization` | `CalculationInitialization\|str` | `default` | Newton-Raphson start (since v1.13.193); ignored by other methods. `default`=`linear` for NR |
 
 **Returns:** `dict[str, np.ndarray]` — output arrays keyed by component type.
+
+**`calculation_initialization`** (power flow only — not a parameter of SE/SC):
+- `linear` (NR default): linear guess with loads/gens as constant admittances. Good when load/generation is near the source.
+- `flat`: every node at 1 p.u. with source reference angle + topological phase shift; source nodes at their `u_ref`.
+- `average_source`: every node at the average source reference voltage + phase shift (the `iterative_current` start).
+- In all cases voltage-regulated (PV) nodes start at their `u_ref` magnitude.
+- If NR diverges / hits a singular Jacobian on a meshed grid with generation far from the source, retry with `flat` before concluding there is no solution.
 
 **Power flow algorithms:**
 | Method | Speed | Accuracy | Notes |
@@ -84,6 +93,10 @@ result = model.calculate_power_flow()
 
 # Asymmetric
 result = model.calculate_power_flow(symmetric=False)
+
+# Flat start for Newton-Raphson (since v1.13.193)
+from power_grid_model import CalculationInitialization
+result = model.calculate_power_flow(calculation_initialization=CalculationInitialization.flat)
 
 # Batch with parallel threading
 result = model.calculate_power_flow(
@@ -354,3 +367,31 @@ power_grid_model.__version__   # e.g. "1.13.106" — the C++ core version string
 
 Available since v1.13.70. The value is read from the native core at import time, so it
 reflects the actually-loaded binary rather than the Python package metadata.
+
+---
+
+## Logger (diagnostic output)
+
+**Since v1.13.193.** Opt-in capture of non-conclusive diagnostic hints (debug text, per-phase timings) from calculations. No logger is active by default (zero cost).
+
+```python
+from power_grid_model import Logger, LoggerType
+```
+
+### `Logger(logger_type: LoggerType = LoggerType.info, *, python_logger: logging.Logger | None = None, python_logging_level: int = logging.INFO)`
+- Context manager: registered on `__enter__`, unregistered on `__exit__` (re-entrant `with` on the same instance is ref-counted). Registration is on the calling thread's core handle, so it captures every calculation that thread runs inside the block.
+- `output: str` (property) — accumulated text; readable inside and after the `with` block (copied on each access).
+- `clear_content() -> None` — clear the accumulated output.
+- If `python_logger` is given, each non-empty line of output is emitted at `python_logging_level` when the outermost `with` exits, then the buffer is cleared.
+- Several loggers can be active at once (`with Logger() as a, Logger(LoggerType.benchmark) as b:`).
+- Using the same `Logger` from multiple user threads simultaneously is UB (internal batch threads are safe). Garbage-collecting it inside an active `with` emits `ResourceWarning`.
+
+```python
+import logging
+with Logger() as log, Logger(LoggerType.benchmark) as bench:
+    model.calculate_power_flow()
+print(log.output); print(bench.output)
+
+with Logger(python_logger=logging.getLogger("power_grid_model")):
+    model.calculate_power_flow()   # flushed to the Python logger on exit
+```

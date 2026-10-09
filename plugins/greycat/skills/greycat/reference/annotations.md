@@ -128,7 +128,7 @@ A function with `@expose` is reachable from outside the runtime, even if no othe
 
 ### `@permission("name")`
 
-Gates the function on the named permission. The caller must hold that permission or the call is rejected with a 403.
+Gates the function on the named permission. The caller must hold that permission or the call is rejected, with a 401 when the caller is anonymous and a 403 otherwise. The check applies to calls over HTTP and MCP. A call from GCL code is not checked, so an `@expose`d function that calls an `admin` function (`Identity::create`, `Identity::grant`, ...) with untrusted input must check its own caller.
 
 ```gcl
 @expose

@@ -28,7 +28,7 @@ CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
 echo "Current tag: $CURRENT_TAG"
 
 # Tags follow v#.#.# format (e.g., v3.4.0, v3.3.0)
-LATEST_TAG=$(git tag --sort=-version:refname | grep "^v" | head -n 1)
+LATEST_TAG=$(git tag --sort=-version:refname | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | head -n 1)
 echo "Latest tag: $LATEST_TAG"
 
 if [ "$CURRENT_TAG" != "unknown" ] && [ "$CURRENT_TAG" != "$LATEST_TAG" ]; then

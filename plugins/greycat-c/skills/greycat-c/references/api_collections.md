@@ -196,7 +196,7 @@ All map functions take typed `gc_slot_t` key/value pairs. Keys must be primitive
 
 ```c
 // Create a Map object and allocate its bucket storage with a capacity hint.
-gc_map_t *map = (gc_map_t *) gc_machine__create_object(ctx, gc_core_Map);
+gc_map_t *map = (gc_map_t *) gc_machine__create_object(ctx, gc_machine__program(ctx)->core.Map);
 gc_map__init(map, 100, ctx); // grows to the next power of two >= 100
 
 // Insert string -> int entries (e.g. counting enum occurrences).
@@ -550,7 +550,7 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 The TensorType element-type tags used everywhere below are integer constants:
 `gc_core_TensorType_i32` (0), `_i64` (1), `_f32` (2), `_f64` (3), `_c64` (4), `_c128` (5).
 
-> Note: these are the integer ordinals of the `TensorType` enum. The public tensor API takes a raw `u8_t tensor_type`, and the public headers expose only the `gc_core_TensorType` type id — not per-member constants. Pass the ordinal directly; plugins typically `#define gc_core_TensorType_f64 3` (etc.) in their own header for readability, as the bundled libraries do.
+> Note: these are the integer ordinals of the `TensorType` enum. The public tensor API takes a raw `u8_t tensor_type`, and the public headers expose only the `TensorType` type id (`prog->core.TensorType`) — not per-member constants. Pass the ordinal directly; plugins typically `#define gc_core_TensorType_f64 3` (etc.) in their own header for readability, as the bundled libraries do.
 
 **Create, initialize, fill, and return a tensor** — the canonical native-function pattern. `gc_core_tensor__create` produces an empty (uninitialized) tensor object; you must call one of the `init_*` functions before any element access. `init_*` may set a runtime error (e.g. `GC_ERROR_TENSOR_TOO_LARGE`, `GC_ERROR_TENSOR_INCORRECT_DIM`) and leave the tensor untouched, so always check before writing. Because `create` returns a freshly marked object, un-mark it after publishing the result:
 

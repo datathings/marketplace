@@ -539,7 +539,9 @@ const task = await gc.project.import_data.spawn(url); // run server-side as a ba
 ```
 
 Every generated call takes the function's args followed by two optional params: `$g` (which instance) and
-`$signal` (an `AbortSignal`). The untyped escape hatch is `gc.$.default.call<T>('module::fn', args, signal)`.
+`$signal` (an `AbortSignal`). Its `.spawn` takes a third, `$taskClass` (`'small'`, `'medium'` or `'large'`, the
+worker class the task runs in, `'medium'` when omitted). The untyped escape hatch is
+`gc.$.default.call<T>('module::fn', args, signal)`.
 
 Return values are real SDK objects, not plain JSON: a returned `time`/`duration`/`geo` carries the same helpers
 as its GCL counterpart (`time.format(...)`, `.toInputValue()`, `.ord(...)`) - see [stdlib.md](stdlib.md).

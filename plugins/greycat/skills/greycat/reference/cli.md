@@ -80,7 +80,7 @@ Calls an `@expose`d function **on a running server** as a task, waits for it, an
 - `--url` (`GREYCAT_URL`) selects the server. Without it, the server is `http://localhost:<port>`: the `--port` given, else the port the server holding this project's store wrote to `gcdata/security/port`, else the default `8080`.
 - `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
 - `--task_class` (`GREYCAT_TASK_CLASS`) picks the worker class the server runs the task in: `small`, `medium` (the default) or `large`. A class the server has no workers for runs in the nearest one that has some.
-- The task is followed through the server's event stream (`runtime::Task::events`). When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
+- The task is followed through the server's event stream (`runtime::Task::events`): `call` opens it first and names it in the `sse` header of the call. When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
 - The result prints like `run`'s: GCL notation, or JSON with `--format=json`; `--pretty` indents it. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, an argument does not read, or the token is rejected. Ctrl-C cancels the remote task.
 - A `@reserved` function (`runtime::Task::history`, `runtime::Task::running`, ...) is answered by the server directly rather than as a task, and `call` reads that answer. `runtime::Task::events` (a stream of events) and `runtime::Runtime::abi` (the ABI file) answer with no value to print, so `call` refuses them.
 
@@ -117,7 +117,7 @@ Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `pr
 
 ### `greycat test [function]`
 
-Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. See [annotations.md § @test](annotations.md).
+Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. A module whose run leaks memory or leaves a graph block marked counts as one more failure (`leak in module ...`, `mark errors in module ...`): GCL code cannot cause either, so it is a bug of the runtime or of a native library to report. Exit code is non-zero when anything failed. See [annotations.md § @test](annotations.md).
 
 ### `greycat lint` / `greycat fmt` / `greycat lsp` / `greycat doc`
 
@@ -225,9 +225,11 @@ greycat user show <name>                       show user details and grants
 greycat user add <name> [role]                 add user (default role: "user")
 greycat user remove <name>                     remove user
 greycat user role <name> <new_role>            change user role
-greycat user grant <name> r|w|rw <target>      grant <name> file access to <target>
-greycat user revoke <name> r|w|rw <target>     remove a previously-granted access
+greycat user grant <name> r|w|rw <target>      let <target> open files/<name>/
+greycat user revoke <name> r|w|rw <target>     take that access back from <target>
 ```
+
+`grant` and `revoke` call `Identity::grant` and `Identity::revoke`, which edit the grants of `<name>`, the list of identities that may open `files/<name>/`. `greycat user grant alice r carol` lets carol read `files/alice/` and gives alice nothing on `files/carol/`. See [runtime.md, Grants and per-user files](runtime.md#grants-and-per-user-files), which also covers identities used as groups.
 
 Built-in users: `id=0` (`public`, anonymous), `id=1` (`root`, role `admin`). Built-in roles live in `lib/std/runtime.gcl`: `public`, `user`, `admin`.
 

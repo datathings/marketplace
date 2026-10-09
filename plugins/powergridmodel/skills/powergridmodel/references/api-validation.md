@@ -203,7 +203,7 @@ print(errors_to_string(errors, name="my grid", details=True))
 | `InvalidAssociatedEnumValueError` | Enum value invalid for the given associated component (e.g. Branch3Side for a transformer) |
 | `MissingValueError` | Required attribute is NaN/null |
 | `NotGreaterThanError` | Field requires `> ref` but is not |
-| `NotGreaterOrEqualError` | Field requires `>= ref` but is not |
+| `NotGreaterOrEqualError` | Field requires `>= ref` but is not (since v1.13.193 also `voltage_regulator.q_max >= q_min`) |
 | `NotLessThanError` | Field requires `< ref` but is not |
 | `NotBetweenError` | Field value not in valid range (exclusive) |
 | `NotBetweenOrAtError` | Field value not in valid range (inclusive) |
@@ -216,7 +216,7 @@ print(errors_to_string(errors, name="my grid", details=True))
 | `TransformerClockError` | Invalid clock number for given winding types |
 | `FaultPhaseError` | Fault phase does not match the fault type |
 | `PQSigmaPairError` | `p_sigma` and `q_sigma` must both be present or both absent |
-| `InvalidVoltageRegulationError` | Voltage regulators on the same node have different `u_ref` values |
+| `InvalidVoltageRegulationError` | Voltage regulators on the same node have different `u_ref` values; since v1.13.193 also raised on `regulated_object` when the regulated load/gen `type` is not `const_power` |
 | `MixedCurrentAngleMeasurementTypeError` | Different angle measurement types on the same terminal |
 | `MixedPowerCurrentSensorError` | Power and current sensors on the same terminal |
 | `MissingVoltageAngleMeasurementError` | Global-angle current sensor without voltage angle measurement |
@@ -232,5 +232,6 @@ print(errors_to_string(errors, name="my grid", details=True))
 | `AutomaticTapCalculationError` | Invalid tap regulator configuration for automatic tap changing |
 | `UnsupportedRegulatorCombinationError` | Voltage regulators and transformer tap regulators in the same model |
 | `UnsupportedVoltageRegulatorSourceCombinationError` | Source and voltage-regulated appliance on the same node |
+| `UnsupportedLoadGenTypeForVoltageRegulator` | Since v1.13.193: voltage regulator's regulated load/gen is not `LoadGenType.const_power` (message `Unsupported load_gen type for voltage regulators ...`) |
 | `InvalidCalculationMethod` | Unsupported calculation method for the given calculation type |
 | `PowerGridBatchError` | One or more batch scenarios failed (access `.failed_scenarios`, `.errors`) |

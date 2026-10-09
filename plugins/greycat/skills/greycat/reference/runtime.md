@@ -56,7 +56,7 @@ When you change a type's shape (rename, reorder, change attribute types) and reb
 
 A **task** is a function call run on a worker thread. Two ways to spawn:
 
-- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` (or `task: small` / `task: medium` / `task: large` to pick the worker class; `true` is `medium`, any other value is answered `400`) — the server returns the `task_id` immediately. A `@reserved` function (`Task::running`, `Task::cancel`, ...) never takes a task slot. The server ignores the header, answers with the value as it does without it, and adds the response header `task: none`, listed in `Access-Control-Expose-Headers` so that a browser app on another origin can read it. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended. `greycat call <fn> [args]` does this from the shell, in `medium` unless `--task_class` names another class, following the task through `Task::events` rather than polling (see [cli.md](cli.md)).
+- **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` (or `task: small` / `task: medium` / `task: large` to pick the worker class; `true` is `medium`, any other value is answered `400`) — the server returns the `task_id` immediately. A `@reserved` function (`Task::running`, `Task::cancel`, ...) never takes a task slot. The server ignores the header, answers with the value as it does without it, and adds the response header `task: none`, listed in `Access-Control-Expose-Headers` so that a browser app on another origin can read it. Poll status via `Task::is_running(task_id)` or the `Task::running()` / `Task::history()` helpers, then fetch the result from `GET /files/<user_name>/tasks/<task_id>/result.gcb?json` once the task has ended. `greycat call <fn> [args]` does this from the shell, in `medium` unless `--task_class` names another class, following the task through `Task::events` rather than polling (see [cli.md](cli.md)). A call of either kind that carries the request header `sse: <id>` is reported on the event stream with that id (see [Task events](#task-events-over-sse)).
 - **Programmatic** — `Scheduler::add(fn, periodicity, ...)` schedules a periodic task; the startup `main()` is enqueued as a task on `serve` boot.
 
 A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and **only run in parallel inside a task context** — calling `await` from a one-shot `greycat run` script runs them serially.
@@ -84,7 +84,7 @@ When the jobs' writes merge back into the parent task, a node or an object field
 Worker pool sizes:
 
 - `--workers` (`GREYCAT_WORKERS`) — task workers in total. Default = CPU count. They are split into three classes: small (`--workers_small`, default 20%), large (`--workers_large`, default 10%) and medium, which takes the rest and keeps at least one worker.
-- `--workers_small` (`GREYCAT_WORKERS_SMALL`) — task workers for the small class. Every RPC request (path-RPC or JSON-RPC) runs as a small task on them, so long background tasks never starve requests. Default 20% of `--workers`, rounded, at least 1 from 2 workers; `run` and `test` start none. An RPC task is a task like any other: it has an id, shows in `Task::running()` and `Task::history`, emits SSE task events and can be stopped with `Task::cancel`; only its arguments and result travel over the connection. An `await` inside it suspends it like any task, freeing the worker while its jobs run.
+- `--workers_small` (`GREYCAT_WORKERS_SMALL`) — task workers for the small class. Every RPC request (path-RPC or JSON-RPC) runs as a small task on them, so long background tasks never starve requests. Default 20% of `--workers`, rounded, at least 1 from 2 workers; `run` and `test` start none. An RPC task is a task like any other: it has an id, shows in `Task::running()` and `Task::history`, emits SSE task events when the call names a stream with the `sse` header, and can be stopped with `Task::cancel`; only its arguments and result travel over the connection. An `await` inside it suspends it like any task, freeing the worker while its jobs run.
 - `--workers_large` (`GREYCAT_WORKERS_LARGE`) — how many of `--workers` serve the large class, default 10% rounded half up (none below 5 workers). A worker runs its own class first and, when that queue is empty, any lighter class, so large workers also drain medium and small tasks. Only sync RPC calls run outside `medium` by default (`small`); choose it where the task starts: `Job { function: f, task_class: TaskClass::large }` for `spawn` (default `medium`) and for each `await` job (default: the parent's class), `PeriodicOptions { task_class: TaskClass::large }` for the scheduler (default `medium`), and the `task` header's value for RPC (`--task_class` for `greycat call`). MCP calls run `medium`. A class with no workers runs in the nearest class that has some; `Task::task_class()` answers the class a task actually runs in.
 - `--cache` (`GREYCAT_CACHE`, default 75% of RAM) — 1/4 backs the store zones, 3/4 is the object cache of the task workers. It is split by class: a medium worker holds one unit, a small one `--cache_ratio_small` units (default `0.4`) and a large one `--cache_ratio_large` units (default `3`), so with the defaults the small class holds about 8% of the workers' cache and the large one about 30%. A ratio must be > 0. `serve` logs the split at startup, e.g. `Workers: 16 (small 3 x 810.2MiB, medium 11 x 1.98GiB, large 2 x 5.93GiB), cache: 48.0GiB (workers 36.0GiB, zones 12.0GiB)`, and `Runtime::info()` answers it in `RuntimeInfo.small` / `medium` / `large` (`workers`, `mem_worker`, `cache_ratio`).
 - `--max_args_memory` (default 1 MiB) — an RPC call whose arguments are larger is streamed to its task's arguments file while it is read, like a call with a `task` header, instead of being held in memory for as long as the call runs. Its headers stay readable; `Task::body()` answers `null`. JSON-RPC envelopes stay in memory, since their method and params are only found by parsing them.
@@ -134,7 +134,7 @@ Started by `greycat serve` / `greycat dev`. Routes:
 | `POST /`                       | JSON-RPC 2.0 entrypoint. `method` is the FQN with `.` separators: `"<module>.<fn>"`, or `"<module>.<Type>.<fn>"` for a static method. Body: `{jsonrpc, method, params, id}`. |
 | `POST /<module>::<fn>`         | Path-RPC to a free-standing function. Body: JSON array of positional args (or GCB binary if client sets the GCB content-type).                                               |
 | `POST /<module>::<Type>::<fn>` | Path-RPC to an `@expose` static method on a type: three segments (the method's full FQN). E.g. `/runtime::Identity::current_id`, `/openid::Openid::providers`.               |
-| `GET /runtime::Task::events`   | Server-Sent Events stream of task events for the caller (see [Task events](#task-events-over-sse)). Authenticated callers only.                                             |
+| `GET /runtime::Task::events`   | Server-Sent Events stream of the tasks of the calls that name it (see [Task events](#task-events-over-sse)). Authenticated callers only.                                     |
 | `GET /files/...`               | Read from `<project>/files/`. Per-user subdirectory + ACL.                                                                                                                   |
 | `POST/PUT /files/...`          | Write to `<project>/files/`. Triggers any handler registered via `Runtime::on_files_put`.                                                                                    |
 | `GET /...` (anything else)     | Static assets, resolved against `<project>/webroot/` then each `lib/<name>/webroot/` (see below). Unknown paths return 404 — no automatic SPA fallback.                       |
@@ -150,7 +150,7 @@ Every request resolves to an identity (user). The server reads the token from on
 
 No token = anonymous (`user_id = 0`, role `public`). Anonymous callers only reach functions gated by `@permission("public")`.
 
-Tokens are HMAC-signed and live in-memory; restart issues fresh ones. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<name>` from the CLI.
+A token carries the user id and an expiry, signed with the server's key (`gcdata/security/private_key`). The server keeps no session list, so a token stays valid until it expires, across restarts and password changes. The permissions are not in the token. They are read from the user's current role on every request, so a role change applies to open sessions at once. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<name>` from the CLI.
 
 ### Where arguments come from
 
@@ -192,7 +192,7 @@ The security model is **users × roles × permissions × grants**:
 - A **user** has a numeric `id`, unique `name`, and exactly one `role`.
 - A **role** is a named bundle of permissions (declared with `@role(name, perm1, perm2, ...)`).
 - A **permission** is a named gate (declared with `@permission(name, desc)`).
-- A **grant** ties one user's identity to another user's `files/` subdirectory (read, write, or both).
+- A **grant** lets one identity open another identity's `files/<name>/` folder (read, write, or both). It is stored in the `grants` of the folder's owner (see [Grants and per-user files](#grants-and-per-user-files)).
 
 Built-in permissions live in `lib/std/runtime.gcl`:
 
@@ -228,7 +228,54 @@ fn ping(): String { return "pong"; }              // anonymous — use only when
 
 A handful of stdlib endpoints are `@permission("public")` because they filter their *own* output by the caller's permission mask rather than gating the call: MCP `tools/list` and `runtime::OpenApi::v3` both drop every function the caller could not invoke, so reaching them anonymously discloses only the `public` endpoints. That pattern — public entry point, per-item filtering inside — is the only reason to make a listing endpoint public; a function that returns data rather than a filtered catalogue still needs a real permission.
 
-Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`. CLI equivalents under `greycat user`.
+Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`, `Identity::set_role`, `Identity::set_grants`, `Identity::grant`, `Identity::revoke`, `Identity::remove`. CLI equivalents under `greycat user`.
+
+`@permission` is checked when a function is called over HTTP or as an MCP tool. A call from GCL code is not checked. `Identity::get_by_id`, `get_by_name`, `all`, `create`, `set_role`, `remove`, `grant`, `revoke` and `Role::all` are `admin` over HTTP, but any caller runs them from GCL. An `@expose`d function that forwards untrusted input to them must check its caller itself (`Identity::has_permission("admin")`, for example). `Identity::token`, `set_password` and `set_grants` do compare the caller to the target identity, from GCL as well.
+
+`Identity::create` on a name that already exists sets its role and clears its password, so that identity can no longer sign in until `set_password` runs again.
+
+### Grants and per-user files
+
+Each identity owns `files/<name>/`, named after the identity and never its id. Who may open it:
+
+| Caller | Access to `files/<name>/` |
+| --- | --- |
+| The identity itself | read and write |
+| Any identity with the `admin` role | read and write, on every folder (`files/root/` included), without a grant |
+| An identity listed in the `grants` of `<name>` | what the grant says: `read` lists and downloads, `write` uploads and deletes, `read_write` both |
+| Anonymous, when the `grants` of `<name>` list `public` | what the grant says. A grant to `public` does not open the folder to signed-in users. |
+| Anyone else | 401 when the request carries no valid credentials, 403 when it does |
+
+The `grants` of an identity are the list of who may open its folder, not the folders it may open. The same rule decides who sees an identity's tasks (`read`) and cancels them (`write`). It is checked on every request, so a grant or a revoke applies at once to sessions already open. Grants are not transitive: when alice grants `files/alice/` to the identity `team-grid`, the members of `team-grid` do not get into it.
+
+| Call | Effect |
+| --- | --- |
+| `Identity::set_grants("alice", [IdentityGrant { name: "carol", grant: IdentityGrantType::read }])` | carol may read `files/alice/`. Replaces the whole list. A non-admin may only call it on themselves. |
+| `Identity::grant("alice", "carol", IdentityGrantType::read)` | adds carol to the grants of alice, so carol may read `files/alice/` while alice gets nothing on `files/carol/` |
+| `Identity::revoke("alice", "carol", IdentityGrantType::read)` | carol no longer reads `files/alice/` |
+| `greycat user grant alice r carol` | same as `Identity::grant("alice", "carol", read)` |
+
+`Identity::remove(name)` keeps `files/<name>/` on disk, and an identity created later under the same name owns it again. The grants other identities extend to the removed one stop showing in their `grants` but stay stored, and a new identity can be given the same id. Revoke them before removing an identity.
+
+#### Identities as groups
+
+An identity does not have to be a person. Create one without a password and it cannot sign in (`login` is rejected with 400 whatever the password). Its folder becomes a shared space and its `grants` are the member list:
+
+```gcl
+Identity::create("team-grid", "public");
+Identity::set_grants("team-grid", [
+    IdentityGrant { name: "alice", grant: IdentityGrantType::read_write },
+    IdentityGrant { name: "bob", grant: IdentityGrantType::read }
+]);
+```
+
+```sh
+greycat user add team-grid public
+greycat user grant team-grid rw alice
+greycat user grant team-grid r bob
+```
+
+alice uploads to and deletes from `files/team-grid/`, bob lists and downloads, anyone else gets 403 (401 when anonymous). Only an admin changes the members: `set_grants` on `team-grid` refuses a member ("not authorized"), over HTTP and from GCL alike. Nothing in the API tells a group identity from a person, so keep the naming convention (or a list of group names) in the application.
 
 ### The `--user=<name>` impersonation flag — footgun, do not promote
 
@@ -282,7 +329,16 @@ Inside a task: `Task::id()`, `Task::parentId()`, `Task::expected_steps(n)`, `Tas
 
 `GET /runtime::Task::events` keeps the connection open and pushes one frame per task event, instead of the client polling `Task::running` / `Task::history`. The caller must be authenticated (cookie `greycat=<token>` is what a browser `EventSource` sends; `Authorization: <token>` works for `curl` and `fetch`); an anonymous request gets `401`. The response is `Content-Type: text/event-stream` with `Connection: close` and no length: the stream ends with the connection.
 
-Frames, every `data:` line being the `runtime::Task` in the same JSON shape `Task::running` returns:
+The first frame is `connected`, whose `data:` is the id of this stream, an unsigned 64-bit integer in decimal text whatever the `Accept` header. It can exceed what a JavaScript `Number` holds exactly, so a client keeps it as the string it received:
+
+```
+event: connected
+data: 4294967303
+```
+
+A stream only reports the tasks of the calls that name it: an RPC call (path-RPC or JSON-RPC, with or without the `task` header) carrying the request header `sse: <id>` is reported on the stream with that id. A call without the header is reported nowhere, so two clients of the same user (two tabs, or two libraries sharing a JS VM) each see their own calls only. The id binds the task the call creates, not the root tasks that task spawns, nor the scheduled ones.
+
+Then one frame per event of a bound task, every `data:` line being the `runtime::Task` in the same JSON shape `Task::running` returns:
 
 ```
 event: task-started
@@ -295,22 +351,28 @@ event: task-complete
 data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","creation":"2026-09-28T10:19:09.949Z","start":"2026-09-28T10:19:09.949Z","completion":"2026-09-28T10:19:11.002Z","status":"ended","task_class":"medium"}
 ```
 
-- Send `Accept: application/octet-stream` on the request and every `data:` line is instead the base64 of the binary response form (ABI header, then the GCB `Task`), which is what the web SDK asks for. JSON is the default.
-- `task-started` fires once per root task, when its code starts running on a worker; the gap between `creation` and `start` is the time it waited in the queue. A task resuming from an `await` is not reported again, and one cancelled while still queued never starts: it only gets `task-complete`.
+- Send `Accept: application/octet-stream` on the request and every task `data:` line is instead the base64 of the binary response form (ABI header, then the GCB `Task`), which is what the web SDK asks for. JSON is the default. The `connected` frame stays plain text.
+- `task-started` fires once per task, when its code starts running on a worker; the gap between `creation` and `start` is the time it waited in the queue. A task resuming from an `await` is not reported again, and one cancelled while still queued never starts: it only gets `task-complete`.
 - `task-progress` fires when the whole percentage of `Task::add_steps` over `Task::expected_steps` changes, never more often.
-- `task-complete` fires once per root task, whatever its final status (`ended`, `error`, `cancelled`). Jobs spawned by `await` are not reported on their own.
+- `task-complete` fires once per task, whatever its final status (`ended`, `error`, `cancelled`). Jobs spawned by `await` are not reported on their own.
 - `task-breakpoint` fires when the task pauses on a `breakpoint` (in its own code or in one of its `await` jobs), once the worker is paused: `Debug::all` already lists it, so a debugger reacting to the frame can open the session with `Debug::get`. `task-resumed` fires when it goes on, with the status back to `running`. A debug call made while it is paused is not reported.
-- A stream carries the caller's own tasks only, the ones it created. Neither the admin role nor a read grant adds anyone else's: the stream is the back-channel of the caller's work, not a monitor. An application that watches every task the caller may see (an admin console) reads `Task::running`, `Task::history` and `Task::live`, whose access rule includes the admin role and the grants.
-- `: connected` is sent on open and `: ping` every 15 s; both are comments an `EventSource` ignores. A subscriber whose token has expired, or that stops reading, is closed, and so is one that writes anything on the connection after its request: the stream is one-way.
+- A call is only reported when the stream it names belongs to the caller. An id that names another user's stream (admin role and read grants included), a closed stream, or nothing at all (malformed) does not refuse the call: it runs, reported nowhere. To watch every task the caller may see (an admin console), read `Task::running`, `Task::history` and `Task::live`, whose access rule includes the admin role and the grants.
+- The id names one stream for its lifetime. A reconnect, such as the automatic one of `EventSource`, opens a new stream with a new id, sent in its own `connected` frame: a client keeps the last id it received, and the calls already bound to the old stream are reported nowhere (fetch `Task::history` to catch up).
+- `: ping` is sent every 15 s, a comment an `EventSource` ignores. A subscriber whose token has expired, or that stops reading, is closed, and so is one that writes anything on the connection after its request: the stream is one-way.
 - Every open stream holds a request pool slot for as long as it lives, so `--max_sse` (default 2048) and `--max_sse_per_user` (default 16) cap them; a caller past either gets `429 Too Many Requests` and should poll and retry later.
-- There are no `id:` lines, so a reconnecting client cannot resume; fetch `Task::history` to catch up.
+- There are no `id:` lines, so a reconnecting client cannot resume.
 - Not available on Windows, where the endpoint answers `503`.
 
 ```js
 const events = new EventSource("/runtime::Task::events");   // cookie auth
+let sse = null;
+events.addEventListener("connected", (e) => (sse = e.data));  // again after every reconnect
 events.addEventListener("task-started", (e) => console.log(JSON.parse(e.data).start));
 events.addEventListener("task-complete", (e) => console.log(JSON.parse(e.data)));
 events.addEventListener("task-progress", (e) => console.log(JSON.parse(e.data).progress));
+
+// once `connected` has been received
+await fetch("/api::import", { method: "POST", headers: { task: "true", sse }, body: "[]" });
 ```
 
 ## Backups and many-worlds
@@ -470,7 +532,7 @@ From GCL, `root` reads it back with `Stream<Log>::get("log").reader(from)`.
     └── index.html       # static HTTP root
 ```
 
-- `files/<user_name>/` is the per-user upload area, reachable via `GET/PUT/POST /files/<user_name>`. Access is enforced by user grants: `greycat user grant alice rw root` lets `alice` read and write `files/root/`. A path the caller may not reach answers 401 when the request carries no valid credentials and 403 when it does. The `files/` root itself can be neither written nor deleted (403).
+- `files/<user_name>/` is the per-user upload area, reachable via `GET/PUT/POST /files/<user_name>`. Access is enforced by grants (see [Grants and per-user files](#grants-and-per-user-files)): `greycat user grant alice rw carol` lets `carol` read and write `files/alice/`. A path the caller may not reach answers 401 when the request carries no valid credentials and 403 when it does. The `files/` root itself can be neither written nor deleted (403).
 - `webroot/` — public static assets. Served at `/` without authentication. Unknown paths return 404 (no automatic SPA fallback to `index.html` — handle deep links explicitly if your router needs it). `webroot/` is also the recommended bundle output target, in which case it is generated rather than committed — see [webapp.md](webapp.md).
 
 `Runtime::on_files_put(handler)` registers a GCL callback that fires for every successful upload (receives the file path).

@@ -256,26 +256,9 @@ extern bool gc_lib_my_plugin__link_native(gc_program_t *prog, gc_program_library
 bool gc_lib_my_plugin__link(gc_program_t *prg, gc_program_library_t *lib) {
     bool res = true;
 
-    // Resolve dependency modules
-    u32_t core = gc_program__resolve_module(prg,
-        gc_program__resolve_symbol(prg, "core", 4));
-
-    // Resolve well-known types from core
-    gc_core_any = gc_program__resolve_type(prg, core,
-        gc_program__resolve_symbol(prg, "any", 3));
-    res &= (gc_core_any != 0);
-
-    gc_core_String = gc_program__resolve_type(prg, core,
-        gc_program__resolve_symbol(prg, "String", 6));
-    res &= (gc_core_String != 0);
-
-    gc_core_Array = gc_program__resolve_type(prg, core,
-        gc_program__resolve_symbol(prg, "Array", 5));
-    res &= (gc_core_Array != 0);
-
-    gc_core_Tensor = gc_program__resolve_type(prg, core,
-        gc_program__resolve_symbol(prg, "Tensor", 6));
-    res &= (gc_core_Tensor != 0);
+    // Core type ids (any/String/Array/Tensor/...) are per program and already resolved by the
+    // runtime into prg->core (gc_program__resolve_core_types) — read prg->core.Array etc.;
+    // there are no gc_core_* globals to fill anymore (removed in 8.4).
 
     // Resolve this plugin's module
     u32_t mymod = gc_program__resolve_module(prg,
@@ -748,7 +731,7 @@ Create with `gc_string__create_from(data, length, ctx)` (trailing `ctx` required
 
 ## Working with Arrays
 
-`gc/array.h` (full reference + examples in **api_collections.md**). Plugin pattern: create with `gc_machine__create_object(ctx, gc_core_Array)`, populate with `gc_array__add_slot(arr, slot, type, ctx)`, then `set_result` + `gc_object__un_mark`. Read a param array by iterating `0..arr->size` and calling `gc_array__get_slot(arr, i, &slot, &slot_type)`, checking `slot_type` before using the slot. (See the Tokenization Retry pattern below for a worked array-build example.)
+`gc/array.h` (full reference + examples in **api_collections.md**). Plugin pattern: create with `gc_machine__create_object(ctx, gc_machine__program(ctx)->core.Array)`, populate with `gc_array__add_slot(arr, slot, type, ctx)`, then `set_result` + `gc_object__un_mark`. Read a param array by iterating `0..arr->size` and calling `gc_array__get_slot(arr, i, &slot, &slot_type)`, checking `slot_type` before using the slot. (See the Tokenization Retry pattern below for a worked array-build example.)
 
 ## Working with Tensors
 
@@ -784,7 +767,7 @@ void tokenize_text(gc_machine_t *ctx) {
     }
 
     // Build result array from buffer
-    gc_array_t *arr = (gc_array_t *)gc_machine__create_object(ctx, gc_core_Array);
+    gc_array_t *arr = (gc_array_t *)gc_machine__create_object(ctx, gc_machine__program(ctx)->core.Array);
     int *tokens = (int *)buf->data;
     for (int i = 0; i < n_tokens; i++) {
         gc_array__add_slot(arr, (gc_slot_t){.i64 = tokens[i]}, gc_type_int, ctx);

@@ -102,7 +102,7 @@ Symmetric or asymmetric cable/overhead line. Both nodes must have equal `u_rated
 | `i_n` | A | no | Rated current (omit → `loading` = NaN) |
 
 ### Link (`link`)
-High-admittance connection between busbars inside a substation. No additional attributes beyond the base branch fields. No sensors can be attached to links. Links are modeled as ideal connections in the Y-bus matrix.
+High-admittance connection between busbars inside a substation. No additional attributes beyond the base branch fields. No power/current sensors can be attached to links. Since v1.13.167: if the grid has **no node-injection power sensors**, links are infinite-admittance (ideal) connections — linked nodes are merged into a "topological node", solved, and link flows/node injections are reconstructed afterwards; otherwise a fixed `(1+j)·1e6 p.u.` admittance is used (the old behavior everywhere; v2.0 will always use infinite admittance). Docs now classify `link` as an `edge`, not a `branch` (same attributes).
 
 ### Transformer (`transformer`)
 Two-winding transformer, possibly with tap changer and different voltage levels.
@@ -324,12 +324,18 @@ Regulates the voltage at a node by adjusting the reactive power dispatch of a co
 | `regulated_object` | `int32` | yes | ID of regulated appliance (sym_gen/asym_gen/sym_load/asym_load) |
 | `status` | `int8` | yes | 1 = active, 0 = disabled |
 | `u_ref` | `float64` (p.u.) | yes (power_flow) | Target voltage magnitude at the node |
+| `q_min` / `q_max` | `float64` (var) | no | Reactive power limits of the regulated object (enforced since v1.13.193) |
+
+**Updatable:** `status`, `u_ref`, `q_min`, `q_max`. **Output (`sym_output`/`asym_output`):** `id`, `energized`, `limit_violated` (`int8`: `0` none, `1` `q_min` reached, `2` `q_max` reached). The reactive power itself is reported on the regulated load/gen output, not on the regulator.
+
+**Behavior (Newton-Raphson power flow only):** an active regulator makes the node PV (P specified, |U| = `u_ref`, Q solved). Since v1.13.193, Q limits are enforced: if required Q exceeds `q_min`/`q_max`, the object is clamped to the limit and the node switches to PQ (|U| may deviate from `u_ref`). Multiple active regulators on one node share Q equally; clamped ones drop out and the remainder is redistributed. Asymmetric: limit checks use total three-phase Q.
 
 **Constraints:**
 - Each appliance can be regulated by at most one voltage regulator (`regulated_object` must be unique).
 - All voltage regulators connected to the same node must have the same `u_ref` value.
 - Voltage regulators and transformer tap regulators cannot coexist in the same model (raises `UnsupportedRegulatorCombinationError`).
 - Nodes with both a source and a voltage-regulated appliance are not supported when both are enabled (raises `UnsupportedVoltageRegulatorSourceCombinationError`).
+- Since v1.13.193: the regulated load/gen must have `type == LoadGenType.const_power` (runtime `UnsupportedLoadGenTypeForVoltageRegulator`; validator `InvalidVoltageRegulationError` on `regulated_object`), and `q_max >= q_min` (validator `NotGreaterOrEqualError`; NaN limits skipped).
 
 **Note:** Voltage regulators are excluded from state estimation and short-circuit output (irrelevant component for those calculation types).
 
@@ -387,6 +393,7 @@ from power_grid_model import (
     CalculationMethod, CalculationType, TapChangingStrategy,
     ShortCircuitVoltageScaling, AngleMeasurementType,
     ComponentAttributeFilterOptions,
+    CalculationInitialization, LoggerType,  # since v1.13.193
 )
 ```
 
@@ -486,6 +493,21 @@ from power_grid_model import (
 |------|-------|
 | `minimum` | 0 |
 | `maximum` | 1 |
+
+### CalculationInitialization (IntEnum) — since v1.13.193
+Option `calculation_initialization` of `calculate_power_flow`; only Newton-Raphson uses it.
+| Name | Value | Description |
+|------|-------|-------------|
+| `default` | 0 | Method default (`linear` for Newton-Raphson) |
+| `flat` | 1 | 1 p.u. + source angle/phase shift; source nodes at `u_ref` |
+| `linear` | 2 | Linear guess with loads/gens as constant admittances |
+| `average_source` | 3 | Average source reference voltage + phase shift (iterative-current start) |
+
+### LoggerType (IntEnum) — since v1.13.193
+| Name | Value | Description |
+|------|-------|-------------|
+| `info` | 3 | Timestamped text messages (default for `Logger`) |
+| `benchmark` | 5 | Timing information per calculation phase |
 
 ### AngleMeasurementType (IntEnum)
 | Name | Value | Description |

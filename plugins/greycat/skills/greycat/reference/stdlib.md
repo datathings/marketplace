@@ -664,9 +664,13 @@ Identity::token(user_id, 24hour);
 Identity::permissions();
 Identity::has_permission("admin");
 Identity::set_password("alice", "newpass");
-Identity::create("bob", "user");
+Identity::create("bob", "user");              // an existing bob gets the role and loses his password
 Identity::get_by_name("alice");
+Identity::grant("alice", "bob", IdentityGrantType::read);  // bob may read files/alice/
+Identity::revoke("alice", "bob", IdentityGrantType::read); // bob no longer reads files/alice/
 ```
+
+`admin` functions such as `create`, `get_by_name`, `grant` and `remove` are only permission-checked over HTTP. From GCL any caller runs them. See [runtime.md, Grants and per-user files](runtime.md#grants-and-per-user-files).
 
 ## Logging
 

@@ -57,7 +57,7 @@ result = model.calculate_power_flow(update_data=update_data, threading=0)
 - `shunt`: `status`, `g1`, `b1`, `g0`, `b0`
 - `fault`: `status`, `fault_object`, `fault_type`, `fault_phase`, `r_f`, `x_f`
 - Sensors: `measured_object`, measurement values, sigma values
-- Regulators: `status`, `u_set`, `u_band`, etc.
+- Regulators: `transformer_tap_regulator` — `status`, `u_set`, `u_band`, etc.; `voltage_regulator` — `status`, `u_ref`, `q_min`, `q_max`
 
 ---
 

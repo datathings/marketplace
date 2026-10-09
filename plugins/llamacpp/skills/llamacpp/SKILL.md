@@ -73,7 +73,7 @@ For detailed API documentation, the complete API is split across 6 files for eff
 - **[api-sampling.md](references/api-sampling.md)** (524 lines) - All 20+ sampling strategies (incl. adaptive-p) + backend sampling API
 - **[api-advanced.md](references/api-advanced.md)** (426 lines) - LoRA adapters, performance, training, constants, C++ RAII wrappers
 
-**Total:** 219 active functions (b11284) across 6 organized files
+**Total:** 219 active functions (b11526) across 6 organized files
 
 ### Quick Function Lookup
 
@@ -160,9 +160,18 @@ For advanced issues: https://github.com/ggerganov/llama.cpp/discussions
   - [api-advanced.md](references/api-advanced.md) - LoRA, performance, training, constants, C++ RAII (`llama-cpp.h`)
 - **[references/workflows.md](references/workflows.md)** (1,706 lines) - 16 complete working examples: basic workflows (text generation, chat, embeddings, batching, sequences), intermediate (LoRA, state, sampling, encoder-decoder, memory), advanced features (XTC/DRY, per-sequence state, model detection), production applications (interactive chat, streaming), and the extended batch API.
 
-## What's New in b11284
+## What's New in b11526
 
-**b11284** (164 commits since b11120) — additive, non-breaking: 14 new functions, nothing removed, no signature changes.
+**b11526** (242 commits since b11284) — no functions added, removed, or re-signatured. Changes are data/struct-only:
+
+**BREAKING (data, not code):**
+- `LLAMA_SESSION_VERSION` 10 → 11 and `LLAMA_STATE_SEQ_VERSION` 3 → 4 (KV state now saves exact rotation metadata). Session/sequence-state files from older builds are rejected on load — regenerate them. See [api-context.md](references/api-context.md#llama_state_load_file).
+
+**New:**
+- `llama_context_params.moe_cache_size` (`size_t`, [EXPERIMENTAL]) — device cache in bytes for MoE experts kept in host memory, split across devices like the layers; `0` = disabled.
+- `LLAMA_VOCAB_TYPE_PLAMO3 = 8` (PLaMo-3 tokenizer).
+
+**Previously (b11284, 164 commits since b11120)** — additive, non-breaking: 14 new functions, nothing removed, no signature changes.
 
 - **New extended batch API** — opaque `struct llama_batch_ext` + `llama_process(ctx, type, batch)` with `enum llama_process_type` (`LLAMA_PROCESS_TYPE_ENCODE`/`DECODE`); return codes match `llama_decode()`. Builder: `llama_batch_ext_init(ctx)`/`_free`/`_clear`, `_add(batch, seq_id)`/`_add_token`/`_add_embd` (return batch index, or `-1` full / `-2` invalid token / `-3` invalid seq id), `_add_seq`, `_set_embd_token`, `_set_embd_state` (stub), `_set_output_embd`/`_set_output_logits` (equivalent for now), `_set_pos` (**caller must set positions**; M-RoPE embedding entries take multiple positions). New `struct llama_embd { data, n_rows, n_embd }`. batch_ext get_logits/get_embeddings are TODO — read outputs with `llama_get_logits_ith(ctx, idx)`. `llama_decode()` now converts `llama_batch` to this internally. See [api-inference.md](references/api-inference.md#extended-batch-api-b11284) and [workflow 16](references/workflows.md#16-extended-batch-api-llama_process).
 - **C++:** `llama_batch_ext_ptr` (+ `llama_batch_ext_deleter`) in `llama-cpp.h`.
