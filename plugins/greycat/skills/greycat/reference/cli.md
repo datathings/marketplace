@@ -71,6 +71,8 @@ greycat run foo 42 hello '{"name":"John"}'   # foo(42, "hello", Person { name: "
 
 The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it. When stderr is a TTY, a progress bar shows once the function has run 500ms, with the percentage it reports through `Task::expected_steps` / `Task::add_steps`.
 
+`--world=<name>` (`GREYCAT_WORLD`) runs the function in that world (see [runtime.md § Worlds](runtime.md)): it reads and commits to the world's index. Unset, or `main`, runs it in main; a name no world has fails before anything runs.
+
 ### `greycat call <function> [args...]`
 
 Calls an `@expose`d function **on a running server** as a task, waits for it, and prints the result. Nothing is built or opened locally: the server owns `gcdata/`, so `call` works while `serve` is up, from any directory.
@@ -80,6 +82,7 @@ Calls an `@expose`d function **on a running server** as a task, waits for it, an
 - `--url` (`GREYCAT_URL`) selects the server. Without it, the server is `http://localhost:<port>`: the `--port` given, else the port the server holding this project's store wrote to `gcdata/security/port`, else the default `8080`.
 - `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
 - `--task_class` (`GREYCAT_TASK_CLASS`) picks the worker class the server runs the task in: `small`, `medium` (the default) or `large`. A class the server has no workers for runs in the nearest one that has some.
+- `--world` (`GREYCAT_WORLD`) runs the task in that world, sent as the `world` header: unset or `main` is main, and a name the server has no world for fails the call (`400`).
 - The task is followed through the server's event stream (`runtime::Task::events`): `call` opens it first and names it in the `sse` header of the call. When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
 - The result prints like `run`'s: GCL notation, or JSON with `--format=json`; `--pretty` indents it. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, an argument does not read, or the token is rejected. Ctrl-C cancels the remote task.
 - A `@reserved` function (`runtime::Task::history`, `runtime::Task::running`, ...) is answered by the server directly rather than as a task, and `call` reads that answer. `runtime::Task::events` (a stream of events) and `runtime::Runtime::abi` (the ABI file) answer with no value to print, so `call` refuses them.
@@ -286,7 +289,6 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--registry` / `GREYCAT_REGISTRY`       | `legacy`           | `new`, `upgrade`, env-only `install` | Registry to resolve libraries and core releases from: `legacy` for `get.greycat.io`, otherwise the base URL of a JSON-RPC registry. See [Registries](#registries). |
 | `--registry_token`                      | none               | `new`, `upgrade`, env-only `install` | `GREYCAT_REGISTRY_TOKEN`. Token sent to that registry, for packages that are not anonymously readable. Shown as `<set>` by `-h`. |
 | `--with=<cmd>`                          | none               | `dev`                               | Watch-build command to spawn alongside the server.                                                                                                                                                                                 |
-| `--worlds` / `GREYCAT_WORLDS`           | `1`                | `run`, `serve`                      | Number of parallel graph "worlds" (branching state) — see [runtime.md § many-worlds](runtime.md). Worker count is multiplied accordingly.                                                                                          |
 
 Run `greycat <command> -h` to see only the options that apply to `<command>` along with their **resolved** values (after `.env` and env-var processing) — handy for debugging configuration.
 

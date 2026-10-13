@@ -32,6 +32,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Logging](#logging)
   - [System Information](#system-information)
   - [Current HTTP Request](#current-http-request) - Task::header/headers/uri/body
+  - [Worlds](#worlds) - World, WorldMode, WorldInfo (new)
   - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
@@ -425,6 +426,7 @@ type PeriodicOptions {
   start: time?;           // default time::now()
   max_duration: duration?;// force-cancel after this; null = unlimited
   task_class: TaskClass?; // worker class each run executes in; default medium
+  world: String?;         // world each run executes in; default `main`; a run is skipped while its world does not exist (new)
 }
 Scheduler::add(health_check, FixedPeriodicity { every: 5min },
   PeriodicOptions { start: time::now() + 1hour, max_duration: 30s });
@@ -476,6 +478,7 @@ type Task {
   status: TaskStatus;
   progress: float?;
   task_class: TaskClass?;   // class the task runs in after fallback; null when read from history
+  world: String?;           // world the task reads/commits to, `main` for main; null when read from history (new)
   // static native fns:
   //   expected_steps(total_expected_steps: int)
   //   add_steps(steps: int)
@@ -512,6 +515,8 @@ type Job<T> {
   function: core::function;
   arguments: Array<any?>?;
   task_class: TaskClass?;   // null: medium for spawn, the awaiting task's class for await (new)
+  world: String?;           // world a spawn runs in (`main` = main store); null: the spawning task's world.
+                            //   An await job always runs in the awaiting task's world; naming another one is an error (new)
   // native fn result(): T
 }
 // native fn await(jobs: Array<Job>)   // MergeStrategy removed (upstream `dccdde5c0`, breaking): merges are strict only,
@@ -614,6 +619,11 @@ type Runtime {
   // @expose @permission("admin"): store_stats(): StoreStats  (new; live blocks/bytes by type vs file bytes on disk, damaged blocks,
   //   unreadable zones; reads every live block, as long as a full backup)
 }
+// StoreStats.live_blocks now counts blocks reachable from main's index *or any world's* (a shared block counts once);
+// new StoreStats.worlds: Array<StoreWorldStats>? (in World::list order):
+// type StoreWorldStats { name: String; mode: WorldMode; entries: int; own_blocks: int; own_bytes: int; meta_bytes: int; }
+//   entries = index entries; own_blocks/own_bytes = live blocks it holds that main does not (a block other worlds
+//   also reference counts in each); meta_bytes = size of its block index
 
 var info = Runtime::info();
 println("Version: ${info.version}, arch: ${info.arch}");
@@ -674,6 +684,30 @@ var child  = System::spawn("/usr/bin/sleep", ["10"]);
 var result = child.wait();    // ChildProcessResult
 ```
 
+### Worlds
+
+**New (upstream `214249d24`).** A world is a named branch of the store: tasks running in it read and commit to the world's own block index instead of main's, so what they write stays out of main. Worlds share with main every block they have in common — a world costs only what it writes plus its index. Main is world `0`; the name `main` is reserved. Merging a world back into main is not available. Pick the world with `Job.world` (spawn), `PeriodicOptions.world`, the RPC `world` header, or `greycat run|call --world=<name>` (`GREYCAT_WORLD`; unknown name fails before running / `400`). Backups hold main and every world (`backup_full` must run in main); defrag moves world blocks along with main's.
+```gcl
+enum WorldMode {
+  full;   // starts with a copy of main's block index: sees main as of creation, nothing committed later reaches it
+  light;  // starts empty and reads main for whatever it has not written; once it modifies a node, main's later changes to it stop reaching it
+}
+type WorldInfo { id: int; name: String; mode: WorldMode; created: time; user_id: int?; }  // id never reused; user_id null if created as no user
+
+type World {
+  // @expose @permission("admin") static native fn create(name: String, mode: WorldMode): int   // full copies main's index: O(#blocks)
+  // @expose @permission("admin") static native fn remove(name: String)                         // fails while a task still reads it
+  //                              static native fn id(name: String): int?
+  //                              static native fn current(): String                            // `main` for the main store
+  // @expose @permission("admin") static native fn list(): Array<WorldInfo>                     // creation order, main excluded
+}
+
+World::create("what-if", WorldMode::light);       // returns the world id
+var id = spawn(Job { function: project::simulate, world: "what-if" });   // runs in "what-if"
+// await([Job { ..., world: "what-if" }]) from main is an error: await jobs always run in the awaiting task's world
+```
+Names take 1 to 128 of `[A-Za-z0-9_.-]`; ids are never reused. Full reference: the `greycat` skill's `runtime.md` § Worlds.
+
 ### Identity & Security
 
 The 8.0 security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). Anonymous callers are id `0`.
@@ -692,12 +726,16 @@ type Identity {
   // @expose @permission("admin")  static native fn get_by_name(name: String): Identity?
   // @expose @permission("admin")  static native fn all(): Array<Identity>
   // @expose @permission("admin")  static native fn create(name: String, role: String): Identity
+  //     (on an existing name: takes `role` and is returned; password, grants and open sessions are now *kept* -- fix, upstream `a538bbb66`)
+  // @expose @permission("admin")  static native fn create_with_password(name: String, role: String, password: String): Identity
+  //     (new; throws if name taken, password empty, or role undeclared; never changes an existing identity -- the sign-up call:
+  //      a @permission("public") function may forward a visitor's name/password, choosing `role` itself)
   // @expose                       static native fn token(id: int, ttl: duration?): String
   // @expose @permission("public") static native fn login(login: String, password: String): String
   // @expose                       static native fn logout()
   // @expose @permission("public") static native fn permissions(): Array<String>
   //                               static native fn has_permission(permission: String): bool
-  // @expose                       static native fn set_password(name: String, pass: String): bool
+  // @expose                       static native fn set_password(name: String, pass: String): bool   (empty pass removes the password; an empty password never signs in)
   // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
   // @expose                       static native fn set_role(name: String, role: String)
   // @expose @permission("admin")  static native fn remove(name: String): bool   (new; public/root cannot be removed)

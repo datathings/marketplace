@@ -212,9 +212,23 @@ fn setup_users() {
 greycat run setup_users
 ```
 
-Keep `@permission("admin")` on such a function. `Identity::create` is not permission-checked when GCL calls it, so without it any signed-in user could run it over HTTP. On an existing name, `create` also clears the password.
+Keep `@permission("admin")` on such a function. `Identity::create` is not permission-checked when GCL calls it, so without it any signed-in user could run it over HTTP. On an existing name, `create` sets the role and keeps the password.
 
 The test harness in `test/server/` of this repo is a working reference.
+
+### Letting visitors sign up
+
+A sign-up form is called by an anonymous visitor, and `set_password` refuses that caller, also from GCL. `Identity::create_with_password` creates the identity with its password in one call and never touches an existing one, so a `@permission("public")` endpoint can forward the form to it:
+
+```gcl
+@expose
+@permission("public")
+fn signup(name: String, password: String): int {
+    return Identity::create_with_password(name, "user", password).id;
+}
+```
+
+The new identity signs in at once. A taken name, an empty password and an unknown role throw. Pick the role in the function and never take it from the caller.
 
 ## Schema / type evolution
 

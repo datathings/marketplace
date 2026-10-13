@@ -123,11 +123,12 @@ typedef struct {
     bool immediate;            // default true
     bool activated;            // default true
     u8_t task_class;           // gc_task_class_t; set it explicitly, `{}` gives small. Out of range runs as medium
+    u32_t world_id;            // world the task runs in, 0 (`{}`) for main; held in former padding. A run whose world was removed is skipped
     i64_t start_time_us;       // default: current time (µs since epoch)
     i64_t max_duration_us;     // 0 for unlimited
 } gc_periodic_options_t;
-// static_assert: sizeof == 24; task_class at offset 2 (the padding after `activated`),
-// start_time_us at 8, max_duration_us at 16 -- public SDK layout, unchanged by the new field.
+// static_assert: sizeof == 24; task_class at offset 2 and world_id at offset 4 (both in the padding after
+// `activated`), start_time_us at 8, max_duration_us at 16 -- public SDK layout, unchanged by the new fields.
 
 typedef struct {
     i64_t task_id;
@@ -357,7 +358,6 @@ typedef enum {
     /// Formerly `req_workers`: same slot, so the numbering below is unchanged.
     gc_env_options__workers_small,
     gc_env_options__workers,
-    gc_env_options__worlds,
     gc_env_options__port,
     gc_env_options__webroot,
     gc_env_options__key,
@@ -397,6 +397,7 @@ typedef enum {
     gc_env_options__cache_ratio_small,
     gc_env_options__cache_ratio_large,
     gc_env_options__task_class,
+    gc_env_options__world,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -426,6 +427,8 @@ typedef enum {
 | `gc_env_options__cache_ratio_small` | `--cache_ratio_small` / `GREYCAT_CACHE_RATIO_SMALL` | `0.4` (`.f64`) | **New (upstream `dccdde5c0`), appended before `gc_env_options_len`.** Object cache of a small worker relative to a medium one (1 unit); must be > 0. |
 | `gc_env_options__cache_ratio_large` | `--cache_ratio_large` / `GREYCAT_CACHE_RATIO_LARGE` | `3.0` (`.f64`) | **New**, same. Object cache of a large worker relative to a medium one; must be > 0. The workers' cache (3/4 of `--cache`) is split by class by these ratios. |
 | `gc_env_options__task_class` | `--task_class` / `GREYCAT_TASK_CLASS` | `"medium"` (`small` / `medium` / `large`) | **New**, same. Worker class `greycat call` sends as the `task` header. |
+| `gc_env_options__world` | `--world` / `GREYCAT_WORLD` | `NULL` (→ `main`) | **New (upstream `19f306db7`), appended before `gc_env_options_len`.** World `greycat run` runs the function in / `greycat call` sends as the `world` header; unset or `main` is main, an unknown name fails. |
+| `gc_env_options__worlds` | — | — | **Removed** (upstream `19f306db7`) — the enumerator sat between `__workers` and `__port`, so **every later variant shifted down by one** (ABI-breaking for code that stored raw `gc_env_options_offset_t` values; source-breaking for code naming it). |
 | `gc_env_options__reserved_2` | — | — | **Renamed from `gc_env_options__logfile`** (same slot). `--logfile` is **removed** from the CLI (the log is the `log` stream). Source-breaking only for code naming the old enumerator. |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 

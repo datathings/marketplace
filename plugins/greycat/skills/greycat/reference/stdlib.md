@@ -629,6 +629,11 @@ Runtime::info();                   // RuntimeInfo (version, license, workers and
 Runtime::sleep(1s);
 Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();
+Runtime::store_stats();             // StoreStats: live blocks and bytes, by type and by world
+
+World::create("what-if", WorldMode::light);   // branch of the store, see runtime.md § Worlds
+World::list();   World::id("what-if");   World::remove("what-if");
+World::current();                             // the calling task's world, "main" for main
 
 System::exec("/bin/ls", ["-la"]);             // blocking subprocess
 System::spawn("/bin/sleep", ["60"]);          // non-blocking
@@ -664,7 +669,9 @@ Identity::token(user_id, 24hour);
 Identity::permissions();
 Identity::has_permission("admin");
 Identity::set_password("alice", "newpass");
-Identity::create("bob", "user");              // an existing bob gets the role and loses his password
+Identity::create("bob", "user");              // an existing bob gets the role and keeps its password
+Identity::create_with_password("carol", "user", "pw"); // new identity only, throws if carol exists
+Identity::set_password("bob", "");            // removes bob's password, so bob cannot sign in
 Identity::get_by_name("alice");
 Identity::grant("alice", "bob", IdentityGrantType::read);  // bob may read files/alice/
 Identity::revoke("alice", "bob", IdentityGrantType::read); // bob no longer reads files/alice/

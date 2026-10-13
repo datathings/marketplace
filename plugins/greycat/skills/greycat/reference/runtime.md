@@ -10,7 +10,8 @@ What is alive in a process running `greycat serve` (or `greycat run`). Reach her
 - The HTTP server
 - Identity and permissions
 - Tasks and the scheduler
-- Backups and many-worlds
+- Backups
+- Worlds (branches of the store)
 - Logging
 - File uploads (`/files/`) and static assets (`webroot/`)
 
@@ -33,7 +34,7 @@ Everything is in-process. There is no separate database, queue, or web server to
 | Entry                       | Meaning                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------- |
 | `data_<N>.bin`              | Zone files (numbered; one per worker / shard).                                  |
-| `meta.bin`, `meta.bin-lock` | Index of zones and live transactions.                                           |
+| `index.bin`, `index.bin-lock` | Index of zones and live transactions.                                           |
 | `program`                   | The compiled program. Updated on each compatible rebuild.                       |
 | `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds.    |
 | `history/`                  | Task history (recent task records — for the `Task::history` API).               |
@@ -228,11 +229,13 @@ fn ping(): String { return "pong"; }              // anonymous — use only when
 
 A handful of stdlib endpoints are `@permission("public")` because they filter their *own* output by the caller's permission mask rather than gating the call: MCP `tools/list` and `runtime::OpenApi::v3` both drop every function the caller could not invoke, so reaching them anonymously discloses only the `public` endpoints. That pattern — public entry point, per-item filtering inside — is the only reason to make a listing endpoint public; a function that returns data rather than a filtered catalogue still needs a real permission.
 
-Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::all`, `Identity::set_role`, `Identity::set_grants`, `Identity::grant`, `Identity::revoke`, `Identity::remove`. CLI equivalents under `greycat user`.
+Identity management at runtime: `Identity::login`, `Identity::token`, `Identity::set_password`, `Identity::create`, `Identity::create_with_password`, `Identity::all`, `Identity::set_role`, `Identity::set_grants`, `Identity::grant`, `Identity::revoke`, `Identity::remove`. CLI equivalents under `greycat user`.
 
-`@permission` is checked when a function is called over HTTP or as an MCP tool. A call from GCL code is not checked. `Identity::get_by_id`, `get_by_name`, `all`, `create`, `set_role`, `remove`, `grant`, `revoke` and `Role::all` are `admin` over HTTP, but any caller runs them from GCL. An `@expose`d function that forwards untrusted input to them must check its caller itself (`Identity::has_permission("admin")`, for example). `Identity::token`, `set_password` and `set_grants` do compare the caller to the target identity, from GCL as well.
+`@permission` is checked when a function is called over HTTP or as an MCP tool. A call from GCL code is not checked. `Identity::get_by_id`, `get_by_name`, `all`, `create`, `create_with_password`, `set_role`, `remove`, `grant`, `revoke` and `Role::all` are `admin` over HTTP, but any caller runs them from GCL. An `@expose`d function that forwards untrusted input to them must check its caller itself (`Identity::has_permission("admin")`, for example). `Identity::token`, `set_password` and `set_grants` do compare the caller to the target identity, from GCL as well.
 
-`Identity::create` on a name that already exists sets its role and clears its password, so that identity can no longer sign in until `set_password` runs again.
+`Identity::create` on a name that already exists sets its role and keeps its password. `Identity::create_with_password(name, role, password)` only creates a new identity, which signs in at once, and throws on a taken name. That makes it the call behind a public sign-up endpoint (see [workflow.md](workflow.md)).
+
+An empty password never signs in. `Identity::set_password(name, "")` removes the password, so the identity cannot sign in until it gets one again.
 
 ### Grants and per-user files
 
@@ -375,14 +378,15 @@ events.addEventListener("task-progress", (e) => console.log(JSON.parse(e.data).p
 await fetch("/api::import", { method: "POST", headers: { task: "true", sse }, body: "[]" });
 ```
 
-## Backups and many-worlds
+## Backups
 
 In-process API:
 
 ```gcl
-Runtime::backup_full();       // full snapshot of gcdata/ into backup_path
+Runtime::backup_full();       // full snapshot of gcdata/ into backup_path, returns the archive path
 Runtime::backup_delta();      // incremental
 Runtime::defrag();            // compact zone files
+Runtime::store_stats();       // live blocks and bytes, by type and by world
 ```
 
 CLI equivalents: `greycat backup` and `greycat defrag`.
@@ -391,7 +395,43 @@ CLI equivalents: `greycat backup` and `greycat defrag`.
 
 Restore with `greycat restore <archive>`; `--verify` validates the archive before extracting.
 
-**Many-worlds** is the runtime's branching-graph feature: `--worlds=<N>` (`GREYCAT_WORLDS`) opens N parallel graph worlds for simulation / what-if analysis. Worker count is multiplied accordingly; see `gcdata/world_*` after enabling.
+A backup holds main and every world (see [Worlds](#worlds-branches-of-the-store)); a block a world shares with main is stored once. It must run in main: called from a task running in a world it raises. `greycat restore` replaces the worlds of the store with those of the archive, and an archive made before worlds existed restores none.
+
+## Worlds (branches of the store)
+
+A world is a named branch of the store: tasks running in it read and commit to the world's own block index instead of main's, so what they write stays out of main. Worlds and main share the zone files and every block they have in common, so a world costs only what it writes, plus its index. Merging a world back into main is not available.
+
+```gcl
+World::create("what-if", WorldMode::light);   // returns the world id; admin only
+World::list();                                // Array<WorldInfo> {id, name, mode, created, user_id}; exposed, admin only
+World::id("what-if");                         // int?, null when there is none
+World::current();                             // String, the world the calling task or job runs in, "main" for main
+World::remove("what-if");                     // admin only; fails while a task runs in it
+```
+
+Names take 1 to 128 of `[A-Za-z0-9_.-]`; `main` is reserved for the main store. Ids are never reused.
+
+Two modes:
+
+| Mode    | Starts with                  | Sees main's later commits                                                                                 |
+| ------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `full`  | a copy of main's block index | Never: the world is the store as it was at creation.                                                      |
+| `light` | an empty index, reading main | For every node the world has not modified. Once it modifies a node, that node stays as the world left it. |
+
+A full world's creation copies main's index into its table, in time proportional to the store's block count (about 50 ms per million blocks), during which no commit runs. A light world is created instantly. In a light world, the unit of isolation is the node: a `node<T>` slot, an object, or a whole `nodeTime` / `nodeIndex` / `nodeList` / `nodeGeo`. A light world modifying a large `nodeIndex` main holds copies the index entries of its whole tree on that first commit (entries only, not the blocks); two tasks of the world making that first write to the same node at once conflict, and one fails with a fusion error. Two tasks of a world writing the same node later merge as they do in main.
+
+Picking the world a task runs in:
+
+| Where         | How                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| An HTTP call  | Request header `world: <name>`; an unknown name is answered `400`. `main` or no header: main. |
+| `spawn`       | `Job.world`: a name, `"main"`, or `null` for the spawning task's world.                       |
+| `await`       | Always the awaiting task's world; a job naming another one is an error.                       |
+| The scheduler | `PeriodicOptions.world`; `null` is main. A run is skipped while its world does not exist.     |
+
+`Task.world`, in what `Task::running()` and a `task: true` call answer, names the world a task runs in (`"main"` for main). It is `null` in `Task::history()`, which does not record it.
+
+`Runtime::store_stats().worlds` reports each world's index entries, the blocks it holds that main does not and their bytes, and its index size. A world's index is a table of `gcdata/index.bin`, next to main's; `gcdata/worlds/registry` lists the worlds. Never edit or copy them by hand. Defrag moves the blocks of every world along with main's.
 
 ## Logging
 
