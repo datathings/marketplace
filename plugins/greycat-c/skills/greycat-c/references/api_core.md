@@ -166,6 +166,7 @@ typedef union gc_f32_conv_t_ {
 | Macro | Description |
 |-------|-------------|
 | `gc_sdk` | DLL export/import or `__attribute__((visibility("default")))`. Marks functions as part of the public SDK. |
+| `gc_noinline` | **New in 8.4.** `__declspec(noinline)` (MSVC) or `__attribute__((noinline))`. Keeps a cold-branch function out of its callers so its frame does not burden a hot one. |
 | `gc_unused` | `__attribute__((unused))` — suppresses unused variable warnings |
 | `gc_fallthrough` | `__attribute__((fallthrough))` — marks intentional switch fallthrough |
 | `likely(x)` | `__builtin_expect((x), 1)` — branch prediction hint (likely true) |
@@ -1083,6 +1084,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_type_desc__is_nullable(type_d)` | Check if a type descriptor marks the type as nullable. |
 | `gc_type_desc__to_type_id(type_d)` | Extract the type ID from a type descriptor. |
 | `gc_type_desc__to_type_desc(type_id, is_nullable)` | Build a type descriptor from a type ID and nullable flag. |
+| `static inline bool gc_type_desc__generic_arg_fits(const gc_program_t *prog, const u32_t expected, const u32_t actual)` | **New in 8.4.** Whether generic argument descriptor `actual` is accepted where `expected` is declared (both specializations of one generic): `any?` accepts anything, `any` anything non-nullable, any other argument must match exactly, nullability included. The one rule of parameter checks and field stores. |
 
 #### Format Pragma Extraction
 
@@ -1301,7 +1303,7 @@ if (symb_off != 0) {
 <a id="gclog-h"></a>
 ## gc/log.h — Logging
 
-Structured logging from both VM (machine) and host contexts. Emitted records are decorated with the level, ISO timestamp, user/task ids, and (when emitted from a VM frame) the current `module::Type::fn`. Records are appended to the host log. **As of 8.4 the runtime writes them to the `log` stream — `files/root/streams/log.ndjson`, one JSON `runtime::Log` object per line — via `gc/stream.h`** (registered at host init as root, non-durable, no callback), replacing `files/root/log.csv`; the `gc/log.h` header comment still says "CSV record" but that is stale. Calls return immediately when `level` exceeds the configured threshold, so it is safe to use the convenience helpers in hot paths.
+Structured logging from both VM (machine) and host contexts. Emitted records are decorated with the level, ISO timestamp, user/task ids, and (when emitted from a VM frame) the current `module::Type::fn`. Records are appended to the host log. **As of 8.4 the runtime writes them to the `log` stream — `files/root/streams/log.ndjson`, one JSON `runtime::Log` object per line — via `gc/stream.h`** (registered at host init as root, no callback, buffered: records reach the file once `--log_flush_size` (64KB) is pending or at the latest `--log_flush_step` (1s) later, at once on an `error` record with `--log_flush_on_error`; a killed process loses what is still buffered), replacing `files/root/log.csv`; the `gc/log.h` header comment still says "CSV record" but that is stale. Calls return immediately when `level` exceeds the configured threshold, so it is safe to use the convenience helpers in hot paths.
 
 ### Log Levels
 
@@ -1311,10 +1313,11 @@ typedef enum gc_log_level {
     gc_log_level_error = 1,
     gc_log_level_warn  = 2,
     gc_log_level_info  = 3,
-    gc_log_level_perf  = 4,
-    gc_log_level_trace = 5
+    gc_log_level_trace = 4
 } gc_log_level_t;
 ```
+
+**Breaking (8.4, upstream `99b9ebb08`): `gc_log_level_perf` is removed and `gc_log_level_trace` is now `4` (was `5`).** Code naming `gc_log_level_perf` no longer compiles; code comparing raw numeric levels must be rebuilt. Runtime metrics no longer ride on the log: they are separate CSV streams switched on by `--metrics` (`host`, `task`, `http`; see `gc_env_options__metrics` in [api_runtime_storage.md](api_runtime_storage.md)). Use `info` or `trace` for what used to be logged at `perf`.
 
 ### Functions
 
@@ -1360,13 +1363,13 @@ Both return immediately when `level` exceeds the configured threshold, so they a
 **VM-context structured logging.** `gc_log__machine` formats a `gc_slot_t` according to its `gc_type_t` and decorates the TTY line with the current frame's `module::Type::fn`. Guard expensive object construction with `gc_log__enabled` so you allocate nothing when the level is suppressed; mark/unmark the temporary object across the call:
 
 ```c
-if (gc_log__enabled(gc_machine__get_host(ctx), gc_log_level_perf)) {
+if (gc_log__enabled(gc_machine__get_host(ctx), gc_log_level_trace)) {
     gc_object_t *usage = gc_machine__create_object(ctx, gc_mymod_UsageStat);
     gc_object__set_at(usage, gc_mymod_UsageStat_read_bytes,
                       (gc_slot_t) {.u64 = stat->read_bytes}, gc_type_int, ctx);
     gc_object__set_at(usage, gc_mymod_UsageStat_write_bytes,
                       (gc_slot_t) {.u64 = stat->write_bytes}, gc_type_int, ctx);
-    gc_log__machine(ctx, gc_log_level_perf, (gc_slot_t) {.object = usage}, gc_type_object);
+    gc_log__machine(ctx, gc_log_level_trace, (gc_slot_t) {.object = usage}, gc_type_object);
     gc_object__un_mark(usage, ctx);
 }
 ```

@@ -90,7 +90,7 @@ my-project/
   [project.md](project.md).
 - **Clearing `webroot/` only clears your own output.** Assets a library serves live in `lib/<name>/webroot/`
   and are resolved separately, so wiping the bundle output cannot remove them. See
-  [runtime.md](runtime.md).
+  [files.md](files.md).
 
 ## Backend vs frontend: what `app/` signals
 
@@ -307,7 +307,7 @@ that exists nowhere else. That case is rare; when in doubt, add the token.
 A page is a plain `index.html` that carries the color-scheme class and hosts one Lit root element, plus an
 `index.ts` that defines it. The root element owns the page lifecycle - including the init/login gate, since
 `gc.sdk.init()` must resolve before any typed call works (see
-[Authentication](#authentication-and-the-init-login-flow)). It renders in shadow DOM (the Lit default) and
+[Authentication](#authentication-and-the-initlogin-flow)). It renders in shadow DOM (the Lit default) and
 carries its own `static styles`.
 
 ```html
@@ -578,7 +578,7 @@ The resolved token rides the `Authorization` header on every subsequent call. Do
 anonymous caller. It is reserved for endpoints that genuinely must serve anonymous traffic (`login`, a health
 probe) and is a deliberate project-owner decision.
 
-The raw JSON-RPC and path-RPC HTTP endpoints still exist (see [runtime.md](runtime.md)); the SDK calls them for
+The raw JSON-RPC and path-RPC HTTP endpoints still exist (see [http.md](http.md)); the SDK calls them for
 you, and app code should go through the SDK.
 
 ## Running and building
@@ -656,7 +656,7 @@ selectors, and keeping specs independent of the persistent `gcdata/` store.
 14. **Installing frontend deps with npm/npx or bare pnpm.** `vp install` uses the pinned pnpm; `pnpm add`
     directly relinks the store across pnpm majors and errors, and `npx` trips the `devEngines` pin. Add deps to
     `package.json`, run `vp install`, and invoke tools through `pnpm exec` / `pnpm run`.
-15. **Assuming a fresh database per test.** `gcdata/` is one persistent store and `--store` only caps its size.
+15. **Assuming a fresh database per test.** `gcdata/` is one persistent store and `--store` only sizes its index and does not select another database.
     Playwright specs must create uniquely-labeled data and clean it up, not assume an empty list.
 16. **Hand-written TypeScript mirrors of backend types.** `project.d.ts` already declares every type that
     crosses the wire. An `interface Sensor` in `app/` duplicates it and drifts silently. Reshape the GCL type

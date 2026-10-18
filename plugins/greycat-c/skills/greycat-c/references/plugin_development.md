@@ -690,7 +690,7 @@ Use `gc_machine__log_level` to check the machine's verbosity level before perfor
 
 ```c
 void my_function(gc_machine_t *ctx) {
-    // gc_log_level_t: none=0, error=1, warn=2, info=3, perf=4, trace=5
+    // gc_log_level_t: none=0, error=1, warn=2, info=3, trace=4 (perf removed in 8.4)
     if (gc_machine__log_level(ctx) >= gc_log_level_trace) {
         // Only build expensive debug strings when trace logging is active
         gc_buffer_t *buf = gc_machine__get_buffer(ctx);

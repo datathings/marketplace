@@ -9,7 +9,7 @@ The stdlib ships under `lib/std/` (split into `core.gcl`, `io.gcl`, `runtime.gcl
 - Node tags (graph-persisted: node, nodeTime, nodeList, nodeIndex, nodeGeo)
 - Time and duration
 - Geographic types (geo, GeoBox, GeoCircle, GeoPoly)
-- IO (Reader / Writer / File)
+- IO (Reader / Writer, Json, Csv)
 - Networking (Url, Smtp)
 - Crypto and UUID
 - Tensor and vector index
@@ -248,7 +248,10 @@ g.set(geo { 49.6, 6.1 }, station);
 g.get(geo { 49.6, 6.1 });
 g.resolve(geo { 49.7, 6.0 });      // closest-prior read
 g.rangeSize(geo { 49, 6 }, geo { 50, 7 });
+for (pos, station in g[geo { 49, 6 }..geo { 50, 7 }]) { /* every key of the box, south-west first */ }
 ```
+
+A range `g[a..b]` is the box spanned by `a` and `b` (any two opposite corners): it yields exactly the keys inside, in curve order, and `rangeSize` counts the same keys. Walking from the higher code, `g[b..a]`, runs the box backwards. No `GeoBox.contains` filter is needed on the keys.
 
 ### Sampling node tags
 
@@ -272,7 +275,7 @@ nodeGeo::sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: 
 | `adaptative`  | Variable delta — bound the number of skipped elements between samples. Useful for non-monotonic series.   |
 | `dense`       | All elements in range; no down-sampling.                                                                  |
 
-`maxRows` is the upper bound on rows returned regardless of mode. `maxDephasing` (nodeTime / nodeList only) caps the allowed time / index drift between sampled points across multiple input refs — useful when aligning unsynchronized series.
+`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. `maxDephasing` (nodeTime / nodeList only) caps the allowed time / index drift between sampled points across multiple input refs — useful when aligning unsynchronized series.
 
 ## Time and duration
 
@@ -284,6 +287,7 @@ time::current()                    // contextual time (defaults to time::max out
 time::min   time::max
 time::new(epoch, DurationUnit::milliseconds)
 time::parse("2025-05-22", "%Y-%m-%d")
+time::parse("2025-05-22T16:47:42+02:00", null)   // null format: ISO 8601; nothing may follow the text but whitespace
 time::isLeap(2024)
 time::totalDaysInYear(2024)
 time::totalDaysInMonth(2, 2024)
@@ -406,35 +410,11 @@ Concrete subtypes:
 | `CsvWriter<T>` / `CsvReader<T>`   | CSV (config via `CsvFormat`)                       |
 | `BinReader`                       | Raw `i32` / `i64` / `f32` / `f64` / `Tensor` reads |
 
+`Stream<T>`, an append-only file of records that concurrent tasks write and a callback drains in batches, is covered in [streams.md](streams.md).
+
 ### File
 
-```gcl
-File::baseDir();           // <project>/files/
-File::userDir();           // <project>/files/<user_name>/
-File::workingDir();        // current task / request scoped dir
-File::open(path);          // File?
-File::ls(path, ".csv", true);   // recursive list with suffix filter
-File::mkdir(path);
-File::delete(path);
-File::rename(old, new);
-File::copy(src, dst);
-
-var f = File::open("data.csv");
-f.isDir();   f.name();   f.extension();   f.sha256();
-f.size;   f.last_modification;
-```
-
-`FileWalker` lazily iterates a directory tree:
-
-```gcl
-var walker = FileWalker { path: "./data" };
-while (!walker.isEmpty()) {
-    var entry = walker.next();             // File?
-    if (entry != null && !entry.isDir()) {
-        // process file
-    }
-}
-```
+`File`, `FileWalker` and the per-user `files/` folders are covered in [files.md](files.md).
 
 ### Json
 
@@ -579,7 +559,7 @@ Pair it with `@raw` when the provider also expects a bare token echoed back — 
 
 `Smtp` for sending email (with `Email`, `SmtpMode`, `SmtpAuth`).
 
-See [io.gcl](../../../../lib/std/io.gcl) for full signatures.
+See `lib/std/io.gcl` for full signatures.
 
 ## Crypto and UUID
 
@@ -631,9 +611,10 @@ Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();
 Runtime::store_stats();             // StoreStats: live blocks and bytes, by type and by world
 
-World::create("what-if", WorldMode::light);   // branch of the store, see runtime.md § Worlds
+World::create("what-if", WorldMode::light);   // branch of the store, see storage.md § Worlds
 World::list();   World::id("what-if");   World::remove("what-if");
 World::current();                             // the calling task's world, "main" for main
+var r = WorldChangesReader {};                // the nodes the current world modified: can_read(), read(): any, available()
 
 System::exec("/bin/ls", ["-la"]);             // blocking subprocess
 System::spawn("/bin/sleep", ["60"]);          // non-blocking
@@ -677,7 +658,7 @@ Identity::grant("alice", "bob", IdentityGrantType::read);  // bob may read files
 Identity::revoke("alice", "bob", IdentityGrantType::read); // bob no longer reads files/alice/
 ```
 
-`admin` functions such as `create`, `get_by_name`, `grant` and `remove` are only permission-checked over HTTP. From GCL any caller runs them. See [runtime.md, Grants and per-user files](runtime.md#grants-and-per-user-files).
+`admin` functions such as `create`, `get_by_name`, `grant` and `remove` are only permission-checked over HTTP. From GCL any caller runs them. See [identity.md, Grants and per-user files](identity.md#grants-and-per-user-files).
 
 ## Logging
 
@@ -689,7 +670,6 @@ pprint("printed without newline");
 error("an error");
 warn("a warning");
 info("an info");
-perf("perf log");
 trace("trace log");
 ```
 

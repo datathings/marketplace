@@ -44,7 +44,7 @@ typedef struct gc_allocator gc_allocator_t;
 | `gc_alloc__free` | `void gc_alloc__free(gc_allocator_t *allocator, void *ptr, size_t size)` | Free memory back to `allocator`. The original allocation `size` MUST be passed. |
 | `gc_alloc__size` | `size_t gc_alloc__size(gc_allocator_t *allocator, void *ptr)` | Return the usable size of the allocation `ptr` belongs to. |
 | `gc_alloc__realloc` | `void *gc_alloc__realloc(gc_allocator_t *allocator, void *ptr, size_t old_size, size_t new_size)` | Resize allocation from `old_size` to `new_size`. |
-| `gc_alloc__align_malloc` | `void *gc_alloc__align_malloc(gc_allocator_t *allocator, size_t size, size_t block_size)` | Allocate `size` bytes aligned to `block_size`. |
+| `gc_alloc__align_malloc` | `void *gc_alloc__align_malloc(gc_allocator_t *allocator, size_t size, size_t block_size)` | Allocate `size` bytes, zero-initialized, aligned to `block_size` **only on the runtime (jemalloc) build** — the standalone (`calloc`) and wasm (`malloc`+`memset`) builds ignore the alignment, so direct-IO / page-aligned code cannot rely on it there. |
 | `gc_alloc__align_free` | `void gc_alloc__align_free(gc_allocator_t *allocator, void *ptr, size_t size, size_t block_size)` | Free aligned memory. |
 
 ### Thread-Bound Convenience Helpers

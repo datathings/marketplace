@@ -25,6 +25,7 @@ SHA-256 hashing, HMAC-SHA-256, and Base64/Base64URL encoding/decoding.
 |----------|-------|-------------|
 | `gc_crypto_sha256_len` | 32 | SHA-256 digest length in bytes |
 | `GC_CRYPTO_HMAC_SHA256_BLOCKSIZE` | 64 | HMAC-SHA-256 block size in bytes |
+| `GC_CRYPTO_BASE64_DECODE_ERROR` | `UINT32_MAX` | **New in 8.4.** What `gc_crypto__base64_decode` / `gc_crypto__base64url_decode` return for an input they refuse |
 
 ### SHA-256
 
@@ -77,11 +78,11 @@ typedef struct gc_crypto_hmac_sha256_ctx {
 | `gc_crypto__base64_encode_len` | `u32_t gc_crypto__base64_encode_len(u32_t len)` | Compute output length for Base64 encoding |
 | `gc_crypto__base64_encode` | `u32_t gc_crypto__base64_encode(const char *in, u32_t inlen, char *out)` | Encode to Base64. Returns output length. |
 | `gc_crypto__base64_decode_len` | `u32_t gc_crypto__base64_decode_len(u32_t input_len)` | Compute output length for Base64 decoding |
-| `gc_crypto__base64_decode` | `u32_t gc_crypto__base64_decode(const char *input, u32_t input_len, char *output)` | Decode from Base64. Returns output length. |
+| `gc_crypto__base64_decode` | `u32_t gc_crypto__base64_decode(const char *input, u32_t input_len, char *output)` | Decode from Base64. Returns output length, or **`GC_CRYPTO_BASE64_DECODE_ERROR` (8.4: foreign bytes are refused)** for a lone final char, wrong `=` count, any char after `=`, or a byte outside the alphabet (`output` partially written). Spaces/tabs/CR/LF are skipped; a final 2/3-char group decodes with or without `=` padding. |
 | `gc_crypto__base64url_encode_len` | `u32_t gc_crypto__base64url_encode_len(u32_t len)` | Compute output length for Base64URL encoding |
 | `gc_crypto__base64url_encode` | `u32_t gc_crypto__base64url_encode(const char *str, u32_t str_len, char *output)` | Encode to Base64URL (URL-safe variant). Returns output length. |
 | `gc_crypto__base64url_decode_len` | `u32_t gc_crypto__base64url_decode_len(u32_t input_len)` | Compute output length for Base64URL decoding |
-| `gc_crypto__base64url_decode` | `u32_t gc_crypto__base64url_decode(const char *input, u32_t input_len, char *output)` | Decode from Base64URL. Returns output length. |
+| `gc_crypto__base64url_decode` | `u32_t gc_crypto__base64url_decode(const char *input, u32_t input_len, char *output)` | Decode from Base64URL — same contract as `gc_crypto__base64_decode` over `-`/`_` (`=` padding accepted; `+`/`/` invalid). Returns output length or `GC_CRYPTO_BASE64_DECODE_ERROR`. |
 
 ### Usage Examples
 
@@ -144,6 +145,10 @@ gc_buffer__clear(buf);
 u32_t dec_max = gc_crypto__base64_decode_len(input->size);
 gc_buffer__prepare(buf, dec_max);
 u32_t decoded_len = gc_crypto__base64_decode(input->buffer, input->size, buf->data);
+if (decoded_len == GC_CRYPTO_BASE64_DECODE_ERROR) {
+    gc_machine__set_runtime_error(ctx, "invalid base64");
+    return;
+}
 gc_string_t *decoded = gc_string__create_from(buf->data, decoded_len, ctx);
 gc_machine__set_result(ctx, (gc_slot_t) {.object = (gc_object_t *) decoded}, gc_type_object);
 gc_object__un_mark((gc_object_t *) decoded, ctx);
@@ -211,6 +216,43 @@ Geospatial encoding/decoding using a 64-bit geohash and Haversine distance calcu
 | `gc_geo__encode` | `geo_t gc_geo__encode(f64_t latitude, f64_t longitude)` | Encode lat/lng to a 64-bit geohash |
 | `gc_geo__decode` | `void gc_geo__decode(geo_t hash, f64_t *lat, f64_t *lon)` | Decode a geohash back to lat/lng |
 | `gc_geo__distance` | `f64_t gc_geo__distance(geo_t h1, geo_t h2)` | Compute the great-circle distance (in meters) between two geohashes |
+
+A `geo` is a 64-bit Morton code (lat/lng each quantized to 2^32 steps over the Web Mercator range, bit-interleaved). `gc_geo__encode` **clamps** (never rejects): +180 lands in the last cell, NaN/inf become the lower bound; `gc_geo__decode` returns the cell centre.
+
+#### Geo Box (new in 8.4)
+
+An axis-aligned box of cells — `min` the south-west cell, `max` the north-east one. Every code of the box lies in `[min, max]` on the curve, but the curve also visits cells outside the box in between: walk the interval with `bigmin` / `litmax` to jump over those stretches (this is what `nodeGeo` ranges and `sample` now do).
+
+```c
+typedef struct gc_geo_box {
+    geo_t min;
+    geo_t max;
+} gc_geo_box_t;
+```
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_geo_box__of` | `gc_sdk gc_geo_box_t gc_geo_box__of(geo_t a, geo_t b)` | Box spanned by any two opposite corners (lesser cell of each axis to `min`, greater to `max`) |
+| `gc_geo_box__contains` | `gc_sdk bool gc_geo_box__contains(gc_geo_box_t box, geo_t hash)` | Whether `hash` lies in the box on both axes, bounds included |
+| `gc_geo_box__bigmin` | `gc_sdk bool gc_geo_box__bigmin(gc_geo_box_t box, geo_t hash, geo_t *next)` | Smallest box code above `hash` (Tropf–Herzog BIGMIN) into `*next`; `false` at/past the last code |
+| `gc_geo_box__litmax` | `gc_sdk bool gc_geo_box__litmax(gc_geo_box_t box, geo_t hash, geo_t *prev)` | Largest box code below `hash` (LITMAX) into `*prev`; `false` at/before the first code |
+| `gc_geo_box__cells` | `gc_sdk u64_t gc_geo_box__cells(gc_geo_box_t box)` | Cell count; `UINT64_MAX` for the whole world |
+| `gc_geo_box__nth` | `gc_sdk geo_t gc_geo_box__nth(gc_geo_box_t box, u64_t n)` | `n`-th cell in curve order (from 0); `box.max` past the last |
+
+```c
+// Visit only the codes inside the box, skipping curve stretches that leave it
+gc_geo_box_t box = gc_geo_box__of(corner_a, corner_b);
+geo_t g = box.min;
+while (true) {
+    if (gc_geo_box__contains(box, g)) {
+        visit(g);                       // e.g. seek the index at g
+        if (g == box.max) break;
+        g++;
+    } else if (!gc_geo_box__bigmin(box, g, &g)) {
+        break;
+    }
+}
+```
 
 ### Usage Examples
 
@@ -358,6 +400,7 @@ Calendar conversion, timezone handling, ISO 8601 parsing, and formatting. GreyCa
 |----------|-------|-------------|
 | `GC_DTZ_OK` | 0 | Conversion succeeded |
 | `GC_DTZ_ILLEGAL_TIMESTAMP` | 1 | Invalid or illegal timestamp |
+| `GC_DTZ_ZONE_COUNT` | 598 | **New in 8.4.** Zones in the generated tables (= entries of std's `TimeZone` enum; a `tz` is its ordinal, 0 = UTC). A `tz` at or past it reads as UTC in `gc_dtz_utc_to_time_zone` / `gc_time__tm_from_time` / `gc_dtz_first_day_of_week`, and is refused (`GC_DTZ_ILLEGAL_TIMESTAMP` / `false` / 0) by `gc_dtz_time_zone_to_utc`, `gc_dtz_time__parse`, `gc_dtz_time__print` |
 
 **Days-in-month lookup:**
 
@@ -391,6 +434,8 @@ typedef struct {
     bool parsed;          // Whether a timezone was found in the string
 } gc_core_time_parse_tz_t;
 ```
+
+When `parsed`, the fields hold the **negated** offset (add them to `tm_hour` / `tm_min` to get UTC: `+02:00` → `tz_hh_offset == -2`; `Z` → 0/0), and the text names an instant (do not apply a zone). Zero the struct before the call — the parser only ever sets `parsed`. `gc_core_time__parse_iso` (8.4) refuses trailing text other than whitespace, range-checks every field (second 60 allowed, offset hours ≤ 14), takes up to six fraction digits (`.` or `,`) and four-digit or signed 4–7-digit years.
 
 ### Functions
 
@@ -528,7 +573,7 @@ typedef struct {
 
 ### Functions (WASM only)
 
-Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `sqrtf`, `sqrt`, `div`, `llabs`, `labs`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `cos`, `tan`, `atan`, `atan2`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `isfinite`.
+Standard math functions: `abs`, `fabs`, `fabsf`, `hypotf`, `hypot`, `sin`, `sqrtf`, `sqrt`, `div`, `llabs`, `labs`, `exp`, `pow`, `powl`, `log`, `log2`, `log2l`, `cos`, `tan`, `atan`, `atan2`, `round`, `floor`, `ceil`, `ceill`, `isnan`, `isfinite`, `signbit` (new in 8.4).
 
 ### Usage Examples
 
@@ -699,7 +744,7 @@ These functions interleave/deinterleave integer coordinates into a single 64-bit
 | Function | Description |
 |----------|-------------|
 | `gc__deep_equals(left, left_type, right, right_type, prog)` | Deep structural equality comparison of two slots |
-| `gc_slot__hash(slot, type, prog)` | Compute a hash value for a slot |
+| `gc_slot__hash(slot, type, prog)` | Hash consistent with `gc__deep_equals` (**8.4:** an `int` and a `float` of the same value hash alike, `-0.0` included; composites fold position/pairing). Used by Map keys and non-scalar `nodeIndex` keys |
 
 ### Sorting
 

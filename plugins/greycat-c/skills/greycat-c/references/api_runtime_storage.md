@@ -352,7 +352,7 @@ typedef enum {
     gc_env_options__max_backup_files,
     gc_env_options__defrag_ratio,
     /// Formerly `usage_step`: same slot, so the numbering below is unchanged.
-    gc_env_options__host_perf_step,
+    gc_env_options__metrics_host_step,
     gc_env_options__store,
     gc_env_options__http_threads,
     /// Formerly `req_workers`: same slot, so the numbering below is unchanged.
@@ -398,6 +398,17 @@ typedef enum {
     gc_env_options__cache_ratio_large,
     gc_env_options__task_class,
     gc_env_options__world,
+    gc_env_options__metrics,
+    gc_env_options__metrics_http_fields,
+    gc_env_options__metrics_http_flush_size,
+    gc_env_options__metrics_http_flush_step,
+    gc_env_options__log_flush_size,
+    gc_env_options__log_flush_step,
+    gc_env_options__metrics_host_flush_size,
+    gc_env_options__metrics_host_flush_step,
+    gc_env_options__metrics_task_flush_size,
+    gc_env_options__metrics_task_flush_step,
+    gc_env_options__log_flush_on_error,
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -407,7 +418,7 @@ typedef enum {
 
 **New in 8.4:** `gc_env_options__openapi` (bool, `GREYCAT_OPENAPI` / `--openapi`, default `true`) — when on, the `OpenApi::v3()` document includes every `@expose`d function (filtered by the caller's permissions); when off, only `@tag("openapi")` ones.
 
-**Also new in 8.4 (appended after `openapi`, so `gc_env_options_len` grew by 4 (3 more after that, see below)):**
+**Also new in 8.4 (appended after `openapi`, so `gc_env_options_len` grew by 4; more were appended after that, see below):**
 
 | Variant | Slot | CLI / env | Default | Meaning |
 |---------|------|-----------|---------|---------|
@@ -422,7 +433,7 @@ typedef enum {
 |---------|-----------|---------|---------|
 | `gc_env_options__workers_small` | `--workers_small` / `GREYCAT_WORKERS_SMALL` | `2` | **Renamed from `gc_env_options__req_workers`** (same slot/value; source-breaking only for code naming the old enumerator; CLI `--req_workers` is gone). Task workers for the small class, which RPC requests run as; added to `--workers`. `serve` only. |
 | `gc_env_options__workers_large` | `--workers_large` / `GREYCAT_WORKERS_LARGE` | `0` | **New, appended before `gc_env_options_len`.** How many of `--workers` serve the large class (the rest serve medium tasks); idle large workers also drain medium and small tasks. Sub-tasks spawned by `await` run in their parent's class. `run`, `serve`, `test`. |
-| `gc_env_options__host_perf_step` | `--host_perf_step` / `GREYCAT_HOST_PERF_STEP` | `60s` (was `10s`) | **Renamed from `gc_env_options__usage_step`** (upstream `e7630e693`; same slot/value — source-breaking only for code naming the old enumerator; `--usage_step` is refused, `GREYCAT_USAGE_STEP` ignored). Period of the `HostPerf` record logged at `perf`/`trace` level. |
+| `gc_env_options__metrics_host_step` | `--metrics_host_step` / `GREYCAT_METRICS_HOST_STEP` | `60s` (was `10s`) | **Renamed from `gc_env_options__usage_step`** (upstream `e7630e693`), then from `gc_env_options__host_perf_step` (upstream `2d08dd123`); same slot/value — source-breaking only for code naming an old enumerator; `--usage_step` / `--host_perf_step` are refused. Period of the `HostMetric` record, when `host` is in `--metrics`. |
 | `gc_env_options__max_args_memory` | `--max_args_memory` / `GREYCAT_MAX_ARGS_MEMORY` | `1 MiB` | **New (upstream `e7630e693`), appended before `gc_env_options_len`.** RPC arguments larger than this are streamed to the task's arguments file instead of held in memory (`Task::body()` is then `null`; headers stay readable). JSON-RPC envelopes always stay in memory. |
 | `gc_env_options__cache_ratio_small` | `--cache_ratio_small` / `GREYCAT_CACHE_RATIO_SMALL` | `0.4` (`.f64`) | **New (upstream `dccdde5c0`), appended before `gc_env_options_len`.** Object cache of a small worker relative to a medium one (1 unit); must be > 0. |
 | `gc_env_options__cache_ratio_large` | `--cache_ratio_large` / `GREYCAT_CACHE_RATIO_LARGE` | `3.0` (`.f64`) | **New**, same. Object cache of a large worker relative to a medium one; must be > 0. The workers' cache (3/4 of `--cache`) is split by class by these ratios. |
@@ -430,6 +441,11 @@ typedef enum {
 | `gc_env_options__world` | `--world` / `GREYCAT_WORLD` | `NULL` (→ `main`) | **New (upstream `19f306db7`), appended before `gc_env_options_len`.** World `greycat run` runs the function in / `greycat call` sends as the `world` header; unset or `main` is main, an unknown name fails. |
 | `gc_env_options__worlds` | — | — | **Removed** (upstream `19f306db7`) — the enumerator sat between `__workers` and `__port`, so **every later variant shifted down by one** (ABI-breaking for code that stored raw `gc_env_options_offset_t` values; source-breaking for code naming it). |
 | `gc_env_options__reserved_2` | — | — | **Renamed from `gc_env_options__logfile`** (same slot). `--logfile` is **removed** from the CLI (the log is the `log` stream). Source-breaking only for code naming the old enumerator. |
+| `gc_env_options__metrics` | `--metrics` / `GREYCAT_METRICS` | `NULL` (none) | **New, appended before `gc_env_options_len`** (`.str`, comma list of `host`, `task`, `http`). Metrics recorded, each to its own CSV stream under `files/root/streams/`: `host_metrics` (`HostMetric` every `--metrics_host_step`), `task_metrics` (`TaskMetric` per task), `http_metrics` (`HttpMetric` per HTTP request). Replaces the removed `perf` log level. |
+| `gc_env_options__metrics_http_fields` | `--metrics_http_fields` / `GREYCAT_METRICS_HTTP_FIELDS` | `NULL` (none) | **New** (`.str`, comma list of `ip`, `forwarded_for`, `user_agent`). Personal data an `HttpMetric` records; null otherwise. |
+| `gc_env_options__log_flush_size` / `__metrics_http_flush_size` / `__metrics_host_flush_size` / `__metrics_task_flush_size` | `--log_flush_size`, `--metrics_{http,host,task}_flush_size` / `GREYCAT_LOG_FLUSH_SIZE`, `GREYCAT_METRICS_{HTTP,HOST,TASK}_FLUSH_SIZE` | `64KB` (`.u64` bytes) | **New.** The `log` / metric stream's buffer is written to its file once this many bytes are pending; `0` writes each record at once. |
+| `gc_env_options__log_flush_step` / `__metrics_http_flush_step` / `__metrics_host_flush_step` / `__metrics_task_flush_step` | `--log_flush_step`, `--metrics_{http,host,task}_flush_step` | `1s` (`.i64` µs) | **New.** Longest time a record of that stream stays buffered. |
+| `gc_env_options__log_flush_on_error` | `--log_flush_on_error` / `GREYCAT_LOG_FLUSH_ON_ERROR` | `false` (`.b`) | **New.** An `error` record writes the buffered log records at once, so errors preceding a crash reach the file. |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples
@@ -649,6 +665,14 @@ typedef enum {
 
 Used for numeric precision/quantization (e.g., storing a float as an integer with known precision).
 
+**Signed `@precision` (new in 8.4, upstream `29c4a14c4`).** An attribute's `precision` byte is `0` for a plain float; otherwise its low bits are the step (`gc_abi_precision_t`) and `GC_ABI_PRECISION_SIGNED` tells the stored form: without the flag the field holds `vu64` of the truncated value × divider (every pre-flag store; no negatives), with it `vi64` (negatives allowed — `@precision` floats now take negative values). The compiler emits the flag; a stored descriptor keeps the form its objects were written in. Decode with the inline helpers:
+
+```c
+#define GC_ABI_PRECISION_SIGNED 0x40u
+static inline u8_t gc_abi_precision__step(const u8_t precision) { return precision & ~(u8_t) GC_ABI_PRECISION_SIGNED; }
+static inline bool gc_abi_precision__is_signed(const u8_t precision) { return (precision & GC_ABI_PRECISION_SIGNED) != 0; }
+```
+
 ### ABI Symbols Table
 
 ```c
@@ -671,7 +695,7 @@ typedef struct {
     u8_t sbi_type;           // Serialization Binary Interface type
     u8_t nullable;           // Whether the field is nullable
     u8_t mapped;             // Whether the field is mapped (computed on upgrade)
-    u8_t precision;          // Numeric precision
+    u8_t precision;          // `@precision` byte (step | GC_ABI_PRECISION_SIGNED); 0 = plain float
 } gc_abi_attribute_t;
 ```
 
@@ -971,30 +995,43 @@ close(out_fd);
 <a id="gcstream-h"></a>
 ## gc/stream.h — Streams (io::Stream C API)
 
-**New in 8.4.** Public C API behind the GCL `io::Stream<T>` type (the GCL natives are now thin wrappers over it; see [standard_library.md](standard_library.md#stream)). A stream is an append-only, per-user NDJSON file — `files/<user>/streams/<name>.ndjson`, `/` in the name maps to directories — that absorbs high-rate concurrent writes and wakes an optional callback task at most `max_dephasing_us` after a write. The runtime's own log is one: `"log"`, registered as root at host init. Every function is `gc_sdk`-exported.
+**New in 8.4.** Public C API behind the GCL `io::Stream<T>` type (the GCL natives are thin wrappers over it; see [standard_library.md](standard_library.md#stream)). A stream is an append-only, per-user file — `files/<user>/streams/<name>.ndjson` (or `.csv` for `gc_stream_format_csv`), `/` in the name maps to directories — that absorbs high-rate concurrent writes and wakes an optional callback task at most `max_dephasing_us` after records reach the file. **Every stream buffers its writes** (upstream `8e00f444a`, breaking): records reach the file once `flush_size` bytes are pending, at the latest `flush_step_us` after the first of them, on `gc_stream__flush` / `gc_stream__last_written_pos` / `gc_stream__reader`, on a `GET`/`HEAD` of the file through `/files`, and at a clean shutdown — a killed/crashed process loses what is still buffered. `gc_stream__flush` is the durability point (the old per-append `durable` fsync is gone). The runtime's own `log`, `host_metrics`, `task_metrics` and `http_metrics` streams are registered as root at host init. Every function is `gc_sdk`-exported.
 
 > **Not pulled in by `greycat.h`** — `#include "gc/stream.h"` explicitly (it includes `gc/buffer.h` and `gc/type.h`).
 
-### Opaque Type
+### Types & Constants
 
 ```c
-/// A registered io::Stream. Opaque; entries live for the host's lifetime and never move.
+/// A registered io::Stream. Opaque. Entries live for the host's lifetime and never move.
 typedef struct gc_stream gc_stream_t;
+
+/// The format of a stream's records, in the order of the GCL `StreamFormat` enum: one JSON value per
+/// line (`.ndjson`), or one CSV line with the default `CsvFormat` (`.csv`).
+typedef enum gc_stream_format {
+    gc_stream_format_ndjson = 0,
+    gc_stream_format_csv = 1,
+} gc_stream_format_t;
+
+/// The buffer size `Stream<T>::new` takes when its `flush_size` is null, in bytes (64KB).
+#define GC_STREAM_DEFAULT_FLUSH_SIZE 64000
+/// The longest buffering `Stream<T>::new` takes when its `flush_step` is null, in microseconds (1s).
+#define GC_STREAM_DEFAULT_FLUSH_STEP_US 1000000
 ```
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_stream__register` | `gc_sdk gc_stream_t *gc_stream__register(gc_host_t *host, u32_t user_id, u64_t permissions, const char *name, u32_t name_len, u32_t type_id, u32_t callback_fn_off, i64_t max_dephasing_us, bool durable, gc_buffer_t *err)` | Register `name` for `user_id` and return its entry. Re-registering the same (user, name) with the same `type_id` returns the existing entry **as is** — the first registration's callback, `max_dephasing_us` and `durable` stay in force, the new ones are silently ignored; a different `type_id` is an error. `callback_fn_off` 0 = no callback (drain deadline never armed, never wakes the worker thread). `durable` = fsync per append. `user_id`/`permissions` are **trusted** (in-process API — never feed it request input). Returns `nullptr` on error with the reason in `err` (cleared first). |
+| `gc_stream__register` | `gc_sdk gc_stream_t *gc_stream__register(gc_host_t *host, u32_t user_id, u64_t permissions, const char *name, u32_t name_len, u32_t type_id, u32_t callback_fn_off, i64_t max_dephasing_us, u64_t flush_size, i64_t flush_step_us, gc_stream_format_t format, gc_buffer_t *err)` | **Signature changed (upstream `8e00f444a` / `0136bf785`): `bool durable` replaced by `u64_t flush_size, i64_t flush_step_us, gc_stream_format_t format`.** Register `name` for `user_id` and return its entry. Re-registering the same (user, name) with the same `type_id` returns the existing entry **as is** — the first registration's callback, `max_dephasing_us`, flush settings and `format` stay in force, the new ones are silently ignored; a different `type_id` is an error. `callback_fn_off` 0 = no callback (drain deadline never armed). Records are buffered and written once `flush_size` bytes are pending, or at the latest `flush_step_us` after the first of them; `flush_size` 0 writes each record as it comes. `user_id`/`permissions` are **trusted** (in-process API — never feed it request input). Returns `nullptr` on error with the reason in `err` (cleared first). |
 | `gc_stream__find` | `gc_sdk gc_stream_t *gc_stream__find(gc_host_t *host, u32_t user_id, const char *name, u32_t name_len)` | The entry registered in this process for (user_id, name), or `nullptr`. |
-| `gc_stream__append` | `gc_sdk bool gc_stream__append(gc_host_t *host, gc_stream_t *s, const char *record, u64_t len)` | **Signature changed (upstream `e7630e693`): new leading `host` param** — the host the stream was registered on; its stop flag interrupts a blocked write and its registry arms the callback. Append one pre-serialized record: `len` bytes **ending with `'\n'`**, one write under the stream's lock, fsynced if durable. The caller guarantees it is one JSON value of the stream's type + newline (not checked). On failure returns `false` with `errno` set (`EINVAL` when the last byte is not `'\n'`) and truncates the file back to the last accounted byte, so a partial record never prefixes the next one. |
-| `gc_stream__write` | `gc_sdk bool gc_stream__write(gc_stream_t *s, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | JSON-serialize `value` with `ctx`'s scratch buffer and append it. An object whose type is not exactly the stream's type is refused; that and any other failure set a runtime error on `ctx` and return `false`. |
-| `gc_stream__last_written_pos` | `gc_sdk i64_t gc_stream__last_written_pos(gc_stream_t *s)` | Bytes appended (and, if durable, fsynced) so far — the upper bound `gc_stream__reader` uses. |
+| `gc_stream__append` | `gc_sdk bool gc_stream__append(gc_host_t *host, gc_stream_t *s, const char *record, u64_t len)` | **Signature changed (upstream `e7630e693`): new leading `host` param** — the host the stream was registered on; its stop flag interrupts a blocked write and its registry arms the callback. Append one pre-serialized record (`len` bytes **ending with `'\n'`**) to the stream's buffer, whole. The caller guarantees it is one record of the stream's format (a JSON value, or a CSV line) + newline (not checked). Returns `false` with `errno` `EINVAL` when the last byte is not `'\n'`. A failed write of the buffer to the file drops the records it held: it is logged, reported by the next `gc_stream__flush`, and the file is truncated back to the last accounted byte, so a partial record never prefixes the next one. |
+| `gc_stream__flush` | `gc_sdk bool gc_stream__flush(gc_host_t *host, gc_stream_t *s)` | **New.** Write the buffered records to the file and sync it to disk; once it returns `true`, every record appended before the call is on disk. `false` with `errno` set when the write or the sync failed, or when a write since the previous call dropped records (that failure is then cleared). After a failed sync the records stay in the file but may not be on disk. |
+| `gc_stream__write` | `gc_sdk bool gc_stream__write(gc_stream_t *s, gc_slot_t value, gc_type_t type, gc_machine_t *ctx)` | Serialize `value` in the stream's format and append it, as `gc_stream__append` does. An object whose type is not exactly the stream's type is refused (runtime error on `ctx`, `false`), as is a value the format cannot serialize. |
+| `gc_stream__last_written_pos` | `gc_sdk i64_t gc_stream__last_written_pos(gc_host_t *host, gc_stream_t *s)` | **Signature changed: new leading `host` param.** Write the buffered records to the file, then return its size in bytes — the upper bound `gc_stream__reader` uses. |
 | `gc_stream__name` | `gc_sdk const char *gc_stream__name(const gc_stream_t *s, u32_t *len)` | Registered name; length through `*len`. |
 | `gc_stream__path` | `gc_sdk const char *gc_stream__path(const gc_stream_t *s, u32_t *len)` | File path, cwd-relative, NUL-terminated; length through `*len`. |
 | `gc_stream__type` | `gc_sdk u32_t gc_stream__type(const gc_stream_t *s)` | The stream's record type id. |
-| `gc_stream__reader` | `gc_sdk gc_object_t *gc_stream__reader(gc_stream_t *s, i64_t from, gc_machine_t *ctx)` | A `JsonReader<T>` object over `[from, last_written_pos at call time)` — what GCL `reader()` returns. Returned **marked** (like `gc_machine__create_object`): store it, then `gc_object__un_mark`. |
+| `gc_stream__reader` | `gc_sdk gc_object_t *gc_stream__reader(gc_stream_t *s, i64_t from, gc_machine_t *ctx)` | A `JsonReader` (or, for a CSV stream, a `CsvReader`) object over `[from, last_written_pos at call time)` reading the stream's `T`. It is the **bare generic** — the GCL `reader()` returns a `JsonReader<T>` / `CsvReader<T>` (built in GCL and bound via `Stream::bind_reader`), so a GCL slot typed `Reader<T>` refuses the C one. Returned **marked** (like `gc_machine__create_object`): store it, then `gc_object__un_mark`. |
 
 ### Usage Example
 
@@ -1008,7 +1045,8 @@ gc_buffer_t *err = gc_machine__get_buffer(ctx);
 gc_stream_t *s = gc_stream__find(host, user_id, "ingest/events", 13);
 if (s == nullptr) {
     s = gc_stream__register(host, user_id, permissions, "ingest/events", 13, type_id,
-                            0 /* no callback */, 0, true /* durable */, err);
+                            0 /* no callback */, 0, GC_STREAM_DEFAULT_FLUSH_SIZE,
+                            GC_STREAM_DEFAULT_FLUSH_STEP_US, gc_stream_format_ndjson, err);
     if (s == nullptr) {
         gc_machine__set_runtime_error(ctx, "stream registration failed");  // reason is in err
         return;
@@ -1021,6 +1059,8 @@ if (!gc_stream__write(s, (gc_slot_t) {.object = event}, gc_type_object, ctx)) {
 // Or append pre-serialized NDJSON: must end with '\n'
 static const char rec[] = "{\"id\":1}\n";
 if (!gc_stream__append(host, s, rec, sizeof(rec) - 1)) { /* errno set */ }
+// Durability point: write the buffer and fsync (also reports records dropped since the last flush)
+if (!gc_stream__flush(host, s)) { /* errno set */ }
 
 gc_object_t *reader = gc_stream__reader(s, 0, ctx);   // marked
 if (reader != nullptr) {

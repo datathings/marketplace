@@ -49,7 +49,7 @@ library:
   carries a `///` doc comment. The last resort, and always the ground truth.
 
 A library may also carry `lib/<name>/webroot/`, static assets served at `/` alongside the
-project's own `webroot/`. See [runtime.md](runtime.md) for the resolution order.
+project's own `webroot/`. See [files.md](files.md) for the resolution order.
 
 `std` follows the same layout: the installed copy carries `lib/std/skills/SKILL.md`
 plus a `skills/reference/` directory beside it - this very file is one of its pages.

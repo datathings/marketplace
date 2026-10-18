@@ -182,15 +182,15 @@ typedef struct {
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_map__init` | `void gc_map__init(gc_map_t *self, u64_t capacity, const gc_machine_t *ctx)` | Initialize the map with a given capacity (allocates storage via the call's allocator). |
-| `gc_map__set` | `void gc_map__set(gc_map_t *self_map, gc_slot_t key, gc_type_t key_type, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert or update a key-value pair. |
+| `gc_map__set` | `void gc_map__set(gc_map_t *self_map, gc_slot_t key, gc_type_t key_type, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert or update a key-value pair (replacing and releasing the previous key and value). **8.4 contract:** object keys and values of any type are accepted and **not copied** — attached to the map's block, or marked shared; an object already owned by another block is re-created (String) or deep-cloned (other key) / refused (other value, runtime error). Growth past 2^31 buckets fails. On any failure key and value are left as handed in, nothing attached, map not dirtied. |
 | `gc_map__get` | `gc_slot_t gc_map__get(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *value_type, const gc_program_t *prog)` | Lookup a value by key. Writes value type to `*value_type`. |
-| `gc_map__get_key` | `gc_slot_t gc_map__get_key(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *stored_key_type, const gc_program_t *prog)` | **New in 8.4.** Return the map's **own** key object for the entry whose key deep-equals `key`, writing its type to `*stored_key_type`. `key` is only a lookup probe; the result is the deep copy the map made on insertion (the same object the VM pushes when the map is iterated). The returned slot is borrowed (not marked/copied). Absent key → null slot and `*stored_key_type = gc_type_null`. |
+| `gc_map__get_key` | `gc_slot_t gc_map__get_key(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_type_t *stored_key_type, const gc_program_t *prog)` | **New in 8.4.** Return the map's **own** key object for the entry whose key deep-equals `key`, writing its type to `*stored_key_type`. `key` is only a lookup probe; the result is the slot the map stored on insertion (the object passed to `gc_map__set`, or its clone — the same object the VM pushes when the map is iterated), and may carry another numeric tag than the probe. The returned slot is borrowed (not marked/copied). Absent key → null slot and `*stored_key_type = gc_type_null`. |
 | `gc_map__contains` | `bool gc_map__contains(const gc_map_t *self, gc_slot_t key, gc_type_t key_type, const gc_program_t *prog)` | Check if a key exists in the map. |
 | `gc_map__remove` | `bool gc_map__remove(gc_map_t *self, gc_slot_t key, gc_type_t key_type, gc_machine_t *ctx)` | Remove an entry by key. Returns `true` if the key was found and removed. |
 
 ### Usage Examples
 
-All map functions take typed `gc_slot_t` key/value pairs. Keys must be primitives or `String` objects; `gc_type_null` is never a valid key. Maps are GreyCat objects, so create them with `gc_machine__create_object` and initialize their storage with `gc_map__init` (which allocates buckets via the call's allocator).
+All map functions take typed `gc_slot_t` key/value pairs. Which key types are allowed is enforced by the language, not by `gc_map__set`; `gc_type_null` is never a valid key. Keys hash with `gc_slot__hash` and compare with `gc__deep_equals`, which treat an `int` and a `float` of the same value alike (**8.4:** `1` and `1.0` are one key; the first stored keeps its tag). Maps are GreyCat objects, so create them with `gc_machine__create_object` and initialize their storage with `gc_map__init` (which allocates buckets via the call's allocator).
 
 #### Create, initialize, and populate a map
 
@@ -234,7 +234,7 @@ if (value_type == gc_type_int) {
 
 #### Recover the map's stored key (`gc_map__get_key`)
 
-`gc_map__set` deep-copies object keys (e.g. `String`), so the key you pass in is not the one the map holds. When you need the *stored* key — to alias the object the program sees while iterating the map — probe with any deep-equal key:
+`gc_map__set` stores the key object you pass (cloning it only when it already belongs to another block), and a numeric key keeps the tag it was first stored with, so the probe is not necessarily what the map holds. When you need the *stored* key — to alias the object the program sees while iterating the map — probe with any deep-equal key:
 
 ```c
 gc_type_t stored_type = gc_type_null;
@@ -242,7 +242,7 @@ gc_slot_t stored = gc_map__get_key(map,
                                    (gc_slot_t) {.object = (gc_object_t *) probe}, gc_type_object,
                                    &stored_type, gc_machine__program(ctx));
 if (stored_type != gc_type_null) {
-    // stored.object is the map's own copy; borrowed — mark it if you keep it past the call
+    // stored.object is the map's own key; borrowed — mark it if you keep it past the call
 }
 ```
 
@@ -433,7 +433,7 @@ typedef struct {
 
 | Constant | Message |
 |----------|---------|
-| `GC_ERROR_TENSOR_UNSUPPORTED_TYPE` | "Unsupported type, only float and double are supported for now" |
+| `GC_ERROR_TENSOR_UNSUPPORTED_TYPE` | "Unsupported type, only f64, f32 and i32 tensors are supported" (8.4 wording; raised for an unknown type code and by `gc_core_tensor_descriptor__supported_types`) |
 | `GC_ERROR_TENSOR_INCORRECT_DIM` | "Incorrect dimension" |
 | `GC_ERROR_TENSOR_INCORRECT_TYPE` | "Incorrect type" |
 | `GC_ERROR_TENSOR_DIMENSION_MISMATCH` | "Tensors dimension mismatch" |
@@ -491,6 +491,8 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 // ... same pattern for all types and dimensions
 ```
 
+**Bounds hazard (header contract):** each accessor checks element type and `nb_dim` first (`GC_ERROR_TENSOR_INCORRECT_TYPE` / `_INCORRECT_DIM`: getters/adders return 0), then bounds (`GC_ERROR_TENSOR_OUT_OF_BOUND`). On an out-of-bound position the **getters still read `tensor->data`** (element 0, or `nullptr` on an unshaped / zero-length tensor → crash); setters/adders write nothing. Validate positions against `descriptor.dim` / `descriptor.size` before a get. A tensor built with `gc_machine__init_tensor` (caller-owned `data` + `proxy`) must not be re-shaped: `init_xd` / `update_capacity` would free `data` through the allocator.
+
 **Supported types for get/set/add:** `i32`, `i64`, `f32`, `f64`, `c64`, `c128`
 **Supported dimensions:** 1D, 2D, 3D, N-D
 
@@ -501,8 +503,8 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 | `gc_core_tensor__get_data(t)` | Get the raw data pointer |
 | `gc_core_tensor__get_descriptor(t)` | Get a pointer to the descriptor |
 | `gc_core_tensor__set_descriptor(t, desc)` | Replace the descriptor |
-| `gc_core_tensor__set_proxy(tensor, proxy)` | Set the proxy owner object |
-| `gc_core_tensor__diff(t1, t2, ctx)` | Compute the sum of absolute element-wise differences between two tensors |
+| `gc_core_tensor__set_proxy(tensor, proxy, ctx)` | **Signature changed in 8.4: new `gc_machine_t *ctx` param** — `gc_sdk void gc_core_tensor__set_proxy(gc_tensor_t *tensor, gc_object_t *proxy, gc_machine_t *ctx)`. Declares `proxy` the owner of the payload and **marks** it (the finalizer un-marks it instead of freeing `data`); a different previous proxy loses the tensor's mark; re-setting the current proxy is a no-op. `proxy` must not be `nullptr`. |
+| `gc_core_tensor__diff(t1, t2, ctx)` | Largest absolute element-wise difference (modulus for complex types); `-1` with a runtime error when types or shapes differ |
 | `gc_core_tensor__check_shape(shape, tot_size, skip_zero)` | Validate a shape array |
 | `gc_core_tensor__pos_to_offset(self, p[], ctx)` | Convert multi-dimensional position to flat offset |
 | `gc_core_tensor__update_capacity(tensor, ctx)` | Reallocate data to match descriptor size |
@@ -515,6 +517,8 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 | Function | Description |
 |----------|-------------|
 | `gc_core_tensor_descriptor__type_size(t)` | Get the byte size per element for a tensor type |
+| `gc_core_tensor_descriptor__same_shape(a, b)` | **New in 8.4.** `gc_sdk bool gc_core_tensor_descriptor__same_shape(const gc_tensor_descriptor_t *a, const gc_tensor_descriptor_t *b)` — shape equality ignoring `capacity` and the stale dims past `nb_dim` |
+| `gc_core_tensor_descriptor__shape_hash(d)` | **New in 8.4.** `gc_sdk u64_t gc_core_tensor_descriptor__shape_hash(const gc_tensor_descriptor_t *d)` — hash consistent with `same_shape` (as Map keys need) |
 | `gc_core_tensor_descriptor__type(t)` | Convert a tensor type to `gc_type_t` |
 | `gc_core_tensor_descriptor__nb_arrays(desc)` | Get the number of 1D arrays (product of dims except last) |
 | `gc_core_tensor_descriptor__check_type(a, b, ctx)` | Verify two descriptors have the same element type |
@@ -523,7 +527,7 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 | `gc_core_tensor_descriptor__to_json(desc, buffer, prog)` | Serialize descriptor to JSON |
 | `gc_core_tensor_descriptor__increment_index(nb_dim, dim, index)` | Increment a multi-dim index |
 | `gc_core_tensor_descriptor__index_to_offset(nb_dim, dim, index)` | Convert multi-dim index to flat offset |
-| `gc_core_tensor_descriptor__leading_dim(desc)` | Get the leading dimension size |
+| `gc_core_tensor_descriptor__leading_dim(desc)` | Last dimension (reads `dim[-1]` on a 0-d descriptor: check `nb_dim`) |
 | `gc_core_tensor_descriptor__matrix_count(a)` | Number of matrices in a batched tensor |
 | `gc_core_tensor_descriptor__supported_types(a, ctx)` | Check if the tensor type is supported for operations |
 | `gc_core_tensor_descriptor__default_check(a, b, ctx)` | Default compatibility check (type + dim) |

@@ -358,15 +358,15 @@ Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch mi
 
 ### `@precision(step)`
 
-Stores a `float` attribute truncated to a fixed decimal step. `step` is a float literal power of ten from `1.0` down to `0.0000000001`.
+Stores a `float` attribute truncated toward zero to a fixed decimal step. `step` is a float literal power of ten from `1.0` down to `0.0000000001`.
 
 ```gcl
 type Reading {
-    @precision(0.01) value: float;   // Reading { value: 1.239 }.value == 1.23
+    @precision(0.01) value: float;   // Reading { value: 1.239 }.value == 1.23, { value: -1.239 } == -1.23
 }
 ```
 
-Only for non-negative values: a negative value is stored corrupted.
+The value times the inverse of the step must fit a signed 64-bit integer; a larger, infinite or NaN value is a runtime error on assignment. Changing the step of an existing attribute versions its type: objects already stored keep reading with the step they were written with, new writes use the new one.
 
 ## Modifiers
 

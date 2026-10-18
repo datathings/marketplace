@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). Also breaking in 8.4: `Array.sort` / `sort_by` / `Table.sort` place null keys last in both orders, and the runtime log moved from `files/root/log.csv` to the `log` stream (`files/root/streams/log.ndjson`). New: `io::Stream<T>` and the `Task::events()` SSE endpoint. The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). Also breaking in 8.4: `Array.sort` / `sort_by` / `Table.sort` place null keys last in both orders, the runtime log moved from `files/root/log.csv` to the `log` stream (`files/root/streams/log.ndjson`), the `perf` log level / `perf(v)` were removed (metrics are now `TaskMetric` / `HostMetric` / `HttpMetric` CSV streams behind `--metrics`), `Stream<T>::new` takes `options: StreamOptions?` instead of `durable: bool` (every stream buffers; `flush()` is the durability point), and `String.chars()` returns raw code points. New: `io::Stream<T>`, the `Task::events()` SSE endpoint, `MergeStrategy` + `Task::set_merge_strategy`, `WorldChangesReader`. The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
 - **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Task::header`/`headers`/`uri`/`body`), OpenAPI export, MCP server endpoints
@@ -29,10 +29,10 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
 - [std::runtime - Runtime Features](#runtime-module-stdruntime)
   - [Scheduler & Periodicities](#scheduler--periodicities)
   - [Task & Job Management](#task--job-management)
-  - [Logging](#logging)
+  - [Logging](#logging) - log levels, Log, TaskMetric/HostMetric/HttpMetric streams
   - [System Information](#system-information)
   - [Current HTTP Request](#current-http-request) - Task::header/headers/uri/body
-  - [Worlds](#worlds) - World, WorldMode, WorldInfo (new)
+  - [Worlds](#worlds) - World, WorldMode, WorldInfo, WorldChangesReader (new)
   - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
@@ -46,7 +46,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [File System](#file-system) - File, FileWalker
   - [HTTP Client](#http-client) - Http, HttpRequest, HttpResponse, HttpMethod, Url
   - [Email](#email) - Email, Smtp
-  - [Stream](#stream) - Stream<T> (new in 8.4)
+  - [Stream](#stream) - Stream<T>, StreamOptions, StreamFormat (new in 8.4)
 
 - [std::util - Utilities](#util-module-stdutil)
   - [Collections](#collections) - Queue, Stack, SlidingWindow, TimeWindow
@@ -80,10 +80,12 @@ Immutable UTF-8 string with rich query/transform/similarity methods.
 //   indexOf(char), indexOfFrom, lastIndexOf, slice(from, to), trim,
 //   lowercase, uppercase, size, replace(s, s2), indexOfString,
 //   indexOfStringFrom, split(c: char): Array<String>, chars(): Chars,
-//   jaro, jarowinkler (similarity), levenshtein, nfkd_casefold
+//   jaro, jarowinkler (similarity), levenshtein, nfkd_casefold,
+//   nfkd_casefold_chars(): Chars (new)
 var parts = "a,b,c".split(',');
 var d = "kitten".levenshtein("sitting");   // 3
 ```
+**8.4 behaviour changes (upstream `5b869f03d`):** `chars()` returns the code points **as they are** (`"Éa ﬁ"` → `É`, `a`, ` `, `ﬁ`; throws on invalid UTF-8) — the old decomposed/case-folded output is now `nfkd_casefold_chars()`. `get(i)` returns the character starting at byte `i` (U+FFFD inside a character), not the raw byte. `uppercase()` / `lowercase()` map non-ASCII letters (`size()` may change). `indexOf` / `indexOfFrom` / `lastIndexOf` / `split` work with non-ASCII `char`s. All functions treat a NUL byte as content (`contains`, `replace`, `startsWith`, `compare`…); a String holding NUL is refused where it reaches the OS (file paths, `System::exec`/`spawn`, `getEnv`, `Identity::create`). `int::parse` / `float::parse` / `parseNumber` take the whole string (trailing whitespace only).
 
 #### Chars
 ```gcl
@@ -186,9 +188,9 @@ Persistent graph node primitives. All are `native` and stored to disk.
 
 - **`node<T>`** - singleton boxed value. `resolve(): T`, `set(value: T)`, static `resolve_all(n: Array<node?>): Array<any?>`.
 - **`nodeTime<T>`** - temporal series. `resolve()`, `resolveAt(time)`, `resolveAtWithin(time, duration)`, `resolveTimeAt`, `resolveTimeValueAt`, `getAt`, `removeAt`, `setAt(time, value)`, `setAll(time, values, delta)`, `rangeSize(from, to)`, `size`, `firstTime`/`first`/`lastTime`/`last`, `prev(time)`/`next(time)`, `removeAll`, static `sample(...)`, static `info(...)`.
-- **`nodeList<T>`** - sparse indexed list. `get(index)`, `set(index, value)`, `add(value)`, `resolve(index)`, `resolveEntry(index): Tuple<int,T>?`, `remove(index): bool`, `firstIndex`/`first`/`lastIndex`/`last`, etc.
+- **`nodeList<T>`** - sparse indexed list. `get(index)`, `set(index, value)`, `add(value)` (writes after the **last index**, 0 when empty — 8.4 fix: it wrote at `size()`, overwriting after a gap; fails at the largest `int`), `resolve(index)`, `resolveEntry(index): Tuple<int,T>?`, `remove(index): bool`, `firstIndex`/`first`/`lastIndex`/`last`, etc.
 - **`nodeIndex<K, V>`** - keyed map, O(log n). `set(key, value)`, `get(key)`, `remove(key)`, `search(key, max): Array<SearchResult<K,V>>`, static `search_closest`, static `sample`/`info`.
-- **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), `search(center: geo, max: int): Array<SearchResult<geo,T>>`, etc.
+- **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), `search(center: geo, max: int): Array<SearchResult<geo,T>>`, etc. **8.4:** a range `for (g, v in idx[a..b])` and `rangeSize(a, b)` cover **only the box** spanned by any two opposite corners (they used to walk the whole curve stretch between them, outside the box too); `idx[b..a]` walks it backwards. Static `sample(refs, from, to, maxRows, mode)` returns no row outside the box (a `null` corner = the world's).
 - **`nodeTimeCursor<T>`** (`@volatile`) - iterator over a nodeTime (`first`, `last`, `next`, `previous`, `lessOrEq(t)`, `skip_values`, `skip_duration`, `currentTime`, `current`).
 
 ```gcl
@@ -303,7 +305,7 @@ enum ErrorCode {
 Module-level functions (called without a type prefix):
 ```gcl
 // logging (write to the task/console log if level allows):
-println(v); pprint(v); print(v); error(v); warn(v); info(v); perf(v); trace(v);
+println(v); pprint(v); print(v); error(v); warn(v); info(v); trace(v);   // perf(v) removed in 8.4 (compile error)
 // values:
 valueOf(en: any): any?;        // value of an enum field
 parseNumber(value: String): any;   // int or float, throws on failure
@@ -486,6 +488,7 @@ type Task {
   //   id(): int
   //   task_class(): TaskClass             (class the current task/job runs in, after fallback; new)
   //   no_history(v: bool)
+  //   set_merge_strategy(strategy: MergeStrategy)   (new; current task only, not inherited by what it spawns)
   //   header(name: String): String?        (HTTP request the current task answers; see Current HTTP Request)
   //   headers(): Map<String, String>?
   //   uri(): String?
@@ -504,9 +507,19 @@ type Task {
 
 **RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is now the task dir for RPC calls too (`/files/<user_id>/tasks/<task_id>/`; the old `requests/<timestamp>/` dir is gone).
 
-**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `medium` (**`regular` renamed `medium`**, upstream `dccdde5c0`: `TaskClass::medium`, `gc_task_class_medium`, `HostPerf.medium`, `--task_class medium`); a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `medium`; unknown value → `400`; the `greycat call` CLI sends `--task_class`, default `medium`). `Task.task_class: TaskClass?` reports the class a live task runs in (`null` when read back from history). The workers' object cache (3/4 of `--cache`) is split by class: medium = 1 unit, small = `--cache_ratio_small` (0.4), large = `--cache_ratio_large` (3). A task request for a `@reserved` function is answered without a task (marked `task: none`), and a reserved stub called from GCL raises. **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
+**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `medium` (**`regular` renamed `medium`**, upstream `dccdde5c0`: `TaskClass::medium`, `gc_task_class_medium`, `HostMetric.medium`, `--task_class medium`); a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `medium`; unknown value → `400`; the `greycat call` CLI sends `--task_class`, default `medium`). `Task.task_class: TaskClass?` reports the class a live task runs in (`null` when read back from history). The workers' object cache (3/4 of `--cache`) is split by class: medium = 1 unit, small = `--cache_ratio_small` (0.4), large = `--cache_ratio_large` (3). A task request for a `@reserved` function is answered without a task (marked `task: none`), and a reserved stub called from GCL raises. **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
 ```gcl
 enum TaskClass { small; medium; large; }
+```
+
+**Merge strategy (new, upstream `14cd9a918`).** `Task::set_merge_strategy(s)` chooses how the current task's commit resolves a conflict (two writes of the same key/field, both changed from the same origin); a task starts with the default and nothing it spawns inherits it. **A `Map` now merges key by key** (writes to different keys all land; a plain-object value merges field by field), and a concurrent change of an `Array` / `Map` attribute now **conflicts** where it was silently overwritten by the last commit.
+```gcl
+enum MergeStrategy {
+  fusion_by_key_fail_on_conflict,   // default: nodes/objects merge key by key; a key/field both sides changed differently fails with `incompatible fusion`
+  fusion_by_key_last_win,           // same, but a conflicting key/field takes this task's value
+  no_fusion_fail_on_conflict,       // a structured node (nodeTime/nodeIndex/nodeList/nodeGeo) changed by both fails the commit (or the await merge); plain fields still merge
+}
+Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win);
 ```
 
 #### Job<T> & await
@@ -519,15 +532,14 @@ type Job<T> {
                             //   An await job always runs in the awaiting task's world; naming another one is an error (new)
   // native fn result(): T
 }
-// native fn await(jobs: Array<Job>)   // MergeStrategy removed (upstream `dccdde5c0`, breaking): merges are strict only,
-//   key-by-key for nodeTime/nodeIndex/nodeList/nodeGeo; the same key/field changed to different values throws and keeps nothing
+// native fn await(jobs: Array<Job>)   // no strategy param (removed upstream `dccdde5c0`); see Task::set_merge_strategy below
 ```
 
 ### Logging
 
-Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `perf(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace. **As of 8.4 it is the record shape of the `log` [stream](#stream) — `files/root/streams/log.ndjson`, one JSON object per line — which replaced `files/root/log.csv`** (see the C-API skill's `gc/log.h` / `gc/stream.h` notes).
+Logging is done with the **module-level functions** `error(v)`, `warn(v)`, `info(v)`, `trace(v)` (see [Math & Free Functions](#math--free-functions)). **`perf(v)` and `LogLevel::perf` were removed in 8.4** (compile error; `--log=perf` is invalid) — use `info` / `trace`, and `--metrics` for runtime metrics. `Log` itself is a `@volatile` data record produced for log parsing — not a callable namespace. **As of 8.4 it is the record shape of the `log` [stream](#stream) — `files/root/streams/log.ndjson`, one JSON object per line — which replaced `files/root/log.csv`** (see the C-API skill's `gc/log.h` / `gc/stream.h` notes).
 ```gcl
-enum LogLevel { error; warn; info; perf; trace; }
+enum LogLevel { error; warn; info; trace; }
 
 @volatile
 type Log {
@@ -551,13 +563,14 @@ var r = Stream<Log>::get("log").reader(0);          // as root
 while (r.can_read()) { var rec = r.read(); }
 var raw = JsonReader<Map<String, any?>> { path: "files/root/streams/log.ndjson" };
 ```
-**Breaking in 8.4:** `files/root/log.csv` is no longer written, and `Log.time` lost its `@format(DurationUnit::microseconds)` annotation (8.3's `CsvReader<Log>` + `CsvFormat { string_delimiter: '\0' }` recipe no longer applies).
+Log records are **buffered** (8.4): they reach the file once `--log_flush_size` (64KB) is pending, at the latest `--log_flush_step` (1s) after the first, when the file is read through `/files`, and at once on an `error` record with `--log_flush_on_error`; a killed/crashed process loses what is still buffered. **Breaking in 8.4:** `files/root/log.csv` is no longer written, and `Log.time` lost its `@format(DurationUnit::microseconds)` annotation (8.3's `CsvReader<Log>` + `CsvFormat { string_delimiter: '\0' }` recipe no longer applies).
 
-#### TaskPerf / HostPerf (perf records)
-**Breaking (upstream `e7630e693`):** `LogDataUsage` renamed `TaskPerf` (logged once per task, not per transaction); `RuntimeUsage`, `WorkerUsage`, `ZoneUsage`, `Runtime::usage()`, `RuntimeUsage::collect()` and the `runtime::usages` time series are **removed** — host stats are now the `HostPerf` record. Both are only logged at `perf` / `trace`, as the `data` of a `perf` `Log` in the `log` stream (`task_id` null for `HostPerf`). `--usage_step` → `--host_perf_step` (default 60s).
+#### TaskMetric / HostMetric / HttpMetric (metric streams)
+**Breaking (8.4, upstream `7580ac70c` / `99b9ebb08` / `2d08dd123`):** the `perf` log level is gone and metrics no longer ride on the `log` stream. `TaskPerf` → **`TaskMetric`**, `HostPerf` / `HostPerfClass` / `HostPerfZones` → **`HostMetric`** / **`HostMetricClass`** / **`HostMetricZones`** (`HostPerfUser`, `top_out` / `top_in` / `top_files`, `http_max_in` / `_out` / `_file` dropped). Each metric is its own **CSV stream** under `files/root/streams/` (default `CsvFormat`, no header; nested `small` / `medium` / `large` / `zones` spread one column per field), switched on by `--metrics` / `GREYCAT_METRICS` (comma list of `host`, `task`, `http`; unset → none; `--log` does not enable them): `host_metrics.csv` (`HostMetric` every `--metrics_host_step`, default 60s; formerly `--host_perf_step`, earlier `--usage_step`), `task_metrics.csv` (`TaskMetric` per task and per `await` job, once ended and committed), `http_metrics.csv` (`HttpMetric` per HTTP request). Each stream buffers: `--metrics_{host,task,http}_flush_size` (64KB) / `_flush_step` (1s). Earlier (upstream `e7630e693`): `LogDataUsage` → per-task record; `RuntimeUsage`, `WorkerUsage`, `ZoneUsage`, `Runtime::usage()`, `RuntimeUsage::collect()`, `runtime::usages` removed.
 ```gcl
 @volatile
-type TaskPerf {   // one per task and per await job, once ended and committed
+type TaskMetric {   // one per task and per await job, once ended and committed
+  time: time; user_id: int?; task_id: int?; job_id: int?; src: function?;   // new: identify the record (no Log wrapper)
   wait: duration; exec: duration; run: duration; suspended: duration; commit: duration;
   awaits: int; jobs: int; fusion_conflicts: int; catches: int;
   read_bytes: int; read_hits: int; read_wasted: int; write_bytes: int; write_hits: int;
@@ -569,26 +582,39 @@ type TaskPerf {   // one per task and per await job, once ended and committed
 }
 
 @volatile
-type HostPerf {   // every --host_perf_step; counters cover `period`, the rest are point values
-  period: duration; cores: int; load: float; cpu_user: duration; cpu_system: duration;
+type HostMetric {   // every --metrics_host_step; counters cover `period`, the rest are point values
+  time: time; period: duration; cores: int; load: float; cpu_user: duration; cpu_system: duration;
   os_memory_total: int; os_memory_used: int;
   process_resident: int; process_virtual: int; process_shared: int;
   malloc_total: int; memory_drift: int;
   io_read: int; io_write: int; store_read: int; store_write: int;
   disk_free: int; disk_meta: int; tasks_live: int;
   http_connections: int; sse_subscribers: int; http_bytes_in: int; http_bytes_out: int;
-  files_served: int; files_pushed: int; http_max_in: int; http_max_out: int; http_max_file: int;
-  top_out: Array<HostPerfUser>; top_in: Array<HostPerfUser>; top_files: Array<HostPerfUser>;
-  small: HostPerfClass; medium: HostPerfClass; large: HostPerfClass;
-  zones: HostPerfZones;
+  files_served: int; files_pushed: int;
+  small: HostMetricClass; medium: HostMetricClass; large: HostMetricClass;
+  zones: HostMetricZones;
 }
-@volatile type HostPerfUser { user_id: int; bytes_in: int; bytes_out: int; files_served: int; files_pushed: int; }
-@volatile type HostPerfClass { workers: int; busy: float; queued: int; idle: int;
+@volatile type HostMetricClass { workers: int; busy: float; queued: int; idle: int;
   ended: int; errors: int; cancelled: int; timeouts: int; memory: int; cache_budget: int; }
-@volatile type HostPerfZones { count: int; used: int; size: int; committed_blocks: int;
+@volatile type HostMetricZones { count: int; used: int; size: int; committed_blocks: int;
   reserved_blocks: int; written_blocks: int; bin_cache: int; worst_zone: int; worst_ratio: float; defrag: bool; }
+
+enum HttpMetricKind { file; upload; rpc; task; sse; other; }
+@volatile
+type HttpMetric {   // one per HTTP request, once its response ended (new)
+  time: time; user_id: int;              // 0 = anonymous
+  ip: String?; forwarded_for: String?; user_agent: String?;   // personal data: only if named in --metrics_http_fields
+  method: runtime::HttpMethod?;          // null when the request line could not be read
+  path: String;                          // without query string
+  kind: HttpMetricKind; status: int;     // 0 = no response sent
+  ttfb: duration; duration: duration; request_bytes: int; response_bytes: int;
+  task_id: int?;                         // joins an rpc/task record with its TaskMetric
+  aborted: bool;
+}
+
+var r = Stream<TaskMetric>::get("task_metrics").reader(0);   // as root; a CsvReader<TaskMetric>
 ```
-Signals: `wait + exec` = caller latency; `exec = run + suspended`; `dirty_evictions` / `cache_evictions` > 0 → cache budget too small. Read back from the stream, `TaskPerf` data is typed; `HostPerf` data is a `Map<any?, any?>`.
+Signals: `wait + exec` = caller latency; `exec = run + suspended`; `dirty_evictions` / `cache_evictions` > 0 → cache budget too small; `HttpMetric.duration - ttfb` = transfer time.
 
 ### System Information
 
@@ -705,6 +731,18 @@ type World {
 World::create("what-if", WorldMode::light);       // returns the world id
 var id = spawn(Job { function: project::simulate, world: "what-if" });   // runs in "what-if"
 // await([Job { ..., world: "what-if" }]) from main is an error: await jobs always run in the awaiting task's world
+```
+
+**`WorldChangesReader` (new, upstream `2ef3c3a93`).** Lists the nodes the current world modified (world version ≠ main's current version, among the blocks the world wrote), each once, in node-reference order, as committed when the task started. A `node<T>` set back to main's value is not listed; a structured node whose tree the world rewrote is. Fails in a task running in main.
+```gcl
+type WorldChangesReader {
+  pos: int?;                      // nodes already read; a restored reader (suspend/resume) recomputes and skips them
+  // native fn can_read(): bool
+  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle; fails past the end
+  // native fn available(): int
+}
+var r = WorldChangesReader {};
+while (r.can_read()) { var n = r.read(); }
 ```
 Names take 1 to 128 of `[A-Za-z0-9_.-]`; ids are never reused. Full reference: the `greycat` skill's `runtime.md` § Worlds.
 
@@ -1069,19 +1107,29 @@ smtp.send(Email {
 ### Stream
 
 #### Stream<T> (new in 8.4)
-An append-only buffer that absorbs a high-rate, concurrent write stream of `T` values and hands them to GreyCat in batches, at a bounded pace, instead of one graph transaction per write. Records live in `files/<user>/streams/<name>.ndjson` (one JSON line each) and survive restarts; the registry is in-memory, so **register again at startup** (re-registering a name whose file already holds records reattaches and fires the callback once). Names are unique per user; `/` separates hierarchy levels (empty, `.`, `..` segments, leading/trailing `/`, and `\` are rejected). The consumer owns its checkpoint: persist the offset next to the data it produced, and keep the callback idempotent (a re-run may see already-processed values). C API: `gc/stream.h` (see the C-API skill's api_runtime_storage.md).
+An append-only buffer that absorbs a high-rate, concurrent write stream of `T` values and hands them to GreyCat in batches, at a bounded pace, instead of one graph transaction per write. Records live in `files/<user>/streams/<name>.ndjson` (one JSON line each; `.csv` with `StreamFormat::csv`, one CSV line each, default `CsvFormat`, no header) and survive restarts; the registry is in-memory, so **register again at startup** (re-registering a name whose file already holds records reattaches and fires the callback once). Names are unique per user; `/` separates hierarchy levels (empty, `.`, `..` segments, leading/trailing `/`, and `\` are rejected). The consumer owns its checkpoint: persist the offset next to the data it produced, and keep the callback idempotent (a re-run may see already-processed values). C API: `gc/stream.h` (see the C-API skill's api_runtime_storage.md).
 ```gcl
+enum StreamFormat { ndjson, csv, }
+type StreamOptions {
+  format: StreamFormat?;   // ndjson when null
+  flush_size: int?;        // buffered bytes that trigger a write to the file; 64KB when null, 0 = write each value at once
+  flush_step: duration?;   // longest time a value stays buffered; 1s when null
+}
 type Stream<T> {
-  native fn last_written_pos(): int;       // offset just past the last value appended
+  native fn last_written_pos(): int;       // writes the buffer to the file, then returns the offset just past the last value
   native fn name(): String;
-  native static fn new(name: String, callback: function, max_dephasing: duration, durable: bool): Stream<T>;   // T from the call: Stream<Event>::new(...)
+  native static fn new(name: String, callback: function, max_dephasing: duration, options: StreamOptions?): Stream<T>;   // T from the call: Stream<Event>::new(...); throws on negative flush_size/flush_step
   native static fn get(name: String): Stream<T>;   // Stream<Event>::get(name); T must match registration; a bare `Stream` raises
-  native fn reader(from: int): JsonReader<T>;   // values in [from, last_written_pos() at call time)
-  native fn write(value: T);               // concurrent-safe; an object must be exactly T (no subtype)
+  native fn format(): StreamFormat;
+  native fn bind_reader(reader: Reader<T>, from: int): Reader<T>;   // used by reader(); throws if reader is not of the stream's format
+  fn reader(from: int): Reader<T>;         // JsonReader<T> (ndjson) or CsvReader<T> (csv) over [from, last_written_pos() at call time)
+  native fn write(value: T);               // appends to the buffer; concurrent-safe; an object must be exactly T (no subtype)
+  native fn flush();                       // writes the buffer and fsyncs: the durability point; throws on failure or on values dropped since the last flush
 }
 ```
-- `callback` fires at most `max_dephasing` after a `write()` (one callback per burst); it must be a top-level function — lambdas don't capture their environment.
-- `durable: true` fsyncs every `write()` (returns once on disk); `false` appends without fsync (log-file profile; a crash can lose the unsynced tail, a torn last line is repaired on next registration).
+- **Breaking (8.4, upstream `8e00f444a`): every stream buffers its writes and `durable: bool` is gone** — the 4th `new` param is now `options: StreamOptions?` (`Stream<Event>::new(name, cb, 500ms, null)` takes every default). Values reach the file once `flush_size` bytes are pending, at the latest `flush_step` after the first, on `reader()` / `last_written_pos()` / `flush()`, on a `GET`/`HEAD` of the file through `/files` (so `Range: bytes=<offset>-` polling sees every value written so far), and at a clean shutdown. A killed/crashed process loses buffered values; a machine crash loses unsynced ones. **Call `flush()` before persisting a drain offset** when the stream must survive a machine crash (a file cut back below a persisted offset makes the next drain skip values). A failed write is logged (not thrown), the file is cut back to its last complete record, and the next `flush()` throws.
+- **`reader()` return type changed:** `Reader<T>` (a `JsonReader<T>` or `CsvReader<T>`), not `JsonReader<T>`; `new` / `get` return a specialized `Stream<T>` (upstream `45bb8756f` / `5c6d34997`).
+- `callback` fires at most `max_dephasing` after values reach the file (one callback per burst); it must be a top-level function — lambdas don't capture their environment.
 
 ```gcl
 type Event { id: int; payload: String; }
@@ -1094,12 +1142,13 @@ fn on_events() {
   var end = s.last_written_pos();          // capture before draining
   var r = s.reader(state.pos);
   while (r.can_read()) { handle(r.read()); }
+  s.flush();                               // only if the offset must survive a machine crash
   state.pos = end;
   ingest.set(state);
 }
 
 fn start() {
-  var s = Stream<Event>::new("ingest/events", on_events, 500ms, true);
+  var s = Stream<Event>::new("ingest/events", on_events, 500ms, null);   // or StreamOptions { format: StreamFormat::csv, flush_size: 0 }
   s.write(Event { id: 1, payload: "hello" });
 }
 ```

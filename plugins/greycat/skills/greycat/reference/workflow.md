@@ -1,6 +1,6 @@
 # Working with a GreyCat project
 
-Reach for this file when the task is operational: starting a fresh project, evolving an existing one, adding an endpoint, running tests, shipping a build. The other reference files (`syntax.md`, `types.md`, `stdlib.md`, `cli.md`, `runtime.md`) cover the _what_; this one is the _how_.
+Reach for this file when the task is operational: starting a fresh project, evolving an existing one, adding an endpoint, running tests, shipping a build. The other reference files (`syntax.md`, `types.md`, `stdlib.md`, `cli.md`, `runtime.md` and the topics it routes to) cover the _what_; this one is the _how_.
 
 ## Contents
 
@@ -272,7 +272,8 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 - [ ] Provision a writable `files/` if the app accepts uploads.
 - [ ] Configure with `.env` (or systemd `Environment=`): `GREYCAT_PORT`, `GREYCAT_LOG`, `GREYCAT_CACHE`, `GREYCAT_STORE`, `GREYCAT_BACKUP_PATH`, `GREYCAT_TZ`.
 - [ ] Schedule backups: either external (snapshot the `gcdata/` directory), or in-process via a scheduled `Runtime::backup_delta()`.
-- [ ] Run with `--log=perf` and chart the `HostPerf` and `TaskPerf` records of the `log` stream if the workload is heavy on memory or storage (see runtime.md § Logging).
+- [ ] Run with `GREYCAT_METRICS=host,task` and chart the `HostMetric` and `TaskMetric` records of the `host_metrics` and `task_metrics` streams if the workload is heavy on memory or storage (see observability.md § Metrics stream).
+- [ ] Add `http` to `GREYCAT_METRICS` to get one `HttpMetric` record per request (path, status, latency, bytes) when the traffic itself needs watching, for example `/files` downloads (see observability.md § HTTP request records).
 
 ## Common project chores
 

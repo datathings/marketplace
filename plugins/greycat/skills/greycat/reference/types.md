@@ -211,7 +211,8 @@ fn describe(x: any?) {
 - `is T` accepts the same `T` syntax as a declaration (including generics, nullability, FQN).
 - It returns `bool`.
 - In the then-branch, the LHS value's type is narrowed to `T`.
-- Type tests on generic types compare the generic arguments exactly: a `Box<String>` is not `Box<int>`, nor raw `Box`.
+- On a generic type, `is` follows the rule of a parameter check: the value is the type itself, a specialization of the raw generic (`Box<String> is Box`), or a specialization whose every argument the tested one accepts: `any` accepts any non-nullable argument, `any?` any argument, anything else must match exactly, nullability included. So `Map<int, String> is Map<int, any>` holds, `Map<int, String?> is Map<int, any>` does not (but `is Map<int, any?>` does), and `Box<String> is Box<int>` is false. Inheritance applies to the parents too: a `type IntBox extends Box<int>` is `Box<int>`, `Box<any>` and `Box`.
+- `x is any` is true for every non-null value; `null is any?` is true and `null is any` false.
 
 ## The `as` operator
 

@@ -123,7 +123,7 @@ Playwright pierces open shadow DOM, so the Lit roots and Web Awesome elements ar
 
 ## Keep specs independent of persistent state
 
-`gcdata/` persists across runs and `--store` is only a per-zone size cap, not a throwaway-DB path - there is no
+`gcdata/` persists across runs and `--store` only sizes its index and is not a throwaway-DB path. There is no
 per-test database. A spec that asserts on list contents must scope to data it created: use a unique label per
 run, then add -> assert -> delete. Keep `fullyParallel: false` unless every assertion is text-scoped.
 

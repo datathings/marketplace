@@ -272,7 +272,7 @@ fn ping(): String {
 }
 ```
 
-No `@permission` clause — calls require a valid session. The browser obtains one via `Identity::login` (cookie) or `greycat token --user=<name>` (header / query string). See [runtime.md § Identity and permissions](runtime.md).
+No `@permission` clause — calls require a valid session. The browser obtains one via `Identity::login` (cookie) or `greycat token --user=<name>` (header / query string). See [identity.md](identity.md).
 
 ### Per-user data (scope by caller)
 
