@@ -150,7 +150,7 @@ type User {
     static MAX_NAME_LEN: int = 64;   // static (class-level) attribute — readonly
 
     fn rename(new_name: String) {
-        this.name = new_name;        // `this` is implicit in methods
+        this.name = new_name;        // `this` is required: a bare `name` does not resolve
     }
 
     static fn validate_name(name: String): bool {
@@ -163,6 +163,8 @@ type User {
 ```
 
 Every attribute ends with `;`; after a method body `;` is optional. Methods can omit return type (means "returns nothing").
+
+Inside a method, the receiver's attributes and methods are reached through `this` only (`this.name`, `this.rename("x")`). A bare `name` or `rename("x")` is an `unresolved-name` error.
 
 ## Types
 

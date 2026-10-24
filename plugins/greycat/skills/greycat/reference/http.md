@@ -35,6 +35,8 @@ Every request resolves to an identity (user). The server reads the token from on
 
 No token = anonymous (`user_id = 0`, role `public`). Anonymous callers only reach functions gated by `@permission("public")`.
 
+A browser app on another origin sends its token in the `Authorization` header. Every response allows any origin (`Access-Control-Allow-Origin: *`), and the `OPTIONS` preflight allows `GET`, `POST`, `PUT` and `DELETE` with any header, `Authorization` included. Cookies are not sent cross-origin, since a browser refuses credentials to a server that answers `*`.
+
 A token carries the user id and an expiry, signed with the server's key (`gcdata/security/private_key`). The server keeps no session list, so a token stays valid until it expires, across restarts and password changes. The permissions are not in the token. They are read from the user's current role on every request, so a role change applies to open sessions at once. Use `Identity::login(name, pass)` to obtain one, or `greycat token --user=<name>` from the CLI.
 
 ## Where arguments come from
@@ -68,4 +70,4 @@ from the outside, where an error is not.
 
 JSON-RPC follows the standard `{jsonrpc, id, result | error}` envelope. Path-RPC returns the raw JSON-encoded result, or the GCB-encoded result when the caller asked for it via `Accept: application/octet-stream`.
 
-Errors: 400 (bad request or params), 401 (no valid credentials, the caller may log in and retry), 403 (authenticated, but the permission is missing), 404 (no such function or file), 422 (ABI mismatch, the caller sends a payload incompatible with the server's current ABI), 500 (runtime exception in the function).
+Errors: 400 (bad request or params), 401 (no valid credentials, the caller may log in and retry), 403 (authenticated, but the permission is missing, with an empty body, or the call lands in a world the caller may not use, with a `core::Error` saying so, see [storage.md](storage.md#worlds-branches-of-the-store)), 404 (no such function or file), 422 (ABI mismatch, the caller sends a payload incompatible with the server's current ABI), 500 (runtime exception in the function).

@@ -30,6 +30,7 @@ The patterns that keep GreyCat code correct, and the mistakes that an agent fami
 | `interface Foo { ... }`                             | `abstract type Foo { ... }`                        | No `interface` keyword.                                       |
 | `type Type { x: int = 42; }`                        | `type Type { x: int; }`                            | Instance field have no initializer.                           |
 | `let x = ...`                                       | `var x = ...`                                      | Only `var`.                                                   |
+| `name` / `rename()` inside a method                 | `this.name` / `this.rename()`                      | `this` is never implicit.                                     |
 | `const PI = 3.14`                                   | `static pi: float = 3.14;` inside a type           | No `const`; use `static` attributes.                          |
 | `T extends Bound` generic                           | `<T>` (no bounds)                                  | Generics are unbounded.                                       |
 | `(a, b, c)` triple                                  | `Tuple<Tuple<A, B>, C>` or a custom type           | Only 2-tuples.                                                |

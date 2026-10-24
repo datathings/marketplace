@@ -30,7 +30,7 @@ trace("...");
 
 Metrics are not log records: they have no level, they are never printed, and `--log` does not switch them on. `GREYCAT_METRICS` (`--metrics`) takes a comma-separated list of the metrics to record, `host` (`HostMetric`, every `--metrics_host_step`), `task` (`TaskMetric`, once per task) and `http` (`HttpMetric`, once per HTTP request), for example `GREYCAT_METRICS=host,task,http`. Unset, nothing is recorded and nothing is built. An unknown name is refused at startup. The option applies to `run` and `serve`.
 
-Each metric has its own stream of `root`, one record per line, with no wrapper: the record itself. A `TaskMetric` carries `user_id`, `task_id`, `job_id` and `src` as a log record does.
+Each metric has its own stream of `root`, one record per line, with no wrapper: the record itself. A `TaskMetric` carries `user_id`, `task_id`, `job_id` and `src` as a log record does, and the `world_id` of the world the task ran in.
 
 - `host` -> `files/root/streams/host_metrics.csv`, `HostMetric` records;
 - `task` -> `files/root/streams/task_metrics.csv`, `TaskMetric` records;
@@ -48,6 +48,7 @@ With `task` in `GREYCAT_METRICS`, every task -- RPC calls, calls with a `task` h
 - `job_id` -- `null` for the task itself, the job's index in its `await` for an `await` job;
 - `src` -- the function the task ran, the key for per-endpoint figures;
 - `user_id` -- the caller;
+- `world_id` -- the id of the world the task read and committed to, `0` for the main store; an `await` job runs in its task's world. `World::list()` maps ids to names (`WorldInfo.id`, `name`), main excluded, and an id is never reused, so a removed world's records keep their own;
 - `time` -- when the record was written, right after the task ended.
 
 **Units and scope.** Durations are microseconds, byte counts are bytes, everything else is a count. A task's figures cover all its runs -- a task suspended in an `await` runs once before and once after each suspension, maybe on different workers -- but not its jobs, which log their own record: add a task's jobs (same `task_id`) to get the total work of an `await` tree. Read back from the stream, each record is a `TaskMetric`.

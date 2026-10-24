@@ -39,7 +39,7 @@ true  false  null  typeof
 is  as
 ```
 
-`this` is not reserved: it is an identifier bound to the receiver inside methods. Don't reuse it as a name.
+`this` is not reserved: it is an identifier bound to the receiver inside methods. Don't reuse it as a name. It is never implicit, so a method reads its own attributes and calls its own methods as `this.x` and `this.f()`.
 
 Annotation names follow `@` and use the identifier regex.
 
@@ -208,7 +208,7 @@ foo(args)
 fn (p: T): R { body }                           // anonymous function
 
 // unary
--x   !x   *x                                     // no unary +
+-x   !x   *x                                     // no unary +, see Numbers
 --x   ++x                                       // prefix
 x--   x++   x!!                                 // postfix; !! is "force non-null"
 
@@ -247,6 +247,7 @@ Gotchas:
 
 - `??` binds tighter than `^`. `count ?? 0 > 0` parses as `(count ?? 0) > 0`.
 - `-o.b` parses as `-(o.b)` (postfix `.` binds tighter than prefix `-`).
+- Prefix operators stack, so `***n` dereferences three times and `!!b` negates twice. Write `- -x` with a space to negate twice, since `--x` is a decrement.
 - `o.x * o.y` parses correctly as `(o.x) * (o.y)`.
 
 ## Literals
@@ -261,7 +262,12 @@ Gotchas:
 .5                  // INVALID — leading digit required
 3.14e+10            // float scientific
 1e-10               // float scientific (no decimal required)
+-42                 // int, the sign belongs to the literal
++42                 // int, same value as 42
++1.5                // float
 ```
+
+There is no unary `+` operator. A `+` is accepted only as the sign of a number literal (or `+Infinity`), written directly against it, so `+ 42`, `+(42)` and `+x` are syntax errors.
 
 ### Typed-suffix numbers
 

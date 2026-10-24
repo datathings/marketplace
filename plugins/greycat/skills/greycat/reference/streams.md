@@ -14,7 +14,7 @@
 
 ## How a stream works
 
-- A stream belongs to the user who registers it, under a name unique for that user. `/` groups names, as in `"ingest/events"`.
+- A stream belongs to the user who registers it, under a name unique for that user. `/` groups names, as in `"ingest/events"`. Removing that user stops the stream (see [identity.md](identity.md#grants-and-per-user-files)).
 - Its records live in `files/<user>/streams/<name>.ndjson`, one JSON object per line (`.csv` and one CSV line for a CSV stream). The file survives restarts. The registry of streams does not, so a program registers its streams at every start.
 - `write(v)` appends a record to an in-memory buffer, which reaches the file in batches. Each record starts at a byte offset of the file that never changes.
 - Once records reach the file, the stream runs its callback as a task, at most `max_dephasing` later. A burst of writes therefore costs one callback.

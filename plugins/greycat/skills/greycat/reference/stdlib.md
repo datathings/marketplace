@@ -32,7 +32,7 @@ ys.add_all([5, 6, 7]);
 ys.get(0);                          // 4
 ys.set(0, 99);
 ys.size();
-ys.index_of(5);
+ys.index_of(5);                     // -1 when absent, never null
 ys.remove(0);                       // returns removed value
 ys.sort(SortOrder::asc);
 ys.sort_by(field, SortOrder::desc); // sort by attribute of contained objects
@@ -40,6 +40,10 @@ ys.swap(0, 1);
 ys.fill(10, 0);                     // size 10, default value 0
 ys.range_equals(0, 4, null);        // all five elements equal null?
 ```
+
+`index_of` returns `-1` when no element matches. Test membership with `xs.index_of(v) >= 0`. `xs.index_of(v) == null`
+is always false and `!= null` always true. Lint reports such a comparison as `decidable-condition` only when it is
+the condition of an `if` or a loop. Elsewhere, as in `return xs.index_of(v) != null;`, it passes lint.
 
 Iteration:
 
@@ -410,6 +414,8 @@ Concrete subtypes:
 | `CsvWriter<T>` / `CsvReader<T>`   | CSV (config via `CsvFormat`)                       |
 | `BinReader`                       | Raw `i32` / `i64` / `f32` / `f64` / `Tensor` reads |
 
+`GcxWriter<T>` / `GcxReader<T>` write and read `.gcx`, a binary format that does not depend on the ABI: objects carry their field names and the type, field and enum entry names sit once in a dictionary at the end of the file. Choose it over GCB for a file that must survive changes to the program's types or be read by another tool; GCB is smaller and faster but only reads back into the same types. `GcxWriter` is not a `Writer`: it has `write(v)` and `close()`, no `flush()`, and the file is readable only once `close()`d. Read back into changed types, a removed field is skipped and a missing nullable field reads as null. Layout and rules: `lib/std/io.md` (GcxWriter / GcxReader).
+
 `Stream<T>`, an append-only file of records that concurrent tasks write and a callback drains in batches, is covered in [streams.md](streams.md).
 
 ### File
@@ -611,7 +617,7 @@ Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();
 Runtime::store_stats();             // StoreStats: live blocks and bytes, by type and by world
 
-World::create("what-if", WorldMode::light);   // branch of the store, see storage.md § Worlds
+World::create("what-if", WorldMode::overlay, null);   // branch of the store, see storage.md § Worlds
 World::list();   World::id("what-if");   World::remove("what-if");
 World::current();                             // the calling task's world, "main" for main
 var r = WorldChangesReader {};                // the nodes the current world modified: can_read(), read(): any, available()

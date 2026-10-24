@@ -39,11 +39,11 @@ When the jobs' writes merge back into the parent task, a node or an object field
 
 Worker pool sizes:
 
-- `--workers` (`GREYCAT_WORKERS`) — task workers in total. Default = CPU count. They are split into three classes: small (`--workers_small`, default 20%), large (`--workers_large`, default 10%) and medium, which takes the rest and keeps at least one worker.
+- `--workers` (`GREYCAT_WORKERS`) — task workers in total. Default = CPU count, see [cli.md](cli.md). They are split into three classes: small (`--workers_small`, default 20%), large (`--workers_large`, default 10%) and medium, which takes the rest and keeps at least one worker.
 - `--workers_small` (`GREYCAT_WORKERS_SMALL`) — task workers for the small class. Every RPC request (path-RPC or JSON-RPC) runs as a small task on them, so long background tasks never starve requests. Default 20% of `--workers`, rounded, at least 1 from 2 workers; `run` and `test` start none. An RPC task is a task like any other: it has an id, shows in `Task::running()` and `Task::history`, emits SSE task events when the call names a stream with the `sse` header, and can be stopped with `Task::cancel`; only its arguments and result travel over the connection. An `await` inside it suspends it like any task, freeing the worker while its jobs run.
 - `--workers_large` (`GREYCAT_WORKERS_LARGE`) — how many of `--workers` serve the large class, default 10% rounded half up (none below 5 workers). A worker runs its own class first and, when that queue is empty, any lighter class, so large workers also drain medium and small tasks. Only sync RPC calls run outside `medium` by default (`small`); choose it where the task starts: `Job { function: f, task_class: TaskClass::large }` for `spawn` (default `medium`) and for each `await` job (default: the parent's class), `PeriodicOptions { task_class: TaskClass::large }` for the scheduler (default `medium`), and the `task` header's value for RPC (`--task_class` for `greycat call`). MCP calls run `medium`. A class with no workers runs in the nearest class that has some; `Task::task_class()` answers the class a task actually runs in.
-- `--cache` (`GREYCAT_CACHE`, default 75% of RAM) — 1/4 backs the store zones, 3/4 is the object cache of the task workers. It is split by class: a medium worker holds one unit, a small one `--cache_ratio_small` units (default `0.4`) and a large one `--cache_ratio_large` units (default `3`), so with the defaults the small class holds about 8% of the workers' cache and the large one about 30%. A ratio must be > 0. `serve` logs the split at startup, e.g. `Workers: 16 (small 3 x 810.2MiB, medium 11 x 1.98GiB, large 2 x 5.93GiB), cache: 48.0GiB (workers 36.0GiB, zones 12.0GiB)`, and `Runtime::info()` answers it in `RuntimeInfo.small` / `medium` / `large` (`workers`, `mem_worker`, `cache_ratio`).
-- `--max_args_memory` (default 1 MiB) — an RPC call whose arguments are larger is streamed to its task's arguments file while it is read, like a call with a `task` header, instead of being held in memory for as long as the call runs. Its headers stay readable; `Task::body()` answers `null`. JSON-RPC envelopes stay in memory, since their method and params are only found by parsing them.
+- `--cache` (`GREYCAT_CACHE`, default 75% of host memory, see [cli.md](cli.md)) — 1/4 backs the store zones, 3/4 is the object cache of the task workers. It is split by class: a medium worker holds one unit, a small one `--cache_ratio_small` units (default `0.4`) and a large one `--cache_ratio_large` units (default `3`), so with the defaults the small class holds about 8% of the workers' cache and the large one about 30%. A ratio must be > 0. `serve` logs the split at startup, e.g. `Workers: 16 (small 3 x 810.2MiB, medium 11 x 1.98GiB, large 2 x 5.93GiB), cache: 48.0GiB (workers 36.0GiB, zones 12.0GiB)`, and `Runtime::info()` answers it in `RuntimeInfo.small` / `medium` / `large` (`workers`, `mem_worker`, `cache_ratio`).
+- `--max_args_memory` (default 1 MiB) — an RPC call whose arguments are larger is streamed to its task's arguments file in `gcdata/jobs/` while it is read, like a call with a `task` header, instead of being held in memory for as long as the call runs. Its headers stay readable; `Task::body()` answers `null`. JSON-RPC envelopes stay in memory, since their method and params are only found by parsing them.
 - `--request_ttl` — an RPC request still queued or running after this long is cancelled like any task, and answers `503` with an error saying the time-to-live ran out. A `Task::cancel` call says so instead. Background tasks are not subject to it.
 - `--http_threads` — IO threads for socket accept / read / write.
 
@@ -51,17 +51,32 @@ Worker pool sizes:
 
 `Task::running()` lists currently executing tasks; `Task::history(offset, max)` reads the recent-task log. `Task::cancel(task_id)` requests cancellation. `TaskStatus` is one of:
 
-| State               | Meaning                                 |
-| ------------------- | --------------------------------------- |
-| `empty`             | Allocated but not yet enqueued.         |
-| `waiting`           | Queued, waiting for a worker.           |
-| `running`           | Executing on a worker.                  |
-| `await`             | Blocked on `await(...)` for child jobs. |
-| `cancelled`         | Cancelled before completion.            |
-| `error`             | Threw an uncaught exception.            |
-| `ended`             | Completed successfully.                 |
-| `ended_with_errors` | Completed, but some child jobs failed.  |
-| `breakpoint`        | Paused at a debugger breakpoint.        |
+| State               | Meaning                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| `empty`             | Allocated but not yet enqueued.                                     |
+| `waiting`           | Queued, waiting for a worker.                                       |
+| `running`           | Executing on a worker.                                              |
+| `await`             | Blocked on `await(...)` for child jobs.                             |
+| `cancelled`         | Cancelled before completion.                                        |
+| `error`             | Threw an uncaught exception.                                        |
+| `ended`             | Completed successfully.                                             |
+| `ended_with_errors` | Deprecated, removed in v9.x. Never produced.                        |
+| `breakpoint`        | Paused at a debugger breakpoint.                                    |
+| `committing`        | Returned; its transaction is being committed or rolled back.        |
+| `cancelling`        | Cancelled while running or about to start; being stopped.           |
+| `await_cancelling`  | Cancelled while blocked on `await(...)`; stopped once its jobs end. |
+
+A task stays `committing` from the moment its code returns until its writes are committed or rolled back, and only then takes its final status. Once a task reads `ended`, its writes are committed: a task started after that reads them.
+
+`Task::cancel` takes effect or changes nothing, decided by the task's status at that instant:
+
+- `waiting`, still queued: it never runs and reads `cancelled` at once.
+- `running`, or picked by a worker but not started: it reads `cancelling`, is interrupted (a `try`/`catch` cannot stop that), and ends `cancelled` with its writes rolled back.
+- `await`: it reads `await_cancelling` and its jobs are cancelled too. It never resumes its code; once its jobs end it is rolled back and ends `cancelled`.
+- `committing` or a final status: too late, its outcome is decided. The task ends as it would have, `ended` or `error`, and `Task::cancel` answers `false`.
+- `breakpoint`: ignored while the task is paused.
+
+`cancelling` and `await_cancelling` are still in flight: code that waits for a task to finish waits on them as it does on `running`.
 
 ### Transactions and rollback
 
@@ -146,7 +161,7 @@ data: {"user_id":1,"user_name":"root","task_id":12,"mod":"api","fun":"import","c
 - `task-started` fires once per task, when its code starts running on a worker; the gap between `creation` and `start` is the time it waited in the queue. A task resuming from an `await` is not reported again, and one cancelled while still queued never starts: it only gets `task-complete`.
 - `task-progress` fires when the whole percentage of `Task::add_steps` over `Task::expected_steps` changes, never more often.
 - `task-complete` fires once per task, whatever its final status (`ended`, `error`, `cancelled`). Jobs spawned by `await` are not reported on their own.
-- `task-breakpoint` fires when the task pauses on a `breakpoint` (in its own code or in one of its `await` jobs), once the worker is paused: `Debug::all` already lists it, so a debugger reacting to the frame can open the session with `Debug::get`. `task-resumed` fires when it goes on, with the status back to `running`. A debug call made while it is paused is not reported.
+- `task-breakpoint` fires when the task pauses on a `breakpoint` (in its own code or in one of its `await` jobs), once the worker is paused: `Debug::all` already lists it, so a debugger reacting to the frame can open the session with `Debug::get`. `task-resumed` fires when it goes on, with the status back to what it was: `running`, or `await` when one of its jobs paused. A debug call made while it is paused is not reported.
 - A call is only reported when the stream it names belongs to the caller. An id that names another user's stream (admin role and read grants included), a closed stream, or nothing at all (malformed) does not refuse the call: it runs, reported nowhere. To watch every task the caller may see (an admin console), read `Task::running`, `Task::history` and `Task::live`, whose access rule includes the admin role and the grants.
 - The id names one stream for its lifetime. A reconnect, such as the automatic one of `EventSource`, opens a new stream with a new id, sent in its own `connected` frame: a client keeps the last id it received, and the calls already bound to the old stream are reported nowhere (fetch `Task::history` to catch up).
 - `: ping` is sent every 15 s, a comment an `EventSource` ignores. A subscriber whose token has expired, or that stops reading, is closed, and so is one that writes anything on the connection after its request: the stream is one-way.

@@ -32,14 +32,14 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Logging](#logging) - log levels, Log, TaskMetric/HostMetric/HttpMetric streams
   - [System Information](#system-information)
   - [Current HTTP Request](#current-http-request) - Task::header/headers/uri/body
-  - [Worlds](#worlds) - World, WorldMode, WorldInfo, WorldChangesReader (new)
+  - [Worlds](#worlds) - World, WorldMode, WorldInfo, WorldChangesReader, NodeReader (new)
   - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
   - [License Management](#license-management)
   - [OpenAPI Integration](#openapi-integration)
   - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
 
 - [std::io - Input/Output](#io-module-stdio)
-  - [Readers & Writers](#readers--writers) - Writer, Reader, GcbWriter/Reader, TextWriter/Reader, BinReader
+  - [Readers & Writers](#readers--writers) - Writer, Reader, GcbWriter/Reader, GcxWriter/Reader (new), TextWriter/Reader, BinReader
   - [JSON I/O](#json-io) - JsonWriter, JsonReader, Json
   - [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)
   - [CSV I/O](#csv-io) - CsvWriter, CsvReader, CsvFormat, Csv analysis
@@ -462,9 +462,14 @@ enum Month { Jan(0); Feb(1); Mar(2); Apr(3); May(4); Jun(5);
 
 #### Task
 ```gcl
-enum TaskStatus {
+enum TaskStatus {   // ordinals used by native code (= gc_task_status_t); only ever appended, removed/reordered in a major release only
   empty; waiting; running; await; cancelled;
-  error; ended; ended_with_errors; breakpoint;
+  error; ended;
+  ended_with_errors;   // deprecated, removed in v9.x: never produced (a task whose jobs failed ends `ended` or `error`); kept for ordinals
+  breakpoint;
+  committing;          // new: code returned, result being written + transaction committed/rolled back; still in flight, past cancellation
+  cancelling;          // new: cancel accepted while running (or picked, not started); ends `cancelled` (`error` when a request's ttl ran out)
+  await_cancelling;    // new: cancel accepted while suspended in `await`; its jobs are cancelled, torn down once they end, code not resumed
 }
 
 type Task {
@@ -571,13 +576,14 @@ Log records are **buffered** (8.4): they reach the file once `--log_flush_size` 
 @volatile
 type TaskMetric {   // one per task and per await job, once ended and committed
   time: time; user_id: int?; task_id: int?; job_id: int?; src: function?;   // new: identify the record (no Log wrapper)
+  world_id: int;   // new: WorldInfo.id the task read/committed to, 0 = main; an await job runs in its awaiting task's world
   wait: duration; exec: duration; run: duration; suspended: duration; commit: duration;
   awaits: int; jobs: int; fusion_conflicts: int; catches: int;
   read_bytes: int; read_hits: int; read_wasted: int; write_bytes: int; write_hits: int;
   dirty_blocks: int; dirty_evictions: int;
   cache_bytes: int; cache_hits: int; cache_misses: int; cache_evictions: int; cache_blocks: int;
   memory: int; cache_budget: int;
-  task_class: String; borrowed: int; queued: int;
+  task_class: TaskClass; borrowed: int; queued: int;   // task_class was `String` before upstream `6070615de`
   args_bytes: int; result_bytes: int; status: TaskStatus;
 }
 
@@ -640,7 +646,12 @@ type Runtime {
   // @expose @permission("debug"): info(): RuntimeInfo, root(): any   (usage() removed upstream `e7630e693`)
   // @expose @reserved @permission("api"): abi()
   // static native fns: sbi_tree(node: any?): Array<Tuple<int, int>>?, sleep(d: duration), backup_delta(), defrag(),
-  //   on_files_put(handler: function?)
+  //   on_files_put(handler: function?), on_files_get(handler: function?)   (handler(path: String): path relative to the
+  //   project, eg. `files/alice/x.csv`, which `File` and the readers open as is)
+  // @expose @permission("admin"): export_store(): String   (new; every node, as the task sees the store, to a `.gce` file
+  //   under the backup dir, returns its path. A .gce is a gcx file (see GcxWriter): info Map (format, next_key, time, world),
+  //   root object with the module vars, then per node in reference order a node-begin record (tag 25: handle + type) and
+  //   its entries. Survives program changes; lasts at least as long as store_stats)
   // @expose @permission("admin"): backup_full(): String   (now returns the archive path)
   // @expose @permission("admin"): store_stats(): StoreStats  (new; live blocks/bytes by type vs file bytes on disk, damaged blocks,
   //   unreadable zones; reads every live block, as long as a full backup)
@@ -712,28 +723,43 @@ var result = child.wait();    // ChildProcessResult
 
 ### Worlds
 
-**New (upstream `214249d24`).** A world is a named branch of the store: tasks running in it read and commit to the world's own block index instead of main's, so what they write stays out of main. Worlds share with main every block they have in common — a world costs only what it writes plus its index. Main is world `0`; the name `main` is reserved. Merging a world back into main is not available. Pick the world with `Job.world` (spawn), `PeriodicOptions.world`, the RPC `world` header, or `greycat run|call --world=<name>` (`GREYCAT_WORLD`; unknown name fails before running / `400`). Backups hold main and every world (`backup_full` must run in main); defrag moves world blocks along with main's.
+**New (upstream `214249d24`).** A world is a named branch of the store: tasks running in it read and commit to the world's own block index instead of its base's, so what they write stays out of main. Worlds share every block they have in common — a world costs only what it writes plus its index. Main is world `0`; the name `main` is reserved. Merging a world back into main is not available. Pick the world with `Job.world` (spawn), `PeriodicOptions.world`, the RPC `world` header, or `greycat run|call --world=<name>` (`GREYCAT_WORLD`; unknown name fails before running / `400`). Backups hold main and every world (`backup_full` must run in main); defrag moves world blocks along with main's.
+
+**Breaking (upstream `6070615de`):** `WorldMode { full; light; }` → `{ snapshot; overlay; standalone; }`; `World::create` gained `base: String?` (worlds can be based on another world; at most 8 overlays per chain; a base cannot be removed while a world is based on it); `create` / `remove` now need the new **`world`** permission (in the `admin` role) instead of `admin`, `remove` by a non-creator still needs `admin` (checked from GCL too); `list` has no `@permission` and returns only the worlds the caller may use (`Identity.worlds`; `admin` sees all). `create` / `remove` log the `WorldInfo` at `info`.
 ```gcl
-enum WorldMode {
-  full;   // starts with a copy of main's block index: sees main as of creation, nothing committed later reaches it
-  light;  // starts empty and reads main for whatever it has not written; once it modifies a node, main's later changes to it stop reaching it
+enum WorldMode {   // how a world relates to its base (main or another world); snapshot/overlay have a base, standalone none
+  snapshot;    // sees its base as of creation, nothing committed later; copies the base's block index (O(#blocks)); over an
+               // overlay, also writes the nodes the overlay chain modified, as the overlay reads them
+  overlay;     // reads its base for every node it has not modified, as the base holds it now (base commits keep reaching it);
+               // an overlay over an overlay reads through it (one more index lookup per level). Created at once
+  standalone;  // sees nothing but its own writes, like a new store; module vars start as its own empty nodes, committed by the
+               // first task running in it. Created at once
 }
-type WorldInfo { id: int; name: String; mode: WorldMode; created: time; user_id: int?; }  // id never reused; user_id null if created as no user
+type WorldInfo {   // as World::list reports it, and as the `info` records of create/remove carry it
+  id: int; name: String; mode: WorldMode; created: time;
+  user_id: int?;   // creator; null if created as no user or before the store recorded it
+  removed: time?;  // new: set in the `info` record World::remove logs; always null in list()
+  base: String?;   // new: world it was created from, `main` for main; null for standalone
+}
 
 type World {
-  // @expose @permission("admin") static native fn create(name: String, mode: WorldMode): int   // full copies main's index: O(#blocks)
-  // @expose @permission("admin") static native fn remove(name: String)                         // fails while a task still reads it
+  // @expose @permission("world") static native fn create(name: String, mode: WorldMode, base: String?): int
+  //     (base: `main`/null = main store, or another world; standalone takes none. Caller must be allowed to use the base,
+  //      becomes WorldInfo.user_id and may use the world whatever Identity.worlds says)
+  // @expose @permission("world") static native fn remove(name: String)
+  //     (fails while a task reads it, while another world is based on it, and for a non-creator without `admin`)
   //                              static native fn id(name: String): int?
   //                              static native fn current(): String                            // `main` for the main store
-  // @expose @permission("admin") static native fn list(): Array<WorldInfo>                     // creation order, main excluded
+  // @expose                      static native fn list(): Array<WorldInfo>   // caller's usable worlds, creation order, main excluded
 }
 
-World::create("what-if", WorldMode::light);       // returns the world id
+World::create("what-if", WorldMode::overlay, null);        // returns the world id
+World::create("what-if-2", WorldMode::snapshot, "what-if"); // snapshot of what the overlay reads
 var id = spawn(Job { function: project::simulate, world: "what-if" });   // runs in "what-if"
 // await([Job { ..., world: "what-if" }]) from main is an error: await jobs always run in the awaiting task's world
 ```
 
-**`WorldChangesReader` (new, upstream `2ef3c3a93`).** Lists the nodes the current world modified (world version ≠ main's current version, among the blocks the world wrote), each once, in node-reference order, as committed when the task started. A `node<T>` set back to main's value is not listed; a structured node whose tree the world rewrote is. Fails in a task running in main.
+**`WorldChangesReader` (new, upstream `2ef3c3a93`).** Lists the nodes the current world modified (world version ≠ its **base's** current version, among the blocks the world wrote), each once, in node-reference order, as committed when the task started. A `node<T>` set back to the base's value is not listed; a structured node whose tree the world rewrote is. In a snapshot world, a node the base changed later is also listed when it shares a head block with a node the world modified; a standalone world lists every node it holds, module vars included. Fails in a task running in main.
 ```gcl
 type WorldChangesReader {
   pos: int?;                      // nodes already read; a restored reader (suspend/resume) recomputes and skips them
@@ -742,6 +768,18 @@ type WorldChangesReader {
   // native fn available(): int
 }
 var r = WorldChangesReader {};
+while (r.can_read()) { var n = r.read(); }
+```
+
+**`NodeReader` (new, upstream `6070615de`).** Every node the store holds as the current task sees it (root slot of every head block of the index, reachable from a module var or not), in node-reference order, as committed when the task started. In a world, the world's view (an overlay adds main's nodes it did not modify). Reads every block header: a full scan lasts about as long as `Runtime::store_stats`.
+```gcl
+type NodeReader {
+  type: type?;   // exact node type (`nodeTime<float>`, `node<Sensor>`) or node kind (`nodeTime`); null = every node; other types fail
+  last: any?;    // last node read; a restored reader (suspend/resume) resumes after it
+  // native fn can_read(): bool
+  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle; fails past the end
+}
+var r = NodeReader {};             // every node; set `type` to filter
 while (r.can_read()) { var n = r.read(); }
 ```
 Names take 1 to 128 of `[A-Za-z0-9_.-]`; ids are never reused. Full reference: the `greycat` skill's `runtime.md` § Worlds.
@@ -757,34 +795,52 @@ type Identity {
   name: String;       // unique login name
   role: String;       // role name -> permission flags at login
   grants: Array<IdentityGrant>;
+  world: String?;           // new: default world for a client to send in its `world` header (null = main, or removed since);
+                            //      the server never applies it: a call without a `world` header runs in main
+  worlds: Array<String>?;   // new: worlds its calls may run in besides main (null = every world); a call landing in an
+                            //      unlisted world fails, except one it created; `admin` may use every world
 
   // @expose @permission("public") static native fn current_id(): int   (cheap, lock-free)
   // @expose                       static native fn current(): Identity  (requires auth)
   // @expose @permission("admin")  static native fn get_by_id(id: int): Identity?
   // @expose @permission("admin")  static native fn get_by_name(name: String): Identity?
+  //     (exact name, else the one that reads the same under NFKC + Unicode case folding: `Alice@Corp.com` names
+  //      `alice@corp.com`, `Straße` names `strasse`; accents count. null if none, or several read as it.
+  //      Every call taking an identity name -- login, create, set_password, set_role, grant, remove, ... -- reads it this way)
   // @expose @permission("admin")  static native fn all(): Array<Identity>
   // @expose @permission("admin")  static native fn create(name: String, role: String): Identity
   //     (on an existing name: takes `role` and is returned; password, grants and open sessions are now *kept* -- fix, upstream `a538bbb66`)
+  //     (a new name is the folder files/<name>/: 1-255 UTF-8 bytes, no control/format/invisible/private-use/unassigned char,
+  //      none of / \ * ? " < > |, no leading/trailing space, not `.`/`..`/ending in `.`/a Windows device name (con, nul.txt);
+  //      `:` (SSO names `<provider>:<sub>`) refused on Windows only; stored NFC; throws if its folder already exists)
   // @expose @permission("admin")  static native fn create_with_password(name: String, role: String, password: String): Identity
-  //     (new; throws if name taken, password empty, or role undeclared; never changes an existing identity -- the sign-up call:
+  //     (new; throws if name taken or breaks the new-name rules of `create`, password empty, or role undeclared; never changes an existing identity -- the sign-up call:
   //      a @permission("public") function may forward a visitor's name/password, choosing `role` itself)
   // @expose                       static native fn token(id: int, ttl: duration?): String
-  // @expose @permission("public") static native fn login(login: String, password: String): String
+  // @expose @permission("public") static native fn login(login: String, password: String): String   (case-insensitive login, as get_by_name)
   // @expose                       static native fn logout()
   // @expose @permission("public") static native fn permissions(): Array<String>
   //                               static native fn has_permission(permission: String): bool
   // @expose                       static native fn set_password(name: String, pass: String): bool   (empty pass removes the password; an empty password never signs in)
   // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
-  // @expose                       static native fn set_role(name: String, role: String)
+  // @expose @permission("admin")  static native fn set_role(name: String, role: String): bool
   // @expose @permission("admin")  static native fn remove(name: String): bool   (new; public/root cannot be removed)
+  //     (changed upstream `6070615de`: also drops grants others extend to it; open sessions end at once (token -> anonymous);
+  //      id never reused; its tasks are cancelled (but the caller's), streams stop, Task::events close; files/<name>/ is now
+  //      *deleted* with its files (a name that isn't one path segment keeps it; throws if deletion fails, identity already gone))
   // @expose @permission("admin")  static native fn grant(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access added)
   // @expose @permission("admin")  static native fn revoke(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access removed)
+  // @expose @permission("admin")  static native fn set_world(name: String, world: String?)        (new; null/"main" = main; not checked against `worlds`)
+  // @expose @permission("admin")  static native fn set_worlds(name: String, worlds: Array<String>?)  (new; null lifts the restriction, [] = main only)
+  //     (both throw if no such user or world; like create/set_role/remove/grant/revoke, not permission-checked when called from GCL)
 }
 
 var me        = Identity::current();
 var caller_id = Identity::current_id();   // 0 if unauthenticated
 var token     = Identity::login("alice", "secret");
 ```
+
+**Permissions / roles (`runtime.gcl`).** Permissions: `public`, `admin`, `api` (exposed functions — **no longer** "and webroot files"), `debug`, and **new `world`** (create worlds, remove the ones one created). Roles: `public` = public; `admin` = public, admin, api, debug, **world**; `user` = public, api.
 
 #### IdentityGrant & IdentityGrantType
 ```gcl
@@ -855,6 +911,25 @@ writer.flush();
 var reader = GcbReader<MyType> { path: "/data/output.gcb" };
 while (reader.can_read()) { process(reader.read()); }
 ```
+
+#### GcxWriter<T> / GcxReader<T> (new, upstream `6070615de`)
+GreyCat exchange format (`.gcx`): a self-describing binary stream of values that does **not** depend on the ABI, so a program whose types changed, or a tool outside GreyCat, can still read it. Type / field / enum-entry names go once into a dictionary at the end of the file, written by `close()` — **the file is readable only once closed** (a never-closed file is rejected).
+```gcl
+type GcxWriter<T> {           // not a Writer<T>: no flush()
+  // private path: String; private append: bool? (keep an existing closed file's values, write after them); private opened: bool?
+  // native fn write(v: T)
+  // native fn close()          // writes the dictionary; further writes fail, a second close does nothing
+}
+type GcxReader<T> extends Reader<T> {   // matches types/fields/enum entries by name to the current program
+  // native fn read(): T; native fn can_read(): bool; native fn available(): int
+}
+var w = GcxWriter<Person> { path: "people.gcx" };
+w.write(Person { name: "Ada", age: 36 });
+w.close();
+var r = GcxReader<Person> { path: "people.gcx" };
+while (r.can_read()) { var p = r.read(); }
+```
+Schema drift: a field the type no longer has is skipped; a field missing from the file reads as null (error if not nullable); an unknown type / enum entry / field / function is an error naming it. A writer whose task was suspended (`await`) refuses further writes rather than restart the file; `GcxReader` resumes at its `pos`. Max nesting 512. Layout: `"GCX\0"` + u16 version `1`, tagged values (tags 0–24: null, false, true, int `vi`, float, char, time, duration, geo, String, Buffer, node kinds 11–15, enum, object (non-null fields only), Array, Map, Table, Tensor, type, field, function), then the name dictionary, then u64 dictionary length + `"GCXE"`; node references are raw (meaningful only in the writing store). Full byte layout: upstream `lib/std/io.md` § GcxWriter / GcxReader.
 
 #### TextWriter<T> / TextReader
 UTF-8 text, line oriented. `TextWriter` adds `writeln(v: T)`. `TextReader` reads one line per `read()` (trims trailing `\r` and null bytes; throws when exhausted).
@@ -1138,13 +1213,13 @@ var ingest: node<IngestState?>;
 
 fn on_events() {
   var s = Stream<Event>::get("ingest/events");
-  var state = ingest.resolve() ?? IngestState { pos: 0 };
+  var state = ingest.resolve();
+  if (state == null) { state = IngestState { pos: 0 }; ingest.set(state); }   // store it once; later field writes persist
   var end = s.last_written_pos();          // capture before draining
   var r = s.reader(state.pos);
   while (r.can_read()) { handle(r.read()); }
   s.flush();                               // only if the offset must survive a machine crash
   state.pos = end;
-  ingest.set(state);
 }
 
 fn start() {

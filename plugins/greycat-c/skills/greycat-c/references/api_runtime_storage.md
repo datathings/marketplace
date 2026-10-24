@@ -44,10 +44,15 @@ typedef enum {
     gc_task_status_cancelled         = 4,  // Cancelled by user
     gc_task_status_error             = 5,  // Completed with error
     gc_task_status_ended             = 6,  // Completed successfully
-    gc_task_status_ended_with_errors = 7,  // Completed with partial errors
+    gc_task_status_ended_with_errors = 7, // deprecated, to be removed in v9.x: never produced, kept so the values after it stay those of TaskStatus
     gc_task_status_breakpoint        = 8,  // Stopped at a breakpoint (debugging)
+    gc_task_status_committing        = 9,  // Code returned; result written, transaction committing/rolling back (past cancellation)
+    gc_task_status_cancelling        = 10, // Cancel accepted while running (or picked, not started); ends cancelled (error on ttl)
+    gc_task_status_await_cancelling  = 11, // Cancel accepted while suspended in await; jobs cancelled, torn down without resuming
 } gc_task_status_t;
 ```
+
+Mirrors `runtime::TaskStatus` ordinal for ordinal (statuses are only ever appended; removal/reorder only in a major release). **Since upstream `6070615de`:** `committing` / `cancelling` / `await_cancelling` (9–11) are new in-flight states — a `switch` that treats unknown values as terminal must now list them as live; `ended_with_errors` (7) is never produced (a task whose jobs failed ends `ended` or `error`) and is kept only so 8+ keep their values.
 
 ### Scheduler Enums
 
@@ -236,13 +241,18 @@ if (gc_host__get_task_status(host, task_id, &status)) {
     switch (status) {
     case gc_task_status_running:
     case gc_task_status_waiting:
+    case gc_task_status_await:
         // 1u = boot/system requester, UINT64_MAX = all permissions, NULL = ignore cancelled task copy
         gc_host__cancel_task(host, task_id, 1u, UINT64_MAX, NULL);
         break;
     case gc_task_status_ended:
     case gc_task_status_error:
-    case gc_task_status_ended_with_errors:
+    case gc_task_status_cancelled:
         // terminal — nothing to cancel
+        break;
+    case gc_task_status_committing:       // past the point a cancel can stop it
+    case gc_task_status_cancelling:
+    case gc_task_status_await_cancelling: // already being stopped
         break;
     default:
         break;
@@ -470,7 +480,7 @@ const char *ca_path = opts[gc_env_options__ca_path].str;  // NULL if unset
 <a id="gcca-h"></a>
 ## gc/ca.h — Resolved TLS Trust Chain
 
-**New header in 8.2.** Exposes the trust chain the process resolved at startup — the system CA store concatenated with whatever the `ca_path` option added — so a library that verifies its own TLS connections (e.g. it links its own TLS stack rather than reusing the host's) can honor the same configuration the runtime does instead of rediscovering a store of its own.
+**New header in 8.2.** Exposes the trust chain the process resolved at startup — the system CA store concatenated with whatever the `ca_path` option and the `SSL_CERT_FILE` / `SSL_CERT_DIR` environment variables added (the latter two honoured since upstream `6070615de`) — so a library that verifies its own TLS connections (e.g. it links its own TLS stack rather than reusing the host's) can honor the same configuration the runtime does instead of rediscovering a store of its own.
 
 ### Functions
 

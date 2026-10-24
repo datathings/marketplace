@@ -31,11 +31,18 @@ Playwright only for browser behavior.
 pinned pnpm. `pnpm add`/`pnpm install` run directly relink the store across pnpm majors and error; `npx
 playwright` is blocked by the `devEngines` pin. Run every Playwright command through `pnpm exec` / `pnpm run`.
 
-```jsonc
-// package.json
+The entries this adds to the `package.json` of [webapp.md](webapp.md#packagejson):
+
+```json
 {
-  "scripts": { "build": "vp build", "test:e2e": "playwright test" },
-  "devDependencies": { "@playwright/test": "^1", "vite-plus": "^0.2" }
+  "scripts": {
+    "build": "vp build",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1",
+    "vite-plus": "^1"
+  }
 }
 ```
 
@@ -61,25 +68,25 @@ backend calls at the same `baseURL`. A `setup` project authenticates once; the `
 saved session.
 
 ```ts
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.E2E_PORT ?? 8080);
 const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
-  testDir: 'e2e',
+  testDir: "e2e",
   fullyParallel: false, // tests share one persistent gcdata store
-  use: { baseURL: BASE_URL, trace: 'on-first-retry' },
+  use: { baseURL: BASE_URL, trace: "on-first-retry" },
   projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/user.json' },
-      dependencies: ['setup'],
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/user.json" },
+      dependencies: ["setup"],
     },
   ],
   webServer: {
-    command: 'greycat dev',
+    command: "greycat dev",
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
@@ -95,17 +102,17 @@ Log in through the UI in a `setup` spec and save `storageState`; the SDK persist
 
 ```ts
 // e2e/auth.setup.ts
-import { test as setup, expect } from '@playwright/test';
+import { test as setup, expect } from "@playwright/test";
 
-const AUTH_FILE = 'e2e/.auth/user.json';
-const USER = process.env.E2E_USER ?? 'e2e';
-const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-password';
+const AUTH_FILE = "e2e/.auth/user.json";
+const USER = process.env.E2E_USER ?? "e2e";
+const PASSWORD = process.env.E2E_PASSWORD ?? "e2e-password";
 
-setup('authenticate', async ({ page }) => {
-  await page.goto('/');
+setup("authenticate", async ({ page }) => {
+  await page.goto("/");
   await page.locator('wa-input[name="username"] input').fill(USER);
   await page.locator('wa-input[name="password"] input').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.locator('wa-input[name="title"]')).toBeVisible({ timeout: 10_000 });
   await page.context().storageState({ path: AUTH_FILE });
 });
@@ -115,10 +122,10 @@ setup('authenticate', async ({ page }) => {
 
 Playwright pierces open shadow DOM, so the Lit roots and Web Awesome elements are transparent to its locators:
 
-- `getByRole('button', { name: 'Sign in' })` and `getByLabel('Username')` resolve Web Awesome's rendered
+- `getByRole("button", { name: "Sign in" })` and `getByLabel("Username")` resolve Web Awesome's rendered
   labels and roles.
 - `.fill()` needs the native control inside a `wa-input`; target it as `wa-input[name="title"] input`.
-- Scope a repeated item by its text: `page.locator('li', { hasText: title })`, then query the button or
+- Scope a repeated item by its text: `page.locator("li", { hasText: title })`, then query the button or
   checkbox inside that row.
 
 ## Keep specs independent of persistent state
@@ -129,30 +136,30 @@ run, then add -> assert -> delete. Keep `fullyParallel: false` unless every asse
 
 ```ts
 // e2e/todos.spec.ts
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from "@playwright/test";
 
 function uniqueTitle(): string {
   return `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 function row(page: Page, title: string) {
-  return page.locator('li', { hasText: title });
+  return page.locator("li", { hasText: title });
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto("/");
   await expect(page.locator('wa-input[name="title"]')).toBeVisible({ timeout: 10_000 });
 });
 
-test('add, complete, and delete a todo', async ({ page }) => {
+test("add, complete, and delete a todo", async ({ page }) => {
   const title = uniqueTitle();
   await page.locator('wa-input[name="title"] input').fill(title);
-  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole("button", { name: "Add" }).click();
   await expect(row(page, title)).toBeVisible();
 
-  await row(page, title).locator('wa-checkbox').click();
+  await row(page, title).locator("wa-checkbox").click();
   await expect(row(page, title)).toHaveClass(/done/);
 
-  await row(page, title).getByRole('button', { name: 'Delete' }).click();
+  await row(page, title).getByRole("button", { name: "Delete" }).click();
   await expect(row(page, title)).toHaveCount(0);
 });
 ```

@@ -182,6 +182,7 @@ type Circle extends Shape {
 Rules:
 
 - Single inheritance — exactly one `extends` clause, naming exactly one type.
+- A chain may be of any depth. Checks against one of a type's nearest 8 ancestors cost the same at any depth; each ancestor past those adds a few nanoseconds to `is`, to a parameter and to an attribute write.
 - The parent's attributes are inherited (no need to redeclare).
 - A subtype's instance literal (`Circle { name: "c1", radius: 2.0 }`) must initialize every required attribute, including those inherited.
 - A `Circle` value is assignable to a `Shape` slot (subtype → supertype is implicit).

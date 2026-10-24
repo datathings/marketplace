@@ -20,7 +20,7 @@ The files a GreyCat server holds and serves: per-user folders under `files/`, re
 ├── files/
 │   ├── <user_name>/        # one folder per identity, named after it (never its id)
 │   │   ├── streams/        # the files of the user's streams, see streams.md
-│   │   └── tasks/<id>/     # per-task files, see Task folders
+│   │   └── tasks/<id>/     # the result of a task, see Task folders
 │   └── root/               # the folder of root, which holds the log and metric streams
 └── webroot/                # public static assets, served at /
 ```
@@ -36,12 +36,13 @@ Every request authenticates as for RPC (`Authorization: <token>` without `Bearer
 | `GET /files/<user>/<path>` | Downloads a file | `200`, or `206` for a range (see Downloads) |
 | `HEAD /files/<user>/<path>` | Same headers as `GET`, no body | as `GET` |
 | `GET /files/<user>/<dir>/` | Lists a folder (the trailing `/` is required) | `200`, a listing |
-| `PUT /files/<user>/<path>` | Uploads the body, creating parent folders and overwriting an existing file | `200`, body `true` |
+| `PUT /files/<user>/<path>` | Uploads the body, creating parent folders and overwriting an existing file | `200`, body `true`, `500` when the file cannot be created (a folder holds its path) |
 | `DELETE /files/<user>/<path>` | Deletes a file, or a folder with everything in it | `200`, body `true`, `404` when missing |
 
 - `POST` is always an RPC call, so `POST /files/...` answers `404`. Upload with `PUT`.
 - A folder path without its trailing `/` answers `301` to the same path with the `/`.
-- A `..` segment answers `404`.
+- The query string is not part of the path: `PUT /files/alice/x.csv?v=2` writes `x.csv`. A `?` in a name is sent encoded, as `%3F`.
+- A `..` segment answers `404`, and so does a `.` segment followed by more path (`/files/./alice/data.csv`) and a path that starts with `/` after `/files/` (`/files//etc/hostname`, `/files/%2Fetc/hostname`).
 - The `files/` root itself lists the folders the caller may open, and can be neither written nor deleted (`403`).
 
 ```sh
@@ -93,8 +94,7 @@ The GCL `File` API checks nothing: any function reads and writes any path. An `@
 
 - Each call runs as a background task (class `medium`) of the user who made the request, with that user's permissions. Anonymous requests run as `public`.
 - The handler cannot refuse or change the request, which is already answered or about to be.
-- The `PUT` handler gets the request path, `/files/alice/uploads/readings.csv`. Drop the leading `/` to open it from GCL (`files/alice/uploads/readings.csv`).
-- The `GET` handler gets the path below `files/`, `alice/uploads/readings.csv`.
+- Both handlers get the path of the file relative to the project, `files/alice/uploads/readings.csv`, with `/` separators on every platform and without the query string. It opens as it is from GCL.
 
 ```gcl
 type Reading {
@@ -112,7 +112,7 @@ fn on_upload(path: String) {
     if (!path.endsWith(".csv")) {
         return;
     }
-    var reader = CsvReader<Reading> { path: path.slice(1, path.size()) };
+    var reader = CsvReader<Reading> { path: path };
     while (reader.can_read()) {
         readings.add(reader.read());
     }
@@ -121,7 +121,7 @@ fn on_upload(path: String) {
 
 ## Task folders
 
-`files/<user>/tasks/<id>/` holds a task's files while it needs them: its arguments (removed once read), the files of its `await` jobs, and `result.gcb`, the result of a task started with the `task` header or by the scheduler. `File::workingDir()` names it from inside the task. Task folders are deleted 24 hours after the task ends, so copy anything worth keeping elsewhere in the user's folder.
+`files/<user>/tasks/<id>/` holds `result.gcb`, the result of a task started with the `task` header, by `spawn` or by the scheduler. It appears whole, once the task's transaction committed: the task writes `result.gcb.tmp` next to it, then renames it, so a client polling for the file never reads a partial one, nor a result the commit then turned into an error. What the server keeps for a task while it runs (its arguments, the files of its `await` jobs) lives in `gcdata/jobs/` instead, out of reach of `/files` (see [storage.md](storage.md#the-graph-store)). `File::workingDir()` names it from inside the task. Task folders are deleted 24 hours after the task ends, so copy anything worth keeping elsewhere in the user's folder.
 
 ## `File` and `FileWalker` in GCL
 

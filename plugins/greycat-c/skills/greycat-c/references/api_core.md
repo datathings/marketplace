@@ -686,7 +686,7 @@ struct gc_program_type {
     u32_t super_type;              // Parent type offset
     u32_t super_type_s_type_off;   // Super type specialized type offset
     u32_t companion_type;          // Companion type offset
-    u32_t super_types[GC_PROGRAM_INHERITANCE_MAX_DEPTH];  // Inheritance chain (max depth 4)
+    u32_t super_types[GC_PROGRAM_INHERITANCE_MAX_DEPTH];  // Nearest ancestors first (8 slots); deeper chains continue via super_type
     u32_t abi_type;                // ABI type ID
     u32_t binary_size;             // Binary serialization size
     u32_t binary_data_off;         // Offset for binary data fields
@@ -1057,6 +1057,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_type__abi_type_id(prog, type_id)` | Get the ABI type ID for a program type. |
 | `gc_program__is_type(prog, source_type_id, target_type_id)` | Return `true` if `source_type_id` is (or is a monomorphized form of) `target_type_id`. |
 | `gc_sdk bool gc_program_type__inherits(const gc_program_t *prog, const gc_program_type_t *type, u32_t target_type_id)` | **New in 8.4.** `true` if `type` inherits `target_type_id` at any depth of its flattened chain. `extends Box<int>` records the monomorphized parent, so a bare generic `target_type_id` (`Box`) is matched through the specialization, as `gc_program__is_type` does. |
+| `static inline u32_t gc_program_type__super_past_slots(const gc_program_t *prog, const gc_program_type_t *type)` | **New (upstream `6070615de`).** The first ancestor of `type` that `super_types` has no slot for, `0` when the whole chain fits: an is-a check scans the slots, then walks `super_type` from here. Inheritance chains may now be of any depth — don't assume `super_types` is the complete chain. |
 
 #### Function Introspection
 
@@ -1146,7 +1147,7 @@ typedef struct gc_program_type_field_format {
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `gc_compiler_tags_max` | 2 | Max compiler tags per function |
-| `GC_PROGRAM_INHERITANCE_MAX_DEPTH` | 4 | Maximum type inheritance depth |
+| `GC_PROGRAM_INHERITANCE_MAX_DEPTH` | 8 | Ancestors a type holds in `super_types`, nearest first — **not a depth limit** (was `4`, and a limit, before upstream `6070615de`): an is-a check scans these slots, then walks `super_type` from `gc_program_type__super_past_slots` for a deeper chain. Changes `sizeof(gc_program_type_t)` and every field offset after `super_types` — rebuild plugins. |
 | `GC_PROGRAM_TEMPLATE_MAX_NESTED` | 4 | Maximum nested generic type depth |
 
 ### Usage Examples
