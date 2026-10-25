@@ -16,7 +16,7 @@
       "name": "greycat",
       "source": "./plugins/greycat",
       "description": "Comprehensive GreyCat development skill and LSP for graph-based language with built-in persistence. Covers data modeling, API development, parallel processing, frontend integration, and all standard libraries.",
-      "version": "3.2.5"
+      "version": "3.2.6"
     },
     {
       "name": "greycat-c",
