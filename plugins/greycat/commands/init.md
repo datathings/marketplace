@@ -233,7 +233,7 @@ await gc.sdk.init();                                                // then gc.p
 
 **Test isolation patterns**: `EmailService::disable()` kill switches, redirect writes via `Uuid::v4()` scratch paths, `skipHeavyImportersForTests()` flag, `cleanTearDir()` teardown.
 
-**Frontend**: no test framework is prescribed — rely on `greycat-lang`/`tsc` type-checking and the Lighthouse audit. Add a runner (e.g. Vitest) only if the project needs one.
+**Frontend**: no test framework is prescribed — rely on `greycat lint`/`tsc` type-checking and the Lighthouse audit. Add a runner (e.g. Vitest) only if the project needs one.
 
 ---
 
@@ -556,7 +556,7 @@ export default defineConfig({
 
 ## LSP
 
-`greycat-lang server --stdio` — autocomplete, hover, go-to-def, diagnostics, format, rename. Always run `greycat lint` before commit.
+`greycat lsp` — autocomplete, hover, go-to-def, diagnostics, format, rename. Always run `greycat lint` before commit.
 
 More: https://doc.greycat.io/
 ```

@@ -22,7 +22,7 @@ The marketplace follows a two-level structure:
 
 **LSP Plugins** (greycat-lsp):
 - `lspServers` in `plugin.json` - LSP server configuration (command, args, transport)
-- Requires `greycat-lang` binary in PATH
+- Requires `greycat` binary in PATH (the server is `greycat lsp`)
 
 ## Commands
 
@@ -61,8 +61,8 @@ These are **repo maintenance workflows**, not distributed with the skills.
 
 ### Test LSP
 ```bash
-which greycat-lang               # Verify binary exists
-greycat-lang server              # Start LSP server
+which greycat                    # Verify binary exists
+greycat lsp                      # Start LSP server
 ```
 
 ## Adding a New Plugin

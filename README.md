@@ -121,7 +121,7 @@ Activates on `.gcl` files and GreyCat projects. Provides:
 - Standard library (core, io, runtime, util)
 - Pro libraries (ai, algebra, finance, kafka, opcua, powerflow, s3, sql, useragent)
 - Frontend integration (@greycat/web SDK)
-- LSP support (completion, diagnostics, hover, go-to-def) — requires `greycat-lang` in PATH
+- LSP support (completion, diagnostics, hover, go-to-def) — requires `greycat` in PATH (the server is `greycat lsp`)
 
 #### greycat-c
 
@@ -292,7 +292,7 @@ This provides the C API reference, tensor operations, and native function implem
 
 **Skills not activating**: Verify with `claude plugin list`, ensure enabled in settings.
 
-**LSP not working**: Check `greycat-lang --version` is installed and in PATH. The LSP is included in the greycat plugin.
+**LSP not working**: Check `greycat --version` is installed and in PATH, and that `greycat lsp` starts. The LSP is included in the greycat plugin.
 
 ## Links
 
