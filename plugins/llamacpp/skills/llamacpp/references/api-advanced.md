@@ -226,6 +226,8 @@ struct llama_perf_context_data {
     int32_t n_p_eval;     // number of prompt tokens
     int32_t n_eval;       // number of generated tokens
     int32_t n_reused;     // number of times a ggml compute graph had been reused
+    int32_t n_reallocs_same; // graph reallocations during inference with an unchanged graph size (b11895+)
+    int32_t n_reallocs_diff; // graph reallocations during inference with a changed graph size (b11895+)
 };
 
 struct llama_perf_sampler_data {
@@ -391,7 +393,7 @@ Context parameters (get defaults via `llama_context_default_params()`):
 - `n_outputs_max_per_seq`: Max outputs per sequence (0 = `n_outputs_max`); relevant to backend (multi-output) sampling (b10416+)
 - `n_threads`: Threads for generation
 - `n_threads_batch`: Threads for batch processing
-- `embeddings`: Extract embeddings (together with logits)
+- `embeddings`: Extract embeddings (together with logits, except when the pooling type is not NONE — pooled-embedding contexts skip the LM head as of b11895)
 - `offload_kqv`: Offload the KQV ops (including the KV cache) to GPU
 - `no_perf`: Whether to measure performance timings
 - `rope_scaling_type`: RoPE scaling type

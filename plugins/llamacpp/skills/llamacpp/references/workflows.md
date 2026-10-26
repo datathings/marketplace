@@ -1612,7 +1612,7 @@ int main() {
 
 **Notes:**
 - Multi-sequence: add an entry once, then `llama_batch_ext_add_seq(batch, idx, other_seq)` **before** any `_set_*()` call.
-- Embedding input (e.g. multimodal): `llama_batch_ext_add_embd(batch, seq, (struct llama_embd){ data, 1, n_embd })`; for M-RoPE models pass an array of positions to `llama_batch_ext_set_pos()`.
+- Embedding input (e.g. multimodal): `llama_batch_ext_add_embd(batch, seq, (struct llama_embd){ data, 1, n_embd })`; for M-RoPE models pass `n_pos_per_embd` positions (`[t, y, x, z]`, `t` = KV cache position) to `llama_batch_ext_set_pos()`.
 - Encoder: `llama_process(ctx, LLAMA_PROCESS_TYPE_ENCODE, batch)`.
 - C++: `llama_batch_ext_ptr batch(llama_batch_ext_init(ctx));` (from `llama-cpp.h`).
 

@@ -725,7 +725,7 @@ var result = child.wait();    // ChildProcessResult
 
 **New (upstream `214249d24`).** A world is a named branch of the store: tasks running in it read and commit to the world's own block index instead of its base's, so what they write stays out of main. Worlds share every block they have in common — a world costs only what it writes plus its index. Main is world `0`; the name `main` is reserved. Merging a world back into main is not available. Pick the world with `Job.world` (spawn), `PeriodicOptions.world`, the RPC `world` header, or `greycat run|call --world=<name>` (`GREYCAT_WORLD`; unknown name fails before running / `400`). Backups hold main and every world (`backup_full` must run in main); defrag moves world blocks along with main's.
 
-**Breaking (upstream `6070615de`):** `WorldMode { full; light; }` → `{ snapshot; overlay; standalone; }`; `World::create` gained `base: String?` (worlds can be based on another world; at most 8 overlays per chain; a base cannot be removed while a world is based on it); `create` / `remove` now need the new **`world`** permission (in the `admin` role) instead of `admin`, `remove` by a non-creator still needs `admin` (checked from GCL too); `list` has no `@permission` and returns only the worlds the caller may use (`Identity.worlds`; `admin` sees all). `create` / `remove` log the `WorldInfo` at `info`.
+**Breaking (upstream `6070615de`):** `WorldMode { full; light; }` → `{ snapshot; overlay; standalone; }`; `World::create` gained `base: String?` (worlds can be based on another world; at most 8 overlays per chain; a base cannot be removed while a world is based on it); `create` / `remove` (and later `reset`) now need the new **`world`** permission (in the `admin` role) instead of `admin`, `remove` by a non-creator still needs `admin` (checked from GCL too); `list` has no `@permission` and returns only the worlds the caller may use (`Identity.worlds`; `admin` sees all). `create` / `remove` log the `WorldInfo` at `info`.
 ```gcl
 enum WorldMode {   // how a world relates to its base (main or another world); snapshot/overlay have a base, standalone none
   snapshot;    // sees its base as of creation, nothing committed later; copies the base's block index (O(#blocks)); over an
@@ -735,10 +735,11 @@ enum WorldMode {   // how a world relates to its base (main or another world); s
   standalone;  // sees nothing but its own writes, like a new store; module vars start as its own empty nodes, committed by the
                // first task running in it. Created at once
 }
-type WorldInfo {   // as World::list reports it, and as the `info` records of create/remove carry it
+type WorldInfo {   // as World::list reports it, and as the `info` records of create/remove/reset carry it
   id: int; name: String; mode: WorldMode; created: time;
   user_id: int?;   // creator; null if created as no user or before the store recorded it
   removed: time?;  // new: set in the `info` record World::remove logs; always null in list()
+  reset: time?;    // new (`a53de07ad`): set in the `info` record World::reset logs; null in any other record and in list()
   base: String?;   // new: world it was created from, `main` for main; null for standalone
 }
 
@@ -748,6 +749,11 @@ type World {
   //      becomes WorldInfo.user_id and may use the world whatever Identity.worlds says)
   // @expose @permission("world") static native fn remove(name: String)
   //     (fails while a task reads it, while another world is based on it, and for a non-creator without `admin`)
+  // @expose @permission("world") static native fn reset(name: String)                          // new (`a53de07ad`)
+  //     (empties it of what its tasks wrote, as when created: overlay reads its base again, snapshot re-copies the base's
+  //      index as it is now, standalone holds nothing / module vars empty again; keeps id, name, creator, allowed identities;
+  //      WorldChangesReader then lists nothing. Logs WorldInfo with `reset` at `info`. Same failure rules as remove,
+  //      including from a task in the world itself)
   //                              static native fn id(name: String): int?
   //                              static native fn current(): String                            // `main` for the main store
   // @expose                      static native fn list(): Array<WorldInfo>   // caller's usable worlds, creation order, main excluded
@@ -781,6 +787,24 @@ type NodeReader {
 }
 var r = NodeReader {};             // every node; set `type` to filter
 while (r.can_read()) { var n = r.read(); }
+```
+**`WorldDiffReader` (new, upstream `d0bfe2ca7`).** The keys of one node whose value differs between the current world and its base, as committed when the task started (not the task's pending writes), in the node's key order (time for nodeTime, position for nodeList, encoded key for nodeIndex/nodeGeo, hash order for a non-scalar nodeIndex key). Deep-equal values are not listed; a standalone world reports every key as `added`. The base is read as it is now, down its overlay chain. Loads each internal block once and only the differing leaves. Fails in main and when `node` is not a node.
+```gcl
+enum WorldDiffKind { added; removed; changed; }
+type WorldDiff {
+  kind: WorldDiffKind;
+  key: any?;     // index key / time / list position / geo; null for a node<T>
+  base: any?;    // null when added
+  world: any?;   // null when removed
+}
+type WorldDiffReader {
+  node: any;          // node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle to compare
+  last: WorldDiff?;   // last entry read; a new or restored reader resumes after it (exact if no commit in between)
+  // native fn can_read(): bool
+  // native fn read(): WorldDiff   // fails past the end
+}
+var r = WorldDiffReader { node: project::readings };
+while (r.can_read()) { var d = r.read(); }
 ```
 Names take 1 to 128 of `[A-Za-z0-9_.-]`; ids are never reused. Full reference: the `greycat` skill's `runtime.md` § Worlds.
 

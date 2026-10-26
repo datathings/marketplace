@@ -114,7 +114,7 @@ Every identity may use main, whatever its list says: a list names the other worl
 
 `Identity.world` and `Identity.worlds` read the settings back, by name. A world removed since it was set no longer shows: a default world removed reads `null`.
 
-The `world` permission lets a user create worlds with `World::create` and remove the ones they created with `World::remove`; an `admin` removes any. The built-in `user` role lacks it, so a project grants it through a role of its own, `@role("modeler", "public", "api", "world")`.
+The `world` permission lets a user create worlds with `World::create`, and reset or remove the ones they created with `World::reset` and `World::remove`; an `admin` resets or removes any. The built-in `user` role lacks it, so a project grants it through a role of its own, `@role("modeler", "public", "api", "world")`.
 
 ### The `--user=<name>` impersonation flag — footgun, do not promote
 

@@ -5,6 +5,7 @@ How GreyCat runs code: every call, scheduled run and `await` job is a task on a 
 ## Contents
 
 - Workers, tasks, and jobs
+- Merge conflicts on shared nodes
 - Tasks and the scheduler
 - Task events over SSE
 
@@ -30,12 +31,13 @@ try {
 }
 ```
 
-When the jobs' writes merge back into the parent task, a node or an object field changed on one side only takes that change. A `nodeTime`, `nodeIndex`, `nodeList` or `nodeGeo` written by several jobs merges key by key, so jobs filling the same series or index with **different keys** never conflict. The same key, or the same field, written with different values on both sides is a conflict: `await` throws and nothing it merged is kept. The same rule applies when a task commits over a concurrent one. A `Map` merges key by key, and a plain object merges field by field, so writes to different keys or fields both land; a `Map` value that is a plain object merges field by field under its key. An `Array` or `String` changed differently on both sides conflicts. `MergeStrategy::no_fusion_fail_on_conflict` refuses the merge of a structured node (`nodeTime`, `nodeIndex`, `nodeList`, `nodeGeo`) that the task and another task changed at once: the commit, or the `await` that merges the jobs, fails instead. Plain fields and objects still merge. A task can resolve every conflict its commit meets in its own favour by calling `Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win)`: the value it wrote overrides the one committed before, key by key, instead of failing the commit. The strategy applies to that task alone, and a task starts with `MergeStrategy::fusion_by_key_fail_on_conflict`.
+When the jobs' writes merge back into the parent task, a node or an object field changed on one side only takes that change. A `nodeTime`, `nodeIndex`, `nodeList` or `nodeGeo` written by several jobs merges key by key, so jobs filling the same series or index with **different keys** never conflict. The same key, or the same field, written with different values on both sides is a conflict: `await` throws and nothing it merged is kept. The same rule applies when a task commits over a concurrent one. A `Map` merges key by key, and a plain object merges field by field, so writes to different keys or fields both land; a `Map` value that is a plain object merges field by field under its key. An `Array` or `String` changed differently on both sides conflicts. `MergeStrategy::no_fusion_fail_on_conflict` refuses the merge of a structured node (`nodeTime`, `nodeIndex`, `nodeList`, `nodeGeo`) that the task and another task changed at once: the commit, or the `await` that merges the jobs, fails instead. Plain fields and objects still merge. A task can resolve every conflict its commit meets in its own favour by calling `Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win)`: the value it wrote overrides the one committed before (key by key for a `Map`), instead of failing the commit. It covers every write the task commits, and a task starts with `MergeStrategy::fusion_by_key_fail_on_conflict`. Read [Merge conflicts on shared nodes](#merge-conflicts-on-shared-nodes) before setting it.
 
-**Two gotchas:**
+**Three gotchas:**
 
 1. **Parallel writes must target different keys** (or different fields of an object), or the batch throws. `nodeList::add` appends at the current size, so two jobs appending to the same list collide: give each job its own index range with `set`.
 2. **Object references resolved BEFORE `await` are stale AFTER it.** A `node.resolve()` value held across an `await` call still points at the pre-merge revision. Set the variable to `null` before `await`, then re-resolve with `node.resolve()` (or use the `->` shorthand) afterwards.
+3. **Lazily created container fields conflict.** Jobs that each create a `null` map field on the same node fail the merge. See [Merge conflicts on shared nodes](#merge-conflicts-on-shared-nodes).
 
 Worker pool sizes:
 
@@ -95,6 +97,68 @@ fn import_batch(rows: Array<Row>) {
 ```
 
 Jobs spawned via `await` join the parent task's transaction by default, so a thrown job error also rolls back the parent task's writes.
+
+## Merge conflicts on shared nodes
+
+Concurrent tasks each run on their own snapshot and commit on their own. A commit that meets a change another task already committed is merged against it, under the rules of [Workers, tasks, and jobs](#workers-tasks-and-jobs). A conflict fails the commit with `incompatible fusion`. The task then ends `error`, its writes roll back, and an HTTP caller gets an error.
+
+The common case is a container field created on first use. Two tasks that run this function for the same card at the same time both see the field missing:
+
+```gcl
+type Face {
+    lang: String;
+    body: String;
+}
+
+type Card {
+    id: int;
+    faces: Map<String, Face>?;
+}
+
+var cards: nodeIndex<int, node<Card>>;
+
+fn face(id: int, lang: String): Face {
+    var card = cards.get(id)!!.resolve();
+    var kept = card.faces?.get(lang);
+    if (kept != null) {
+        return kept;
+    }
+    Runtime::sleep(200ms);                // stands for a slow fetch
+    var fetched = Face { lang: lang, body: "fetched" };
+    card.faces ?= Map<String, Face> {};   // each task sets the field from null
+    card.faces.set(lang, fetched);
+    return fetched;
+}
+```
+
+Each task replaces the field `faces` with a map of its own. The field then holds two different values, so the merge fails on the field itself (`incompatible fusion, field=...`), even though the two maps hold different keys. When the map already exists, tasks writing different keys merge key by key, and tasks writing the same key with different values fail with `incompatible fusion, map key=...`.
+
+The fix is to create the container together with its node. No task then changes the field, and each key merges:
+
+```gcl
+type Card {
+    id: int;
+    faces: Map<String, Face>;   // never null: created with the card
+}
+
+var cards: nodeIndex<int, node<Card>>;
+
+fn add_card(id: int) {
+    cards.set(id, node<Card> { Card { id: id, faces: Map<String, Face> {} } });
+}
+```
+
+With the field non-null, `face` reads `card.faces.get(lang)` and writes `card.faces.set(lang, fetched)`, with no `?.` and no `?=`.
+
+Turning an existing nullable field non-null leaves the stored `null`s in place, so they need a one-off fill, described in [Schema / type evolution](workflow.md#schema--type-evolution).
+
+For a value that is a cache, where any writer's copy is as good as another's, the writing task can keep its own value with `Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win)`. It resolves a conflict on a key, such as two tasks writing the same key. It does not resolve a conflict on a field. There the writing task's map replaces the other one as a whole, and the entries the other task wrote are lost without an error. The lazily created field above therefore needs the container created with its node, not this strategy.
+
+**`fusion_by_key_last_win` applies to every write the task commits, not only to the lines near the call.** The strategy belongs to the task, so it covers the writes of every function the task calls, and the position of the call inside the function does not matter. A task that also writes real state (a counter, a balance, an inventory) then overwrites a concurrent change to that state without an error. To use it safely:
+
+- Set it only in a task whose writes are all cache-like, and keep that endpoint narrow.
+- Audit every function the task calls, since their writes are included.
+- Or give each key a single writer, one task that fills the missing values while every other task only reads them.
 
 ## Tasks and the scheduler
 

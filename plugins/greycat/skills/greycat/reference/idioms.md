@@ -151,7 +151,7 @@ var cache: Map<String, int>?;
 cache ?= Map<String, int> { };   // create the map iff cache is currently null
 ```
 
-Common pattern for lazy initialization of nullable attributes.
+Fine for a local variable, or for an attribute that no concurrent task writes. On an attribute of a node that concurrent tasks write, it creates the race described in [Merge conflicts on shared nodes](tasks.md#merge-conflicts-on-shared-nodes), so create the container with its node instead.
 
 ### Null in collections
 

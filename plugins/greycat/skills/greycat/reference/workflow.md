@@ -242,9 +242,11 @@ The runtime stores an ABI snapshot in `gcdata/abi` next to the program. On rebui
 | Remove an attribute                                             | Yes — value is dropped on next save.                     |
 | Rename an attribute                                             | No — looks like remove + add.                            |
 | Change an attribute's type to a wider one (e.g. `int` → `int?`) | Yes.                                                     |
-| Change an attribute's type to a narrower one                    | No — load fails on a non-conforming value.               |
+| Change an attribute's type to a narrower one                    | No — load fails, except on a stored `null` (see below).  |
 | Add/remove an enum entry                                        | Add: yes. Remove: only if no instance references it.     |
 | Rename a type                                                   | No — looks like a new type.                              |
+
+Making a nullable attribute non-null (`T?` to `T`) loads, but a stored `null` stays as it is. Reading the attribute answers `null` in spite of its type, and calling a method on it throws (`type null has no function named get`). Fill the stored nulls once, before the non-null version serves requests, with a `greycat run` task. Run it while the attribute is still nullable, or after the change by reading the attribute through an `any?` local. A direct `== null` test on the non-null attribute does see the stored `null` at runtime, but `greycat lint` reports it as `decidable-condition` (always false) and its branch as unreachable.
 
 When the runtime cannot migrate, it refuses to load and prints the offending shape diff. Either undo the source change, write a migration in `greycat run` mode (read the old graph, transform, save), or restore from backup.
 

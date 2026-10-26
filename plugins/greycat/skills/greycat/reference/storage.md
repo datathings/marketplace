@@ -109,12 +109,15 @@ World::create("variant", WorldMode::overlay, "what-if"); // reads "what-if" rath
 World::list();                                // Array<WorldInfo> {id, name, mode, created, user_id, base}; the worlds the caller may use
 World::id("what-if");                         // int?, null when there is none
 World::current();                             // String, the world the calling task or job runs in, "main" for main
+World::reset("variant");                      // empties it of what its tasks wrote; same permission and failures as remove
 World::remove("variant");                     // `world` permission: its creator or an admin; fails while a task runs in it or a world is based on it
 ```
 
 Names take 1 to 128 of `[A-Za-z0-9_.-]`; `main` is reserved for the main store. Ids are never reused.
 
-`World::create` and `World::remove` each write an `info` record to the `log` stream whose `data` is the world's `WorldInfo`, with the calling task's `user_id`, `task_id` and `src` (see [observability.md](observability.md#where-log-records-go)). `WorldInfo.removed` tells them apart: the time of the removal in `remove`'s record, null otherwise (and always null in `World::list()`).
+`World::create`, `World::reset` and `World::remove` each write an `info` record to the `log` stream whose `data` is the world's `WorldInfo`, with the calling task's `user_id`, `task_id` and `src` (see [observability.md](observability.md#where-log-records-go)). `WorldInfo.reset` and `WorldInfo.removed` tell them apart: the time of the reset in `reset`'s record and of the removal in `remove`'s, null otherwise (and always null in `World::list()`).
+
+`World::reset` empties a world of what its tasks wrote, as it was when created, from its base as the base is now: an overlay world reads its base again for every node, a snapshot world copies its base again (which takes as long as creating it), and a standalone world holds nothing, its module variables empty nodes again. `WorldChangesReader` then lists nothing. The world keeps its id, name, creator and the identities allowed to use it, which `remove` then `create` would not: a new world gets a new id, and an identity's world settings keep a world by its id. Neither `reset` nor `remove` runs while a task runs in the world, so neither works from a task in that world, nor while another world is based on it. A call that comes into the world while either works fails as for a world that does not exist (`400`, ``no world has the name of the `world` header``).
 
 A snapshot or overlay world starts from its **base**, the third argument of `World::create`: `null` or `"main"` for main, or the name of another world. A standalone world takes none, and the caller must be allowed to use the base (see [identity.md](identity.md#the-worlds-of-an-identity)). A world that is the base of another cannot be removed. `WorldInfo.base` names it, `"main"` for main, null for a standalone world.
 
@@ -161,6 +164,60 @@ the world was created also shows when it shares a head block with a node the wor
 base: every node it holds is listed, its module variables included. `available()` counts the nodes left; `pos` counts
 those read, and a reader resumed after its task was suspended skips them. It fails in main. Building the list costs
 nothing at commit: the reader reads the world's commits table and compares block addresses with its base's index.
+
+`WorldDiffReader` shows what changed inside one node: each key whose value differs between the current world and its
+base, as a `WorldDiff` with `kind` (`WorldDiffKind::added`, `removed` or `changed`), `key`, and the `base` and `world`
+values (null on the side that lacks the key):
+
+```gcl
+var prices: nodeIndex<String, float>;
+
+fn show_diff() {
+    var nodes = WorldChangesReader {};
+    while (nodes.can_read()) {
+        var diff = WorldDiffReader { node: nodes.read() };
+        while (diff.can_read()) {
+            var d = diff.read(); // WorldDiff {kind, key, base, world}
+            println("${d.kind} ${d.key}: ${d.base} -> ${d.world}");
+        }
+    }
+}
+```
+
+Main holds apple 1.0, pear 2.0 and plum 3.0 in `prices`. An overlay world on main sets apple to 0.8, removes pear and
+adds kiwi at 1.5. Run in that world, `show_diff` prints, in hash order:
+
+```
+WorldDiffKind::removed pear: 2.0 -> null
+WorldDiffKind::added kiwi: null -> 1.5
+WorldDiffKind::changed apple: 1.0 -> 0.8
+```
+
+plum holds the same value on both sides and is not listed: a key whose two values are deep-equal never is, even when
+the world rewrote it. `key` is the time of a `nodeTime`, the position of a `nodeList`, the geo of a `nodeGeo`, the key
+of a `nodeIndex`, and null for a `node<T>`. Keys come in the node's order: by time, by position, by encoded key for a
+`nodeIndex` with a scalar key and a `nodeGeo`, and by hash for a `nodeIndex` with any other key (`String`, objects).
+
+The base is read as it is now, down its overlay chain, not as it was when the world was created. In a snapshot world,
+the base's later changes show up as differences. An overlay world reads the base for a node it never modified, so
+that node gives nothing; a node it modified stays as the world left it, so the base's later changes to that node show
+up. A standalone world has no base: every key it holds is `added`. A node a task created in the world lists every key
+`added`, and a `node<T>` it created and left null lists nothing. A `node<T>` module variable already exists in main,
+holding null, from the server's start, so a world's first set of it reads `changed`, with `null` as the base value.
+
+Like `WorldChangesReader`, it compares what was committed when the task started, not the task's own pending writes,
+and fails in main; it also fails when `node` is not a node. `last` holds the last entry read, and a new reader given
+it (`WorldDiffReader { node: n, last: d }`) resumes after that entry, which pages a large diff across tasks. The resume
+is exact when neither the world nor its base committed in between; otherwise, in a `nodeIndex` with a non-scalar key,
+the rest of the hash bucket of `last.key` may be missed if that key is gone. A reader whose native state was lost
+(task suspended, restored) resumes after `last` the same way.
+
+A diff loads every internal block of the node, once, and the leaves that differ, and steps over the leaves both sides
+share at the same address: a parent names its children by key, so a parent both sides share still has its children
+compared, at one index lookup per child and side. A few edits to a million-key index cost a few dozen blocks. In an
+overlay world, a node whose tree the world never wrote costs its head blocks only, whatever its size, even when the
+base changed it since. In a snapshot world, such a node costs its internal blocks (about 30 for a million `int` keys)
+and, when its root is a single leaf, that one leaf.
 
 `Task.world`, in what `Task::running()` and a `task: true` call answer, names the world a task runs in (`"main"` for main). It is `null` in `Task::history()`, which does not record it.
 

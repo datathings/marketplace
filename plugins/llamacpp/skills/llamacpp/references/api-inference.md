@@ -108,7 +108,7 @@ Add the entry at `idx` to another sequence (position stays the same). Call **bef
 bool llama_batch_ext_set_embd_token(struct llama_batch_ext * batch, int32_t idx, struct llama_embd embd);
 bool llama_batch_ext_set_embd_state(struct llama_batch_ext * batch, int32_t idx, struct llama_embd embd);
 ```
-`_set_embd_token`: set the token embedding of entry `idx` (after `_add_token()` to have both an ID and an embedding). `_set_embd_state`: set an extra hidden "state" embedding carried over from a previous stage (e.g. MTP: N layers of the target model; Qwen3 VL deepstack: N layers of the vision encoder) — currently a stub in b11284 that returns `false`.
+`_set_embd_token`: set the token embedding of entry `idx` (after `_add_token()` to have both an ID and an embedding). `_set_embd_state`: set an extra hidden "state" embedding carried over from a previous stage (e.g. MTP: N layers of the target model; Qwen3 VL deepstack: N layers of the vision encoder; LiliCorr: context embeddings for the transformers). Returns `false` if the context does not take a state embedding — as of b11895 only MTP and LiliCorr contexts do (it was a stub always returning `false` in b11284).
 
 #### llama_batch_ext_set_output_embd / llama_batch_ext_set_output_logits
 ```c
@@ -124,7 +124,7 @@ bool llama_batch_ext_set_pos(
     int32_t idx,
     const llama_pos * pos);
 ```
-Set the position of entry `idx`. For M-RoPE models, embedding entries need multiple positions per token (pass an array); text tokens need a single position. Returns `false` on invalid `idx` or NULL `pos`.
+Set the position of entry `idx`. For M-RoPE models, embedding entries need `n_pos_per_embd` positions per token (pass an array) in the order `[t, y, x, z]` — `t` is also the KV cache position; text tokens need a single position. Returns `false` on invalid `idx` or NULL `pos`.
 
 #### llama_process
 ```c

@@ -97,6 +97,8 @@ t.cols();
 t.rows();
 ```
 
+A `Table<T>` holds one column per field of `T`, in field order. `set_row`, `add_row` and `get_row` throw on a table with another column count, and `get_row` throws on a cell its field cannot hold, such as a `null` in a non-null field.
+
 ### Buffer
 
 Binary blob. Bytes append-and-read.
@@ -170,6 +172,8 @@ w.min();   w.max();               // each returns Tuple<time, T>?
 These types persist across worker restarts. They are the bridge between in-memory logic and the GreyCat graph database.
 
 A value fetched from the graph (`idx.get(k)`, `n.resolve()`, a `for ... in nodeIndex` loop) is a **live node**: mutate its fields in place and the change persists on commit; do NOT `set` it back, which re-attaches an already-attached node and throws `object is already attached to another node`. `set` is for inserting a brand-new node. See [idioms.md](idioms.md), "Working with the graph".
+
+While a `for` loop walks a `nodeTime`, `nodeList`, `nodeIndex` or `nodeGeo`, it can set a new value at a key the node already holds. Adding or removing a key of that node (`setAt`, `set` or `add` with a new key, `setAll`, `remove`, `removeAt`, `removeAll`) throws `concurrent modification`, and so it does while a `nodeTimeCursor` over the node stands on one of its values. A node that holds a single value is the exception: the loop reads that value before its body runs, so the body can change the node. Collect the keys to add or remove, and change the node after the loop; other nodes can change inside it.
 
 ### node<T>
 
@@ -279,7 +283,7 @@ nodeGeo::sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: 
 | `adaptative`  | Variable delta — bound the number of skipped elements between samples. Useful for non-monotonic series.   |
 | `dense`       | All elements in range; no down-sampling.                                                                  |
 
-`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. `maxDephasing` (nodeTime / nodeList only) caps the allowed time / index drift between sampled points across multiple input refs — useful when aligning unsynchronized series.
+`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. On a `nodeTime` or `nodeList`, `fixed` and `fixed_reg` lay rows at even steps from `from` to `to`, every ref of `refs` sampled at the same keys. Going forward (`from < to`) a row holds the value at or before its key, going backward the value at or after it. A row past the last key going forward, or before the first going backward, is `null`: on a `nodeTime`, it holds that edge value only while it is less than `maxDephasing` away from it (`null` is 0). A `nodeList` sample ignores `maxDephasing`.
 
 ## Time and duration
 
@@ -618,9 +622,10 @@ Runtime::defrag();
 Runtime::store_stats();             // StoreStats: live blocks and bytes, by type and by world
 
 World::create("what-if", WorldMode::overlay, null);   // branch of the store, see storage.md § Worlds
-World::list();   World::id("what-if");   World::remove("what-if");
+World::list();   World::id("what-if");   World::reset("what-if");   World::remove("what-if");
 World::current();                             // the calling task's world, "main" for main
 var r = WorldChangesReader {};                // the nodes the current world modified: can_read(), read(): any, available()
+var d = WorldDiffReader { node: n };          // n's keys that differ from the base: read(): WorldDiff {kind, key, base, world}
 
 System::exec("/bin/ls", ["-la"]);             // blocking subprocess
 System::spawn("/bin/sleep", ["60"]);          // non-blocking

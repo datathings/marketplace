@@ -300,6 +300,8 @@ DRY (Don't Repeat Yourself) sampler.
 - `seq_breakers`: Strings that reset the repetition search (e.g. punctuation)
 - `num_breakers`: Number of entries in `seq_breakers`
 
+**Limit (b11895+):** at most `LLAMA_DRY_MAX_SEQ_BREAKERS` (64) distinct breakers are used (duplicates not counted); extra ones are ignored with a warning. Each breaker scans the whole vocabulary, so init cost is O(num_breakers × n_vocab).
+
 **Breaking change (b10416):** the `int32_t n_ctx_train` parameter (previously the 2nd argument, right after `vocab`) was removed. History-based samplers no longer resolve a "full-context window" from training context size — pass an explicit `dry_penalty_last_n` instead.
 
 **Reference:** https://github.com/oobabooga/text-generation-webui/pull/5677
