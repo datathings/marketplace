@@ -161,6 +161,7 @@ typedef struct {
 | `gc_task__expected_steps` | `void gc_task__expected_steps(const gc_machine_t *ctx, i64_t total_expected_steps)` | **New (upstream `e7630e693`).** Set how many steps the task running `ctx` expects, as GCL `Task::expected_steps` does. A job reports to its parent task. No-op outside a task. |
 | `gc_task__add_steps` | `void gc_task__add_steps(gc_machine_t *ctx, i64_t steps)` | **New (upstream `e7630e693`).** Add steps done to the task running `ctx`, as GCL `Task::add_steps` does; notifies task event subscribers (SSE `task-progress`) when the whole percentage moved. No-op outside a task. |
 | `gc_host__add_request` | `bool gc_host__add_request(u32_t fn, char *data, u32_t data_len)` | Add a request to the host's request queue. |
+| `gc_host__run_function` | `u32_t gc_host__run_function(const gc_host_t *self)` | **New in 9.0.** The function (offset into the program's `functions`) the command is about to run in-process — `greycat run`, and `backup` / `stats` / `token` / `user` without a server; `0` for every other command (incl. `serve`). Set before libraries start, so a `lib_start` hook can prepare for that one function only. |
 | `gc_host__options` | `const gc_env_slot_t *gc_host__options(const gc_host_t *self)` | **New in 8.2.** Configuration the process resolved from CLI flags, the environment, and the `.env` file — indexed by `gc_env_options_offset_t`, `gc_env_options_len` entries long. Settled before any library is linked and read-only afterwards, so the pointer stays valid for the lifetime of the host. See [gc/env.h](#gcenv-h). |
 
 ### Scheduler Functions
@@ -419,6 +420,14 @@ typedef enum {
     gc_env_options__metrics_task_flush_size,
     gc_env_options__metrics_task_flush_step,
     gc_env_options__log_flush_on_error,
+    gc_env_options__label,           // New in 9.0
+    gc_env_options__repair,          // New in 9.0
+    gc_env_options__task_retention,  // New in 9.0
+    gc_env_options__tls,             // New in 9.0
+    gc_env_options__acme,            // New in 9.0
+    gc_env_options__acme_email,      // New in 9.0
+    gc_env_options__acme_directory,  // New in 9.0
+    gc_env_options__paste,           // New in 9.0
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -456,6 +465,14 @@ typedef enum {
 | `gc_env_options__log_flush_size` / `__metrics_http_flush_size` / `__metrics_host_flush_size` / `__metrics_task_flush_size` | `--log_flush_size`, `--metrics_{http,host,task}_flush_size` / `GREYCAT_LOG_FLUSH_SIZE`, `GREYCAT_METRICS_{HTTP,HOST,TASK}_FLUSH_SIZE` | `64KB` (`.u64` bytes) | **New.** The `log` / metric stream's buffer is written to its file once this many bytes are pending; `0` writes each record at once. |
 | `gc_env_options__log_flush_step` / `__metrics_http_flush_step` / `__metrics_host_flush_step` / `__metrics_task_flush_step` | `--log_flush_step`, `--metrics_{http,host,task}_flush_step` | `1s` (`.i64` µs) | **New.** Longest time a record of that stream stays buffered. |
 | `gc_env_options__log_flush_on_error` | `--log_flush_on_error` / `GREYCAT_LOG_FLUSH_ON_ERROR` | `false` (`.b`) | **New.** An `error` record writes the buffered log records at once, so errors preceding a crash reach the file. |
+| `gc_env_options__label` | `--label` / `GREYCAT_TOKEN_LABEL` | `NULL` (`.str`) | **New in 9.0** (all eight below appended before `gc_env_options_len`; earlier offsets unchanged). Label of a token `greycat token` issues, as `Identity::tokens` lists it. |
+| `gc_env_options__repair` | `--repair` / `GREYCAT_REPAIR` | `false` (`.b`) | **New.** `greycat restore` resets (and lists) nodes whose blocks do not decode instead of failing. |
+| `gc_env_options__task_retention` | `--task_retention` / `GREYCAT_TASK_RETENTION` | `24h` (duration, `.i64` µs) | **New.** How long an ended task's folder `gcdata/tasks/<id>/` (result + working dir) is kept; past it `Task::result` answers `410`. |
+| `gc_env_options__tls` | `--tls` / `GREYCAT_TLS` | `false` (`.b`) | **New.** Serve HTTPS on the port with `gcdata/security/tls/cert.pem` + `key.pem` (OpenSSL 3.5 replaced Mbed TLS). |
+| `gc_env_options__acme` | `--acme` / `GREYCAT_ACME` | `NULL` (`.str`) | **New.** Comma-separated domains to obtain/renew the `--tls` certificate for from the ACME directory; implies `--tls`. |
+| `gc_env_options__acme_email` | `--acme_email` / `GREYCAT_ACME_EMAIL` | `NULL` (`.str`) | **New.** ACME account contact email. |
+| `gc_env_options__acme_directory` | `--acme_directory` / `GREYCAT_ACME_DIRECTORY` | Let's Encrypt v2 URL (`.str`) | **New.** ACME directory URL. |
+| `gc_env_options__paste` | `--paste` / `GREYCAT_PASTE` | `false` (`.b`) | **New.** `greycat login`: paste a registry token at the prompt instead of approving in the browser. |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples
@@ -488,7 +505,7 @@ const char *ca_path = opts[gc_env_options__ca_path].str;  // NULL if unset
 |----------|-----------|-------------|
 | `gc_ssl_ca__pem_bundle` | `const char *gc_ssl_ca__pem_bundle(u64_t *len)` | Returns the resolved trust chain, PEM-encoded, or `NULL` when no certificate could be resolved (`*len` is left untouched on `NULL`). Owned by the runtime, valid until shutdown — **must not be freed** by the caller. |
 
-Handed out as PEM bytes rather than as a parsed (e.g. mbedtls) chain on purpose: PEM is what every TLS stack accepts, so the library doesn't need to link the same one GreyCat uses internally.
+Handed out as PEM bytes rather than as a parsed (e.g. OpenSSL) store on purpose: PEM is what every TLS stack accepts, so the library doesn't need to link the same one GreyCat uses internally. (9.0: GreyCat's own TLS stack moved from Mbed TLS to OpenSSL 3.5, shipped shared in `lib/ssl`.)
 
 ```c
 u64_t len = 0;
@@ -645,7 +662,7 @@ The ABI defines the binary wire format for GreyCat's type system — how types, 
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `GC_ABI_PROTO` | 3 | Current ABI protocol version |
+| `GC_ABI_PROTO` | 4 | Protocol of the ABI file and the GCB header. **9.0: 3 → 4** (node tags regrouped: `nodeSet` after `nodeTime`, `nodeIndexSet` after `nodeIndex`); an ABI, store or GCB payload of protocol 3 (GreyCat 8.4) is **refused**. |
 | `GC_ABI_HEADER_SZ` | 8 | ABI header size in bytes |
 | `GC_ABI_FUNCTION_MAX_PARAMS` | 16 | Maximum parameters per function |
 
@@ -750,6 +767,8 @@ typedef struct {
     u32_t param_symbols[GC_ABI_FUNCTION_MAX_PARAMS];  // Per-parameter name symbols
     u32_t return_type;           // Return type descriptor
     u8_t return_nullable;        // Whether return is nullable
+    u8_t is_static;              // New in 9.0: declared `static`; a non-static fn of a type is a method,
+                                 // called on a receiver passed before its parameters
 } gc_abi_function_t;
 ```
 
@@ -1015,8 +1034,8 @@ close(out_fd);
 /// A registered io::Stream. Opaque. Entries live for the host's lifetime and never move.
 typedef struct gc_stream gc_stream_t;
 
-/// The format of a stream's records, in the order of the GCL `StreamFormat` enum: one JSON value per
-/// line (`.ndjson`), or one CSV line with the default `CsvFormat` (`.csv`).
+/// The format of a stream's records: one JSON value per line (`.ndjson`), or one CSV line with the default
+/// `CsvFormat` (`.csv`). Fixed values, converted to and from the entries of the GCL `StreamFormat` enum by name (9.0).
 typedef enum gc_stream_format {
     gc_stream_format_ndjson = 0,
     gc_stream_format_csv = 1,
@@ -1086,6 +1105,8 @@ if (reader != nullptr) {
 
 Functions for resolving node references from their compact `u64_t` representation into full slot values, and for reading/writing entries on node-backed collections.
 
+> **9.0:** two new node kinds, `nodeSet<V>` (`gc_type_node_set`) and `nodeIndexSet<K, V>` (`gc_type_node_index_set`), share the backend; their ids are `prog->core.nodeSet` / `prog->core.nodeIndexSet`. **`nodeList` became positional**: values are only appended (`add`) or removed (`remove` shifts later ones down), an index is a position `0..size()-1`, and `set` was removed. Its internal keys are no longer the positions, so `node_get` with an encoded index no longer reads a `nodeList` position (the runtime uses an internal position lookup); only `node_set_at(..., add_semantic = true, ...)` (append) is valid on a `nodeList`.
+
 > **These functions are NOT specific to plain `node` — the same API drives every node-backed collection variant.** All of `node`, `nodeTime`, `nodeList`, `nodeGeo`, and `nodeIndex` are stored on the same Sorted-Block-Index (SBI) backend and are addressed by an opaque `u64_t node_ref` (a packed block-id + in-block offset). `gc_node__resolve`, `gc_machine_native__node_get`, `gc_machine_native__node_set_at`, and `gc_node_single_value__clear` all take that `node_ref` and work identically regardless of which variant produced it. The runtime's own implementations confirm this: `node.c`, `nodetime.c`, `nodelist.c`, `nodegeo.c`, and `nodeindex.c` are thin wrappers that all delegate to this one shared family. So a native function holding a `node_ref` for any variant can read, write, and resolve entries with these calls — **the only thing that varies per variant is how the GCL-level key is encoded into the raw `u64_t key`** (see *Key encoding per variant* below).
 
 ### Single-Value Result
@@ -1107,8 +1128,8 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to its stored slot value. Writes the resolved type to `*result_type`. Marks the value if it is an object (caller must `gc_object__un_mark` it). This is the plain-`node<T>` dereference, and also the per-entry resolve used by every variant. |
-| `gc_machine_native__node_set_at` | `void gc_machine_native__node_set_at(u64_t node_ref, gc_slot_t key_value, gc_type_t key_type, bool add_semantic, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert/update the entry identified by the typed `key_value` on `node_ref`. When `add_semantic` is `true` the key is treated as an append/auto position (e.g. `nodeList.add`). Used by `setAt`/`set`/`add` on every variant. |
-| `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, u32_t expected_type_id, gc_machine_t *ctx)` | **Exact-key** read of a single entry (`key`/`value`/types/node type) from `node_ref`. `key` is the already-encoded raw `u64_t` (see encoding table). `expected_type_id` is the node variant the caller expects (`gc_core_nodeTime`, `gc_core_nodeList`, `gc_core_nodeGeo`, `gc_core_nodeIndex`, `gc_core_node` — `extern u32_t` symbols from the generated `nativegen.h`); see *Type-id guard* below. Returns a null single if no entry matches exactly. Backs `nodeTime.getAt`, `nodeList.get`, `nodeGeo.get`. |
+| `gc_machine_native__node_set_at` | `void gc_machine_native__node_set_at(u64_t node_ref, gc_slot_t key_value, gc_type_t key_type, bool add_semantic, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert/update the entry identified by the typed `key_value` on `node_ref`. When `add_semantic` is `true` the key is treated as an append/auto position (e.g. `nodeList.add`). Used by `setAt`/`set`/`add` (on a `nodeList`, append only since 9.0). |
+| `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, u32_t expected_type_id, gc_machine_t *ctx)` | **Exact-key** read of a single entry (`key`/`value`/types/node type) from `node_ref`. `key` is the already-encoded raw `u64_t` (see encoding table). `expected_type_id` is the node variant the caller expects — `prog->core.nodeTime` / `.nodeGeo` / `.nodeIndex` / `.node` (9.0 fields; std's own natives use the `gc_core_nodeTime` etc. `extern u32_t` symbols of their generated `nativegen.h`, which an out-of-tree plugin does not have); see *Type-id guard* below. Returns a null single if no entry matches exactly. Backs `nodeTime.getAt`, `nodeGeo.get` (not `nodeList.get` since 9.0). |
 | `gc_node_single_value__clear` | `void gc_node_single_value__clear(gc_node_single_value_t *value, gc_machine_t *ctx)` | Release/unmark the contents of a `gc_node_single_value_t` returned by `gc_machine_native__node_get` (and the internal `node_first`/`node_last`/`node_resolve`). **Always call this** on the returned single once you have consumed its slots, or object values leak a GC mark. |
 
 ### Key encoding per variant
@@ -1117,13 +1138,13 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 
 | Variant | GCL key type | Raw `u64_t` key passed to `node_get` |
 |---------|--------------|--------------------------------------|
-| `nodeList` | `int` (index) | `(u64_t)(index + INT64_MIN)` — offset-binary so signed ints sort correctly as unsigned |
+| `nodeList` | `int` (position) | **9.0: not addressable by `node_get`** — internal keys are not positions (see note above) |
 | `nodeTime` | `time` (µs since epoch) | `(u64_t)(time + INT64_MIN)` — same offset-binary on the timestamp; `nodeTime.resolve()` uses the ambient `ctx->current_time_offset` |
 | `nodeGeo` | `geo` (geohash/Morton code) | the `geo` value used directly as `.u64` (already an unsigned, order-preserving code) |
 | `node` | none (single slot) | n/a — a plain `node<T>` holds one value; use `gc_node__resolve` to dereference it (there is no per-key `node_get`) |
 | `nodeIndex` | typed / multi-field key | usually not a flat `u64_t`, so `node_set_at` (typed key slot) is the normal path; the one exception is a `nodeIndex` keyed by a node, where the key node's own `u64_t` ref is passed straight through (this is how the runtime's vector index reads its values) |
 
-> **Type-id guard (8.1).** `gc_machine_native__node_get` takes an `expected_type_id` and refuses to read a block of any other type. The check is `gc_program__is_type(prog, block->type, expected_type_id)`, so declared subtypes pass. On mismatch — or on an unresolvable block id — the call sets a runtime error on `ctx` (`"resolved block <id> is of type 'X' while 'Y' was expected"`) and returns a null single, guarding against type confusion from a forged or stale `node_ref`. Pass the `gc_core_*` id matching the variant you were handed; the runtime's own wrappers pass `gc_core_nodeTime` / `gc_core_nodeList` / `gc_core_nodeGeo` / `gc_core_nodeIndex`. Always check `ctx` for a runtime error after the call when the `node_ref` came from untrusted input.
+> **Type-id guard (8.1).** `gc_machine_native__node_get` takes an `expected_type_id` and refuses to read a block of any other type. The check is `gc_program__is_type(prog, block->type, expected_type_id)`, so declared subtypes pass. On mismatch — or on an unresolvable block id — the call sets a runtime error on `ctx` (`"resolved block <id> is of type 'X' while 'Y' was expected"`) and returns a null single, guarding against type confusion from a forged or stale `node_ref`. Pass the id matching the variant you were handed (`gc_machine__program(ctx)->core.nodeTime` etc.). Always check `ctx` for a runtime error after the call when the `node_ref` came from untrusted input.
 
 > **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — plus broader range helpers (first / last / size / range-size / remove) are powered by internal *floor* lookups declared in the runtime's internal `machine.h`, **not** in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The four functions documented above are the publicly exported, uniform-across-variants surface.
 
@@ -1167,24 +1188,14 @@ for (u32_t i = 0; i < param->size; i++) {
 
 #### Exact-key read with `gc_machine_native__node_get` + `gc_node_single_value__clear`
 
-`node_get` takes the **raw** `u64_t` key (already encoded per variant — see the encoding table above), the `expected_type_id` of the variant, and returns a `gc_node_single_value_t`. Always pair it with `gc_node_single_value__clear` to release any object slots it holds. For `nodeList` / `nodeTime` the index/timestamp is converted to offset-binary with `+ INT64_MIN`:
-
-```c
-// nodeList.get(index) — offset-binary encode the signed int index
-const u64_t node_ref = gc_machine__this(ctx).u64;
-const u64_t to_get_key = ((u64_t) gc_machine__get_param(ctx, 0).i64 + INT64_MIN); // index param
-
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeList, ctx);
-gc_machine__set_result(ctx, single.value, single.value_type);
-gc_node_single_value__clear(&single, ctx); // mandatory: frees marked object values/keys
-```
+`node_get` takes the **raw** `u64_t` key (already encoded per variant — see the encoding table above), the `expected_type_id` of the variant, and returns a `gc_node_single_value_t`. Always pair it with `gc_node_single_value__clear` to release any object slots it holds. For `nodeTime` the timestamp is converted to offset-binary with `+ INT64_MIN`:
 
 ```c
 // nodeTime.getAt(exactTime) — same offset-binary encode on the microsecond timestamp
 const u64_t node_ref = gc_machine__this(ctx).u64;
 const u64_t to_get_key = ((u64_t) gc_machine__get_param(ctx, 0).i64 + INT64_MIN); // exactTime param
 
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeTime, ctx);
+gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_machine__program(ctx)->core.nodeTime, ctx);
 gc_machine__set_result(ctx, single.value, single.value_type);
 gc_node_single_value__clear(&single, ctx);
 ```
@@ -1194,25 +1205,14 @@ A `nodeGeo` lookup uses the `geo` code directly as the `.u64` key (no offset shi
 ```c
 // nodeGeo.get(geo) — geohash/Morton code is already an order-preserving unsigned key
 const u64_t to_get_key = key.u64;
-gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_core_nodeGeo, ctx);
+gc_node_single_value_t single = gc_machine_native__node_get(node_ref, to_get_key, gc_machine__program(ctx)->core.nodeGeo, ctx);
 gc_machine__set_result(ctx, single.value, single.value_type);
 gc_node_single_value__clear(&single, ctx);
 ```
 
 #### Insert / update with `gc_machine_native__node_set_at`
 
-`node_set_at` takes the key as a **typed slot** (`key_value` + `key_type`), not a pre-encoded `u64_t` — the runtime encodes it for the variant. Pass `add_semantic = false` for an explicit set/setAt, and `true` for append-style adds where the key slot is ignored:
-
-```c
-// nodeList.set(index, value): explicit position, add_semantic = false
-const u64_t node_ref = gc_machine__this(ctx).u64;
-const gc_slot_t key = gc_machine__get_param(ctx, 0);            // index
-const gc_type_t key_type = gc_machine__get_param_type(ctx, 0);
-const gc_slot_t value = gc_machine__get_param(ctx, 1);          // value
-const gc_type_t value_type = gc_machine__get_param_type(ctx, 1);
-gc_machine_native__node_set_at(node_ref, key, key_type, /*add_semantic*/ false, value, value_type, ctx);
-gc_machine__set_result(ctx, value, value_type);
-```
+`node_set_at` takes the key as a **typed slot** (`key_value` + `key_type`), not a pre-encoded `u64_t` — the runtime encodes it for the variant. Pass `add_semantic = false` for an explicit set/setAt (nodeTime, nodeGeo, nodeIndex), and `true` for append-style adds where the key slot is ignored (the only valid form on a `nodeList` since 9.0):
 
 ```c
 // nodeList.add(value): append — add_semantic = true, key slot is a placeholder

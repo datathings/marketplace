@@ -9,7 +9,6 @@ The files a GreyCat server holds and serves: per-user folders under `files/`, re
 - Access
 - Downloads: content type, caching, ranges
 - Reacting to uploads and downloads
-- Task folders
 - `File` and `FileWalker` in GCL
 - `webroot/` and static assets
 
@@ -19,8 +18,7 @@ The files a GreyCat server holds and serves: per-user folders under `files/`, re
 <project>/
 ├── files/
 │   ├── <user_name>/        # one folder per identity, named after it (never its id)
-│   │   ├── streams/        # the files of the user's streams, see streams.md
-│   │   └── tasks/<id>/     # the result of a task, see Task folders
+│   │   └── streams/        # the files of the user's streams, see streams.md
 │   └── root/               # the folder of root, which holds the log and metric streams
 └── webroot/                # public static assets, served at /
 ```
@@ -65,14 +63,19 @@ The first segment after `/files/` names the folder's owner, an identity. A segme
 
 | Caller | Access to `files/<name>/` |
 | --- | --- |
-| The identity itself | read and write |
-| Any identity with the `admin` role | read and write, on every folder (`files/root/` included), without a grant |
-| An identity listed in the `grants` of `<name>` | what the grant says: `read` lists and downloads, `write` uploads and deletes, `read_write` both |
-| Anonymous, when the `grants` of `<name>` list `public` | what the grant says. A grant to `public` does not open the folder to signed-in users. |
+| The identity itself | read and write, except `public` (see the next row) |
+| Anyone, anonymous or signed in, on `files/public/` | read. Writing there takes `files:write` from the role or a grant, which an anonymous caller never gets on `files/public/`. |
+| A caller whose role holds `files:read` / `files:write` (the `admin` role of the std library) | list and download / upload and delete, on every folder (`files/root/` included), without a grant |
+| An identity that `<name>` grants `files:read` / `files:write` (`Identity::grant`) | list and download / upload and delete |
+| Anonymous, when `<name>` grants the identity `public` | what the grant says. It does not open the folder to signed-in users. |
+| A caller whose role holds a permission whose holders `<name>` grants (`Identity::grant_permission`) | what the grant says. A grant to the holders of `api` opens the folder to signed-in users of a role holding `api`, and one to the holders of `public` to every caller, anonymous ones included. |
 | Anyone else | `401` when the request carries no valid credentials, `403` when it does |
 
+A caller granted permissions both itself and as a holder gets the permissions of both. Grants of `tasks:read` or `tasks:cancel` open no folder.
+
 ```sh
-greycat user grant bob r alice     # alice may list and download files/bob/
+greycat user grant bob alice files:read            # alice may list and download files/bob/
+greycat user grant-permission bob api files:read   # so may every signed-in user whose role holds api
 ```
 
 How to grant, revoke and use an identity as a group folder is in [identity.md, Grants and per-user files](identity.md#grants-and-per-user-files). No permission is checked on `/files` beyond this table.
@@ -85,7 +88,7 @@ The GCL `File` API checks nothing: any function reads and writes any path. An `@
 - A `.gz` or `.gzip` file whose inner extension has a type is served with that type and `Content-Encoding: gzip`, so the client decodes `data.csv.gz` as CSV. Any other one (`backup.tar.gz`) is `application/gzip`, stored as it is.
 - `ETag` is the modification time. `If-None-Match` with it answers `304`. There is no `Last-Modified`.
 - `Range: bytes=a-b`, `bytes=a-` or `bytes=-n` answers `206` with `Content-Range: bytes a-b/total`. A single range only: several ranges, or a malformed one, get the whole file. A start past the end answers `416` with `Content-Range: bytes */total`. `If-Range` only matches the `ETag`.
-- `?json` at the end of a `.gcb` URL decodes it and answers JSON, one value per line: `GET /files/<user>/tasks/<id>/result.gcb?json`.
+- `?json` at the end of a `.gcb` URL decodes it and answers JSON, one value per line: `GET /files/<user>/export.gcb?json`.
 - A `GET` or `HEAD` of a stream's file writes the stream's buffer first, which is how a client tails a stream (see [streams.md, Reading a stream over HTTP](streams.md#reading-a-stream-over-http)).
 
 ## Reacting to uploads and downloads
@@ -119,18 +122,14 @@ fn on_upload(path: String) {
 }
 ```
 
-## Task folders
-
-`files/<user>/tasks/<id>/` holds `result.gcb`, the result of a task started with the `task` header, by `spawn` or by the scheduler. It appears whole, once the task's transaction committed: the task writes `result.gcb.tmp` next to it, then renames it, so a client polling for the file never reads a partial one, nor a result the commit then turned into an error. What the server keeps for a task while it runs (its arguments, the files of its `await` jobs) lives in `gcdata/jobs/` instead, out of reach of `/files` (see [storage.md](storage.md#the-graph-store)). `File::workingDir()` names it from inside the task. Task folders are deleted 24 hours after the task ends, so copy anything worth keeping elsewhere in the user's folder.
-
 ## `File` and `FileWalker` in GCL
 
-Paths are relative to the process working directory, like `files/alice/x.csv`.
+Paths are relative to the process working directory, like `files/alice/x.csv`. `File::workingDir()` is the directory of the current task, outside `files/` and not served over HTTP (see [tasks.md, Task results and folders](tasks.md#task-results-and-folders)).
 
 ```gcl
 File::baseDir();                 // "files/"
 File::userDir();                 // "files/<user_name>/" of the caller
-File::workingDir();              // "files/<user_name>/tasks/<id>/" of the current task, not created
+File::workingDir();              // "gcdata/tasks/<id>/work/" of the current task, not created
 File::mkdir("files/alice/archive/2026");                          // creates every missing folder
 File::copy("files/alice/data.csv", "files/alice/archive/2026/data.csv");  // the target folder must exist
 File::rename("files/alice/data.csv", "files/alice/old.csv");      // replaces an existing target

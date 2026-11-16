@@ -181,8 +181,10 @@ for (t, v in series) {}
 // nodeTime — time window
 for (t, v in series[from..to]) {}
 
-// nodeList / nodeIndex — same shape
+// nodeList — i counts positions 0..size()-1
 for (i, v in nodelist[0..1000]) {}
+
+// nodeIndex
 for (k, v in idx) {}
 
 // Explicit math interval (rare; for inclusive/exclusive control)

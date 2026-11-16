@@ -5,7 +5,7 @@ Every annotation, every modifier, with semantics and where each one is valid.
 ## Contents
 
 - Module pragmas (`@library`, `@include`, `@permission`, `@role`, `@function_permission`)
-- Declaration annotations (`@expose`, `@permission`, `@reserved`, `@test`, `@tag`, `@raw`)
+- Declaration annotations (`@expose`, `@permission`, `@reserved`, `@test`, `@tag`)
 - Type-shape annotations (`@volatile`)
 - Attribute annotations (`@format`, `@precision`)
 - Modifiers (`private`, `static`, `abstract`, `native`)
@@ -41,10 +41,7 @@ Module pragmas appear at module scope and **must** terminate with `;`:
 
 ### `@library("name", "version")`
 
-Declares a dependency on a library named `name` at version `version`. Resolution order:
-
-1. `<project_dir>/lib/<name>/` — vendored copy.
-2. For `name == "std"` only: the GreyCat home's `lib/std/` — the runtime install.
+Declares a dependency on a library named `name` at version `version`, looked up as [project.md](project.md#libraryname-version) describes.
 
 Valid in any module of the closure; by convention declared in `project.gcl` (the entrypoint) so the dependency set is readable in one place.
 
@@ -100,7 +97,7 @@ Grants permissions to an existing function, named by its FQN, from module level.
 
 ### `@expose` / `@expose("path")`
 
-Makes a function reachable via HTTP / RPC. Without args, the path is the function's fully-qualified name: `<module>::<fn>` for a free-standing function, or `<module>::<Type>::<fn>` for a static method on a type. With a string arg, the function is exposed at that path.
+Makes a function reachable via HTTP / RPC. Without args, the path is the function's fully-qualified name: `<module>::<fn>` for a free-standing function, or `<module>::<Type>::<fn>` for a method on a type. With a string arg, the function is exposed at that path. A method that is not `static` is called on an instance the call passes as `this`: see [http.md, Calling a method on an instance](http.md#calling-a-method-on-an-instance).
 
 ```gcl
 @expose
@@ -125,6 +122,10 @@ fn mcp_initialize(params: McpInitializeParams): McpInitializeResult {}
 ```
 
 A function with `@expose` is reachable from outside the runtime, even if no other code calls it.
+
+Its arguments bind from the request body or query and its result is written as JSON or GCB. A function that reads the
+raw request takes a `runtime::HttpRequest`, and one that sets its own status, headers, content type or text body
+returns a `runtime::HttpResponse`: see [http.md](http.md#reading-the-request-writing-the-response).
 
 ### `@permission("name")`
 
@@ -158,81 +159,6 @@ native fn cancel(task_id: int): bool;   // body lives in the server binary
 ```
 
 Deprecated — prefer non-reserved alternatives where they exist.
-
-### `@raw`
-
-Writes an `@expose`d function's result to the HTTP response **as text** rather than as JSON,
-under `Content-Type: text/plain; charset=utf-8`. A `String` return comes back as its own
-bytes, with no surrounding quotes.
-
-For an endpoint whose caller is not a GreyCat client and compares the body byte for byte —
-a webhook verification handshake, a health probe scraped as a string, a plain-text ack some
-provider insists on. Without it the answer is a JSON document, and `"abc"` is not `abc`.
-
-```gcl
-/// A liveness probe a load balancer reads as text. Without `@raw` the body is `"ok"`,
-/// quotes included, and a plain string comparison on the other side fails.
-@expose
-@permission("public")
-@raw
-fn healthz(): String {
-    return "ok";
-}
-
-/// An endpoint that echoes a token back for a caller to compare byte for byte -- the
-/// shape of a registration handshake. Returning `""` and not null matters: a null
-/// answers the four characters `null`, which is not an empty body.
-@expose
-@permission("public")
-@raw
-fn echo_token(token: String?, expected: String?): String {
-    if (token == null || !Crypto::equals_constant_time(token, expected ?? "")) {
-        return "";
-    }
-    return token;
-}
-```
-
-Two boundaries worth knowing:
-
-- **It outranks `Accept`.** A caller asking for `application/octet-stream` still gets the raw
-  text. The function declared what its representation is, and the caller that needs `@raw` is
-  precisely the one that cannot negotiate.
-- **JSON-RPC keeps its envelope.** A call through `POST /` still answers
-  `{"jsonrpc", "id", "result"}`. `@raw` is a representation; JSON-RPC is a protocol.
-
-### What each return type produces
-
-The value is rendered the way `println` would render it, which is **not** JSON:
-
-| Return | Body |
-| --- | --- |
-| `String` | the bytes themselves — the point of the annotation |
-| `int` / `float` / `bool` | `42` · `3.5` · `true` |
-| `String?` holding null, or no return type at all | `null` — **four literal bytes, not an empty body** |
-| a user type | `Point{x:1,y:2}` — GreyCat's own debug form, not JSON |
-| `Array<T>` | `Array<int>{1,2,3}` — likewise |
-| an enum entry | `Color::green` |
-
-In practice `@raw` is for `String`, and for the scalars when you want them bare. For a
-composite the rendering is GreyCat's debug representation, which no outside caller is
-expecting — if you want a shape on the wire, build the `String` yourself.
-
-The null row is the one that bites. A function typed `String?` that returns null answers
-the four characters `null`, so an endpoint whose "nothing to say" answer must be an empty
-body has to return `""` and be typed `String`.
-
-`Content-Length` counts bytes, not characters: `"héllo €"` is 10.
-
-### Errors
-
-A `@raw` function that throws answers **400 with the error rendered as text too**, not as
-the usual JSON error document. For a caller that only reads the status — a webhook
-provider deciding whether to retry — that is immaterial; for anything parsing your error
-bodies, it is not.
-
-Has no effect on a function that is not `@expose`d. Works on a static method
-(`/<module>::<Type>::<fn>`) as well as a free function.
 
 ### `@tag("name", ...)`
 
@@ -320,7 +246,7 @@ type Log {
 }
 ```
 
-Attempting to persist a `@volatile` value (writing it into a `node<T>` or a graph-persisted attribute) is a runtime error.
+A `@volatile` value cannot be stored anywhere in the graph: as a value of `node<T>`, `nodeList`, `nodeTime`, `nodeGeo` or `nodeIndex`, as a key of `nodeIndex` or of a stored `Map`, nor at any depth of a stored value (an attribute, an `Array` element, a `Map` entry, a `Table` cell). The write throws `volatile object can't be attached to any node` and leaves the node or object as it was, so a type holding a volatile value, such as a `Log?` attribute, cannot be stored while that attribute is set.
 
 ## Attribute annotations
 
@@ -358,15 +284,15 @@ Without `@format` on a `time` field, CSV parsing defaults to ISO 8601 / epoch mi
 
 ### `@precision(step)`
 
-Stores a `float` attribute truncated toward zero to a fixed decimal step. `step` is a float literal power of ten from `1.0` down to `0.0000000001`.
+Stores a `float` attribute truncated toward zero to a fixed decimal step. `step` is a float literal power of ten from `1.0` down to `0.0000000001`. A value already on the step is stored as written, and reads back equal after any number of writes and reloads.
 
 ```gcl
 type Reading {
-    @precision(0.01) value: float;   // Reading { value: 1.239 }.value == 1.23, { value: -1.239 } == -1.23
+    @precision(0.01) value: float;   // Reading { value: 1.239 }.value == 1.23, { value: -1.239 } == -1.23, { value: 0.29 } == 0.29
 }
 ```
 
-The value times the inverse of the step must fit a signed 64-bit integer; a larger, infinite or NaN value is a runtime error on assignment. Changing the step of an existing attribute versions its type: objects already stored keep reading with the step they were written with, new writes use the new one.
+The value times the inverse of the step must fit a signed 64-bit integer; a larger, infinite or NaN value is a runtime error on assignment, `<module>::Reading.value cannot store NaN at @precision(0.01)`, and the attribute keeps its value. Check a computed value before assigning it: `isNaN(v - v)` is true for NaN and both infinities. `null` assigns into a nullable `@precision` attribute as into any other. Changing the step of an existing attribute versions its type: objects already stored keep reading with the step they were written with, new writes use the new one.
 
 ## Modifiers
 

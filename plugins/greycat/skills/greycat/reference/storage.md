@@ -16,12 +16,12 @@ What lives in `gcdata/` and how to protect it. Reach here when the task is about
 | --------------------------- | ------------------------------------------------------------------------------- |
 | `data_<N>.bin`              | Zone files (numbered; one per worker / shard).                                  |
 | `index.bin`, `index.bin-lock` | Index of zones and live transactions.                                           |
-| `program`                   | The compiled program. Updated on each compatible rebuild.                       |
-| `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds.    |
+| `program`                   | The compiled program. Updated on each compatible rebuild. One this version cannot read, or whose bytecode holds a jump, a stack depth or an id out of range, is rebuilt from `project.gcl` or `project.gcp` by the next command, a store command such as `backup` included, which compiles the current sources and upgrades `gcdata/abi` against them; with neither, the command fails and asks for the project's sources, or a `project.gcp` built by this version, next to `gcdata/`. |
+| `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds. The store cannot be read without it: a command over a store whose `abi` is missing or damaged fails and says so, and never writes a new one over it; restore `gcdata/` from a backup. |
 | `history/`                  | Task history (recent task records — for the `Task::history` API).               |
 | `security/`                 | User / role / grant database (LMDB), the server's private key, the root `password` minted on first boot, and a root `token` (valid one year) re-minted on every `serve`. |
 | `lock`                      | Process lock — prevents two workers from opening the same store simultaneously. |
-| `jobs/<task id>/`           | What a task keeps for the server to read back while it runs: its arguments, the transaction logs and snapshot of an `await`, and the arguments, results and transaction logs of its jobs under `<job index>/`. Never served by `/files`, never synced to disk, and emptied when the process starts, since nothing reads it after a restart. |
+| `tasks/<task id>/`          | The folder of a task: its result and working directory, kept for `--task_retention` once it ended, and what the server reads back while it runs (arguments, transaction logs, the files of its `await` jobs), removed when it ends or the process starts. See [tasks.md, Task results and folders](tasks.md#task-results-and-folders). Never served by `/files`. |
 
 **`gcdata/` is the durable state of the application.** Back it up; do not check it into git. Deleting it resets the project to a blank graph.
 
@@ -29,7 +29,7 @@ What lives in `gcdata/` and how to protect it. Reach here when the task is about
 
 A type is graph-persistent (its values can be saved into `gcdata/`) unless it is tagged `@volatile`. Stdlib runtime types like `Log`, `RuntimeInfo`, `HostMetric`, `TaskMetric`, `HttpMetric`, `Identity`, `Task` are `@volatile` — they describe live process state and cannot be stored.
 
-User types holding `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeGeo<T>`, or `node<T>` attributes get persisted lazily as the program writes to those node tags. See [stdlib.md § Node tags](stdlib.md).
+User types holding `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeGeo<T>`, or `node<T>` attributes get persisted lazily as the program writes to those node tags. See [stdlib.md § Node tags](stdlib.md).
 
 ### Listing every node
 
@@ -45,12 +45,16 @@ while (r.can_read()) {
 ```
 
 It walks the block index in node reference order and lists every node, reachable from a module variable or not, as a
-`node<T>`, `nodeTime`, `nodeIndex`, `nodeList` or `nodeGeo` handle. It lists what was committed when the task started,
+`node<T>`, `nodeTime`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeList` or `nodeGeo` handle. It lists what was committed when the task started,
 not the task's own pending writes. Inside a world it lists the world's view (see
 [What a world changed](#worlds-branches-of-the-store) for the world's own changes). `last` holds the last node read,
 and a reader resumed after its task was suspended, or built with `last` set, continues after it. A `type` that is not
 a node type fails. A full scan reads the header of every block of the store, so it lasts about as long as
 `Runtime::store_stats()`.
+
+The set holding the values of a spilled `nodeIndexSet` key ([stdlib.md](stdlib.md#nodeindexsetk-v)) is a node of the
+store, and is listed as a `nodeSet`. Read it, do not write it: a value added or removed through it changes the pairs of
+the index but not the count `size()` returns, which then no longer matches a loop over the index.
 
 ### ABI evolution
 
@@ -69,11 +73,38 @@ Runtime::store_stats();       // live blocks and bytes, by type and by world
 
 CLI equivalents: `greycat backup` and `greycat defrag`.
 
+The blocks a removal empties, by `removeAll` or by removing the last entries of a block, leave the store with the commit: `store_stats()` no longer counts them, and a defrag, the online one (`--defrag_ratio`, [cli.md](cli.md)) or `greycat defrag`, gives their space back. The zone files do not shrink before.
+
 `GREYCAT_BACKUP_PATH` (default `backup/`) sets the backup destination. `GREYCAT_MAX_BACKUP_FILES` (default `3`) caps retention.
 
-Restore with `greycat restore <archive>`; `--verify` validates the archive before extracting.
+Restore with `greycat restore <archive>`, the server stopped. See [Restoring a damaged archive](#restoring-a-damaged-archive) for `--verify` and `--repair`.
 
 A backup holds main and every world (see [Worlds](#worlds-branches-of-the-store)); a block a world shares with main is stored once. It must run in main: called from a task running in a world it raises. `greycat restore` replaces the worlds of the store with those of the archive, and an archive made before worlds existed restores none.
+
+A backup holds the identities, their roles, passwords and grants, but not their tokens: `greycat restore` ends every session, and every client signs in again.
+
+### Restoring a damaged archive
+
+A plain `greycat restore` copies the blocks without decoding them, so a damaged block only shows when the server reads it. Two options decode them:
+
+- `--verify` (`GREYCAT_VERIFY`) decodes each block as it restores it, and stops with `corrupted block in backup ! block_id:<n>` at the first one that does not decode. It exits non-zero and leaves a partial `gcdata/`: restore again with `--repair`, or from another archive.
+- `--repair` (`GREYCAT_REPAIR`) decodes every block first, then restores the archive, resetting the nodes held by the blocks that do not decode. Each reset is printed on stdout (`repair: head 17 does not decode: its 128 nodes are reset`, `repair: node <ref> (head <h>, slot <s>) is reset: ...`), then a summary is logged.
+
+Both decode the blocks with the program of the archive. An archive whose program is in another `.gcp` format is restored by `--verify` without that check and with a warning, and the next `run` or `serve` rebuilds the program; `--repair` refuses it.
+
+An archive or a `gcdata/` of 8.x cannot be used: it numbers the value types otherwise. Every `greycat restore` of an 8.x archive exits non-zero with `the archive was written by another GreyCat version (ABI protocol 3, this one reads 4): it cannot be restored`, and a command opening an 8.x `gcdata/` stops with `gcdata/abi was written by another GreyCat version (ABI protocol 3, this one reads 4): this version cannot open the store`.
+
+What a reset node reads as:
+
+| The block that does not decode                                                                | The node reads as                                                                                                                                  |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a tree block of a `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTime` or `nodeGeo` | never written: the whole collection is empty                                                                                                       |
+| a head, value nullable (`node<Item?>`)                                                        | `null`                                                                                                                                             |
+| a head, value not nullable (`node<Item>`, `node<int>`)                                        | zero: `0`, `false`, the first enum entry, `""`, an empty `Array` or `Map`, an object whose non-nullable fields are zero and nullable fields `null` |
+
+A head whose values cannot be null and have no zero (an abstract type, `any` or a `function`) fails the repair before any block is written, with `restore: head <n> cannot be emptied: ...` naming the type. A zero value cannot be told apart from one written as such, so keep the printed list: it is the only record of what was reset.
+
+Both options decode with the program the archive holds. When it does not load, `--repair` logs `gcdata/program was written by another GreyCat version: the ABI of the archive decodes the blocks` (or `gcdata/program is damaged: ...`) and goes on with the types and fields the archive's ABI records. `--verify` does the same for a program of another version, and fails on a damaged one with `gcdata/program does not load: ...`.
 
 ### Exporting the store
 
@@ -85,7 +116,7 @@ The file holds, in this order:
 
 1. an info `Map` with the keys `format`, `next_key`, `time` and `world`
 2. the root object, whose fields are the module variables
-3. for each node, in reference order, a node begin record (tag `25`, then the node handle and the node's type), followed by its entries: the value of a `node<T>`, or key and value pairs for the other node kinds, until the next begin record
+3. for each node, in reference order, a node begin record (tag `25`, then the node handle and the node's type), followed by its entries: the value of a `node<T>`, or key and value pairs for the other node kinds (a `nodeList` at keys `0..n-1`), until the next begin record. A `nodeIndexSet` writes a pair per value, those of a spilled key too, whose set is no node of the export: the import spills the key again
 
 The byte layout is in `lib/std/io.md` (GcxWriter / GcxReader).
 
@@ -152,14 +183,15 @@ read:
 ```gcl
 var r = WorldChangesReader {};
 while (r.can_read()) {
-    var n = r.read();   // node<T>, nodeTime, nodeIndex, nodeList or nodeGeo
+    var n = r.read();   // node<T>, nodeTime, nodeIndex, nodeSet, nodeIndexSet, nodeList or nodeGeo
 }
 ```
 
 Each node whose world version differs from its base's current version, among the blocks the world wrote, comes once,
 in node reference order. It lists what was committed when the task started, not the task's own pending writes. It
-skips a `node<T>` the world set back to the base's value, but lists a `nodeTime`, `nodeIndex`, `nodeList` or `nodeGeo`
-whose tree the world rewrote, even when it holds the base's values again. In a snapshot world, a node the base changed after
+skips a `node<T>` the world set back to the base's value, but lists a `nodeTime`, `nodeIndex`, `nodeSet`, `nodeIndexSet`,
+`nodeList` or `nodeGeo` whose tree the world rewrote, even when it holds the base's values again. The set holding the
+values of a spilled `nodeIndexSet` key is not listed: a change to it lists the `nodeIndexSet`. In a snapshot world, a node the base changed after
 the world was created also shows when it shares a head block with a node the world modified. A standalone world has no
 base: every node it holds is listed, its module variables included. `available()` counts the nodes left; `pos` counts
 those read, and a reader resumed after its task was suspended skips them. It fails in main. Building the list costs
@@ -193,10 +225,12 @@ WorldDiffKind::added kiwi: null -> 1.5
 WorldDiffKind::changed apple: 1.0 -> 0.8
 ```
 
-plum holds the same value on both sides and is not listed: a key whose two values are deep-equal never is, even when
-the world rewrote it. `key` is the time of a `nodeTime`, the position of a `nodeList`, the geo of a `nodeGeo`, the key
-of a `nodeIndex`, and null for a `node<T>`. Keys come in the node's order: by time, by position, by encoded key for a
-`nodeIndex` with a scalar key and a `nodeGeo`, and by hash for a `nodeIndex` with any other key (`String`, objects).
+plum holds the same value on both sides and is not listed: a key whose two values are deep-equal never is, even when the
+world rewrote it. `key` is the time of a `nodeTime`, the position of a `nodeList` (a value the world removed at its position in the base, one it added or changed at its position in the world; base `[1,2,3,4]`, a world that removed position 1 and appended 5 gives `removed` at 1 and `added` at 3, and `last` is a position in the version it was reported in), the geo of a `nodeGeo`, the key of a
+`nodeIndex`, the value of a `nodeSet` (added or removed only, `base` and `world` null), the key of a pair of a
+`nodeIndexSet` (added or removed only, the value in `world` or `base`), and null for a `node<T>`. Keys come in the
+node's order: by time, by position, by encoded key for a `nodeIndex`, `nodeSet` or `nodeIndexSet` with a scalar key and
+a `nodeGeo`, and by hash for a `nodeIndex`, `nodeSet` or `nodeIndexSet` with any other key (`String`, objects).
 
 The base is read as it is now, down its overlay chain, not as it was when the world was created. In a snapshot world,
 the base's later changes show up as differences. An overlay world reads the base for a node it never modified, so

@@ -115,7 +115,7 @@ VitePlus ships as a global `vp` CLI plus a local `vite-plus` package. Install `v
   },
   "dependencies": {
     "@awesome.me/webawesome": "^3",
-    "@greycat/web": "https://get.greycat.io/files/sdk/web/dev/8.0/8.0.39-dev.tgz",
+    "@greycat/web": "file:./lib/sdk_web",
     "lit": "^3"
   },
   "devDependencies": {
@@ -132,32 +132,29 @@ VitePlus ships as a global `vp` CLI plus a local `vite-plus` package. Install `v
 }
 ```
 
-The `@greycat/web` URL is an example pin. Resolve the current one with the recipe below.
+`@greycat/web` points at `lib/sdk_web/`, which `greycat install` fills (see below).
 
 `vp install` installs these with the pnpm that `devEngines` pins, and downloads that pnpm when it is missing.
-The pin is required. Without it `vp install` falls back to npm, which refuses to fetch the `@greycat/web`
-tarball URL (`EALLOWREMOTE`). `vp fmt` keeps the dependency lists sorted, so `@awesome.me/...` comes before
-`@greycat/web`.
+The pin matters: without it `vp install` falls back to npm. `vp fmt` keeps the dependency lists sorted, so
+`@awesome.me/...` comes before `@greycat/web`.
 
-**`@greycat/web` is not on npm.** It ships from GreyCat's registry as a tarball URL that tracks the same
-branch and version line as the project's `std` library - branch `dev` or `stable`. Pin the exact tarball in
-`package.json`:
+**`@greycat/web` is not on npm.** It ships as the `sdk_web` library, on the same branch and version line as the
+project's `std`. Pin it in `project.gcl` next to `std`, and let `greycat install` extract it into
+`lib/sdk_web/` before `vp install` links it:
 
+```gcl
+@library("std", "<version>");
+@library("sdk_web", "<version>");
 ```
-https://get.greycat.io/files/sdk/web/<branch>/<version>.tgz
-```
-
-Resolve the current `<version>` by reading the branch's `latest` marker, then append `.tgz`:
 
 ```sh
-curl -s https://get.greycat.io/files/sdk/web/dev/latest      # -> 8.0/8.0.39-dev
-# dependency: https://get.greycat.io/files/sdk/web/dev/8.0/8.0.39-dev.tgz
-
-curl -s https://get.greycat.io/files/sdk/web/stable/latest   # -> 7.8/7.8.25-stable
-# dependency: https://get.greycat.io/files/sdk/web/stable/7.8/7.8.25-stable.tgz
+greycat install sdk_web   # writes the pragma at the newest release on the std pin's branch, then installs
+greycat install --bump    # later: moves std and sdk_web together
 ```
 
-Use the branch that matches the project's `std` branch, and re-pin when `std` moves.
+Like every library other than `std`, `lang` and `rust`, `sdk_web` needs a registry token to download (see
+[cli.md](cli.md#registries)). `lib/` is gitignored, so a fresh checkout runs `greycat install` before
+`vp install`.
 
 ### `vite.config.ts`
 
@@ -610,8 +607,8 @@ you, and app code should go through the SDK.
 ## Running and building
 
 ```sh
-vp install            # install frontend deps
-greycat install       # download lib/std and bin/greycat
+greycat install       # download lib/std, lib/sdk_web and bin/greycat
+vp install            # install frontend deps, @greycat/web from lib/sdk_web
 greycat codegen ts    # generate project.d.ts
 greycat dev           # build watcher (vp build --watch) + serve API and assets on one origin
 ```
@@ -627,7 +624,7 @@ vp build              # populates webroot/
 greycat build         # produces project.gcp
 ```
 
-Deploy artifacts: `project.gcp` (or `project.gcl` + `src/` + populated `lib/`), `bin/greycat`, the built
+Deploy artifacts: `project.gcp` (or `project.gcl` + `src/` + populated `lib/`), `bin/` ([project.md](project.md#practical-layout)), the built
 `webroot/`, and a writable `gcdata/` and `files/`.
 
 Suggested `.gitignore`:

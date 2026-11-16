@@ -267,11 +267,14 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 
 - [ ] `greycat fmt --mode=check` and `greycat lint` both exit `0` on the deploy commit. See [lang.md](lang.md).
 - [ ] `greycat build` produces a `project.gcp` artifact (or ship the source tree with `lib/` populated).
-- [ ] Ship `project.gcl`, `src/`, `lib/`, `webroot/`, and `bin/greycat` (or have the deploy host run `greycat install` once).
+- [ ] Ship `project.gcl`, `src/`, `lib/`, `webroot/`, and the whole `bin/` (see [project.md](project.md#practical-layout); or have the deploy host run `greycat install` once).
 - [ ] If `webroot/` is bundler output and therefore gitignored, build it on the deploy host or ship it as a
       separate artifact - it is not in the source tree. See [webapp.md](webapp.md).
 - [ ] Provision a writable `gcdata/` (this is the durable state).
 - [ ] Provision a writable `files/` if the app accepts uploads.
+- [ ] Serve HTTPS from greycat itself: `GREYCAT_ACME=<domains>` on port 443 for a Let's Encrypt certificate, or
+      `GREYCAT_TLS=true` with your own in `gcdata/security/tls/`. See [http.md](http.md#https), and
+      [Port 443](http.md#port-443) for the systemd unit.
 - [ ] Configure with `.env` (or systemd `Environment=`): `GREYCAT_PORT`, `GREYCAT_LOG`, `GREYCAT_CACHE`, `GREYCAT_STORE`, `GREYCAT_BACKUP_PATH`, `GREYCAT_TZ`.
 - [ ] Schedule backups: either external (snapshot the `gcdata/` directory), or in-process via a scheduled `Runtime::backup_delta()`.
 - [ ] Run with `GREYCAT_METRICS=host,task` and chart the `HostMetric` and `TaskMetric` records of the `host_metrics` and `task_metrics` streams if the workload is heavy on memory or storage (see observability.md § Metrics stream).
@@ -292,6 +295,6 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 | Inspect the compiled bytecode    | `greycat bytecode`.                                                                                           |
 | Reset everything                 | `rm -rf gcdata/ bin/ lib/` then `greycat install` + `greycat serve`. **Data loss.**                           |
 | Add a new user                   | `greycat user add alice admin` then `greycat token --user=alice`. See "Creating users".                       |
-| See what's running               | `Task::running()` from GCL, or hit the corresponding admin endpoint over RPC.                                 |
+| See what's running               | `Task::running()`, from GCL or as `POST /runtime::Task::running`: each task, its jobs and the worker of each. |
 | Cancel a stuck task              | `Task::cancel(task_id)`.                                                                                      |
 | Run a one-shot migration script  | Write a function, then `greycat run my_migration_fn`.                                                         |

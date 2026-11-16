@@ -1,6 +1,6 @@
 # Available libraries
 
-Libraries published to `get.greycat.io` and pulled into a project with an `@library("<name>", "<version>")` pragma in `project.gcl`, then fetched by `greycat install`. `std` is required; the rest are optional and domain-specific. Reach for one of these before hand-rolling the same capability.
+Libraries published to `registry.greycat.io` and pulled into a project with an `@library("<name>", "<version>")` pragma in `project.gcl`, then fetched by `greycat install`. `std` is required; the rest are optional and domain-specific. Reach for one of these before hand-rolling the same capability.
 
 For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the whole-graph closure, see [project.md](project.md).
 
@@ -25,7 +25,7 @@ For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the w
 | `useragent`   | User-agent string parsing: `UserAgent::parse`.                                                            |
 | `finance`     | IBAN parsing / validation (ISO 13616): `Iban::parse`.                                                     |
 | `powerflow`   | Power flow analysis (Newton–Raphson): `PowerNetwork`, `PowerBusResult`, `PowerLineResult`.                |
-| `powergrid`   | Successor to `powerflow` — adds load configuration and short-circuit analysis. Same `PowerNetwork` API surface, different namespace. |
+| `powergrid`   | Successor to `powerflow`, on power-grid-model with its names and SI units (V, W, var, A, Ohm): `PowerNetwork` (`addNode` / `addLine` / `addSource` / `addSymLoad`, `calculatePowerFlow`, Tensor time series `calculatePowerFlowBatch`, IEC 60909 `calculateShortCircuit`, several feeders), plus `DcNetwork` DC load flow, PTDF / LODF and N-1 screening. API differs from `powerflow` (9.0). |
 | `text_search` | Full-text search: `TextIndex<T>`, 15 search modes including BM25/BM25F, 33-language tokenization, C-accelerated. |
 | `fcs`         | Reader for Flow Cytometry Standard (FCS) files: `FcsReader`, `FcsMeta`, `FcsChannel`.                     |
 | `ifc`         | IFC (Industry Foundation Classes) BIM reader: `IfcReader`, `IfcEntity`. *(Pro license required.)*         |
@@ -85,13 +85,15 @@ Full semantics (bounds, branch switching, why a pin was skipped) in [cli.md, `gr
 
 ### Reading a version without touching the project
 
-`curl` on the `latest` marker is still the way to answer "what is the newest X" - for a report, for a non-GCL artifact like the web SDK tarball ([webapp.md](webapp.md)), or when the project is not on this machine:
+`registry::latest_version` answers "what is the newest X", for a report or when the project is not on this machine:
 
 ```bash
-curl https://get.greycat.io/files/<lib>/stable/latest   # -> 7.8/7.8.25-stable   (default branch)
-curl https://get.greycat.io/files/<lib>/dev/latest      # -> 8.0/8.0.39-dev
+curl -sX POST https://registry.greycat.io/registry::latest_version \
+  -H 'Content-Type: application/json' -d '["<lib>","stable"]'   # -> "9.0.12-stable"   (default branch)
+curl -sX POST https://registry.greycat.io/registry::latest_version \
+  -H 'Content-Type: application/json' -d '["<lib>","dev"]'      # -> "9.0.271-dev"
 ```
 
-The portion after the `/` (e.g. `7.8.25-stable`) is the version string used in `@library("<lib>", "<version>")`. **Exception:** `std` is published under URL path `core` - fetch with `https://get.greycat.io/files/core/stable/latest`.
+The quoted string is the version used in `@library("<lib>", "<version>")`, `std` included. `null` means the branch has no release of that library. The call needs no token, even for a library whose archives do.
 
-A machine can point the CLI at another registry, and store that registry's token once, through `GREYCAT_REGISTRY` or the `~/.greycat/registries` file; see [cli.md](cli.md#registries).
+`GREYCAT_REGISTRY` points the CLI at another registry, and the token that libraries other than `std`, `lang` and `rust` need is stored once in `~/.greycat/registry_token` (see [cli.md](cli.md#registries)).

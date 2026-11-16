@@ -35,18 +35,20 @@ Defines all primitive type aliases, the GreyCat type system enum, the universal 
 | `f64_t`  | `double`    | 64-bit IEEE 754 double     |
 | `geo_t`  | `u64_t`     | Geospatial hash (encoded lat/lng) |
 
-### Complex Number Types
+### Complex Number Types (`gc/complex.h`)
+
+**Moved in 9.0:** `c64_t` / `c128_t` and the `gc_c64__*` / `gc_c128__*` helpers left `gc/type.h` for the new header `gc/complex.h` (included by `greycat.h` and by `gc/tensor.h`; code that included only `gc/type.h` must add it). Definitions unchanged.
 
 ```c
 typedef struct {
-    f32_t r;  // Real part
-    f32_t i;  // Imaginary part
-} c64_t;   // 64-bit complex (two 32-bit floats)
-
-typedef struct {
     f64_t r;  // Real part
     f64_t i;  // Imaginary part
-} c128_t;  // 128-bit complex (two 64-bit doubles)
+} c128_t;  // Complex of two doubles
+
+typedef struct {
+    f32_t r;  // Real part
+    f32_t i;  // Imaginary part
+} c64_t;   // Complex of two floats
 ```
 
 ### Complex Arithmetic Functions
@@ -69,6 +71,12 @@ typedef struct {
 | `gc_c64__arg` | `f64_t gc_c64__arg(c64_t z)` | Argument (angle) of complex number |
 | `gc_c64__abs` | `f64_t gc_c64__abs(c64_t z)` | Absolute value (modulus) |
 
+### Slot Conversion
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_slot__to_f64` | `f64_t gc_slot__to_f64(gc_slot_t slot, gc_type_t slot_type)` | **New in 9.0 (public).** `slot` as a double: int/time/duration by signed value, char/geo/node by their bits read unsigned, bool as 0/1, null and any other type as 0. |
+
 ### Node Reference Parsing
 
 | Function | Signature | Description |
@@ -79,6 +87,8 @@ typedef struct {
 
 Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serialization, etc.).
 
+**Breaking in 9.0 (renumbered, ABI protocol 4):** `nodeSet` (7) and `nodeIndexSet` (9) were inserted among the node tags, so every tag from `gc_type_node_index` on moved up (by 1 or 2). Always use the enumerators, never raw numbers; a store/ABI/GCB of protocol 3 (GreyCat 8.4) is refused.
+
 | Value | Name | Description |
 |-------|------|-------------|
 | 0  | `gc_type_null` | Null value |
@@ -88,23 +98,33 @@ Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serializat
 | 4  | `gc_type_float` | 64-bit double-precision float |
 | 5  | `gc_type_node` | Graph node reference |
 | 6  | `gc_type_node_time` | Time-indexed node reference |
-| 7  | `gc_type_node_index` | Indexed node reference |
-| 8  | `gc_type_node_list` | Node list reference |
-| 9  | `gc_type_node_geo` | Geospatially-indexed node reference |
-| 10 | `gc_type_geo` | Geospatial hash |
-| 11 | `gc_type_time` | Timestamp (microseconds since epoch) |
-| 12 | `gc_type_duration` | Duration (microseconds) |
-| 13 | `gc_type_cubic` | Cubic interpolation value |
-| 14 | `gc_type_static_field` | Static field / enum value (stored as `gc_slot_tuple_u32_t`) |
-| 15 | `gc_type_object` | Heap-allocated object pointer |
-| 16 | `gc_type_block_ref` | Storage block reference |
-| 17 | `gc_type_block_inline` | Inline storage block |
-| 18 | `gc_type_function` | Function reference |
-| 19 | `gc_type_undefined` | Undefined / unknown type |
-| 20 | `gc_type_type` | Type reference |
-| 21 | `gc_type_field` | Field reference |
-| 22 | `gc_type_stringlit` | String literal (serialization only) |
-| 23 | `gc_type_error` | Error (C internal only) |
+| 7  | `gc_type_node_set` | **New in 9.0.** Set node (`nodeSet<V>`) |
+| 8  | `gc_type_node_index` | Indexed node reference |
+| 9  | `gc_type_node_index_set` | **New in 9.0.** Multimap node (`nodeIndexSet<K, V>`) |
+| 10 | `gc_type_node_list` | Node list reference |
+| 11 | `gc_type_node_geo` | Geospatially-indexed node reference |
+| 12 | `gc_type_geo` | Geospatial hash |
+| 13 | `gc_type_time` | Timestamp (microseconds since epoch) |
+| 14 | `gc_type_duration` | Duration (microseconds) |
+| 15 | `gc_type_cubic` | Cubic interpolation value |
+| 16 | `gc_type_static_field` | Static field / enum value (stored as `gc_slot_tuple_u32_t`) |
+| 17 | `gc_type_object` | Heap-allocated object pointer |
+| 18 | `gc_type_block_ref` | Storage block reference |
+| 19 | `gc_type_block_inline` | Inline storage block |
+| 20 | `gc_type_function` | Function reference |
+| 21 | `gc_type_undefined` | Undefined / unknown type |
+| 22 | `gc_type_type` | Type reference |
+| 23 | `gc_type_field` | Field reference |
+| 24 | `gc_type_stringlit` | String literal (serialization only) |
+| 25 | `gc_type_error` | Error (C internal only) |
+
+Helpers (new in 9.0):
+
+| Symbol | Description |
+|--------|-------------|
+| `GC_TYPE_LAST` | `gc_type_error`, the highest tag: a type byte above it is not a tag. |
+| `static inline bool gc_type__is_node(gc_type_t t)` | `t` tags a node handle (`gc_type_node` .. `gc_type_node_geo`, nodeSet / nodeIndexSet included). |
+| `static inline bool gc_type__is_keyed_node(gc_type_t t)` | `t` is `gc_type_node_index`, `gc_type_node_set` or `gc_type_node_index_set` (keyed by any value). |
 
 ### gc_object_t — Object Header
 
@@ -174,25 +194,26 @@ typedef union gc_f32_conv_t_ {
 
 ### Well-Known Core Type IDs (`prog->core`, per program)
 
-**Breaking (8.4, `e8eabaf84`):** the process-wide `extern u32_t gc_core_any` / `gc_core_geo` / `gc_core_String` / `gc_core_Buffer` / `gc_core_Array` / `gc_core_Tuple` / `gc_core_Map` / `gc_core_Table` / `gc_core_Tensor` / `gc_core_TensorType` globals were **removed from `gc/type.h`**. Core type ids differ from one program to the next, so they now live in `gc_program_t.core` (a `gc_program_core_types_t`, declared in `gc/program.h`), filled once per program by `gc_program__resolve_core_types`. `geo` has no replacement field. Read them through the program: `gc_machine__program(ctx)->core.Array`.
+Core type ids differ from one program to the next, so they live in `gc_program_t.core` (a `gc_program_core_types_t`, declared in `gc/program.h`), filled once per program by `gc_program__resolve_core_types` (called by `gc_program__create_from_abi`, the compiler, and the runtime when it links std). Read them through the program: `gc_machine__program(ctx)->core.Array`. (The old process-wide `gc_core_any` / `gc_core_Array` / ... globals were removed in 8.4.)
 
 ```c
 typedef struct gc_program_core_types {
     u32_t any;
-    u32_t String;
-    u32_t Buffer;
-    u32_t Array;
-    u32_t Tuple;
-    u32_t Map;
-    u32_t Table;
-    u32_t Tensor;
+    // New in 9.0: primitive / node types (a C keyword takes a trailing `_`)
+    u32_t null, bool_, char_, int_, float_;
+    u32_t node, nodeTime, nodeIndex, nodeSet, nodeIndexSet, nodeList, nodeGeo;
+    u32_t geo, time, duration, function, type, field;
+    // Collections
+    u32_t String, Buffer, Array, Tuple, Map, Table, Tensor;
     u32_t TensorType;   // enum type for tensor element types
+    u32_t DurationUnit; // New in 9.0; 0 if undeclared (resolve does not fail on it)
+    u32_t TimeZone;     // New in 9.0; 0 if undeclared (resolve does not fail on it)
 } gc_program_core_types_t;   // each 0 until resolved, or if the program doesn't declare the type
 ```
 
-Name macros (`gc/program.h`) used to resolve them: `GC_CORE_MODULE_NAME` (`"core"`), `GC_CORE_TYPE_NAME_any`, `_String`, `_Buffer`, `_Array`, `_Tuple`, `_Map`, `_Table`, `_Tensor`, `_TensorType` (each the bare type name string).
+Name macros (`gc/program.h`): `GC_CORE_MODULE_NAME` (`"core"`) and one `GC_CORE_TYPE_NAME_<name>` per field (the bare type name string): `_any`, and new in 9.0 `_null`, `_bool`, `_char`, `_int`, `_float`, `_node`, `_nodeTime`, `_nodeIndex`, `_nodeSet`, `_nodeIndexSet`, `_nodeList`, `_nodeGeo`, `_geo`, `_time`, `_duration`, `_function`, `_type`, `_field`, `_DurationUnit`, `_TimeZone`; plus `_String`, `_Buffer`, `_Array`, `_Tuple`, `_Map`, `_Table`, `_Tensor`, `_TensorType`.
 
-`gc/type.h` also **no longer includes `<stddef.h>`** — code that relied on it transitively for `size_t` / `NULL` / `offsetof` must include it itself (`gc/alloc.h` and `gc/crypto.h` now include it directly).
+`gc/type.h` does not include `<stddef.h>` — include it yourself for `size_t` / `NULL` / `offsetof`.
 
 ### Usage Examples
 
@@ -280,7 +301,7 @@ u32_t enum_type_offset = enum_val.tu32.left;
 u32_t enum_value_offset = enum_val.tu32.right;
 ```
 
-#### Complex arithmetic (`gc_c128__*`, `gc_c64__*`)
+#### Complex arithmetic (`gc_c128__*`, `gc_c64__*`, `gc/complex.h`)
 
 `gc_c128__abs` and `gc_c128__arg` are used to derive magnitude and phase when converting complex tensors to real ones (`src/std/core/tensor.c:1329`, `tensor.c:1360`). Combine the conjugate/divide/add helpers for higher-level math.
 
@@ -349,6 +370,21 @@ typedef struct {
 ```
 
 > `gc_machine_t` begins with this layout. Inside any native function, `((gc_ctx_t *)ctx)->allocator` (or `gc_machine__allocator(ctx)`) is the allocator to use for per-call scratch memory.
+
+### Error Codes (`gc_error_code_t`) — new in 9.0
+
+The machine status (`ctx->err`) and the CLI exit status are now a C-only enum in `gc/machine.h`. **Breaking:** GCL's `ErrorCode` enum was removed from std (GCL never sees these values), and the numbering changed (`timeout` 6 → 3, `forbidden` 7 → 4, `runtime_error` 8 → 5).
+
+```c
+typedef enum gc_error_code {
+    gc_error_code_none = 0,
+    gc_error_code_interrupted = 1,   // cancelled task, stop request, Ctrl-C
+    gc_error_code_await = 2,         // suspended in an `await`, resumed once its jobs are done
+    gc_error_code_timeout = 3,       // request or task ran out of time
+    gc_error_code_forbidden = 4,     // caller lacks a permission
+    gc_error_code_runtime_error = 5, // any other error (GCL throw or native)
+} gc_error_code_t;
+```
 
 ### Functions
 
@@ -612,10 +648,10 @@ The top-level compiled program:
 struct gc_program {
     gc_abi_t *abi;                                // Application Binary Interface
     gc_allocator_t *allocator;                    // Allocator owning program tables
-    struct { ... } symbols;                       // Symbol table (interned strings)
+    struct { ... } symbols;                       // Symbol table (interned strings); `.map` is a gc_str_map_t (9.0), look up with gc_program__resolve_symbol
     gc_buffer_t fragments;                        // String fragments for doc comments, paths, etc.
     struct { ... } libraries;                     // Loaded native libraries
-    struct { ... } modules;                       // Module table with map
+    struct { ... } modules;                       // Module table with map (gc_u32_map_t since 9.0)
     struct { ... } permissions;                   // Permission definitions
     struct { ... } roles;                         // Role definitions
     struct { ... } expose_names;                  // Exposed API name mappings
@@ -625,8 +661,26 @@ struct gc_program {
     gc_program_specialized_type_table_t s_types;  // Specialized (generic) types
     gc_block_t stub;                              // Stub block for volatile objects
     gc_program_generic_type_table_t generic_types; // New: `Foo<T> {}` literals per fn, sorted by (fn_off, idx), each fn's entries contiguous from its generic_types_off
-    gc_program_core_types_t core;                 // New: per-program core type ids (replaces the gc_core_* globals), see gc_program__resolve_core_types
+    gc_program_core_types_t core;                 // Per-program core type ids, see gc_program__resolve_core_types
+    struct {                                      // New in 9.0: enums whose values are fixed C values
+        gc_program_enum_map_t tensor_type;        //   TensorType  <-> gc_tensor_type_t
+        gc_program_enum_map_t duration_unit;      //   DurationUnit <-> gc_duration_unit_t
+        gc_program_enum_map_t time_zone;          //   TimeZone    <-> dtz zone index (gc/time.h)
+        gc_program_enum_map_t float_precision;    //   FloatPrecision entry -> precision step (0 = p1 .. 10 = p10000000000), filled by the std link
+    } enums;
 };
+
+/// New in 9.0. Converts the entries of one enum to the fixed C values it stands for, and back, BY ENTRY NAME
+/// (built in gc_program__resolve_core_types, or by gc_program_enum_map__from_entries), so it follows the program's
+/// order (the store's after an upgrade). UINT32_MAX where the other side has no counterpart; sizes 0 when the
+/// program does not declare the enum.
+typedef struct gc_program_enum_map {
+    u32_t type_id;
+    u32_t *to_fixed;       // one slot per entry of the program's enum
+    u32_t to_fixed_size;
+    u32_t *to_entry;       // one slot per fixed value
+    u32_t to_entry_size;
+} gc_program_enum_map_t;
 
 /// A `Foo<T> {}` literal in the body of fn `fn_off`, its `idx`-th: `type_desc` is the type it builds, `T` resolved
 /// for a fn monomorphized onto a specialization, erased for the generic's own fn.
@@ -679,9 +733,9 @@ Extended type information (wraps `gc_object_type_t`):
 ```c
 struct gc_program_type {
     gc_object_type_t header;       // Runtime type info
-    struct { ... } fields;         // Instance fields (map + table; table has nb_any / nb_nullable counters)
-    struct { ... } static_fields;  // Static fields (enum values, constants)
-    struct { ... } functions;      // Methods (map + offset table)
+    struct { ... } fields;         // Instance fields (gc_u32_map_t map + table; table has nb_any / nb_nullable counters)
+    struct { ... } static_fields;  // Static fields (enum values, constants; table + gc_u32_map_t map)
+    struct { ... } functions;      // Methods (gc_u32_map_t map + offset table)
     u32_t g1, g2;                  // Generic type parameters
     u32_t super_type;              // Parent type offset
     u32_t super_type_s_type_off;   // Super type specialized type offset
@@ -719,14 +773,19 @@ struct gc_program_function {
     u32_t return_s_type_off;        // Return specialized type offset
     u32_t expose_rename_off;        // Exposed name override symbol offset
     u8_t nb_params;                 // Number of parameters
-    bool is_static;                 // Static method
-    bool is_native;                 // Implemented in C
-    bool is_private;                // Private visibility
-    bool is_reserved;               // Reserved/internal function
-    bool is_exposed;                // Exposed via HTTP (@expose annotation)
-    bool is_test;                   // Test function
-    bool is_abstract;               // Abstract method
-    bool is_raw;                    // New in 8.4: @raw — exposed result written as text/plain, not JSON
+    // 9.0: the flags are one-bit fields (cannot take their address)
+    bool is_static : 1;             // Static method
+    bool is_native : 1;             // Implemented in C
+    bool is_private : 1;            // Private visibility
+    bool is_reserved : 1;           // Reserved/internal function
+    bool is_exposed : 1;            // Exposed via HTTP (@expose annotation)
+    bool is_test : 1;               // Test function
+    bool is_abstract : 1;           // Abstract method
+    bool takes_http_request : 1;    // New in 9.0: exposed fn whose only param is a non-null runtime::HttpRequest
+                                    // (server fills it from the request instead of binding args)
+    bool returns_http_response : 1; // New in 9.0: declared return type runtime::HttpResponse (nullable or not);
+                                    // the server writes the response it returns
+    // (`is_raw` / `@raw` was REMOVED in 9.0 — return runtime::HttpResponse instead)
     u64_t permissions_mask;         // Required permissions bitmask
     gc_program_src_id_t source;     // Source location
     gc_program_function_body_t *body;  // Native function pointer (NULL for GCL functions)
@@ -811,7 +870,7 @@ struct gc_program_library {
     gc_hook_function_t *worker_start;  // Called on each worker start
     gc_hook_function_t *worker_stop;   // Called on each worker stop
     gc_hook_function_t *codegen;       // Called by `greycat codegen <lang>` (lib acts as generator)
-    gc_hook_function_t *install;       // Called at the end of `greycat install`
+    // `install` hook REMOVED in 9.0 (`greycat install` only downloads: no build, no install hooks)
 };
 ```
 
@@ -825,9 +884,9 @@ struct gc_program_module {
     u32_t lib_name_offset;  // Library name offset
     u32_t path_frag_offset; // Path fragment offset
     u32_t path_frag_len;    // Path fragment length
-    gc_program_map_t types;      // Type map
+    gc_u32_map_t types;     // Type map (symbol -> type offset; gc_u32_map_t since 9.0)
     struct {
-        gc_program_map_t map;
+        gc_u32_map_t map;
         gc_program_offset_table_t table;
     } functions;
     struct {
@@ -864,21 +923,9 @@ typedef struct gc_program_offset_table {
     u32_t capacity;
 } gc_program_offset_table_t;
 
-// Internal hash map bucket
-typedef struct {
-    u64_t hash;
-    u32_t offset;
-    u32_t key;
-} gc_program_bucket_t;
-
-// Internal hash map (used for symbol/type/function resolution)
-typedef struct {
-    gc_program_bucket_t *buckets;
-    u32_t capacity;
-    u32_t size;
-    u32_t resize_threshold;
-    u64_t mask;
-} gc_program_map_t;
+// 9.0: gc_program_map_t / gc_program_bucket_t were REMOVED. Every name index is now a gc_u32_map_t
+// (gc/u32_map.h, symbol -> table offset); the symbol table's content index is a gc_str_map_t (gc/str_map.h).
+// Both are documented in api_collections.md.
 
 // Specialized (generic) type entry
 typedef struct gc_program_specialized_type {
@@ -952,7 +999,10 @@ typedef struct gc_program_op {
 The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 
 <details>
-<summary>Full opcode list (86 opcodes, 0-85)</summary>
+<summary>Full opcode list (83 opcodes, 0-82)</summary>
+
+**Renumbered in 9.0:** the five `push_node_time` / `push_node_list` / `push_node_index` / `push_node_geo` opcodes became one `push_node_empty` (44, operand = the node type: nodeTime, nodeList, nodeIndex, nodeSet, nodeIndexSet or nodeGeo), so every opcode after it moved down by 3.
+
 
 | Value | Name | Description |
 |-------|------|-------------|
@@ -987,22 +1037,23 @@ The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 | 31-32 | `def_time` / `undef_time` | Define/undefine time scope |
 | 33-36 | `load_str` / `store_str` / `store_frag` / `push_str` | String building operations |
 | 37-42 | `push_arr` / `push_map` / `push_table` / `push_obj` / `push_tuple` / `push_geo` | Literal construction |
-| 43-47 | `push_node` / `push_node_time` / `push_node_list` / `push_node_index` / `push_node_geo` | Node literal construction |
-| 48 | `push_const_def` | Push constant definition |
-| 49-51 | `call_fn` / `call_met` / `call_end` | Function/method calls |
-| 52 | `ret` | Return from function |
-| 53 | `not` | Logical NOT |
-| 54 | `noop` | No operation |
-| 55-59 | `try` / `untry` / `throw` / `catch_a` / `catch_p` | Exception handling |
-| 60-65 | `eq` / `ne` / `lt` / `le` / `gt` / `ge` | Comparison operators |
-| 66-67 | `uminus` / `unref` | Unary minus / dereference |
-| 68-75 | `add` / `sub` / `mul` / `div` / `mod` / `pow` / `and` / `or` | Arithmetic & logical |
-| 76-77 | `for_st` / `for_do` | For-loop start/body |
-| 78 | `breakpoint` | Debugger breakpoint |
-| 79-82 | `break` / `break_for_in` / `continue` / `continue_for_in` | Loop control flow |
-| 83 | `volatile_mod` | Volatile module access |
-| 84 | `jol` | Jump on log level greater than machine log level |
-| 85 | `push_obj_g` | `push_obj` of the type the fn's `operand`-th `Foo<T> {}` literal builds (new) |
+| 43 | `push_node` | `node<T>` literal construction |
+| 44 | `push_node_empty` | **New in 9.0.** Push an empty nodeTime / nodeList / nodeIndex / nodeSet / nodeIndexSet / nodeGeo of the operand type |
+| 45 | `push_const_def` | Push constant definition |
+| 46-48 | `call_fn` / `call_met` / `call_end` | Function/method calls |
+| 49 | `ret` | Return from function |
+| 50 | `not` | Logical NOT |
+| 51 | `noop` | No operation |
+| 52-56 | `try` / `untry` / `throw` / `catch_a` / `catch_p` | Exception handling |
+| 57-62 | `eq` / `ne` / `lt` / `le` / `gt` / `ge` | Comparison operators |
+| 63-64 | `uminus` / `unref` | Unary minus / dereference |
+| 65-72 | `add` / `sub` / `mul` / `div` / `mod` / `pow` / `and` / `or` | Arithmetic & logical |
+| 73-74 | `for_st` / `for_do` | For-loop start/body |
+| 75 | `breakpoint` | Debugger breakpoint |
+| 76-79 | `break` / `break_for_in` / `continue` / `continue_for_in` | Loop control flow |
+| 80 | `volatile_mod` | Volatile module access |
+| 81 | `jol` | Jump on log level greater than machine log level |
+| 82 | `push_obj_g` | `push_obj` of the type the fn's `operand`-th `Foo<T> {}` literal builds |
 
 </details>
 
@@ -1041,13 +1092,18 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program__resolve_module(program, mod_name_offset)` | Resolve a module by name offset. |
 | `gc_program__resolve_type(prog, mod_offset, type_name_off)` | Resolve a type within a module. |
 | `gc_program__resolve_field(type, name_off, res)` | Resolve a field within a type. |
+| `gc_sdk u32_t gc_program__encode_symbol(gc_program_t *prog, const char *str, u32_t len)` | **New in 9.0.** Intern `str` in the symbol table and return its offset (existing offset if already interned). |
+| `gc_sdk u32_t gc_program__runtime_type(const gc_program_t *prog, const char *name, u32_t len)` | **New in 9.0.** Type id of std `runtime::<name>`, 0 if absent. |
 
 #### Type Introspection
 
 | Function | Description |
 |----------|-------------|
 | `gc_program__get_program_type(prog, type_id)` | Get the full program type by ID. |
-| `gc_program__resolve_core_types(prog)` | **New.** Fills `prog->core` from the types the program declares under `core`. Call once the types are declared — `gc_program__create_from_abi` does, and the runtime does when it links std. Returns `false` if the module or a type is missing; ids it did resolve are kept. |
+| `gc_program__resolve_core_types(prog)` | Fills `prog->core` (and, 9.0, the `prog->enums` maps by entry name) from the types the program declares under `core`. Call once the types are declared — `gc_program__create_from_abi` does, the compiler does after analysis, and the runtime does when it links std. Returns `false` if the module or a type is missing (not for `DurationUnit` / `TimeZone`); ids it did resolve are kept. |
+| `gc_sdk gc_type_t gc_program__resolve_ptype(const gc_program_t *prog, u32_t type_id)` | **New in 9.0.** The sbi `gc_type_t` a field of type `type_id` occupies in a slot. |
+| `gc_sdk void gc_program_type__compute_layout(gc_program_t *prog, u32_t type_id)` | **New in 9.0.** Computes each field's `sbi_type` / `any_offset` / `nullable_offset`, the table's `nb_any` / `nb_nullable`, and `header.flags.is_object_container`. |
+| `gc_sdk void gc_program__compute_layout(gc_program_t *prog, u32_t from_type)` | **New in 9.0.** `compute_layout` for every type id `>= from_type`. |
 | `gc_program_type__get_field(type, field_offset)` | Get a field descriptor by offset. |
 | `gc_program_type__get_field_by_key(type, key)` | Get a field descriptor by symbol key. |
 | `gc_program_type__get_g1_type_id(type)` / `gc_program_type__get_g2_type_id(type)` | Get generic type parameter IDs. |
@@ -1069,6 +1125,47 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_function__function_name_off(prog, fn_off)` | Get the function name offset. |
 | `gc_program_function__return_type_desc(prog, fn_off)` | Get the return type descriptor. |
 | `gc_program_function__get_param_by_off(fn, offset, out)` | Get parameter info by index. |
+
+#### Enum Entries & Fixed-Value Enum Maps (new in 9.0)
+
+Enum entries are resolved **by name**, never by ordinal: `TensorType`, `DurationUnit`, `TimeZone` (and `TaskStatus`, `StreamFormat`, `FloatPrecision`) are converted to fixed C values (`gc_tensor_type_t`, `gc_duration_unit_t`, dtz zone index, ...) through `prog->enums`. A native library that names GCL enum entries should resolve them at link with `gc_program__resolve_enum_entry` (nativegen does this since 9.0).
+
+| Function | Description |
+|----------|-------------|
+| `gc_sdk bool gc_program__resolve_enum_entry(const gc_program_t *prog, u32_t enum_type_id, const char *name, u32_t name_len, u32_t *entry)` | Position of entry `name` in enum `enum_type_id`; `false` with `*entry = UINT32_MAX` if not an enum or no such entry. |
+| `gc_sdk const gc_string_t *gc_program__enum_entry_name(const gc_program_t *prog, u32_t enum_type_id, u32_t entry)` | Name of entry `entry` (owned by the program), nullptr if none. |
+| `gc_sdk bool gc_program_enum_map__to_fixed(const gc_program_enum_map_t *map, u32_t entry, u32_t *fixed)` | Fixed value of entry `entry`; `false` (`*fixed` untouched) when out of range / no counterpart. |
+| `gc_sdk bool gc_program_enum_map__to_entry(const gc_program_enum_map_t *map, u32_t fixed, u32_t *entry)` | Entry standing for fixed value `fixed`; `false` (`*entry` untouched) when absent. |
+| `gc_sdk void gc_program_enum_map__from_entries(const gc_program_t *prog, u32_t type_id, const u32_t *entries, u32_t count, gc_program_enum_map_t *map)` | Rebuild `map` (one of `prog->enums`, freed with the program): fixed value `i` is entry `entries[i]`; an out-of-range entry (`UINT32_MAX`) gets no pair. Empty if the enum is missing or memory runs out. |
+
+```c
+// Convert a TensorType enum slot (gc_type_static_field) to the fixed gc_tensor_type_t
+const gc_program_t *prog = gc_machine__program(ctx);
+u32_t fixed;
+if (!gc_program_enum_map__to_fixed(&prog->enums.tensor_type, slot.tu32.right, &fixed)) { /* unknown */ }
+// ...and back, to return a TensorType value
+u32_t entry;
+gc_program_enum_map__to_entry(&prog->enums.tensor_type, gc_tensor_type_f64, &entry);
+gc_machine__set_result(ctx, (gc_slot_t){.tu32 = {.left = prog->core.TensorType, .right = entry}}, gc_type_static_field);
+```
+
+#### Program Files (`.gcp`), Indexes & Program Check (new in 9.0)
+
+The compiled program has a specified binary format (`core/doc/gcp-format.md`). Mostly for tools (the Rust compiler/SDK, CLI); plugins rarely need these.
+
+| Function | Description |
+|----------|-------------|
+| `gc_program_file_kind_t` | `gc_program_file_compiled = 0` (`project.gcp`), `gc_program_file_store = 1` (`gcdata/program`). |
+| `gc_sdk void gc_program__save(const gc_program_t *prog, gc_program_file_kind_t kind, gc_buffer_t *buf)` | Write `prog` as a `.gcp` file at `buf->current` (grows the buffer, advances `current`). |
+| `gc_sdk bool gc_program__load(gc_program_t *prog, const char *data, u64_t len, gc_program_file_kind_t kind, gc_buffer_t *err)` | Load into an empty program (fresh from `gc_program__create`), rebuild indexes, compute layouts. `false` + message appended to `err` (prog left empty) on an invalid file. |
+| `gc_sdk bool gc_program__is_current_format(const char *data, u64_t len)` | Magic + format version check (cheap test before loading vs rebuilding). |
+| `gc_sdk u32_t gc_program__file_value_kind(gc_type_t type)` / `gc_program__file_sbi_kind(gc_type_t type)` | Value kind the file writes for a constant/cast/operand tag, or for a field `sbi_type`; `UINT32_MAX` if none. |
+| `gc_sdk bool gc_program__rebuild_indexes(gc_program_t *prog, gc_buffer_t *err)` | Fill every name index a loader does not store (modules, per-module types/functions, per-type fields/static fields/functions, permissions, roles, expose names). `false` with `err` on a name collision. |
+| `gc_sdk void gc_program__set_http_flags(gc_program_t *prog, u32_t from_fn)` | Set `takes_http_request` / `returns_http_response` from signatures for functions `>= from_fn` (call once the types exist when building a program yourself). |
+| `gc_sdk bool gc_program_opcode__has_data(gc_program_opcode_t op)` | Whether `op` is followed by a data op slot. |
+| `gc_sdk const gc_program_opcode_rule_t *gc_program_opcode__rule(gc_program_opcode_t op)` | Row of `op` in the program-check opcode table (`pops`, `pushes`, `reads`, `pops_extra`, `operand`, `data`, `flow` — enums `gc_program_check_pops_t` / `_operand_t` / `_data_t` / `_flow_t`); nullptr for a non-opcode. |
+| `gc_sdk bool gc_program__check(const gc_program_t *prog, gc_buffer_t *err)` | Verify the bytecode of every function (jumps, stack depths, locals, operand ids, try/for-in scopes, module vars, `$args` of exposed fns); no type checking. `false` with `<module>::<function> op <index>: <rule>` in `err`. |
+| `static inline gc_object_type_load_t *gc_program__abi_type_loader(const gc_program_t *prog, const u32_t abi_type)` | Loader for an ABI type id read from a block; nullptr when it maps to no program type (damaged id, removed type). |
 
 #### Field Introspection
 
@@ -1092,7 +1189,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | Function | Description |
 |----------|-------------|
 | `gc_program_type__extract_format_pragma_arg(type, field_name, pragma_name, arg_index, buf, prog, slot, slot_type)` | Extract a specific argument from a type field's pragma. Returns `true` if found. |
-| `gc_program_type__extract_field_format(type, field, default_tz, buf, prog, out)` | Extract the full field format (format string, DurationUnit, TimeZone) from a field's `@format` pragma. Writes result to `out`. |
+| `gc_program_type__extract_field_format(type, field, default_tz, buf, prog, out)` | Extract the full field format from a field's `@format` pragma into `out`: format string, unit as a `gc_duration_unit_t` (converted from `DurationUnit`; ms for `time`, µs for `duration`), zone as a dtz zone index (converted from `TimeZone`; `default_tz` otherwise). |
 
 #### Module, Program & Library
 
@@ -1106,39 +1203,42 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_library__set_lib_hooks(lib, start, stop)` | Set library start/stop hooks. |
 | `gc_program_library__set_worker_hooks(lib, start, stop)` | Set worker start/stop hooks. |
 | `gc_program_library__set_codegen_hook(lib, hook)` | Set the library's code-generation hook, invoked by `greycat codegen <lang>` when `<lang>` names this library. |
-| `gc_program_library__set_install_hook(lib, hook)` | Set the library's post-install hook, invoked at the end of `greycat install`. |
+| ~~`gc_program_library__set_install_hook`~~ | **Removed in 9.0** with the `install` field: `greycat install` only downloads (no build, no install hooks). Do post-install setup in `lib_start` instead. |
 | `gc_lib_std__link(prg, lib)` | Link the standard library to a program. |
 
 #### Internal Map Operations
 
-These are used internally for program symbol/type/function resolution:
+**Removed in 9.0:** `gc_program_map__put` / `gc_program_map__hash_off` / `gc_program_map__get_key` (with `gc_program_map_t`). Program name indexes are `gc_u32_map_t` (`gc_u32_map__get` / `__put`, see api_collections.md); look a name up with `gc_program__resolve_symbol` + the `gc_program__resolve_*` helpers.
+
+### Duration Units (`gc/duration.h`, new in 9.0)
+
+**Breaking:** the `gc_core_DurationUnit_*` macros were removed. Duration units are now a fixed C enum, the same in every program and store; GCL `DurationUnit` converts to/from it by entry name via `prog->enums.duration_unit`.
+
+```c
+typedef enum gc_duration_unit {
+    gc_duration_unit_microseconds = 0,
+    gc_duration_unit_milliseconds = 1,
+    gc_duration_unit_seconds = 2,
+    gc_duration_unit_minutes = 3,
+    gc_duration_unit_hours = 4,
+    gc_duration_unit_days = 5,
+} gc_duration_unit_t;
+#define gc_duration_unit_size 6
+gc_sdk extern const char *const gc_duration_unit_names[gc_duration_unit_size]; // GCL entry names
+```
 
 | Function | Description |
 |----------|-------------|
-| `gc_program_map__put(prog, self, hash, offset, key)` | Insert an entry into a program map. |
-| `gc_program_map__hash_off(offset)` | Compute a hash for an offset. |
-| `gc_program_map__get_key(self, key, hash, offset)` | Look up an entry by key and hash. |
-
-### DurationUnit Constants
-
-Predefined ordinals for the `DurationUnit` enum, used with the field format pragma system:
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `gc_core_DurationUnit_microseconds` | 0 | Microseconds |
-| `gc_core_DurationUnit_milliseconds` | 1 | Milliseconds |
-| `gc_core_DurationUnit_seconds` | 2 | Seconds |
-| `gc_core_DurationUnit_minutes` | 3 | Minutes |
-| `gc_core_DurationUnit_hours` | 4 | Hours |
-| `gc_core_DurationUnit_days` | 5 | Days |
+| `gc_sdk i64_t gc_duration_unit__us(gc_duration_unit_t unit)` | Microseconds in one `unit`; 1 for an out-of-range value. |
+| `gc_sdk bool gc_duration__parse(const char *str, u64_t str_len, i64_t *duration)` | Parse `"10s"`, `"1hour30min"`, `"-5ms"`, `"42"` (µs) into microseconds. Moved here from `gc/util.h`. |
 
 ### Field Format (from `@format` pragma)
 
 ```c
 typedef struct gc_program_type_field_format {
     gc_string_t *format;  // Custom format string (NULL if none)
-    u32_t unit;           // DurationUnit ordinal
-    u32_t tz;             // TimeZone ordinal
+    u32_t unit;           // gc_duration_unit_t (9.0; was a DurationUnit ordinal)
+    u32_t tz;             // dtz zone index, gc/time.h (9.0; was a TimeZone ordinal)
 } gc_program_type_field_format_t;
 ```
 
@@ -1252,9 +1352,9 @@ if (fmt.format != NULL) {
     col->format = fmt.format;      // custom format string from @format
 }
 if (fmt.tz != csv->tz) {
-    col->tz = fmt.tz;              // overridden TimeZone ordinal
+    col->tz = fmt.tz;              // overridden zone (dtz zone index)
 }
-col->unit = fmt.unit;             // DurationUnit ordinal (e.g. gc_core_DurationUnit_seconds)
+col->unit = fmt.unit;             // gc_duration_unit_t (e.g. gc_duration_unit_seconds)
 ```
 
 #### Iterating a module's functions and reading symbols

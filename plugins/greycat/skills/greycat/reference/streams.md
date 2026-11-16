@@ -110,7 +110,7 @@ A metric stream exists only while its metric is enabled, and `get` throws otherw
 
 ## Reading a stream over HTTP
 
-The file of a stream is a file of the `/files` API like any other. Its owner, an admin, or an identity granted read on the owner's directory (`greycat user grant <owner> r <reader>`) can read it. A `GET` or `HEAD` of the file of a stream registered in the serving process writes the stream's buffer before it answers, so the answer holds every record written so far.
+The file of a stream is a file of the `/files` API like any other. Its owner, a caller whose role holds `files:read` (an admin), or a caller the owner grants `files:read`, itself or as the holder of a permission (`greycat user grant <owner> <reader> files:read`, see [files.md, Access](files.md#access)), can read it. A `GET` or `HEAD` of the file of a stream registered in the serving process writes the stream's buffer before it answers, so the answer holds every record written so far.
 
 A client outside the server, another GreyCat server included, follows the stream by polling the file with `Range: bytes=<offset>-`. `offset` starts at 0, or at the `Content-Length` of a `HEAD` to skip the records already there.
 

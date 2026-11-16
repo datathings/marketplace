@@ -68,6 +68,8 @@ Pragmas must terminate with `;`. They may carry a leading `///` doc comment.
 var name: node<T?>;                // node<T?> MUST be nullable on the inner type
 var name: nodeList<T>;
 var name: nodeIndex<K, V>;
+var name: nodeSet<V>;
+var name: nodeIndexSet<K, V>;
 var name: nodeTime<T>;
 var name: nodeGeo<T>;
 private var name: node<T?>;

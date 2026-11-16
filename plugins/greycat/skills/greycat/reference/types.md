@@ -150,7 +150,7 @@ fn main() {
 }
 ```
 
-This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeTime<T>`, etc.
+This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTime<T>`, etc.
 
 ### "Raw" forms
 

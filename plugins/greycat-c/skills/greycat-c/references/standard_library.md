@@ -2,10 +2,10 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **8.4** (see [SKILL.md](../SKILL.md) for the per-release change log). **Breaking in 8.4:** `S3` / `S3Bucket` / `S3Object` / `S3BasicCredentials` and `XmlReader<T>` were removed from `std::io` — they now ship as the separate `s3` and `xml` libraries (see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std)). Also breaking in 8.4: `Array.sort` / `sort_by` / `Table.sort` place null keys last in both orders, the runtime log moved from `files/root/log.csv` to the `log` stream (`files/root/streams/log.ndjson`), the `perf` log level / `perf(v)` were removed (metrics are now `TaskMetric` / `HostMetric` / `HttpMetric` CSV streams behind `--metrics`), `Stream<T>::new` takes `options: StreamOptions?` instead of `durable: bool` (every stream buffers; `flush()` is the durability point), and `String.chars()` returns raw code points. New: `io::Stream<T>`, the `Task::events()` SSE endpoint, `MergeStrategy` + `Task::set_merge_strategy`, `WorldChangesReader`. The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **9.0** (see [SKILL.md](../SKILL.md) for the change summary). **Breaking in 9.0:** `ErrorCode`, `License` / `LicenseType`, `RuntimeInfo.license`, `IdentityGrantType`, `Identity.grants` and `Task::header` / `headers` / `uri` / `body` were removed; `@raw` is gone (an `@expose`d function takes `runtime::HttpRequest` / returns `runtime::HttpResponse` instead); `nodeList` is positional (`set` removed); grants are per-permission (`Identity::grant(name, target, permission)`); `Tensor.scale(value, inPlace: bool)`. **New:** `nodeSet<V>`, `nodeIndexSet<K, V>`, `Task::result(task_id)` + `Job` results kept on disk, `Task.worker_id` / `Task.jobs`, `Identity` tokens (`tokens` / `revoke_token(s)`, labels), `Runtime::program()`, `Tensor.mean/min/max`, `GeoBox.crosses_antimeridian/lobes`, permissions `files:read` / `files:write` / `tasks:read` / `tasks:cancel`. (8.4 moved S3/XML out of std into the `s3` / `xml` libraries — see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std).) The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
-- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, current HTTP request access (`Task::header`/`headers`/`uri`/`body`), OpenAPI export, MCP server endpoints
+- **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, raw HTTP request/response (`runtime::HttpRequest` / `runtime::HttpResponse`), OpenAPI export, MCP server endpoints
 - **io** - File I/O & discovery, data serialization (Gcb/Json/Csv/Text), HTTP API calls, email/SMTP notifications, append-only batched write streams (`Stream<T>`)
 - **util** - Data structures (Queue/Stack/SlidingWindow/TimeWindow), statistical analysis, data binning (quantizers), testing (Assert), monitoring (ProgressTracker), cryptography, UUID
 
@@ -18,11 +18,11 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Numbers & Strings](#numbers--strings) - int, float, String, Buffer, Chars
   - [Time & Duration](#time--duration) - time, duration, Date
   - [Containers](#containers) - Array, Map, Tuple, Table
-  - [Nodes](#nodes) - node, nodeTime, nodeList, nodeIndex, nodeGeo, VectorIndex
+  - [Nodes](#nodes) - node, nodeTime, nodeList, nodeIndex, nodeGeo, nodeSet, nodeIndexSet, VectorIndex
   - [Tensors](#tensors) - Tensor, TensorType, TensorDistance
   - [Geospatial Types](#geospatial-types) - geo, GeoCircle, GeoPoly, GeoBox
   - [Reflection](#reflection) - type, field
-  - [Errors](#errors) - Error, ErrorFrame, ErrorCode
+  - [Errors](#errors) - Error, ErrorFrame
   - [Math & Free Functions](#math--free-functions)
   - [Enumerations](#core-enumerations)
 
@@ -31,10 +31,9 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Task & Job Management](#task--job-management)
   - [Logging](#logging) - log levels, Log, TaskMetric/HostMetric/HttpMetric streams
   - [System Information](#system-information)
-  - [Current HTTP Request](#current-http-request) - Task::header/headers/uri/body
+  - [Current HTTP Request](#current-http-request) - runtime::HttpRequest / HttpResponse (9.0)
   - [Worlds](#worlds) - World, WorldMode, WorldInfo, WorldChangesReader, NodeReader (new)
-  - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityGrantType
-  - [License Management](#license-management)
+  - [Identity & Security](#identity--security) - Identity, IdentityGrant, IdentityToken
   - [OpenAPI Integration](#openapi-integration)
   - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
 
@@ -156,7 +155,7 @@ var back = date.to_time(null);
 //   index_of(value), remove(i): T, remove_first(): T, remove_last(): T,
 //   set_capacity(value), range_equals(start, end, v)
 ```
-**Sort semantics (8.4, breaking):** `sort` / `sort_by` put null elements (or null field values) **last whatever the order**, keeping their relative order (they used to go first in both orders). A mix of `int` and `float` sorts numerically as floats (ints beyond 2^53 lose precision in the comparison only) instead of by raw bits.
+**Sort semantics (8.4, breaking):** `sort` / `sort_by` put null elements (or null field values) **last whatever the order**, keeping their relative order (they used to go first in both orders). A mix of `int` and `float` sorts numerically as floats (ints beyond 2^53 lose precision in the comparison only) instead of by raw bits. **9.0:** any other mix sorts by type group — numbers, then Strings, then each other type — each by value (other objects by identity); descending reverses the groups too (same for `Table.sort`).
 
 #### Map<K, V>
 ```gcl
@@ -188,9 +187,11 @@ Persistent graph node primitives. All are `native` and stored to disk.
 
 - **`node<T>`** - singleton boxed value. `resolve(): T`, `set(value: T)`, static `resolve_all(n: Array<node?>): Array<any?>`.
 - **`nodeTime<T>`** - temporal series. `resolve()`, `resolveAt(time)`, `resolveAtWithin(time, duration)`, `resolveTimeAt`, `resolveTimeValueAt`, `getAt`, `removeAt`, `setAt(time, value)`, `setAll(time, values, delta)`, `rangeSize(from, to)`, `size`, `firstTime`/`first`/`lastTime`/`last`, `prev(time)`/`next(time)`, `removeAll`, static `sample(...)`, static `info(...)`.
-- **`nodeList<T>`** - sparse indexed list. `get(index)`, `set(index, value)`, `add(value)` (writes after the **last index**, 0 when empty — 8.4 fix: it wrote at `size()`, overwriting after a gap; fails at the largest `int`), `resolve(index)`, `resolveEntry(index): Tuple<int,T>?`, `remove(index): bool`, `firstIndex`/`first`/`lastIndex`/`last`, etc.
+- **`nodeList<T>`** - **positional list (breaking, 9.0)**: values are appended with `add(value)` (at position `size()`) and removed with `remove(index): bool` (later values shift down; `false` outside `0..size()-1`), **never written at an index — `set(index, value)` was removed**. An index is a position `0..size()-1`; concurrent appends are all kept (merge order). `get(index)` (null outside the range), `resolve(index)` (value at the position, the **last** value past the end, null if negative/empty), `resolveEntry(index): Tuple<int,T>?`, `rangeSize(from, to)` (positions holding a value), `firstIndex()` = 0 / `lastIndex()` = `size()-1` (null when empty), `first`/`last`, `removeAll`, static `sample`/`info`.
 - **`nodeIndex<K, V>`** - keyed map, O(log n). `set(key, value)`, `get(key)`, `remove(key)`, `search(key, max): Array<SearchResult<K,V>>`, static `search_closest`, static `sample`/`info`.
 - **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), `search(center: geo, max: int): Array<SearchResult<geo,T>>`, etc. **8.4:** a range `for (g, v in idx[a..b])` and `rangeSize(a, b)` cover **only the box** spanned by any two opposite corners (they used to walk the whole curve stretch between them, outside the box too); `idx[b..a]` walks it backwards. Static `sample(refs, from, to, maxRows, mode)` returns no row outside the box (a `null` corner = the world's).
+- **`nodeSet<V>`** (**new in 9.0**, `@iterable`) - persistent set of unique values compared by deep equality, membership in O(log n). `size(): int`, `add(value: V): bool` (true if new; throws on null), `contains(value: V): bool`, `remove(value: V)`, `removeAll()`, static `sample(refs: Array<nodeSet>, from: any?, maxRows: int, mode: SamplingMode): Table`, static `info(nodes: Array<nodeSet>): Array<NodeInfo>` (both `@expose @permission("debug")`). Concurrent merges never conflict (adds/removes of both sides apply).
+- **`nodeIndexSet<K, V>`** (**new in 9.0**, `@iterable`) - persistent multimap: per key a set of distinct values (keys compare as `nodeIndex` keys, values by deep equality; a key past 32 values spills into its own `nodeSet`). `size(): int` (number of pairs), `add(key: K, value: V): bool` (throws on null value), `get(key: K): Array<V>` (empty if none), `contains(key: K, value: V): bool`, `remove(key: K, value: V)`, `removeKey(key: K)`, `removeAll()`, static `sample` / `info` (as nodeSet). Merges pair by pair, never conflicts; `removeKey`/`removeAll` remove only the pairs the task saw.
 - **`nodeTimeCursor<T>`** (`@volatile`) - iterator over a nodeTime (`first`, `last`, `next`, `previous`, `lessOrEq(t)`, `skip_values`, `skip_duration`, `currentTime`, `current`).
 
 ```gcl
@@ -199,7 +200,7 @@ type SearchResult<K, V> { key: K; value: V; distance: float; }   // @volatile
 ```
 
 #### VectorIndex<T>
-Persistent vector store with distance-based nearest-neighbour search.
+Persistent approximate nearest-neighbour index (HNSW graph whose vertices are nodes). Vectors are `f32`/`f64` tensors of finite elements, all of one size and type (compared element by element whatever their shape). 9.0 clarified: `add` throws for an empty/uninitialized tensor, NaN/inf, wrong type/size, and re-adding a node indexes it twice; `search(query, wanted)` returns nearest first (1 when `wanted` null, all when above `size()`, throws when `wanted < 1`); private `rng` left null is now a clock-seeded `Random {}` (set `Random { seed: 1 }` for reproducible graphs); `distance` defaults to `TensorDistance::l2sq`.
 ```gcl
 // native fn add(vector: node<Tensor>, value: T)
 // native fn search(query: Tensor, wanted: int?): Array<SearchResult<Tensor, T>>
@@ -214,14 +215,17 @@ N-dimensional numeric structure.
 ```gcl
 // native fns include: init(etype: TensorType, shape: Array<int>), get(pos), set(pos, value),
 //   getImag/setImag, add(pos, value), append(value), fill(value), setCapacity(value),
-//   sum(): float, size(): int, type(): TensorType, shape(): Array<int>, dim(): int,
-//   initPos(): Array<int>, incPos(pos): bool, reshape(shape), scale(value, inPlace: float): Tensor,
+//   sum(): float, mean(): float, min(): any, max(): any   (mean/min/max new in 9.0; throw on empty/complex),
+//   size(): int, type(): TensorType, shape(): Array<int>, dim(): int,
+//   initPos(): Array<int>, incPos(pos): bool, reshape(shape),
+//   scale(value: any, inPlace: bool): Tensor   (9.0: inPlace was mistyped `float`; ints scale as float then truncate),
 //   slice(pos, size): Tensor, slide(steps), copyElementsFrom(...), distance(v, d: TensorDistance): float,
 //   reset(), toTable(): Table, toString(): String,
 //   to_complex_tensor(), get_real_tensor(), get_imaginary_tensor(),
 //   get_absolute_tensor(), get_phase_tensor(inDegrees: bool)
 // static native fn wrap_1d(etype: TensorType, values: Array): Tensor
 ```
+9.0 semantics (documented, mostly unchanged): a new tensor has no shape (`dim()` 0, `size()` 0, `type()` i32) until `init`; `init` with an empty shape gives **one** element; positions out of the shape throw; `int`/`float` stored into `i32`/`i64` truncates toward zero (NaN → 0, `int` beyond 32 bits wraps for i32), but `fill(Tensor)` rounds to nearest-even; `sum()` is compensated (exact sum rounded once, order-independent); `reset()` keeps memory; `toString()` → `{"dim":2,"shape":[2,3],"type":TensorType::i64,"data":[[...]]}`.
 
 ```gcl
 enum TensorType { i32(4); i64(8); f32(4); f64(8); c64(8); c128(16); }
@@ -270,9 +274,11 @@ type GeoBox {
   // static native fn from_point(center: geo, radius: float): GeoBox
   // native fns: contains(point): bool, intersects(other): bool, union(other): GeoBox,
   //   intersection(other): GeoBox?, expand(margin: float): GeoBox, center(): geo,
-  //   width(): float, height(): float, split(rows, cols): Array<GeoBox>
+  //   width(): float, height(): float, split(rows, cols): Array<GeoBox>,
+  //   crosses_antimeridian(): bool, lobes(): Array<GeoBox>   (new in 9.0)
 }
 ```
+**9.0 antimeridian semantics:** a box spans east from `sw.lng()` to `ne.lng()`; `sw.lng() > ne.lng()` crosses the antimeridian (`GeoBox { sw: geo { -10.0, 170.0 }, ne: geo { 10.0, -170.0 } }` is the 20° box around 180°). `lobes()` splits it into non-crossing boxes, each usable as a `nodeGeo` range `idx[lobe.sw..lobe.ne]`; `union` / `intersection` / `expand` / `split` honour crossing boxes. `GeoCircle.sw()/ne()` span every longitude for a circle crossing the antimeridian or holding a pole.
 
 ### Reflection
 
@@ -294,11 +300,8 @@ native type field {
 ```gcl
 type Error      { message: String?; stack: Array<ErrorFrame>; }
 type ErrorFrame { module: String?; function: String; line: int; column: int; }
-
-enum ErrorCode {
-  none(0); interrupted(1); await(2); timeout(6); forbidden(7); runtime_error(8);
-}
 ```
+**`enum ErrorCode` was removed in 9.0** (breaking): the error code is now a C-only `gc_error_code_t` (none 0, interrupted 1, await 2, timeout 3, forbidden 4, runtime_error 5 — also the CLI exit status). GCL code naming `ErrorCode::*` no longer compiles.
 
 ### Math & Free Functions
 
@@ -485,7 +488,9 @@ type Task {
   status: TaskStatus;
   progress: float?;
   task_class: TaskClass?;   // class the task runs in after fallback; null when read from history
-  world: String?;           // world the task reads/commits to, `main` for main; null when read from history (new)
+  world: String?;           // world the task reads/commits to, `main` for main; null when read from history
+  worker_id: int?;          // new in 9.0: worker running it (numbered small, then medium, then large); null while waiting/suspended and in history
+  jobs: Array<Task>?;       // new in 9.0: the not-yet-ended jobs of its await (task_id = index in the awaited array); only `running` fills it
   // static native fns:
   //   expected_steps(total_expected_steps: int)
   //   add_steps(steps: int)
@@ -494,14 +499,15 @@ type Task {
   //   task_class(): TaskClass             (class the current task/job runs in, after fallback; new)
   //   no_history(v: bool)
   //   set_merge_strategy(strategy: MergeStrategy)   (new; current task only, not inherited by what it spawns)
-  //   header(name: String): String?        (HTTP request the current task answers; see Current HTTP Request)
-  //   headers(): Map<String, String>?
-  //   uri(): String?
-  //   body(): String?
-  //   running(): Array<Task>             (@expose @reserved)
-  //   history(offset, max): Array<Task>  (@expose @reserved)
+  //   (header/headers/uri/body REMOVED in 9.0 -- take a runtime::HttpRequest, see Current HTTP Request)
+  //   running(): Array<Task>             (@expose @reserved; 9.0: caller's own, all with role `tasks:read`, or per tasks:read grant)
+  //   history(offset, max): Array<Task>  (@expose @reserved; newest first from gcdata/history; offset counts every user's entries;
+  //                                       a negative offset/max or one past the end answers 400)
   //   events()                           (@expose @reserved; new in 8.4 — SSE, see below)
-  //   cancel(task_id): bool              (@expose @reserved)
+  //   cancel(task_id): bool              (@expose @reserved; own, role `tasks:cancel`, or grant; false once committing/ended)
+  //   result(task_id: int): any?         (@expose @reserved; new in 9.0: value a top-level task returned once ended; throws 404 unknown /
+  //                                       409 not ended / 410 past --task_retention (24h) / its error (400) / cancellation (503);
+  //                                       `Accept: application/octet-stream` returns the GCB file)
   //   is_running(task_id): bool          (@expose @reserved)
   //   live(ids): Array<bool>             (@expose; one bool per id, false for unknown/inaccessible)
   //   tasks(ids): Array<Task?>           (@expose; null entries for unknown/inaccessible tasks)
@@ -510,9 +516,9 @@ type Task {
 
 **`Task::events()` (new in 8.4)** — Server-Sent Events stream served on `GET /runtime::Task::events` (`Content-Type: text/event-stream`), authenticated callers only. **Only the caller's own tasks are streamed** (**breaking**, upstream `dccdde5c0`: whatever the role or grants; use `running` / `history` / `live` to watch others). Every root task the caller created emits one `event: task-started` frame when its code starts running (not again on resume from `await`), `event: task-progress` frames while it reports progress, `event: task-breakpoint` / `event: task-resumed` when it pauses on a `breakpoint` and goes on, and one `event: task-complete` frame when it ends; each frame's `data:` line is the `Task` as JSON (base64 GCB with `Accept: application/octet-stream`). `: ping` comments keep the connection alive. Open streams are capped by `--max_sse` (2048) and `--max_sse_per_user` (16) — past either the caller gets `429`. Not available on Windows.
 
-**RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is now the task dir for RPC calls too (`/files/<user_id>/tasks/<task_id>/`; the old `requests/<timestamp>/` dir is gone).
+**RPC calls are tasks (upstream `a5c27b348`).** Every path-RPC / JSON-RPC call runs as a (small-class) task: it has an id, appears in `Task::running()` / `Task::history`, emits SSE task events, and can be stopped with `Task::cancel`; an `await` inside it suspends it like any task. `--request_ttl` (default `20s`) cancels an RPC still queued or running and answers `503`. Worker pools: `--workers_small` / `GREYCAT_WORKERS_SMALL` (formerly `--req_workers`; RPC tasks, added to `--workers`) and new `--workers_large` / `GREYCAT_WORKERS_LARGE` (how many of `--workers` serve the large class). `File::workingDir()` is the task's working dir for RPC calls too (9.0: `gcdata/tasks/<task_id>/work/`, private, kept `--task_retention`).
 
-**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `medium` (**`regular` renamed `medium`**, upstream `dccdde5c0`: `TaskClass::medium`, `gc_task_class_medium`, `HostMetric.medium`, `--task_class medium`); a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `medium`; unknown value → `400`; the `greycat call` CLI sends `--task_class`, default `medium`). `Task.task_class: TaskClass?` reports the class a live task runs in (`null` when read back from history). The workers' object cache (3/4 of `--cache`) is split by class: medium = 1 unit, small = `--cache_ratio_small` (0.4), large = `--cache_ratio_large` (3). A task request for a `@reserved` function is answered without a task (marked `task: none`), and a reserved stub called from GCL raises. **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file; `Task::body()` is then `null`.
+**Task classes (new, upstream `e7630e693`).** `small` workers (`--workers_small`) serve RPC calls, `large` ones (`--workers_large`) heavy work, the rest `medium` (**`regular` renamed `medium`**, upstream `dccdde5c0`: `TaskClass::medium`, `gc_task_class_medium`, `HostMetric.medium`, `--task_class medium`); a worker also drains lighter classes, and a class with no workers runs in the nearest one that has some. Pick it with `Job.task_class`, `PeriodicOptions.task_class`, or the RPC `task` header (`task: large`; `task: true` stays `medium`; unknown value → `400`; the `greycat call` CLI sends `--task_class`, default `medium`). `Task.task_class: TaskClass?` reports the class a live task runs in (`null` when read back from history). The workers' object cache (3/4 of `--cache`) is split by class: medium = 1 unit, small = `--cache_ratio_small` (0.4), large = `--cache_ratio_large` (3). A task request for a `@reserved` function is answered without a task (marked `task: none`), and a reserved stub called from GCL raises. **RPC arguments over `--max_args_memory` (default 1 MiB)** are streamed to the task's arguments file (an `HttpRequest` handler then gets `body_file` instead of `body`).
 ```gcl
 enum TaskClass { small; medium; large; }
 ```
@@ -522,7 +528,7 @@ enum TaskClass { small; medium; large; }
 enum MergeStrategy {
   fusion_by_key_fail_on_conflict,   // default: nodes/objects merge key by key; a key/field both sides changed differently fails with `incompatible fusion`
   fusion_by_key_last_win,           // same, but a conflicting key/field takes this task's value
-  no_fusion_fail_on_conflict,       // a structured node (nodeTime/nodeIndex/nodeList/nodeGeo) changed by both fails the commit (or the await merge); plain fields still merge
+  no_fusion_fail_on_conflict,       // a structured node (nodeTime/nodeIndex/nodeList/nodeGeo/nodeSet/nodeIndexSet) changed by both fails the commit (or the await merge); plain fields still merge
 }
 Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win);
 ```
@@ -535,9 +541,14 @@ type Job<T> {
   task_class: TaskClass?;   // null: medium for spawn, the awaiting task's class for await (new)
   world: String?;           // world a spawn runs in (`main` = main store); null: the spawning task's world.
                             //   An await job always runs in the awaiting task's world; naming another one is an error (new)
-  // native fn result(): T
+  // private task_id: int?; private job_id: int?;   (new in 9.0: locate the result file; null until an await ran the job)
+  // native fn result(): T   (9.0: read from the awaiting task's files each call -- keep the value; throws before the
+  //                          await ran the job and once that task ended; a fan-out reads one result at a time)
 }
-// native fn await(jobs: Array<Job>)   // no strategy param (removed upstream `dccdde5c0`); see Task::set_merge_strategy below
+// native fn await(jobs: Array<Job>)   // no strategy param; see Task::set_merge_strategy below
+// 9.0: jobs also run in parallel under `greycat run` (serially only under `greycat test`); the task is suspended while
+// they run, and a writer opened before the await truncates its file if written again after -- reopen with `append: true`.
+// nodeSet / nodeIndexSet changes merge without conflicts.
 ```
 
 ### Logging
@@ -632,8 +643,7 @@ type RuntimeInfo {
   program_version: String?;
   arch: String;
   timezone: TimeZone;
-  license: License;
-  io_threads: int;
+  io_threads: int;        // (9.0: `license: License` removed)
   mem_total: int;       // --cache; mem_workers = the part the task workers share, the rest backs the store zones
   mem_workers: int;
   small: RuntimeInfoClass; medium: RuntimeInfoClass; large: RuntimeInfoClass;
@@ -645,6 +655,8 @@ type RuntimeInfo {
 type Runtime {
   // @expose @permission("debug"): info(): RuntimeInfo, root(): any   (usage() removed upstream `e7630e693`)
   // @expose @reserved @permission("api"): abi()
+  // @expose @reserved @permission("debug"): program()   (new in 9.0: the running program as `gcdata/program` holds it,
+  //   `.gcp` format, every type/function with code; HTTP only, caller needs admin + debug, else 403)
   // static native fns: sbi_tree(node: any?): Array<Tuple<int, int>>?, sleep(d: duration), backup_delta(), defrag(),
   //   on_files_put(handler: function?), on_files_get(handler: function?)   (handler(path: String): path relative to the
   //   project, eg. `files/alice/x.csv`, which `File` and the readers open as is)
@@ -669,34 +681,42 @@ Runtime::sleep(1s);
 
 ### Current HTTP Request
 
-#### Task::header / headers / uri / body (moved from `Request` in 8.4)
-**Breaking:** the 8.4 `type Request` is gone — its four static methods now live on `Task`, since every RPC call runs as a task. `Request::x(...)` → `Task::x(...)`; `headers()` now returns `Map<String, String>?` (`null`, not an empty map, when no request). They reach the parts of the HTTP request the current task answers that `@expose` does not bind as arguments — headers, raw target, raw body — e.g. to authenticate a non-GreyCat caller (webhook signature, proxy claim). All four return `null` for a task that answers no request: `task: true` calls, `greycat run`, scheduler runs, `await` jobs.
+#### runtime::HttpRequest / runtime::HttpResponse (new in 9.0)
+**Breaking:** `Task::header` / `headers` / `uri` / `body` and the `@raw` annotation were **removed**. An `@expose`d function now reaches the raw request by taking a non-null `runtime::HttpRequest` as its **only** parameter (the server fills it instead of binding arguments), and writes its own response by returning `runtime::HttpResponse` (nullable or not). OpenAPI, MCP and the SDK generators know both shapes.
 ```gcl
-type Task {
-  // ...
-  static native fn header(name: String): String?;    // case-insensitive; `authorization` and `cookie` always null
-  static native fn headers(): Map<String, String>?;  // names lowercased; excludes authorization/cookie; null when no request
-  static native fn uri(): String?;                   // path + query as received, percent-encoding intact -> Url::parse(...).params
-  static native fn body(): String?;                  // raw body before parsing; null if none, streamed to file (/files upload or args over --max_args_memory), or no request
+type HttpRequest {               // runtime::HttpRequest (distinct from the io::HttpRequest client type)
+  method: HttpMethod;
+  uri: String;                   // request target as sent (path + query, percent-encoding intact)
+  query: Map<String, String>;    // decoded query params; a repeated key keeps its last value (uri has them all)
+  headers: Map<String, String>;  // names lower-cased; `authorization` and `cookie` left out; repeats joined with ", "
+  body: String?;                 // exact bytes, when it fits in --max_args_memory; null if none or in body_file
+  body_file: File?;              // larger body, in the task folder; deleted when the task ends unless moved
+}
+type HttpResponse {              // runtime::HttpResponse
+  status: int?;                  // null -> 200
+  content_type: String?;         // null -> text/plain; charset=utf-8 for body, the extension's type for body_file
+  headers: Map<String, String>?; // one value per name; replaces a server header (not Content-Length / Transfer-Encoding)
+  body: String?;                 // at most one of body / body_file
+  body_file: File?;
 }
 
 @expose
 @permission("public")
-fn on_event(event: Event) {
-  var sent = Task::header("x-signature");
-  var body = Task::body();
-  if (sent == null || body == null) { throw "unsigned request"; }
-  var expected = Crypto::sha256_hmac_hex(body, System::getEnv("SHARED_SECRET") ?? "");
-  if (!Crypto::equals_constant_time(sent, expected)) { throw "bad signature"; }
-  handle(event);
+fn on_event(req: runtime::HttpRequest): runtime::HttpResponse {
+  var sent = req.headers.get("x-signature");
+  if (sent == null || req.body == null) { return runtime::HttpResponse { status: 401, body: "unsigned request" }; }
+  var expected = Crypto::sha256_hmac_hex(req.body!!, System::getEnv("SHARED_SECRET") ?? "");
+  if (!Crypto::equals_constant_time(sent, expected)) { return runtime::HttpResponse { status: 401, body: "bad signature" }; }
+  handle(req.body!!);
+  return runtime::HttpResponse { body: "ok" };   // text/plain, replaces the old @raw
 }
 ```
-Verify signatures over `Task::body()`, never a re-serialized object (different bytes). Use `Task::uri()` when binding loses information (repeated `?tag=a&tag=b`, or keys colliding once `.`/`-` map to `_`). Pair with `@raw` on the function to answer a bare `text/plain` token (webhook handshakes, health probes).
+Verify signatures over `req.body`, never a re-serialized object (different bytes).
 
 #### System
 ```gcl
 type System {
-  // static native fn exec(path: String, params: Array<String>): String   // returns stdout
+  // static native fn exec(path: String, params: Array<String>): String   // 9.0: returns stdout AND stderr combined; a non-zero exit throws naming the code with the last 4 KB of output
   // static native fn spawn(path: String, params: Array<String>): ChildProcess
   // static native fn tz(): TimeZone
   // static native fn getEnv(key: String): String?
@@ -770,7 +790,7 @@ var id = spawn(Job { function: project::simulate, world: "what-if" });   // runs
 type WorldChangesReader {
   pos: int?;                      // nodes already read; a restored reader (suspend/resume) recomputes and skips them
   // native fn can_read(): bool
-  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle; fails past the end
+  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle; fails past the end
   // native fn available(): int
 }
 var r = WorldChangesReader {};
@@ -783,22 +803,22 @@ type NodeReader {
   type: type?;   // exact node type (`nodeTime<float>`, `node<Sensor>`) or node kind (`nodeTime`); null = every node; other types fail
   last: any?;    // last node read; a restored reader (suspend/resume) resumes after it
   // native fn can_read(): bool
-  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle; fails past the end
+  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle; fails past the end
 }
 var r = NodeReader {};             // every node; set `type` to filter
 while (r.can_read()) { var n = r.read(); }
 ```
-**`WorldDiffReader` (new, upstream `d0bfe2ca7`).** The keys of one node whose value differs between the current world and its base, as committed when the task started (not the task's pending writes), in the node's key order (time for nodeTime, position for nodeList, encoded key for nodeIndex/nodeGeo, hash order for a non-scalar nodeIndex key). Deep-equal values are not listed; a standalone world reports every key as `added`. The base is read as it is now, down its overlay chain. Loads each internal block once and only the differing leaves. Fails in main and when `node` is not a node.
+**`WorldDiffReader` (new, upstream `d0bfe2ca7`).** The keys of one node whose value differs between the current world and its base, as committed when the task started (not the task's pending writes), in the node's key order (time for nodeTime, position for nodeList, encoded key for nodeIndex/nodeGeo, hash order for a non-scalar nodeIndex key). Deep-equal values are not listed; a standalone world reports every key as `added`. The base is read as it is now, down its overlay chain. Loads each internal block once and only the differing leaves. Fails in main and when `node` is not a node. **9.0:** nodeSet / nodeIndexSet supported (a nodeIndexSet pair is only ever `added`/`removed`); a nodeList value keeps its identity as positions shift — `removed` at its base position, `added`/`changed` at its world position.
 ```gcl
 enum WorldDiffKind { added; removed; changed; }
 type WorldDiff {
   kind: WorldDiffKind;
-  key: any?;     // index key / time / list position / geo; null for a node<T>
+  key: any?;     // index key / time / list position / geo / nodeSet element / nodeIndexSet pair key; null for a node<T>
   base: any?;    // null when added
   world: any?;   // null when removed
 }
 type WorldDiffReader {
-  node: any;          // node<T> / nodeTime / nodeIndex / nodeList / nodeGeo handle to compare
+  node: any;          // node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle to compare
   last: WorldDiff?;   // last entry read; a new or restored reader resumes after it (exact if no commit in between)
   // native fn can_read(): bool
   // native fn read(): WorldDiff   // fails past the end
@@ -810,7 +830,7 @@ Names take 1 to 128 of `[A-Za-z0-9_.-]`; ids are never reused. Full reference: t
 
 ### Identity & Security
 
-The 8.0 security model is `Identity` / `IdentityGrant` / `IdentityGrantType` (the old `User` / `UserGroup` / `SecurityPolicy` / `OpenIDConnect` types are gone). Anonymous callers are id `0`.
+The security model is `Identity` / `IdentityGrant` (+ `IdentityToken`, 9.0). Anonymous callers are id `0`, the identity `public`. **Breaking in 9.0:** grants are **per permission** on what an identity owns (its `files/<name>/` folder and its tasks) — `IdentityGrantType` and the `Identity.grants` field are gone. The runtime gives meaning to `files:read` (list/download), `files:write` (upload/delete), `tasks:read` (see tasks, results, events), `tasks:cancel`; any other `@permission` the program declares can be granted and checked with `Identity::has_grant`. A caller holds a permission on what `<name>` owns through its role (opens every identity; `admin` holds the four), by being `<name>`, or via a grant of `<name>` to it (identity grantee) or to the holders of a permission its role holds (`grant_permission`). `public` holds only `files:read` / `tasks:read` on its own things. Grants are not transitive and are dropped at start when the program no longer declares the permission.
 
 ```gcl
 @volatile
@@ -818,7 +838,7 @@ type Identity {
   id: int;            // 0 = anonymous/public user
   name: String;       // unique login name
   role: String;       // role name -> permission flags at login
-  grants: Array<IdentityGrant>;
+  // (9.0: `grants: Array<IdentityGrant>` field removed -- use Identity::grants(name, offset, max))
   world: String?;           // new: default world for a client to send in its `world` header (null = main, or removed since);
                             //      the server never applies it: a call without a `world` header runs in main
   worlds: Array<String>?;   // new: worlds its calls may run in besides main (null = every world); a call landing in an
@@ -836,24 +856,33 @@ type Identity {
   //     (on an existing name: takes `role` and is returned; password, grants and open sessions are now *kept* -- fix, upstream `a538bbb66`)
   //     (a new name is the folder files/<name>/: 1-255 UTF-8 bytes, no control/format/invisible/private-use/unassigned char,
   //      none of / \ * ? " < > |, no leading/trailing space, not `.`/`..`/ending in `.`/a Windows device name (con, nul.txt);
-  //      `:` (SSO names `<provider>:<sub>`) refused on Windows only; stored NFC; throws if its folder already exists)
+  //      `:` (SSO names `<provider>:<sub>`) refused on Windows only; stored NFC; throws if its folder holds files (9.0: an empty folder is removed))
   // @expose @permission("admin")  static native fn create_with_password(name: String, role: String, password: String): Identity
   //     (new; throws if name taken or breaks the new-name rules of `create`, password empty, or role undeclared; never changes an existing identity -- the sign-up call:
   //      a @permission("public") function may forward a visitor's name/password, choosing `role` itself)
-  // @expose                       static native fn token(id: int, ttl: duration?): String
+  // @expose                       static native fn token(id: int, ttl: duration?, label: String?): String   (9.0: + label; non-admin: self only)
+  // @expose                       static native fn tokens(name: String, offset: int, max: int): Array<IdentityToken>   (new; live tokens by id; self or admin)
+  // @expose                       static native fn revoke_token(name: String, id: int): bool       (new; the token then runs as anonymous, its SSE streams close)
+  // @expose                       static native fn revoke_tokens(name: String, keep_current: bool): int   (new; returns how many)
   // @expose @permission("public") static native fn login(login: String, password: String): String   (case-insensitive login, as get_by_name)
-  // @expose                       static native fn logout()
+  // @expose                       static native fn logout()   (9.0: revokes the call's token, not just the cookie)
   // @expose @permission("public") static native fn permissions(): Array<String>
-  //                               static native fn has_permission(permission: String): bool
+  //                               static native fn has_permission(permission: String): bool   (role of the caller)
+  //                               static native fn has_grant(owner: String, permission: String): bool   (new; via role, ownership or grant; false if undeclared; throws if no owner)
   // @expose                       static native fn set_password(name: String, pass: String): bool   (empty pass removes the password; an empty password never signs in)
-  // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)
+  // @expose                       static native fn set_grants(name: String, grants: Array<IdentityGrant>)   (replaces all; throws on an undeclared permission)
+  // @expose                       static native fn grants(name: String, offset: int, max: int): Array<IdentityGrant>      (new; identity grantees by id, then holder grants)
+  // @expose                       static native fn granted_to(name: String, offset: int, max: int): Array<IdentityGrant>  (new; owners granting to `name` itself)
+  // @expose                       static native fn grant_of(name: String, target: String): Array<String>   (new; permissions target holds on name's things via grants)
   // @expose @permission("admin")  static native fn set_role(name: String, role: String): bool
   // @expose @permission("admin")  static native fn remove(name: String): bool   (new; public/root cannot be removed)
   //     (changed upstream `6070615de`: also drops grants others extend to it; open sessions end at once (token -> anonymous);
   //      id never reused; its tasks are cancelled (but the caller's), streams stop, Task::events close; files/<name>/ is now
   //      *deleted* with its files (a name that isn't one path segment keeps it; throws if deletion fails, identity already gone))
-  // @expose @permission("admin")  static native fn grant(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access added)
-  // @expose @permission("admin")  static native fn revoke(name: String, target: String, grant: IdentityGrantType): IdentityGrantType   (new; returns the access removed)
+  // @expose @permission("admin")  static native fn grant(name: String, target: String, permission: String): bool    (9.0 signature; false if already held)
+  // @expose @permission("admin")  static native fn revoke(name: String, target: String, permission: String): bool   (9.0 signature; false if not held)
+  // @expose @permission("admin")  static native fn grant_permission(name: String, holders: String, permission: String): bool    (new: grant to every role holding `holders`)
+  // @expose @permission("admin")  static native fn revoke_permission(name: String, holders: String, permission: String): bool   (new)
   // @expose @permission("admin")  static native fn set_world(name: String, world: String?)        (new; null/"main" = main; not checked against `worlds`)
   // @expose @permission("admin")  static native fn set_worlds(name: String, worlds: Array<String>?)  (new; null lifts the restriction, [] = main only)
   //     (both throw if no such user or world; like create/set_role/remove/grant/revoke, not permission-checked when called from GCL)
@@ -864,35 +893,34 @@ var caller_id = Identity::current_id();   // 0 if unauthenticated
 var token     = Identity::login("alice", "secret");
 ```
 
-**Permissions / roles (`runtime.gcl`).** Permissions: `public`, `admin`, `api` (exposed functions — **no longer** "and webroot files"), `debug`, and **new `world`** (create worlds, remove the ones one created). Roles: `public` = public; `admin` = public, admin, api, debug, **world**; `user` = public, api.
+**Permissions / roles (`runtime.gcl`).** Permissions: `public`, `admin`, `api` (exposed functions, not webroot files), `debug`, `world` (create worlds, remove/reset the ones one created), and **new in 9.0** `files:read`, `files:write`, `tasks:read`, `tasks:cancel` (on every identity's files/tasks when the role holds them, else per grant). Roles: `public` = public; `admin` = public, admin, api, debug, world, files:read, files:write, tasks:read, tasks:cancel; `user` = public, api.
 
-#### IdentityGrant & IdentityGrantType
 ```gcl
-enum IdentityGrantType { read, write, read_write, none }
+Identity::create("team-grid", "public");                     // a group: no password, its folder is shared
+Identity::grant("team-grid", "alice", "files:read");
+Identity::grant("team-grid", "alice", "files:write");
+Identity::grant_permission("team-grid", "api", "files:read"); // every signed-in user / admin
+```
 
+#### IdentityGrant & IdentityToken
+```gcl
 @volatile
 type IdentityGrant {
-  name: String;
-  grant: IdentityGrantType;
+  name: String;                  // grantee identity, or the permission whose holders get it when `holders`;
+                                 //   in granted_to: the identity that grants it
+  holders: bool?;                // true: `name` is a permission (holder grant); false/null: an identity
+  permissions: Array<String>;    // permissions granted on what the owner owns
+}
+@volatile
+type IdentityToken {             // new in 9.0, listed by Identity::tokens
+  id: int;                       // for revoke_token
+  label: String?;                // label given to Identity::token, `login` for a login session, null for none
+  created: time; expires: time;
+  current: bool;                 // the token of the call reading the list
 }
 ```
 
-### License Management
-
-```gcl
-enum LicenseType { community; enterprise; testing; }
-
-type License {
-  name: String?;        // associated username
-  start: time;          // start of validity
-  end: time;            // end of validity
-  company: String?;     // associated company
-  max_memory: int;      // max allowed memory in MB
-  extra_1: int?;
-  extra_2: int?;
-  type: LicenseType?;
-}
-```
+**License Management removed in 9.0:** `License`, `LicenseType` and `RuntimeInfo.license` are gone (and the C `gc_license__level`).
 
 ### OpenAPI Integration
 
@@ -1041,7 +1069,8 @@ type CsvFormat {
   string_delimiter: char?;     // e.g. '"'
   decimal_separator: char?;
   thousands_separator: char?;
-  trim: bool?;                 // default false
+  trim: bool?;                 // default false. 9.0: into a nullable column, an unquoted empty/blank/`null` (any case) field reads as null
+                               //   whatever trim says; quoted, it reads as its text (CsvWriter quotes such Strings)
   format: String?;             // date format, default ISO8601 / epoch ms
   tz: TimeZone?;
   strict: bool?;               // strict null checking
@@ -1074,7 +1103,9 @@ type File {
   path: String;
   size: int?;                // null for directories
   last_modification: time?;
-  // static native fns: baseDir(): String, userDir(): String, workingDir(): String,
+  // static native fns: baseDir(): String, userDir(): String,
+  //   workingDir(): String   (9.0: gcdata/tasks/<task_id>/work/ -- the awaiting task's for a job, created lazily, NOT served
+  //                           over HTTP, removed --task_retention (24h) after the task ends; userDir() outside a task),
   //   open(path): File?, delete(path): bool, rename(old, new): bool, copy(src, target): bool,
   //   mkdir(path): bool, ls(path, ends_with: String?, recursive: bool): Array<File>
   // native fns: isDir(): bool, name(): String, extension(): String?, sha256(): String?
@@ -1423,7 +1454,7 @@ var id   = rng.uuid();                   // seedable UUID v4 (NOT crypto-secure)
 #### Assert
 ```gcl
 // static native fns: equals(a: any?, b: any?), equalsd(a: float, b: float, epsilon: float),
-//   equalst(a: Tensor, b: Tensor, epsilon: float), isTrue(v: bool), isFalse(v: bool),
+//   equalst(a: Tensor, b: Tensor, epsilon: float) (same type+shape, |diff| <= epsilon, modulus for complex; negative epsilon: type/shape only), isTrue(v: bool), isFalse(v: bool),
 //   isNull(v: any?), isNotNull(v: any?)
 Assert::equals(actual, expected);
 Assert::equalsd(pi, 3.14159, 0.001);

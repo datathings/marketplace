@@ -26,7 +26,8 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 - **[reference/syntax.md](reference/syntax.md)** — Complete grammar reference: every statement, every expression form, operator precedence, literals (string substitution, time `'…'`, typed-suffix numbers).
 - **[reference/types.md](reference/types.md)** — Type system in depth: nullability, narrowing, generic invariance, casting, inheritance, `is`/`as`.
 - **[reference/stdlib.md](reference/stdlib.md)** — Built-in types by category (collections, node types, time/duration/geo, IO, Url, S3, Crypto). Method signatures.
-- **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@precision`, `@raw`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
+- **[reference/tensors.md](reference/tensors.md)** — `Tensor` (numeric arrays: shape, elements, fill/append/slice/reshape, sums, complex parts), `TensorDistance` (`l2sq`, `euclidean`, `cosine`, hyperbolic) and `VectorIndex` (approximate nearest-vector search stored in the graph).
+- **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@precision`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
 - **[reference/idioms.md](reference/idioms.md)** — Idiomatic patterns and common pitfalls (no ternary, no `void`, no `::new()`, `function` slot semantics, `private` semantics, generic invariance).
 
 **Tooling / project / runtime:**
@@ -36,10 +37,10 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 - **[reference/cli.md](reference/cli.md)** — `greycat` CLI: every command (`run`, `serve`, `dev`, `build`, `test`, `install`, `codegen`, `user`, `backup`, `restore`, …), every option, the `.env` file.
 - **[reference/lang.md](reference/lang.md)** — `greycat lint`, `greycat fmt`, `greycat lsp`, `greycat doc`: lint rules, suppression directives, formatter modes and pragmas, API reference. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)**: what a running server holds, which file below documents each part, and a troubleshooting table.
-- **[reference/http.md](reference/http.md)**: HTTP routes, JSON-RPC and path-RPC, authentication tokens, how arguments bind, response shapes and status codes.
-- **[reference/tasks.md](reference/tasks.md)**: workers and task classes, background calls with the `task` header, `await` jobs and merge conflicts, transactions, the scheduler, task events over SSE.
+- **[reference/http.md](reference/http.md)**: HTTPS (`--tls`, Let's Encrypt certificates with `--acme`), HTTP routes, JSON-RPC and path-RPC, authentication tokens, how arguments bind, response shapes and status codes.
+- **[reference/tasks.md](reference/tasks.md)**: workers and task classes, background calls with the `task` header, task results (`Task::result`) and folders (`File::workingDir`), `await` jobs and merge conflicts, transactions, the scheduler, task events over SSE.
 - **[reference/identity.md](reference/identity.md)**: users, roles, permissions, `@permission`, tokens, grants, group identities, why `--user` must not be used.
-- **[reference/files.md](reference/files.md)**: the `/files` API (upload, download, list, delete, ranges, content types), who may open a folder, `on_files_put` / `on_files_get`, task folders, `File` and `FileWalker`, `webroot/` and static assets.
+- **[reference/files.md](reference/files.md)**: the `/files` API (upload, download, list, delete, ranges, content types), who may open a folder, `on_files_put` / `on_files_get`, `File` and `FileWalker`, `webroot/` and static assets.
 - **[reference/storage.md](reference/storage.md)**: the graph store (`gcdata/`), what is persisted, ABI evolution, backups and restore, worlds (branches of the store).
 - **[reference/observability.md](reference/observability.md)**: log levels, where log records go, `GREYCAT_METRICS` and the fields of `TaskMetric`, `HostMetric` and `HttpMetric`.
 - **[reference/streams.md](reference/streams.md)**: `Stream<T>`, an append-only file of records that concurrent tasks write and a callback drains in batches. Registering, draining with a persisted offset, durability, the built-in `log` and metric streams, and following a stream of another server over HTTP with byte ranges.
@@ -71,7 +72,7 @@ type Point<T> extends Shape {      // generic, inheriting
 
 enum Color { red, green, blue }
 
-var threshold: node<float?>;       // module-level var: must be node<T?>, nodeList<T>, nodeIndex<K, V>, nodeTime<T>, nodeGeo<T>
+var threshold: node<float?>;       // module-level var: must be node<T?>, nodeList<T>, nodeIndex<K, V>, nodeSet<V>, nodeIndexSet<K, V>, nodeTime<T>, nodeGeo<T>
 
 @expose
 fn ping(): String {
@@ -87,7 +88,8 @@ my-project/
 ├── .env                     # optional GREYCAT_* config picked up at startup
 ├── bin/                     # `greycat install` populates with the pinned core binary
 ├── lib/                     # `greycat install` populates from @library pragmas
-│   └── std/                 # the stdlib
+│   ├── std/                 # the stdlib
+│   └── ssl/                 # comes with std: the OpenSSL bin/greycat loads, its headers, openssl.cmake
 ├── src/                     # @include("src"); — your code
 ├── test/                    # @include("test"); — *_test.gcl stripped by `greycat build`
 ├── files/                   # served at /files/<user_name>/... — user uploads
@@ -101,9 +103,10 @@ Everything in `bin/`, `lib/`, `gcdata/`, and usually `files/` is gitignored. The
 
 ```sh
 greycat install     # download libs + pinned core binary; --bump first rewrites @library pins
-greycat serve       # build + run as long-lived HTTP server (port 8080 by default)
+greycat serve       # build + run as long-lived HTTP server (port 8080 by default; --tls or --acme for HTTPS)
 greycat dev         # serve + spawn a frontend watcher (vp/vite/--with=<cmd>)
 greycat run [fn]    # build + run `fn` (default: `main`). One-shot.
+greycat repl        # prompt of calls on a running server, answers kept in variables
 greycat test        # build + run every @test function
 greycat build       # produce project.gcp (strips *_test.gcl)
 greycat lint        # static analysis of the .gcl closure (--fix applies auto-fixes)
@@ -174,7 +177,7 @@ Everything is typed. Type references appear after `:` and inside generic bracket
 | ----------------------------------- | ------------------------------------------------------------------------ |
 | Primitives                          | `bool`, `int` (i64), `float` (f64), `char`, `String`                     |
 | Native containers                   | `Array<T>`, `Map<K, V>`, `Tuple<T, U>`, `Buffer`, `Table<T>`, `Tensor`   |
-| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeGeo<T>` |
+| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeGeo<T>` |
 | Native value types                  | `time`, `duration`, `geo`, `function`, `field`, `type`, `any`, `null`    |
 | User-defined                        | Anything declared with `type` / `enum`                                   |
 
@@ -252,7 +255,7 @@ Color::red;                // enum entry
 MathConstants::pi;         // module-qualified static (defined in std/core)
 ```
 
-`->` is **not optional sugar for `.`** — it errors on any receiver other than `node` / `nodeTime` (on `nodeList`, `nodeIndex` and `nodeGeo` it throws at runtime).
+`->` is **not optional sugar for `.`** — it errors on any receiver other than `node` / `nodeTime` (on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` and `nodeGeo` it throws at runtime).
 
 ### Optional chaining
 
@@ -280,6 +283,8 @@ for (k, v in arr) {}                    // iterate Array (k=index), Map (k=key)
 for (k, v in map) {}                    // unpack key/value pairs
 for (t, v in node[from..to]) {}         // time-window query on nodeTime
 for (k, v in idx) {}                    // iterate nodeIndex/nodeList
+for (_, v in set) {}                    // iterate nodeSet: k and v both bind the value
+for (k, v in multi) {}                  // iterate nodeIndexSet: once per (key, value) pair
 
 return;          return expr;
 throw error;
@@ -287,6 +292,8 @@ break;           continue;        breakpoint;    // breakpoint pauses the worker
 try {} catch (e) {}                    // catch ident optional
 at (targetTime) {}                          // time-aware-scope binding
 ```
+
+`greycat lint` rejects the `nodeIndexSet` loop for now: see [reference/stdlib.md](reference/stdlib.md#nodeindexsetk-v).
 
 There is **no ternary (`?:`)**, **no `switch`/`match`**, and **no `void` keyword**. A function with no `: T` return type "returns nothing"; using its call as a value yields `null`.
 
@@ -416,7 +423,7 @@ fn add(a: int, b: int): int {
 }
 ```
 
-Reachable at `POST /<module>::add` (path-RPC) and `"<module>.add"` via JSON-RPC. Without `@permission`, requires the `api` permission. See [reference/http.md](reference/http.md) for the request lifecycle.
+Reachable at `POST /<module>::add` (path-RPC) and `"<module>::add"` via JSON-RPC. Without `@permission`, requires the `api` permission. See [reference/http.md](reference/http.md) for the request lifecycle.
 
 ### Time-series query
 
@@ -479,7 +486,7 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 3. **No `::new()`.** Always `Type {}` or `Type<G> {}`. Unless an explicit `Type { static fn new(): Type { /*...*/ } }` exists.
 4. **`function` parameters are opaque.** Lambdas and static fn references carry their signature in source position (`var f = fn(a: int): int {...}` → `f: fn(int): int`), but once a value flows into a `function`-typed slot the signature is gone and calls through it are runtime-checked. Instance methods (`obj.method`, non-static `Foo::method`) are NOT first-class values; the workaround is a lambda that takes the receiver as a parameter (`fn (r: Foo) { r.method(); }`), since lambdas don't capture enclosing locals or `this`.
 5. **Generics are invariantly typed.** `Array<int?>` is not assignable to `Array<int>`. Same for `Map`, `nodeIndex`, etc.
-6. **`->` is reserved for `node` and `nodeTime`.** Only `node<T>` and `nodeTime<T>` support `->`; on `nodeList`, `nodeIndex` and `nodeGeo` it throws at runtime. User types cannot opt in — use `.` instead.
+6. **`->` is reserved for `node` and `nodeTime`.** Only `node<T>` and `nodeTime<T>` support `->`; on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` and `nodeGeo` it throws at runtime. User types cannot opt in — use `.` instead.
 7. **`private` ≠ "hidden."** A `private type` is still visible across modules via its fully-qualified name; only bare-name lookup is blocked. A `private attr` is read-public, write-private. Never gate same-module access on `private`.
 8. **No imports.** Visibility comes from the project graph (`@library` / `@include`), not from `import`/`use` statements.
 9. **`as` is unchecked for object types.** Casts to primitives (`int`, `float`, `bool`, ...) are checked at runtime, and `int` <-> `float` converts. Casts to `String`, user and other object types are dropped, so the lang's static check is the only safety net; a wrong cast throws on the first mismatched member access.

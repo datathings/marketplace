@@ -252,7 +252,7 @@ typedef struct {
     i32_t f_digit;      // Float digit precision
     i32_t level;        // Indentation level (for pretty printing)
     u64_t block_size;   // Block size hint
-    u32_t tz;           // Timezone offset for time formatting
+    u32_t tz;           // Zone `time` values print in: a dtz zone index (GC_DTZ_UTC for UTC; 9.0, no longer a TimeZone ordinal)
 } gc_buffer_options_t;
 ```
 
@@ -330,7 +330,7 @@ typedef struct {
 
 | Function | Description |
 |----------|-------------|
-| `gc_buffer__read_all_from_fd(buf, fd)` | Read everything from a file descriptor into the buffer. Returns `true` on success. |
+| ~~`gc_buffer__read_all_from_fd(buf, fd)`~~ | **Removed in 9.0.** Loop `read(2)` and append with `gc_buffer__add_str(buf, chunk, n)` yourself. |
 
 ### Inline Read/Write (Fixed-Width Binary)
 
@@ -477,20 +477,18 @@ gc_buffer__finalize(buf);
 
 #### Reading a whole file descriptor, then clearing for reuse
 
-`gc_buffer__read_all_from_fd` slurps the entire fd into the buffer (advancing the OS file pointer). Reset the read cursor to `buf->data` before parsing, and call `gc_buffer__clear` to reuse the same allocation for the next read:
+`gc_buffer__read_all_from_fd` was **removed in 9.0**; read in chunks yourself. Reset the read cursor to `buf->data` before parsing, and call `gc_buffer__clear` to reuse the same allocation for the next read:
 
 ```c
 gc_buffer_t *buf = gc_buffer__create(gc_host__allocator(host));
-// (buf already used to build a path and open `fd` above)
 gc_buffer__clear(buf);                 // keep capacity, reset size to 0
-if (!gc_buffer__read_all_from_fd(buf, fd)) {
-    fprintf(stderr, "read failed\n");
-    gc_buffer__finalize(buf);
-    return 1;
+char chunk[4096];
+ssize_t n;
+while ((n = read(fd, chunk, sizeof chunk)) > 0) {
+    gc_buffer__add_str(buf, chunk, (u64_t) n);
 }
+if (n < 0) { /* read failed, see errno */ gc_buffer__finalize(buf); return 1; }
 buf->current = buf->data;              // rewind cursor for reading
-// Walk the slurped bytes with the inline readers (see below). For example,
-// decode a leading varint length prefix:
 u64_t payload_len = 0;
 if (!gc_buffer_read_vu64_size_checked(buf, &payload_len)) {
     // truncated input
@@ -747,6 +745,7 @@ gc_object__field_to_type(field)
 | `gc_object__declare_dirty` | `void gc_object__declare_dirty(gc_object_t *self)` | Mark the object as modified (for persistence layer) |
 | `gc_object__is_instance_of` | `bool gc_object__is_instance_of(const gc_object_t *self, u32_t of_type, gc_machine_t *ctx)` | Check if the object is an instance of a given type (supports inheritance and monomorphization — a `Box<String>` instance tests true against the generic declaration `Box`) |
 | `gc_object__finalize` | `void gc_object__finalize(gc_object_t *self, gc_machine_t *ctx)` | Finalize (destroy) the object |
+| `gc_object__release_partial` | `void gc_object__release_partial(gc_object_t *self, gc_machine_t *ctx)` | **New in 9.0 (not `gc_sdk`, runtime-internal).** Release an object whose load failed halfway, and what it already holds; one loaded into a block is detached first. For custom `load` callbacks that bail out. |
 | `gc_object__clone` | `gc_object_t *gc_object__clone(gc_object_t *self, gc_machine_t *ctx)` | Deep-clone `self`, returning a new (marked) object; the caller owns the mark and must `gc_object__un_mark` it. |
 
 > To create an object, use `gc_machine__create_object(ctx, type_id)` (or `gc_machine__create_return_type_object(ctx)`).

@@ -220,6 +220,14 @@ For functions that are not methods on a type (module-level functions in GCL), us
 extern u32_t gc_mymod_Model;
 extern u32_t gc_mymod_ModelParams;
 
+// Enum entries of the library's own enums (9.0): resolved BY NAME at link to the program's position
+// of the entry, whatever order the store gave the enum. UINT32_MAX until linked. Not compile-time
+// constants: compare with if/else, not `case` labels. (The old `gc_<mod>_<Enum>(name)` slot macro is gone;
+// TensorType / DurationUnit / TimeZone name no entries -- convert them through prog->enums.)
+extern u32_t gc_mymod_PoolingType_none;
+extern u32_t gc_mymod_PoolingType_mean;
+extern u32_t gc_mymod_PoolingType_cls;
+
 // Field offsets for ModelParams
 #define gc_mymod_ModelParams_n_gpu_layers 0
 #define gc_mymod_ModelParams_use_mmap 1
@@ -274,6 +282,9 @@ bool gc_lib_my_plugin__link(gc_program_t *prg, gc_program_library_t *lib) {
         gc_program__resolve_symbol(prg, "ModelParams", 11));
     res &= (gc_mymod_ModelParams != 0);
 
+    // 9.0: enum entries resolved by name (generated for each entry of the library's enums)
+    // res &= gc_program__resolve_enum_entry(prg, gc_mymod_PoolingType, "mean", 4, &gc_mymod_PoolingType_mean);
+
     // Link native function implementations
     res &= gc_program__link_type_fn(prg, gc_mymod_Model,
         (gc_program_function_body_t *)gc_mymod_Model__load,
@@ -324,8 +335,7 @@ bool gc_lib_my_plugin__link_native(gc_program_t *prog, gc_program_library_t *lib
     // Set worker-level hooks (called for each worker thread)
     gc_program_library__set_worker_hooks(lib, worker_start, worker_stop);
 
-    // Optional CLI hooks (see "CLI Hooks" below) — omit if unused
-    gc_program_library__set_install_hook(lib, lib_install);
+    // Optional CLI hook (see "CLI Hooks" below) — omit if unused
     gc_program_library__set_codegen_hook(lib, lib_codegen);
 
     // Configure custom types (see next section)
@@ -388,33 +398,17 @@ static bool worker_stop(gc_unused gc_program_library_t *lib,
 }
 ```
 
-### CLI Hooks (Install & Codegen)
+### CLI Hooks (Codegen)
 
-Two optional hooks let a native library extend the `greycat` CLI itself. Both use the same
-`gc_hook_function_t` signature as the lifecycle hooks and are registered individually:
+**9.0: the install hook was removed** (`gc_program_library__set_install_hook` and `gc_program_library_t.install` are gone): `greycat install` now only downloads — no build, no handover, no install hooks. Move post-install setup (fetching model weights, provisioning `files/`) into `lib_start`, guarded so it runs once; `gc_host__run_function(host)` tells a start hook which function `greycat run` (and `backup` / `stats` / `token` / `user` without a server) is about to call (0 otherwise), so heavy setup can be skipped for unrelated commands.
+
+One optional hook lets a native library extend the `greycat` CLI itself, with the same `gc_hook_function_t` signature as the lifecycle hooks:
 
 ```c
-gc_program_library__set_install_hook(lib, lib_install);
 gc_program_library__set_codegen_hook(lib, lib_codegen);
 ```
 
-Neither is required — a `NULL` hook simply means the library opts out.
-
-**Install hook** — runs at the very end of a successful `greycat install`, after dependencies are
-fetched, the project is rebuilt/reloaded, and the program is linked. Every linked library that
-registers one is invoked, in library order. Returning `false` aborts the command with
-`library install error for <lib>` and a runtime error code. Use it for post-install setup that
-needs the linked program: fetching model weights, provisioning `files/`, compiling assets.
-
-```c
-static bool lib_install(gc_unused gc_program_library_t *lib,
-                        gc_program_t *prog,
-                        gc_unused void **user_data) {
-    (void) prog;
-    // Post-install work; return false to fail `greycat install`.
-    return true;
-}
-```
+A `NULL` hook simply means the library opts out.
 
 **Codegen hook** — makes the library itself a generator for `greycat codegen <lang>`. Dispatch is
 by name: `<lang>` is resolved as a symbol and matched against library names, so a library named
@@ -663,7 +657,7 @@ void apply_params(gc_object_t *params, gc_machine_t *ctx) {
 Full `gc_machine__set_result` signature and primitive/object/string return examples live in **api_core.md** (`gc/machine.h`). Quick reference:
 
 - Primitives: `gc_machine__set_result(ctx, (gc_slot_t){.i64=42}, gc_type_int)` (and `.f64`/`gc_type_float`, `.b`/`gc_type_bool`, `(gc_slot_t){0}`/`gc_type_null`).
-- Enum result: `gc_machine__set_result(ctx, (gc_slot_t){.tu32={.left=0,.right=N}}, gc_type_static_field)` where `N` is the variant ordinal (mirrors the enum-read caveat above).
+- Enum result: `gc_machine__set_result(ctx, (gc_slot_t){.tu32={.left=0,.right=N}}, gc_type_static_field)` where `N` is the entry position — use the link-resolved `gc_<mod>_<Enum>_<entry>` variable from nativegen.h (9.0), not a hard-coded ordinal.
 
 **Plugin-critical caveat — un_mark before returning an object.** A freshly created object is GC-marked; you MUST `gc_object__un_mark` it after `set_result` or it leaks / is collected at the wrong time:
 
@@ -735,7 +729,7 @@ Create with `gc_string__create_from(data, length, ctx)` (trailing `ctx` required
 
 ## Working with Tensors
 
-`gc/tensor.h` (full reference + examples in **api_collections.md**). Plugin pattern: `gc_core_tensor__create(ctx)` → `gc_core_tensor__init_1d(tensor, n, tensor_type, ctx)`, fill element-wise with `gc_core_tensor__set_1d_f32`, then `set_result` + `gc_object__un_mark`. Note: the `tensor_type` argument to `gc_core_tensor__init_1d`/`_xd` is a plain `u8_t` element-type code, NOT the GCL `TensorType` enum object — `TensorType` is `gc_core_TensorType` on the GCL side, and when received as a native-function parameter it arrives as `gc_type_static_field` (read the ordinal from `.tu32.right`, per the enum caveat above), which you then pass through as the `u8_t` element-type code. For hot loops, get the raw pointer via `gc_core_tensor__get_data(tensor)` and the shape via `gc_core_tensor__get_descriptor(tensor)` (`gc_tensor_descriptor_t`, with `desc->size`) and write the buffer directly. The Complete Example below unboxes an input `Tensor` this way.
+`gc/tensor.h` (full reference + examples in **api_collections.md**). Plugin pattern: `gc_core_tensor__create(ctx)` → `gc_core_tensor__init_1d(tensor, n, tensor_type, ctx)`, fill element-wise with `gc_core_tensor__set_1d_f32`, then `set_result` + `gc_object__un_mark`. Note: the `tensor_type` argument to `gc_core_tensor__init_1d`/`_xd` is a `gc_tensor_type_t` code (`gc_tensor_type_f32`, ...; new enum in 9.0), NOT the GCL `TensorType` enum entry. A `TensorType` native-function parameter arrives as `gc_type_static_field`; **convert** its entry (`.tu32.right`) with `gc_program_enum_map__to_fixed(&gc_machine__program(ctx)->enums.tensor_type, slot.tu32.right, &code)` — since 9.0 the entry position is not guaranteed to equal the code. For hot loops, get the raw pointer via `gc_core_tensor__get_data(tensor)` and the shape via `gc_core_tensor__get_descriptor(tensor)` (`gc_tensor_descriptor_t`, with `desc->size`) and write the buffer directly. The Complete Example below unboxes an input `Tensor` this way.
 
 ## Working with Buffers
 
@@ -783,11 +777,9 @@ void tokenize_text(gc_machine_t *ctx) {
 When your GCL enum maps to a C library's enum with potentially different value ordering:
 
 ```c
-// GCL enum values (auto-assigned 0, 1, 2, ...)
-#define gc_mymod_PoolingType_unspecified 0
-#define gc_mymod_PoolingType_none       1
-#define gc_mymod_PoolingType_mean       2
-#define gc_mymod_PoolingType_cls        3
+// 9.0: never hard-code GCL enum ordinals -- an upgraded store may hold the enum in another order.
+// nativegen.h declares `extern u32_t gc_mymod_PoolingType_<entry>`, resolved by name at link
+// (gc_program__resolve_enum_entry). They are variables, so use an if-cascade, not a switch.
 
 // C library enum may have different values
 enum lib_pooling_type {
@@ -799,13 +791,10 @@ enum lib_pooling_type {
 
 // Always use explicit mapping (never assume values match!)
 static enum lib_pooling_type gc_to_lib_pooling_type(u32_t gc_value) {
-    switch (gc_value) {
-    case gc_mymod_PoolingType_unspecified: return LIB_POOLING_UNSPECIFIED;
-    case gc_mymod_PoolingType_none:        return LIB_POOLING_NONE;
-    case gc_mymod_PoolingType_mean:        return LIB_POOLING_MEAN;
-    case gc_mymod_PoolingType_cls:         return LIB_POOLING_CLS;
-    default:                               return LIB_POOLING_UNSPECIFIED;
-    }
+    if (gc_value == gc_mymod_PoolingType_none) return LIB_POOLING_NONE;
+    if (gc_value == gc_mymod_PoolingType_mean) return LIB_POOLING_MEAN;
+    if (gc_value == gc_mymod_PoolingType_cls)  return LIB_POOLING_CLS;
+    return LIB_POOLING_UNSPECIFIED;
 }
 
 // Apply enum from an object field

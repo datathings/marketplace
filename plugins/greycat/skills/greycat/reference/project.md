@@ -32,7 +32,7 @@ The runtime / lang starts loading from the entrypoint. It parses the file, walks
 Declares a dependency on a library named `name` at version `version`. Resolution:
 
 1. Look for `<project>/lib/<name>/` and use it if present.
-2. For `name == "std"` only: fall back to `<GREYCAT_HOME>/lib/std/` (the runtime install).
+2. For `name == "std"` only: fall back to the `lib/std/` of the install the `greycat` binary runs from, beside its `bin/` (`~/.greycat/lib/std/` for the default install). Without either, compiling fails with `unresolved module`, which `greycat install` passes over to fetch std.
 
 A library directory has no entrypoint: every `.gcl` file under `<project>/lib/<name>/` is loaded recursively. A library must therefore not contain a `project.gcl` of its own — it would collide with the consuming project's entrypoint module (`already declared module`). Library modules may carry their own `@library` pragmas, so transitive dependencies resolve and the closure stays whole-graph.
 
@@ -183,8 +183,8 @@ my-project/
 Conventions:
 
 - One `project.gcl` per project, at the root.
-- `bin/` is populated by `greycat install` — gitignored. When a `bin/greycat` exists, the system `greycat` re-execs into it (set `GREYCAT_NO_REDIRECT=true` to bypass).
-- `lib/` is populated by `greycat install` — gitignored. `lib/installed` is the install cache, do not commit.
+- `bin/` is populated by `greycat install` — gitignored. It holds `greycat`, which loads OpenSSL (`libssl.3` and `libcrypto.3`: `.dylib` on macOS, `.so` on Linux, `-3-x64.dll` on Windows) from `lib/ssl/` next to `bin/`. The binary does not start without them, so deploy `bin/` together with `lib/ssl/`, and after deleting `lib/` run `greycat install` before any other command. When a `bin/greycat` exists, the system `greycat` re-execs into it (set `GREYCAT_NO_REDIRECT=true` to bypass); `install` and `upgrade` never do.
+- `lib/` is populated by `greycat install` — gitignored. `lib/installed` is the install cache, do not commit. `lib/ssl/` comes with `std`: the OpenSSL the binary loads, its headers and `openssl.cmake`, which native libraries build with.
 - `src/` for application code.
 - `files/` and `gcdata/` are runtime-managed and gitignored.
 - `webroot/` for public assets served by the HTTP server. A library can ship its own assets in

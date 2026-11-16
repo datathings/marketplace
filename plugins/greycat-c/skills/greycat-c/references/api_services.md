@@ -400,7 +400,9 @@ Calendar conversion, timezone handling, ISO 8601 parsing, and formatting. GreyCa
 |----------|-------|-------------|
 | `GC_DTZ_OK` | 0 | Conversion succeeded |
 | `GC_DTZ_ILLEGAL_TIMESTAMP` | 1 | Invalid or illegal timestamp |
-| `GC_DTZ_ZONE_COUNT` | 598 | **New in 8.4.** Zones in the generated tables (= entries of std's `TimeZone` enum; a `tz` is its ordinal, 0 = UTC). A `tz` at or past it reads as UTC in `gc_dtz_utc_to_time_zone` / `gc_time__tm_from_time` / `gc_dtz_first_day_of_week`, and is refused (`GC_DTZ_ILLEGAL_TIMESTAMP` / `false` / 0) by `gc_dtz_time_zone_to_utc`, `gc_dtz_time__parse`, `gc_dtz_time__print` |
+| `GC_DTZ_UTC` | 0 | **New in 9.0.** The zone index of UTC. |
+| `gc_dtz_zone_names[GC_DTZ_ZONE_COUNT]` | `gc_sdk extern const char *const` | **New in 9.0.** Name of each zone = the std `TimeZone` entry that stands for it. |
+| `GC_DTZ_ZONE_COUNT` | 598 | Zones in the generated tables of dtz.c. **9.0: a `tz` is a dtz zone index, no longer the `TimeZone` enum ordinal** — convert a GCL `TimeZone` slot by entry name via `prog->enums.time_zone` (`gc_program_enum_map__to_fixed`). A `tz` at or past it reads as UTC in `gc_dtz_utc_to_time_zone` / `gc_time__tm_from_time` / `gc_dtz_first_day_of_week`, and is refused (`GC_DTZ_ILLEGAL_TIMESTAMP` / `false` / 0) by `gc_dtz_time_zone_to_utc`, `gc_dtz_time__parse`, `gc_dtz_time__print` |
 
 **Days-in-month lookup:**
 
@@ -685,7 +687,7 @@ f64_t bits   = log2(n);            // log base 2, e.g. tree depth estimate
 <a id="gcutil-h"></a>
 ## gc/util.h — Utility Functions
 
-Miscellaneous utilities: Morton code (Z-order curve) encoding/decoding for spatial indexing, hex conversion, number parsing, JSON parsing, deep equality, slot hashing, duration parsing, sorting, and license level checking.
+Miscellaneous utilities: Morton code (Z-order curve) encoding/decoding for spatial indexing, hex conversion, number parsing (`gc/int.h`), UTF-8 code point parsing (`gc/char.h`), JSON parsing, deep equality, slot hashing, sorting. (9.0: `gc_duration__parse` moved to `gc/duration.h`, the number parsers to `gc/int.h`; license level checking was removed.)
 
 ### Morton Code (Z-Order Curve)
 
@@ -733,11 +735,12 @@ These functions interleave/deinterleave integer coordinates into a single 64-bit
 
 | Function | Description |
 |----------|-------------|
-| `gc_common__parse_number(str, str_len)` | Parse an unsigned integer from a string. `str_len` is `u64_t *` (in: available, out: bytes consumed). |
-| `gc_common__parse_sign_number(str, str_len)` | Parse a signed integer from a string. `str_len` is `u32_t *` (in: available, out: bytes consumed). |
+| `gc_sdk u64_t gc_common__parse_number(const char *str, u64_t *str_len)` | **`gc/int.h` since 9.0.** Read the leading decimal digits; `*str_len` in: available, out: digits read (0 if none). No overflow check (wraps past UINT64_MAX). |
+| `gc_sdk i64_t gc_common__parse_sign_number(const char *str, u32_t *str_len)` | **`gc/int.h` since 9.0.** Same after an optional `-` (counted in `*str_len`). Note `u32_t *` vs `u64_t *` above. |
+| `gc_sdk bool gc_char__parse(const char *str, u32_t len, u32_t *cp)` | **New in 9.0 (`gc/char.h`).** Read `[str, str+len)` as exactly one Unicode code point in shortest-form UTF-8 (surrogates excluded); `false`, `*cp` untouched, otherwise. |
 | `gc_common__parse_date_iso8601(data, len, epoch_utc)` | Parse an ISO 8601 date string to a UTC epoch (microseconds) |
-| `gc_json__parse(ctx, str, len, result, type, type_d)` | Parse a JSON string into a GreyCat slot. Returns `true` on success. |
-| `gc_duration__parse(str, len, duration)` | Parse a duration string (e.g., "1h30m") into microseconds |
+| `gc_json__parse(ctx, str, len, result, type, type_d)` | Parse a JSON string into a GreyCat slot targeting `type_d`. Returns `true` on success; the returned object is marked and the caller owns that reference. |
+| `gc_duration__parse(str, len, duration)` | Parse a duration string (e.g., "1h30m") into microseconds — **declared in `gc/duration.h` since 9.0** (see api_core.md, *Duration Units*) |
 
 ### Deep Equality & Hashing
 
@@ -777,16 +780,7 @@ A stable sort implementation for arrays of sort slots. The trailing `gc_allocato
 
 ### License
 
-```c
-typedef enum gc_license_level {
-    gc_license_level_community = 0,
-    gc_license_level_pro       = 1,
-    gc_license_level_server    = 2,
-    gc_license_level_platform  = 3
-} gc_license_level_t;
-
-gc_license_level_t gc_license__level();  // Get the current license level
-```
+**Removed in 9.0:** `gc_license_level_t` and `gc_license__level()` are gone (std's `License` / `LicenseType` and `RuntimeInfo.license` too). There is no license gate in the SDK anymore.
 
 ### Usage Examples
 
@@ -947,14 +941,6 @@ u32_t z = deinterleave64_3d_x2(key3d);
 u16_t w = deinterleave64_4d_x3(key4d);
 ```
 
-**License level gate.** `gc_license__level()` returns the current `gc_license_level_t`; compare against the enum to gate features.
-
-```c
-if (gc_license__level() < gc_license_level_pro) {
-    gc_machine__set_runtime_error(ctx, "this feature requires a Pro license");
-    return;
-}
-```
 
 
 ---

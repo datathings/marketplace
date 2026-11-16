@@ -1,6 +1,6 @@
-# GreyCat C SDK — Collections: Array, Map, Table & Tensor
+# GreyCat C SDK — Collections: Array, Map, Table, Tensor & C Hash Maps
 
-In-memory data structures: dynamic arrays, hash maps, 2D tables, and multi-dimensional tensors (incl. complex c64/c128).
+In-memory data structures: dynamic arrays, hash maps, 2D tables, multi-dimensional tensors (incl. complex c64/c128), and the plain-C integer/string hash maps (`gc_u32_map_t`, `gc_u64_map_t`, `gc_str_map_t`, new in 9.0).
 
 _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL.md). Sibling references: api_core.md · api_memory_text.md · api_collections.md · api_runtime_storage.md · api_services.md._
 
@@ -10,6 +10,7 @@ _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL
 - [gc/map.h — Hash Maps](#gcmap-h)
 - [gc/table.h — 2D Tables](#gctable-h)
 - [gc/tensor.h — Multi-dimensional Tensors](#gctensor-h)
+- [gc/u32_map.h, gc/u64_map.h, gc/str_map.h — C Hash Maps](#gcintmap-h) (new in 9.0)
 
 ---
 
@@ -396,6 +397,25 @@ if (!gc_table__set_row(table, row, value_slot, value_type, ctx)) {
 
 High-performance multi-dimensional arrays supporting up to 8 dimensions and multiple numeric types (i32, i64, f32, f64, c64, c128). Designed for ML and numerical computing workloads.
 
+### Element Type (`gc_tensor_type_t`) — new in 9.0
+
+The element-type code the tensor encoding stores, fixed in every program and store. GCL `TensorType` converts to/from it **by entry name** through `prog->enums.tensor_type` (see api_core.md, *Enum Entries & Fixed-Value Enum Maps*). Use these enumerators wherever the API takes a `u8_t tensor_type` / reads `descriptor.type`.
+
+```c
+typedef enum gc_tensor_type {
+    gc_tensor_type_i32 = 0,
+    gc_tensor_type_i64 = 1,
+    gc_tensor_type_f32 = 2,
+    gc_tensor_type_f64 = 3,
+    gc_tensor_type_c64 = 4,
+    gc_tensor_type_c128 = 5,
+} gc_tensor_type_t;
+#define gc_tensor_type_size 6
+gc_sdk extern const char *const gc_tensor_type_names[gc_tensor_type_size]; // GCL TensorType entry names
+```
+
+`gc/tensor.h` now includes `gc/complex.h` (for `c64_t` / `c128_t`).
+
 ### Structure
 
 ```c
@@ -407,14 +427,16 @@ typedef struct {
 } gc_tensor_t;
 ```
 
+`data` is nullptr until the tensor first holds elements; a later shape without elements or a reset **keeps** it, so test `descriptor.size`, not `data`, to know whether there are elements.
+
 ### Descriptor
 
 ```c
 typedef struct {
     i64_t dim[GC_CORE_TENSOR_DIM_MAX];  // Shape: size of each dimension (max 8)
-    i8_t nb_dim;                         // Number of dimensions (1-8)
-    i8_t batch_dim;                      // Batch dimension index (-1 if none)
-    u8_t type;                           // Element type (TensorType enum)
+    i8_t nb_dim;                         // Number of dimensions (0-8)
+    i8_t batch_dim;                      // -1 unless update_size recorded a zero-length dim; init leaves it as it was
+    u8_t type;                           // Element type: a gc_tensor_type_t
     u8_t nature;                         // Tensor nature/category
     i64_t size;                          // Total number of elements
     i64_t capacity;                      // Allocated capacity in bytes
@@ -431,9 +453,11 @@ typedef struct {
 
 ### Error Messages
 
+**Changed in 9.0:** these are now only short messages for an SDK caller raising **its own** tensor errors. The SDK functions raise messages of their own that name the shapes and types involved (e.g. `TensorType::f64`, `[2, 3]`), so don't compare `gc_machine__error_buffer` against these constants. Build such messages with `gc_core_tensor__add_type_name` / `gc_core_tensor__add_shape`.
+
 | Constant | Message |
 |----------|---------|
-| `GC_ERROR_TENSOR_UNSUPPORTED_TYPE` | "Unsupported type, only f64, f32 and i32 tensors are supported" (8.4 wording; raised for an unknown type code and by `gc_core_tensor_descriptor__supported_types`) |
+| `GC_ERROR_TENSOR_UNSUPPORTED_TYPE` | "Unsupported type, only f64, f32 and i32 tensors are supported" |
 | `GC_ERROR_TENSOR_INCORRECT_DIM` | "Incorrect dimension" |
 | `GC_ERROR_TENSOR_INCORRECT_TYPE` | "Incorrect type" |
 | `GC_ERROR_TENSOR_DIMENSION_MISMATCH` | "Tensors dimension mismatch" |
@@ -456,7 +480,7 @@ typedef struct {
 | `gc_core_tensor__init_3d(self, c, h, w, type, ctx)` | Initialize as 3D (e.g., image: channels x height x width) |
 | `gc_core_tensor__init_4d(self, n, c, h, w, type, ctx)` | Initialize as 4D (e.g., batch: batch x channels x height x width) |
 | `gc_core_tensor__init_5d(self, t, n, c, h, w, type, ctx)` | Initialize as 5D (e.g., video: time x batch x channels x height x width) |
-| `gc_core_tensor__init_xd(self, dim, shape[], type, ctx)` | Initialize with an arbitrary number of dimensions |
+| `gc_core_tensor__init_xd(self, dim, shape[], type, ctx)` | Initialize with an arbitrary number of dimensions, zero-filled; reallocates only if `capacity` is too small. A zero-length dim gives `size` 0 and allocates nothing; `tensor_dim` 0 gives **one** element. Runtime error + tensor unchanged on bad rank/type/dim/size/allocation. |
 
 ### Element Access (Get / Set / Add)
 
@@ -491,7 +515,7 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 // ... same pattern for all types and dimensions
 ```
 
-**Bounds hazard (header contract):** each accessor checks element type and `nb_dim` first (`GC_ERROR_TENSOR_INCORRECT_TYPE` / `_INCORRECT_DIM`: getters/adders return 0), then bounds (`GC_ERROR_TENSOR_OUT_OF_BOUND`). On an out-of-bound position the **getters still read `tensor->data`** (element 0, or `nullptr` on an unshaped / zero-length tensor → crash); setters/adders write nothing. Validate positions against `descriptor.dim` / `descriptor.size` before a get. A tensor built with `gc_machine__init_tensor` (caller-owned `data` + `proxy`) must not be re-shaped: `init_xd` / `update_capacity` would free `data` through the allocator.
+**Checks (9.0 header contract):** each accessor checks element type and `nb_dim` first (getters/adders return 0, setters return), then bounds, raising an error that names the expected vs given tensor, or the position and the shape. **Fixed in 9.0:** every accessor (getters included) judges the position itself, whatever error the machine already holds — a refused position reads as 0, writes nothing, and the adder returns 0 (the 8.4 "getter reads `data[0]` / crashes on nullptr" hazard is gone). In the standalone core `gc_machine__set_runtime_error` is a no-op and `gc_machine__error` reports false, so a 0 there can't be told from a zero element: validate against `descriptor.dim` when that matters. A tensor built with `gc_machine__init_tensor` (caller-owned `data` + `proxy`) must not be re-shaped: `init_xd` / `update_capacity` would free `data` through the allocator.
 
 **Supported types for get/set/add:** `i32`, `i64`, `f32`, `f64`, `c64`, `c128`
 **Supported dimensions:** 1D, 2D, 3D, N-D
@@ -500,19 +524,23 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 
 | Function | Description |
 |----------|-------------|
-| `gc_core_tensor__get_data(t)` | Get the raw data pointer |
-| `gc_core_tensor__get_descriptor(t)` | Get a pointer to the descriptor |
+| `gc_sdk char *gc_core_tensor__get_data(const gc_tensor_t *t)` | Raw payload (`descriptor.size` elements); nullptr for a nullptr `t` or a tensor that never held elements. (9.0: `const t`) |
+| `gc_core_tensor__get_descriptor(t)` | Get a pointer to the descriptor (read or change in place; use `set_descriptor` for a change of shape) |
 | `gc_core_tensor__set_descriptor(t, desc)` | Replace the descriptor |
 | `gc_core_tensor__set_proxy(tensor, proxy, ctx)` | **Signature changed in 8.4: new `gc_machine_t *ctx` param** — `gc_sdk void gc_core_tensor__set_proxy(gc_tensor_t *tensor, gc_object_t *proxy, gc_machine_t *ctx)`. Declares `proxy` the owner of the payload and **marks** it (the finalizer un-marks it instead of freeing `data`); a different previous proxy loses the tensor's mark; re-setting the current proxy is a no-op. `proxy` must not be `nullptr`. |
-| `gc_core_tensor__diff(t1, t2, ctx)` | Largest absolute element-wise difference (modulus for complex types); `-1` with a runtime error when types or shapes differ |
-| `gc_core_tensor__check_shape(shape, tot_size, skip_zero)` | Validate a shape array |
-| `gc_core_tensor__pos_to_offset(self, p[], ctx)` | Convert multi-dimensional position to flat offset |
-| `gc_core_tensor__update_capacity(tensor, ctx)` | Reallocate data to match descriptor size |
-| `gc_core_tensor__reset_internal(self)` | Reset internal state (descriptor + data pointer) |
-| `gc_core_tensor__clone_internal(dst, src, ctx)` | Deep-copy tensor internals from src to dst (allocates new data buffer via the call's allocator) |
+| `gc_sdk f64_t gc_core_tensor__diff(const gc_tensor_t *t1, const gc_tensor_t *t2, gc_machine_t *ctx)` | Largest absolute element-wise difference (modulus for complex types); `-1` with a runtime error when types or shapes differ. (9.0: `const` params) |
+| `gc_sdk bool gc_core_tensor__check_shape(const gc_array_t *shape, u64_t *tot_size, bool skip_zero)` | Validate a shape array (≤ 8 non-negative ints, product < `GC_CORE_TENSOR_SIZE_MAX`); `false`, no error set. (9.0: `const shape`) |
+| `gc_sdk void gc_core_tensor__add_type_name(gc_buffer_t *buffer, u8_t type)` | **New in 9.0.** Append `TensorType::f64` (etc.) for a type code, as the SDK's error messages name it. |
+| `gc_sdk void gc_core_tensor__add_shape(gc_buffer_t *buffer, i64_t nb_dim, const i64_t dim[])` | **New in 9.0.** Append a shape as the error messages print it: `[2, 3]`. |
+| `gc_core_tensor__pos_to_offset(self, p[], ctx)` | Convert multi-dimensional position to flat offset (raises an error and returns 0 when out of bounds / unshaped — check `gc_machine__error`) |
+| `gc_core_tensor__update_capacity(tensor, ctx)` | Grow data to hold `descriptor.size` elements (new bytes zeroed); `false` with an error raised past `GC_CORE_TENSOR_CAPACITY_MAX` or on allocation failure |
+| `gc_core_tensor__reset_internal(self)` | Zero payload and shape (`nb_dim` 0, `size` 0, `type` 0 = i32, `batch_dim` -1); keeps the allocation and `capacity` |
+| `gc_sdk bool gc_core_tensor__clone_internal(gc_tensor_t *dst, const gc_tensor_t *src, gc_machine_t *ctx)` | **9.0: returns `bool` (was `void`), `const src`.** Copy src's descriptor + payload into dst (reallocating `dst->data` if too small; dst keeps its capacity/marks/block). `false` with an error raised, dst unchanged, on allocation failure. |
 | `gc_core_tensor__print(self, name)` | Print tensor contents to stdout (debug) |
 
 ### Descriptor Utilities
+
+**9.0:** every descriptor function that only reads its operands now takes `const gc_tensor_descriptor_t *` (`nb_arrays`, `check_type`, `check_dim`, `sum_check_result`, `sum_size` (`a`), `tensor_mult_check` / `_check_result` / `_size` (`a`, `b`, and `result` for `_check_result`), `add_bias_check_result`, `add_bias_size` (`a`, `b`), `supported_types`, `default_check`, `matrix_count`, `leading_dim`). Their errors now name the shapes/types instead of raising the bare `GC_ERROR_TENSOR_*` strings. Source-compatible for callers.
 
 | Function | Description |
 |----------|-------------|
@@ -523,7 +551,7 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 | `gc_core_tensor_descriptor__nb_arrays(desc)` | Get the number of 1D arrays (product of dims except last) |
 | `gc_core_tensor_descriptor__check_type(a, b, ctx)` | Verify two descriptors have the same element type |
 | `gc_core_tensor_descriptor__check_dim(a, b, ctx)` | Verify two descriptors have the same dimensions |
-| `gc_core_tensor_descriptor__update_size(desc, ctx)` | Recompute `size` from `dim[]` and `nb_dim` |
+| `gc_core_tensor_descriptor__update_size(desc, ctx)` | Recompute `size` from `dim[]` and `nb_dim`, **leaving zero-length dims out of the product** (so `[0, 4]` gets `size` 4, unlike an init of that shape) and recording the last as `batch_dim` (left as-is when none). `false`, size untouched, on a negative dim / overflow |
 | `gc_core_tensor_descriptor__to_json(desc, buffer, prog)` | Serialize descriptor to JSON |
 | `gc_core_tensor_descriptor__increment_index(nb_dim, dim, index)` | Increment a multi-dim index |
 | `gc_core_tensor_descriptor__index_to_offset(nb_dim, dim, index)` | Convert multi-dim index to flat offset |
@@ -551,12 +579,9 @@ f32_t gc_core_tensor__add_2d_f32(tensor, row, col, value, ctx);
 
 ### Usage Examples
 
-The TensorType element-type tags used everywhere below are integer constants:
-`gc_core_TensorType_i32` (0), `_i64` (1), `_f32` (2), `_f64` (3), `_c64` (4), `_c128` (5).
+The element-type tags used below are the `gc_tensor_type_t` enumerators (new in 9.0): `gc_tensor_type_i32` (0), `_i64` (1), `_f32` (2), `_f64` (3), `_c64` (4), `_c128` (5). (Before 9.0 plugins `#define`d their own `gc_core_TensorType_*` ordinals; replace those with the SDK enum. To read/return a GCL `TensorType` enum value, convert through `prog->enums.tensor_type` — the enum's entry order is not guaranteed to match.)
 
-> Note: these are the integer ordinals of the `TensorType` enum. The public tensor API takes a raw `u8_t tensor_type`, and the public headers expose only the `TensorType` type id (`prog->core.TensorType`) — not per-member constants. Pass the ordinal directly; plugins typically `#define gc_core_TensorType_f64 3` (etc.) in their own header for readability, as the bundled libraries do.
-
-**Create, initialize, fill, and return a tensor** — the canonical native-function pattern. `gc_core_tensor__create` produces an empty (uninitialized) tensor object; you must call one of the `init_*` functions before any element access. `init_*` may set a runtime error (e.g. `GC_ERROR_TENSOR_TOO_LARGE`, `GC_ERROR_TENSOR_INCORRECT_DIM`) and leave the tensor untouched, so always check before writing. Because `create` returns a freshly marked object, un-mark it after publishing the result:
+**Create, initialize, fill, and return a tensor** — the canonical native-function pattern. `gc_core_tensor__create` produces an empty (uninitialized) tensor object; you must call one of the `init_*` functions before any element access. `init_*` may set a runtime error (bad rank/type/dim, too large, allocation failure) and leave the tensor untouched, so always check before writing. Because `create` returns a freshly marked object, un-mark it after publishing the result:
 
 ```c
 void my_make_matrix(gc_machine_t *ctx) {
@@ -564,7 +589,7 @@ void my_make_matrix(gc_machine_t *ctx) {
     i64_t cols = 4;
 
     gc_tensor_t *t = gc_core_tensor__create(ctx);
-    gc_core_tensor__init_2d(t, rows, cols, gc_core_TensorType_f64, ctx);
+    gc_core_tensor__init_2d(t, rows, cols, gc_tensor_type_f64, ctx);
     if (gc_machine__error(ctx)) {
         gc_object__un_mark((gc_object_t *) t, ctx);
         return;
@@ -588,7 +613,7 @@ void my_make_matrix(gc_machine_t *ctx) {
 ```c
 gc_tensor_t *vec = gc_core_tensor__create(ctx);
 i64_t shape[1] = { values->size };
-gc_core_tensor__init_xd(vec, 1, shape, gc_core_TensorType_f64, ctx);
+gc_core_tensor__init_xd(vec, 1, shape, gc_tensor_type_f64, ctx);
 for (i64_t i = 0; i < values->size; i++) {
     gc_core_tensor__set_1d_f64(vec, i, source_data[i], ctx);
 }
@@ -620,14 +645,14 @@ u64_t byte_len = (u64_t) d->size * elem_size;
 gc_tensor_t *x = /* ... */;
 gc_tensor_t *y = /* ... */;
 if (!gc_core_tensor_descriptor__check_type(&x->descriptor, &y->descriptor, ctx)) {
-    return; // GC_ERROR_TENSOR_DIFFERENT_TYPE already set
+    return; // error naming both types already set
 }
 if (x->descriptor.size != y->descriptor.size) {
     gc_machine__set_runtime_error(ctx, GC_ERROR_TENSOR_DIFFERENT_SIZE);
     return;
 }
 if (!gc_core_tensor_descriptor__check_dim(&x->descriptor, &y->descriptor, ctx)) {
-    return; // GC_ERROR_TENSOR_DIMENSION_MISMATCH already set
+    return; // error naming both shapes already set
 }
 f64_t max_abs_diff = gc_core_tensor__diff(x, y, ctx); // sum/max of |x[i] - y[i]|
 ```
@@ -636,7 +661,7 @@ f64_t max_abs_diff = gc_core_tensor__diff(x, y, ctx); // sum/max of |x[i] - y[i]
 
 ```c
 if (!gc_core_tensor_descriptor__default_check(&a->descriptor, &b->descriptor, ctx)) {
-    return; // appropriate GC_ERROR_TENSOR_* set by the failing sub-check
+    return; // error set by the failing sub-check
 }
 // safe to proceed with the element-wise kernel
 ```
@@ -649,7 +674,7 @@ desc.nb_dim = 2;
 desc.dim[0] = rows;
 desc.dim[1] = cols;
 desc.batch_dim = -1;
-desc.type = gc_core_TensorType_f32;
+desc.type = gc_tensor_type_f32;
 gc_core_tensor_descriptor__update_size(&desc, ctx); // recompute desc.size from dim[]/nb_dim
 gc_tensor_t *view = gc_machine__init_tensor(desc, owner_obj, owner_buffer, ctx);
 ```
@@ -671,7 +696,7 @@ if (!gc_core_tensor__check_shape(new_shape, &new_size, false)) {
 gc_tensor_descriptor_t *a = &lhs->descriptor;
 gc_tensor_descriptor_t *b = &rhs->descriptor;
 if (!gc_core_tensor_descriptor__tensor_mult_check(a, /*trans_a*/ false, b, /*trans_b*/ false, ctx)) {
-    return; // GC_ERROR_TENSOR_MATMUL or dimension mismatch already set
+    return; // error naming the rule and the operand shapes already set
 }
 gc_tensor_descriptor_t out = {0};
 out.type = a->type;
@@ -714,5 +739,67 @@ do {
 gc_core_tensor_descriptor__to_json(&t->descriptor, buffer, prog);
 ```
 
-
 ---
+
+<a id="gcintmap-h"></a>
+## gc/u32_map.h, gc/u64_map.h, gc/str_map.h — C Hash Maps (new in 9.0)
+
+Plain C hash maps for native code (not GreyCat objects — no marks, no GC). The program's name indexes use them (they replaced `gc_program_map_t`). `gc/u32_map.h` and `gc/u64_map.h` are included by `greycat.h`; `gc/str_map.h` comes in through `gc/program.h`.
+
+Common rules: open addressing with Robin Hood probing, a power of two buckets at most 60% full. A zero-initialized map (`= {}`) is empty and allocates nothing until its first put/add. Every call that may allocate takes the allocator, which **must be the same for the whole life of the map**. No removal (only `clear`).
+
+### gc_u32_map_t / gc_u64_map_t (integer keys -> integer values)
+
+Same API, `u32_t` vs `u64_t` keys and values. Key 0 is stored beside the buckets (`has_zero` / `zero_value`), so **any** key can be stored. `GC_U32_MAP_MAX_CAPACITY` / `GC_U64_MAP_MAX_CAPACITY` = `1U << 31` buckets.
+
+```c
+typedef struct { u32_t key; u32_t value; u32_t hash; } gc_u32_map_bucket_t;   // u64: u64_t key, value
+typedef struct {
+    gc_u32_map_bucket_t *buckets;
+    u32_t capacity;   // 0 or a power of two
+    u32_t size;       // entries, key 0 included
+    u32_t threshold;  // bucket entries past which a put grows
+    u32_t mask;
+    bool has_zero;
+    u32_t zero_value; // gc_u64_map_t: u64_t
+} gc_u32_map_t;
+```
+
+| Function (u32 shown; `gc_u64_map__*` identical with `u64_t` keys/values) | Description |
+|----------|-------------|
+| `gc_sdk bool gc_u32_map__get(const gc_u32_map_t *self, u32_t key, u32_t *value)` | `false` (`*value` untouched) if absent. |
+| `gc_sdk bool gc_u32_map__put(gc_u32_map_t *self, u32_t key, u32_t value, gc_allocator_t *allocator)` | Set/replace. An existing key never moves buckets. `false`, map untouched, if growth fails. |
+| `gc_sdk bool gc_u32_map__reserve(gc_u32_map_t *self, u32_t nb, gc_allocator_t *allocator)` | Grow to hold `nb` entries without regrowing (`nb` is `u32_t` for both maps). |
+| `gc_sdk bool gc_u32_map__next(const gc_u32_map_t *self, u32_t *pos, u32_t *key, u32_t *value)` | Iterate in no defined order: `*pos = 0` to start; `false` past the last. A put of a new key meanwhile may skip/repeat entries. |
+| `gc_sdk void gc_u32_map__clear(gc_u32_map_t *self)` | Remove every entry, keep the buckets. |
+| `gc_sdk void gc_u32_map__finalize_ex(gc_u32_map_t *self, gc_allocator_t *allocator)` | Free the buckets of a caller-held (inline) map; it is then all zero. |
+| `gc_sdk gc_u32_map_t *gc_u32_map__create(gc_allocator_t *allocator)` | Heap-allocate an empty map; nullptr on OOM. |
+| `gc_sdk void gc_u32_map__finalize(gc_u32_map_t *self, gc_allocator_t *allocator)` | Free buckets + map from `__create`. Accepts nullptr. |
+
+```c
+gc_allocator_t *a = gc_host__global_allocator();
+gc_u64_map_t seen = {};                         // empty, no memory yet
+if (!gc_u64_map__put(&seen, node_ref, 1, a)) { /* OOM */ }
+u64_t v;
+if (gc_u64_map__get(&seen, node_ref, &v)) { /* hit */ }
+u32_t pos = 0; u64_t k;
+while (gc_u64_map__next(&seen, &pos, &k, &v)) { /* visit */ }
+gc_u64_map__finalize_ex(&seen, a);
+```
+
+### gc_str_map_t (strings -> non-zero u32, text not stored)
+
+Each bucket keeps only the string's hash, length and value; the caller gives the text back through a callback (e.g. a symbol id or fragment offset it can resolve). Value **0 marks an empty bucket** and cannot be stored.
+
+```c
+typedef struct { u32_t hash; u32_t len; u32_t value; } gc_str_map_bucket_t;
+typedef struct { gc_str_map_bucket_t *buckets; u32_t capacity, size, threshold, mask; } gc_str_map_t;
+typedef const char *(gc_str_map_text_t)(const void *ctx, u32_t value);  // text of the stored string `value`
+```
+
+| Function | Description |
+|----------|-------------|
+| `gc_sdk u32_t *gc_str_map__find(const gc_str_map_t *self, u64_t hash, const char *str, u32_t len, gc_str_map_text_t *text, const void *ctx)` | Pointer to the value of `str` (`hash` = `gc_string__hash`), nullptr if absent. Writable; valid until the next add/reserve. |
+| `gc_sdk bool gc_str_map__add(gc_str_map_t *self, u64_t hash, u32_t len, u32_t value, gc_allocator_t *allocator)` | Add a string the map does not hold (call `find` first), `value != 0`. `false`, untouched, on OOM. |
+| `gc_sdk bool gc_str_map__reserve(gc_str_map_t *self, u32_t nb, gc_allocator_t *allocator)` | Grow to hold `nb` entries. |
+| `gc_sdk void gc_str_map__finalize_ex(gc_str_map_t *self, gc_allocator_t *allocator)` | Free the buckets; map becomes all zero. |

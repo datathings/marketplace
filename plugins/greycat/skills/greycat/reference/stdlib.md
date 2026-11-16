@@ -6,11 +6,11 @@ The stdlib ships under `lib/std/` (split into `core.gcl`, `io.gcl`, `runtime.gcl
 
 - Collections (Array, Map, Set, Tuple, Table, Buffer)
 - Util collections (Queue, Stack, SlidingWindow, TimeWindow)
-- Node tags (graph-persisted: node, nodeTime, nodeList, nodeIndex, nodeGeo)
+- Node tags (graph-persisted: node, nodeTime, nodeList, nodeIndex, nodeSet, nodeIndexSet, nodeGeo)
 - Time and duration
 - Geographic types (geo, GeoBox, GeoCircle, GeoPoly)
 - IO (Reader / Writer, Json, Csv)
-- Networking (Url, Smtp)
+- Networking (Url, HttpRequest and HttpResponse, Smtp)
 - Crypto and UUID
 - Tensor and vector index
 - Runtime introspection (Runtime, System, Task, Scheduler, Identity)
@@ -173,7 +173,7 @@ These types persist across worker restarts. They are the bridge between in-memor
 
 A value fetched from the graph (`idx.get(k)`, `n.resolve()`, a `for ... in nodeIndex` loop) is a **live node**: mutate its fields in place and the change persists on commit; do NOT `set` it back, which re-attaches an already-attached node and throws `object is already attached to another node`. `set` is for inserting a brand-new node. See [idioms.md](idioms.md), "Working with the graph".
 
-While a `for` loop walks a `nodeTime`, `nodeList`, `nodeIndex` or `nodeGeo`, it can set a new value at a key the node already holds. Adding or removing a key of that node (`setAt`, `set` or `add` with a new key, `setAll`, `remove`, `removeAt`, `removeAll`) throws `concurrent modification`, and so it does while a `nodeTimeCursor` over the node stands on one of its values. A node that holds a single value is the exception: the loop reads that value before its body runs, so the body can change the node. Collect the keys to add or remove, and change the node after the loop; other nodes can change inside it.
+While a `for` loop walks a `nodeTime`, `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` or `nodeGeo`, it can set a new value at a key the node already holds. Adding or removing a key of that node (`setAt`, `set` or `add` with a new key or value, `setAll`, `remove`, `removeAt`, `removeAll`) throws `concurrent modification`, and so it does while a `nodeTimeCursor` over the node stands on one of its values. A node that holds a single value is the exception: the loop reads that value before its body runs, so the body can change the node. Collect the keys to add or remove, and change the node after the loop; other nodes can change inside it.
 
 ### node<T>
 
@@ -218,19 +218,26 @@ Tagged `@iterable @deref("resolve")`.
 
 ### nodeList<T>
 
-Sparse int-indexed list. Used for very large series whose indices may be scattered across the i64 range.
+A list of values read and removed by position: every index is a position `0..size()-1`, and the values after a removed one shift down. There is no `set`: `greycat lint` reports a call to it as `unknown-member`, and `greycat build` still accepts it, so it fails only when it runs, with `type nodeList has no function named set`. Change an object value in place, or `remove` and `add`.
 
 ```gcl
-var l: nodeList<float> = /* ... */;
-l.add(1.0);                        // append at index (lastIndex + 1)
-l.set(100, 2.0);                   // set at explicit index
-l.get(100);
-l.resolve(150);                    // closest-prior read
-l.firstIndex();  l.first();
-l.lastIndex();   l.last();
-l.rangeSize(0, 1000);
-for (i, v in l[0..1000]) { /* ... */ }
+var l = nodeList<float> {};
+l.add(1.0);                        // append at position size()
+l.add(2.0);
+l.get(1);                          // 2.0; null outside 0..size()-1
+l.resolve(5);                      // the last value past the end, null below 0
+l.firstIndex();  l.first();        // 0, null when empty
+l.lastIndex();   l.last();         // size() - 1, null when empty
+l.rangeSize(0, 1);                 // positions in the range; reversed bounds are swapped, the range is clamped to the list
+l.remove(0);                       // true; later values shift down, false outside the list
+for (i, v in l[0..1]) { /* i counts positions; ]a..b], [a..b[ and descending l]4..2] too */ }
 ```
+
+A list written by an earlier version with sparse keys (from `set`) reads by position: `get(0)` is the first stored value.
+
+A position is not an id: it changes when an earlier value is removed. Code that keeps an index elsewhere uses a `nodeIndex<int, T>` with a counter it owns.
+
+Two tasks appending to one list both keep their values, in merge order, and removals and appends do not conflict: the conflicts left are in [tasks.md](tasks.md#concurrent-appends-to-a-nodelist).
 
 ### nodeIndex<K, V>
 
@@ -245,6 +252,77 @@ idx.remove("alice");
 idx.size();
 for (k, v in idx) { /* ... */ }
 ```
+
+### nodeSet<V>
+
+Set of unique values, generic over any `V`.
+
+```gcl
+var s = nodeSet<String> {};
+s.add("red"); // true: "red" was not in the set yet
+s.add("red"); // false: the set already holds it
+s.contains("red"); // true
+s.remove("red");
+s.size();
+s.removeAll();
+// both loop variables bind the value
+for (_, v in s) {
+    println(v);
+}
+```
+
+Two values are the same when they are deeply equal, the rule of a `nodeIndex` key: an `int`, `String`, enum entry or
+other scalar by value, an object by its content, and a `node<T>` by reference. `null` is never an element: `add(null)`
+throws, `contains(null)` is false and `remove(null)` does nothing. A loop walks the values in the order of their
+encoding for a scalar `V` and in hash order otherwise. `->` on a `nodeSet` throws.
+
+Tasks that commit to the same set at once never conflict. The merge applies what each side added and removed: a value
+added on either side is present, a value removed on either side is absent. `removeAll()` removes the values the task
+saw, so a value another task added at the same time stays. `fusion_by_key_last_win` changes nothing for a set, and
+`no_fusion_fail_on_conflict` refuses it like any other structured node ([tasks.md](tasks.md#workers-tasks-and-jobs)).
+
+### nodeIndexSet<K, V>
+
+A multimap: each key holds a set of distinct values, as a `nodeIndex<K, nodeSet<V>>` would, without a node per key.
+
+```gcl
+var idx = nodeIndexSet<String, String> {};
+idx.add("fruit", "apple"); // true: a new pair
+idx.add("fruit", "pear"); // true: a second value under the key
+idx.add("fruit", "apple"); // false: the key holds it already
+idx.get("fruit"); // Array<String> {"apple", "pear"}
+idx.get("nut"); // an empty Array
+idx.contains("fruit", "pear"); // true
+idx.size(); // 2: pairs, not keys
+// one turn per pair, the values of a key one after the other
+for (k, v in idx) {
+    println("${k} ${v}");
+}
+idx.remove("fruit", "pear"); // one pair
+idx.removeKey("fruit"); // the key and every value it holds
+idx.removeAll();
+```
+
+A pair is a key and one of its values. Keys compare as `nodeIndex` keys do, values by deep equality as the elements of a
+`nodeSet` do, and a pair is new when no pair with an equal key and an equal value is there. `null` is never a value:
+`add(key, null)` throws `null can not be added to a nodeIndexSet`. A loop walks the keys in the order of a `nodeIndex`,
+by encoding for a scalar key and by hash otherwise, the values of one key together and in no set order: a merge or a
+removal can change it, and `get` returns them in that order. `->` on a `nodeIndexSet` throws. An object value edited in
+place after `add` does not change the pair; change it with `remove(key, old)` then `add(key, new)`. `greycat lint` does
+not know `nodeIndexSet` yet: it reports a loop over one as `not-iterable` and a module variable of the type as
+`modvar-must-be-node-tag`, and `greycat build` and `greycat run` accept both.
+
+A key with one value costs what it costs in a `nodeIndex`. Up to 32 values, a key keeps them in a chain that every `add`
+to the key walks. Its 33rd value moves them into a `nodeSet` of their own, where `add`, `contains` and `remove` take
+O(log n). The key keeps that set for the life of the index: `remove`, `removeKey` and `removeAll` empty it and leave it
+in the store, and a later `add` fills it again. `NodeReader` lists the set as a `nodeSet`
+([storage.md](storage.md#listing-every-node)).
+
+Tasks that commit to the same index at once never conflict under the default strategies: the pairs merge one by one, as
+the elements of a `nodeSet`. A pair added on either side is present and a pair removed on either side is absent, so two
+values added under one key are both kept. `removeKey` and `removeAll` remove only the pairs the task saw: a pair another
+task added at the same time stays. `fusion_by_key_last_win` changes nothing for it, and `no_fusion_fail_on_conflict`
+refuses it like any other structured node ([tasks.md](tasks.md#workers-tasks-and-jobs)).
 
 ### nodeGeo<T>
 
@@ -269,6 +347,8 @@ Every node tag exposes a static `sample(...)` that returns a `Table` of values f
 nodeTime::sample(refs: Array<nodeTime>, from: time?, to: time?, maxRows: int,
                  mode: SamplingMode, maxDephasing: duration?, tz: TimeZone?): Table
 nodeIndex::sample(refs: Array<nodeIndex>, from: any?, maxRows: int, mode: SamplingMode): Table
+nodeSet::sample(refs: Array<nodeSet>, from: any?, maxRows: int, mode: SamplingMode): Table   // one column per set
+nodeIndexSet::sample(refs: Array<nodeIndexSet>, from: any?, maxRows: int, mode: SamplingMode): Table   // a row per pair
 nodeList::sample(refs: Array<nodeList>, from: int?, to: int?, maxRows: int,
                  mode: SamplingMode, maxDephasing: int?): Table
 nodeGeo::sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: SamplingMode): Table
@@ -283,7 +363,7 @@ nodeGeo::sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: 
 | `adaptative`  | Variable delta — bound the number of skipped elements between samples. Useful for non-monotonic series.   |
 | `dense`       | All elements in range; no down-sampling.                                                                  |
 
-`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. On a `nodeTime` or `nodeList`, `fixed` and `fixed_reg` lay rows at even steps from `from` to `to`, every ref of `refs` sampled at the same keys. Going forward (`from < to`) a row holds the value at or before its key, going backward the value at or after it. A row past the last key going forward, or before the first going backward, is `null`: on a `nodeTime`, it holds that edge value only while it is less than `maxDephasing` away from it (`null` is 0). A `nodeList` sample ignores `maxDephasing`.
+`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. On a `nodeTime` or `nodeList`, `fixed` and `fixed_reg` lay rows at even steps from `from` to `to`, every ref of `refs` sampled at the same keys. Going forward (`from < to`) a row holds the value at or before its key, going backward the value at or after it. A row past the last key going forward, or before the first going backward, is `null`: on a `nodeTime`, it holds that edge value only while it is less than `maxDephasing` away from it (`null` is 0). A `nodeList` sample ignores `maxDephasing`. Its `from` and `to` are positions: without `to` it stops at the last position of the shortest list in `refs`, an empty list there gives an empty table, `fixed_reg` gives the same rows as `fixed` (a list has no gaps), and with no `to` and a `from` past the shortest list's end it walks backward. `nodeList::info` reports the range `0..size()-1`, with a `null` `from` for an empty list.
 
 ## Time and duration
 
@@ -401,6 +481,20 @@ var poly = GeoPoly { points: [p1, p2, p3] };
 poly.contains(other);
 ```
 
+A `geo` latitude is clamped to ±85.05 (the Web Mercator range), a longitude to [-180, 180). `circle.sw()` / `ne()` bound the whole circle; a circle crossing the antimeridian or holding a pole gets a box spanning every longitude, so a box prefilter followed by `circle.contains` misses nothing.
+
+A `GeoBox` spans from `sw.lng()` going east to `ne.lng()`, so a box whose `sw.lng()` is above its `ne.lng()` crosses the antimeridian: `contains`, `intersects`, `intersection`, `union`, `expand`, `center`, `width` and `split` all take it as the narrow box around longitude 180, not the wide one between. A `nodeGeo` range takes its two keys as opposite corners whatever their order, so scan such a box one lobe at a time:
+
+```gcl
+var fiji = GeoBox { sw: geo { -20.0, 175.0 }, ne: geo { -15.0, -178.0 } };
+fiji.crosses_antimeridian(); // true
+for (_, lobe in fiji.lobes()) { // [175..180], then [-180..-178]
+    for (g, v in idx[lobe.sw..lobe.ne]) {
+        // ...
+    }
+}
+```
+
 ## IO
 
 ```gcl
@@ -484,12 +578,15 @@ while (reader.can_read()) {
 }
 ```
 
+`reader.last_line()` returns the row the last `read()` parsed as the file holds it, quotes and separators included, without its line break: copy a row as it is, or quote it in an error.
+
 **Common CSV pitfalls:**
 
 - `CsvFormat.separator` is `char?` (one byte) — write `','`, not `","`. Same for `string_delimiter`, `decimal_separator`, `thousands_separator`.
 - Without `@format` on a `time` field, parsing falls back to ISO 8601 / epoch-ms. Mismatched formats throw at parse time.
 - `geo` is two columns wide (lat then lng). Account for that when matching column order.
 - A greedy `Array<U>` field MUST be the last attribute — there's no way to delimit where it stops otherwise.
+- Into a nullable column, an unquoted cell that is empty, blank or `null` (any case) reads as `null`, even with `trim: false`; quoted, it is the text. `CsvWriter` quotes such Strings, so its own files round-trip `""`, `" "` and `"null"`.
 
 ## Networking
 
@@ -507,18 +604,15 @@ Url::encode(m);                             // "name=John&age=42"
 
 `Url::encode` accepts any value: strings are percent-encoded, objects and `Map`s are flattened to `key=value&key=value` x-www-form-urlencoded form.
 
-### Task — the HTTP request the current task answers
+### HttpRequest and HttpResponse
 
-Every RPC call runs as a task, and these reach the parts of its request `@expose` does not
-pass as arguments. All four answer `null` for a task that answers no request (`greycat run`,
-the scheduler, a call with a `task` header, an `await` job).
+`runtime::HttpRequest` is the whole request of a call: `method`, `uri`, `query`, `headers`, and the body as `body`, or
+as `body_file` when it is larger than `--max_args_memory`. An `@expose`d function taking it as its only parameter
+receives it, which is how a signed webhook checks the bytes it was sent. `runtime::HttpResponse` (`status`,
+`content_type`, `headers`, `body` or `body_file`) is what a function returning it writes as its response: a text
+answer, a download, a redirect. Both are in [http.md](http.md#reading-the-request-writing-the-response).
 
-```gcl
-Task::header("x-signature");              // String?, name matched case-insensitively
-Task::headers();                          // Map<String, String>?, names lowercased
-Task::body();                             // String?, the bytes exactly as they arrived
-Task::uri();                              // String?, path + query, percent-encoding intact
-```
+### Task class
 
 `Task::task_class()` answers the class the current task or job runs in (it raises outside a task, never `null`);
 `spawn` and `await` jobs take a `task_class`:
@@ -527,43 +621,6 @@ Task::uri();                              // String?, path + query, percent-enco
 Task::task_class();                                         // TaskClass
 spawn(Job { function: f, task_class: TaskClass::large });   // also on each await job
 ```
-
-`Task::uri()` is the escape hatch for a query the argument binder cannot express — a
-repeated key (`?tag=a&tag=b`, where binding keeps the last), or two keys that collide once
-`.` and `-` are read as `_`. `Url::parse` takes it and returns `params` already decoded:
-
-```gcl
-var params = Url::parse(Task::uri() ?? "").params;
-params?.get("tag");
-```
-
-`authorization` and `cookie` are withheld from both `header` and `headers`: they carry the
-caller's own GreyCat token, which the function is already running under.
-
-What it is for is authenticating a caller that holds no GreyCat token and signs its payload
-instead, which is how a signed webhook works. Verify against `Task::body()`, not
-against the parsed argument: a payload re-serialized from the object is different bytes and
-will not match.
-
-```gcl
-@expose
-@permission("public")
-fn on_event(event: Event) {
-    var sent = Task::header("x-signature");
-    var body = Task::body();
-    if (sent == null || body == null) {
-        throw "unsigned request";
-    }
-    var expected = Crypto::sha256_hmac_hex(body, System::getEnv("SHARED_SECRET") ?? "");
-    if (!Crypto::equals_constant_time(sent, expected)) {
-        throw "bad signature";
-    }
-    handle(event);
-}
-```
-
-Pair it with `@raw` when the provider also expects a bare token echoed back — see
-[annotations.md](annotations.md).
 
 ### Smtp
 
@@ -596,26 +653,13 @@ rng.normal(0.0, 1.0);
 
 ## Tensor and vector index
 
-```gcl
-var t = Tensor { };
-t.init(TensorType::f64, [3, 3]);
-t.set([0, 0], 1.0);
-t.get([0, 0]);
-t.shape();   t.dim();   t.size();   t.sum();
-t.reshape([9]);
-t.distance(other, TensorDistance::l2sq);
-
-VectorIndex::wrap([1.0, 2.0, 3.0], TensorType::f64);
-
-var vi = VectorIndex<MyType> { };
-vi.add(vector_node, payload);
-vi.search(query_vector, 10);       // Array<SearchResult<Tensor, MyType>>
-```
+`Tensor` (numeric arrays of up to 8 dimensions), `TensorDistance` and the `VectorIndex` nearest-vector search are in
+[tensors.md](tensors.md).
 
 ## Runtime introspection
 
 ```gcl
-Runtime::info();                   // RuntimeInfo (version, license, workers and cache per class, ...)
+Runtime::info();                   // RuntimeInfo (version, workers and cache per class, ...)
 Runtime::sleep(1s);
 Runtime::backup_full();   Runtime::backup_delta();
 Runtime::defrag();
@@ -657,7 +701,11 @@ YearlyPeriodicity { dates: [DateTuple { day: 1, month: Month::Jan }], timezone: 
 Identity::current();                          // requires authentication
 Identity::current_id();                       // 0 if anonymous
 Identity::login("alice", "password");         // returns session token
-Identity::token(user_id, 24hour);
+Identity::token(user_id, 24hour, "ci");     // a token labeled "ci", null for the --validity of the server
+Identity::tokens("alice", 0, 100);            // the tokens of alice that have not expired, a page at a time
+Identity::revoke_token("alice", token_id);    // false when alice has no such token
+Identity::revoke_tokens("alice", true);       // revokes all but the token of the call, returns the count
+Identity::logout();                           // revokes the token of the call and clears the cookie
 Identity::permissions();
 Identity::has_permission("admin");
 Identity::set_password("alice", "newpass");
@@ -665,8 +713,10 @@ Identity::create("bob", "user");              // an existing bob gets the role a
 Identity::create_with_password("carol", "user", "pw"); // new identity only, throws if carol exists
 Identity::set_password("bob", "");            // removes bob's password, so bob cannot sign in
 Identity::get_by_name("alice");
-Identity::grant("alice", "bob", IdentityGrantType::read);  // bob may read files/alice/
-Identity::revoke("alice", "bob", IdentityGrantType::read); // bob no longer reads files/alice/
+Identity::grant("alice", "bob", "files:read");  // bob may read files/alice/
+Identity::revoke("alice", "bob", "files:read"); // bob no longer reads files/alice/
+Identity::grant_permission("alice", "api", "files:read"); // callers holding api may read files/alice/
+Identity::grants("alice", 0, 100);            // the grants of alice, a page at a time
 ```
 
 `admin` functions such as `create`, `get_by_name`, `grant` and `remove` are only permission-checked over HTTP. From GCL any caller runs them. See [identity.md, Grants and per-user files](identity.md#grants-and-per-user-files).

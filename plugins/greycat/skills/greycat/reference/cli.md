@@ -42,7 +42,7 @@ This is how a project pins a specific runtime version: `@library("std", "1.2.3")
 
 Scaffolds a new project. With a `name`, creates a `./<name>/` directory; without one, scaffolds into the current directory. Refuses to run when the target already contains a `project.gcl`.
 
-Writes `project.gcl` pinned to the latest `stable` `std` (resolved from the configured registry, see [Registries](#registries); by default `https://get.greycat.io/files/core/stable/latest`), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
+Writes `project.gcl` pinned to the latest `std` on the branch of the running `greycat` (`dev` for a `9.0.x-dev` build, `stable` for a release), resolved from the registry (see [Registries](#registries)), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
 
 ```sh
 greycat new my-app     # into ./my-app/
@@ -71,13 +71,15 @@ greycat run foo 42 hello '{"name":"John"}'   # foo(42, "hello", Person { name: "
 
 The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it. When stderr is a TTY, a progress bar shows once the function has run 500ms, with the percentage it reports through `Task::expected_steps` / `Task::add_steps`.
 
+A first Ctrl-C lets the running code and `await` jobs finish, starts none of the jobs still queued, and exits with code 1 and `<function> did not complete: stopped` when the function had not returned. A second Ctrl-C quits at once.
+
 `--world=<name>` (`GREYCAT_WORLD`) runs the function in that world (see [storage.md, Worlds](storage.md#worlds-branches-of-the-store)): it reads and commits to the world's index. Unset, or `main`, runs it in main; a name no world has fails before anything runs.
 
 ### `greycat call <function> [args...]`
 
-Calls an `@expose`d function **on a running server** as a task, waits for it, and prints the result. Nothing is built or opened locally: the server owns `gcdata/`, so `call` works while `serve` is up, from any directory.
+Calls an `@expose`d function **on a running server** as a task, waits for it, and prints the result. Nothing is built or opened locally: the server owns `gcdata/`, so `call` works while `serve` is up, from any directory. A caller holding the `admin` and `debug` permissions, as the root token does, may call any function, exposed or not (see [http.md, Calling a method on an instance](http.md#calling-a-method-on-an-instance)): `greycat call core::nodeTime::size '"40960nodeTime"'`.
 
-- `call` first downloads the server's ABI (`runtime::Runtime::abi`) and resolves `function` and its signature from it. Arguments follow the same rules as [`greycat run`](#greycat-run-function), checked against that signature before the call is made: `greycat call api::add 2 3`, `greycat call api::greet John`, `greycat call api::area '{"_type":"api::Circle","radius":2}'`.
+- `call` first downloads the server's ABI (`runtime::Runtime::abi`), then, with a token holding `admin` and `debug`, its program (`runtime::Runtime::program`), and resolves `function` and its signature from the program, or else from the ABI, which lists the exposed functions only. A greycat of another version cannot read the program and says so, reaching the exposed functions only. Arguments follow the same rules as [`greycat run`](#greycat-run-function), checked against that signature before the call is made: `greycat call api::add 2 3`, `greycat call api::greet John`, `greycat call api::area '{"_type":"api::Circle","radius":2}'`. A method that is not `static` takes its receiver as the first argument: `greycat call api::Counter::add '{"_type":"api::Counter","n":3}' 2` (see [http.md, Calling a method on an instance](http.md#calling-a-method-on-an-instance)).
 - Arguments and result travel as GCB, the binary encoding of that ABI. The ABI carries the full parameter types, generics included: `'[1, "a"]'` for an `Array<float>` parameter fails before the call is made.
 - `--url` (`GREYCAT_URL`) selects the server. Without it, the server is `http://localhost:<port>`: the `--port` given, else the port the server holding this project's store wrote to `gcdata/security/port`, else the default `8080`.
 - `--token` (`GREYCAT_TOKEN`) is sent as `Authorization`. Unset, the root token `serve` writes to `gcdata/security/token` is read from the current directory, so running from the project directory needs no flag.
@@ -85,7 +87,29 @@ Calls an `@expose`d function **on a running server** as a task, waits for it, an
 - `--world` (`GREYCAT_WORLD`) runs the task in that world, sent as the `world` header: `main` is main, and a name the server has no world for fails the call (`400`), as does a world the caller may not use (`403`). Unset, the task runs in main, whatever the caller's default world (see [identity.md, The worlds of an identity](identity.md#the-worlds-of-an-identity)).
 - The task is followed through the server's event stream (`runtime::Task::events`): `call` opens it first and names it in the `sse` header of the call. When stderr is a TTY, a progress bar shows the task status, elapsed time, and the percentage the function reports through `Task::expected_steps` / `Task::add_steps`. A server that refuses the stream (Windows, or the `--max_sse` caps reached) fails the call.
 - The result prints like `run`'s: GCL notation, or JSON with `--format=json`; `--pretty` indents it. Exit code 0 when the task `ended`; non-zero when it threw, was cancelled, the function is unknown, an argument does not read, or the token is rejected. Ctrl-C cancels the remote task.
-- A `@reserved` function (`runtime::Task::history`, `runtime::Task::running`, ...) is answered by the server directly rather than as a task, and `call` reads that answer. `runtime::Task::events` (a stream of events) and `runtime::Runtime::abi` (the ABI file) answer with no value to print, so `call` refuses them.
+- A `@reserved` function (`runtime::Task::history`, `runtime::Task::running`, ...) is answered by the server directly rather than as a task, and `call` reads that answer. `runtime::Task::events` (a stream of events), `runtime::Runtime::abi` (the ABI file) and `runtime::Runtime::program` (the program file) answer with no value to print, so `call` refuses them.
+
+### `greycat repl`
+
+A prompt of calls **on a running server**, whose answers are kept in variables and passed to later calls. It connects as [`greycat call`](#greycat-call-function-args) does, with the same options (`--url`, `--port`, `--token`, `--tls`, `--world`, `--task_class`, `--format`, `--pretty`), and fails without a reachable server. Each call runs as a task: a progress line on a TTY, Ctrl-C cancels it and comes back to the prompt, a second Ctrl-C stops waiting for it (the task may still run). Ctrl-C at the prompt leaves, as Ctrl-D does.
+
+```
+greycat> t = mod::series()             # keeps the answer in t
+greycat> t.size()                      # a method, t as its receiver; the answer goes to _
+3
+greycat> mod::scale(t, 2.5, "label")   # a variable, or a JSON literal, per argument
+greycat> c = mod::make_counter(3)
+greycat> c.n                           # a field of an object, read locally
+3
+```
+
+- A line is `mod::fn(args)`, `mod::Type::fn(args)`, `v.m(args)`, `v.f` or `:command`, optionally behind `name = `. Calls nest, inner ones first. A literal is JSON and only an argument: a String is quoted (`"bob"`), since a bare word is a variable.
+- `v.m(args)` finds `m` through the type of `v`, the generic definition of a specialization (`nodeTime` for a `nodeTime<int>`), then each parent; the override of the receiver's type runs. A `static` `m` is refused: call it on its type.
+- The whole line is checked before any of its calls runs: every function resolves, and every literal and variable fits its parameter. The signatures come from the server as for `call`: its program for a caller holding `admin` and `debug`, its ABI (the exposed functions) for any other.
+- A node is a reference to the server's graph; an object is a copy, which a method changing it does not update in the variable.
+- `:vars` lists the variables with their types, `:help` the syntax, `:quit` (or Ctrl-D) leaves. A failed call leaves the variables as they were.
+- On a terminal, the line has history (`gcdata/repl_history`) and tab completion of commands, variables, functions and, after `v.`, the fields and methods of `v`. Piped input is read line by line, with no prompt or banner, so a script gets only the answers on stdout and the errors on stderr.
+- When the server restarts with another program (a schema change), the next call reloads its ABI, clears every variable, says so, and runs the line again.
 
 ### Store commands: in place or through the server
 
@@ -116,7 +140,7 @@ See [webapp.md](webapp.md) for the one prescribed webapp stack (VitePlus + MPA +
 
 ### `greycat build`
 
-Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `project.gcl`. Stripped of every `*_test.gcl` module. Use to produce a deployable package without starting the runtime.
+Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `project.gcl`. Stripped of every `*_test.gcl` module. Use to produce a deployable package without starting the runtime. A `project.gcp` of another `.gcp` format version, which is every one 8.x built, is refused: rebuild it with `greycat build`. So is one whose bytecode holds a jump, a stack depth or an id the runtime would follow out of range, as a damaged or hand-made file can: the error names the function and the op at fault.
 
 ### `greycat test [function]`
 
@@ -137,7 +161,7 @@ These delegate to the `lang` library, loaded from `lib/lang/` or `~/.greycat/lib
 
 Reads every `@library` pragma in the project closure (normally all in `project.gcl`) and downloads each library + the matching core binary into `lib/<name>/` and `bin/`. Skips libraries already at the requested version (tracked in `lib/installed`).
 
-Downloads from `https://get.greycat.io/files/<lib>/<branch>/<major.minor>/<target>/<version>.zip`. `std` resolves under `core/`. That is the legacy registry; see [Registries](#registries) to point the CLI at a JSON-RPC registry and to store its token once.
+Downloads each archive from the registry (`https://registry.greycat.io` unless [Registries](#registries) names another one), which answers its URL for this machine's target, or for `noarch`. `std`, `lang` and `rust` download anonymously. Any other library needs a registry token, which [`greycat login`](#greycat-login--greycat-logout) stores once.
 
 | Option                    | Meaning                                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -188,9 +212,25 @@ Every library gets one line, present tense, whether it moved or not:
 
 A pin that could not move says why, including what the looser bound would have given: `nothing newer on dev in this minor; --bump=latest would give 8.2.160-dev`.
 
+### `greycat login` / `greycat logout`
+
+`greycat login` stores a token of `https://registry.greycat.io` in `~/.greycat/registry_token` (see [Registries](#registries)), so `install` can fetch libraries other than `std`, `lang` and `rust`.
+
+On a desktop it opens the registry in the browser. Sign in there if needed and approve the login. The registry then creates a 365-day token named `greycat login on <host>` and sends the browser back to a listener `login` opened on `127.0.0.1`, which receives a one-time code and exchanges it for the token. The code is useless to anyone else, since the exchange also needs a secret that never leaves the CLI. `login` waits 5 minutes for the browser.
+
+It asks for a token at a prompt instead, which does not echo it, with `--paste` (`GREYCAT_PASTE`), over SSH, on a Linux or BSD machine with no display, or when no browser opens. Create the token on the account page (`https://registry.greycat.io/#/account`). When stdin is not a terminal the token is read from it, as in CI:
+
+```sh
+echo "$REGISTRY_TOKEN" | greycat login
+```
+
+A pasted token is checked with the registry before it is written, and `login` prints the account it belongs to. It refuses when `GREYCAT_REGISTRY` names another registry, since the stored token is never sent there, and warns when `GREYCAT_REGISTRY_TOKEN` is set, since that variable overrides the file.
+
+`greycat logout` removes the file. The token itself stays valid until it expires or is revoked on the account page.
+
 ### `greycat codegen [lang]`
 
-Generates client bindings for the project's library types and `@expose`d functions. Targets: `c`, `ts`, `python`, `rust`, `java`. With no `lang`, auto-detects from project files: `CMakeLists.txt` → `c`, `Cargo.toml` → `rust`, `package.json|tsconfig.json|jsconfig.json` → `ts`, `requirements.txt` → `python`, `pom.xml|gradle.properties` → `java`.
+Generates client bindings for the project's library types and `@expose`d functions. Targets: `c`, `ts`, `python`, `rust`, `java`. With no `lang`, auto-detects from project files: `CMakeLists.txt` → `c`, `Cargo.toml` → `rust`, `package.json|tsconfig.json|jsconfig.json` → `ts`, `pom.xml|gradle.properties` → `java`, and `python` when the project declares `@library("python")`. The `python` target needs that library (it writes the `project_types.pyi` stub); without it the command fails and names the library. `python2` is the legacy generator, which writes `project_types.py` without the library.
 
 Set `GREYCAT_CORE=1` to generate bindings for the `std` library itself (used by the GreyCat core team to regenerate the SDKs in `core/sdk/`).
 
@@ -212,7 +252,7 @@ Writes a full backup with `Runtime::backup_full()`, in this process or on the se
 
 ### `greycat restore <archive>`
 
-Restores `gcdata/` from a backup archive. `--verify` validates archive integrity before extraction.
+Restores `gcdata/` from a backup archive. `--verify` stops at the first block that does not decode; `--repair` restores an archive holding such blocks by resetting the nodes they hold. See [storage.md](storage.md#restoring-a-damaged-archive).
 
 ### `greycat import <file.gce>`
 
@@ -220,27 +260,36 @@ Reads a store export written by `Runtime::export_store` into the project's store
 
 ### `greycat token`
 
-Issues a session token with `Identity::token`, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)). `--user=<name|id>` chooses the user, default id `0` (`public`). `--validity=<duration>` sets the TTL (e.g. `1day`, `60min`, `3600s`, `1hour30min`; the units are `us`, `ms`, `s`, `min`, `hour`, `day`, concatenated with no spaces or other words, so `1h`, `1sec` and `10s 5ms` are refused), default the validity the store or server is configured with.
+Issues a session token with `Identity::token`, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)). `--user=<name|id>` chooses the user, default id `0` (`public`). `--validity=<duration>` sets the TTL (e.g. `1day`, `60min`, `3600s`, `1hour30min`; the units are `us`, `ms`, `s`, `min`, `hour`, `day`, concatenated with no spaces or other words, so `1h`, `1sec` and `10s 5ms` are refused), default the validity the store or server is configured with. `--label=<text>` names the token as `Identity::tokens` and `greycat user tokens` list it (see [identity.md, Tokens](identity.md#tokens)).
 
 ### `greycat user <subcmd> ...`
 
 User administration with the `runtime::Identity` functions, in this process or on the server holding the store (see [Store commands](#store-commands-in-place-or-through-the-server)).
 
 ```
-greycat user list                              list all users
-greycat user show <name>                       show user details and grants
-greycat user add <name> [role]                 add user (default role: "user")
-greycat user remove <name>                     remove user and delete files/<name>/
-greycat user role <name> <new_role>            change user role
-greycat user grant <name> r|w|rw <target>      let <target> open files/<name>/
-greycat user revoke <name> r|w|rw <target>     take that access back from <target>
-greycat user world <name> <world|main>         set its default world, for clients to pick
-greycat user worlds <name> <w1,w2,...|->       set the worlds besides main its calls may run in, - for every world
+greycat user list                                     list all users
+greycat user show              <name>                 show user details and grants
+greycat user add               <name> [role]          add user (default role: "user")
+greycat user remove            <name>                 remove user and delete files/<name>/
+greycat user role              <name> <new_role>      change user role
+greycat user grant             <name> <target> <p1,p2,...>  grant <target> permissions on what <name> owns
+greycat user revoke            <name> <target> <p1,p2,...>  take them back from <target>
+greycat user grant-permission  <name> <holders> <p1,p2,...> grant them to every holder of the permission <holders>
+greycat user revoke-permission <name> <holders> <p1,p2,...> take them back from the holders of <holders>
+greycat user world             <name> <world|main>    set its default world, for clients to pick
+greycat user worlds            <name> <w1,w2,...|->   set the worlds besides main its calls may run in, - for every world
+greycat user tokens            <name>                 list its tokens that have not expired
+greycat user revoke-token      <name> <id>            revoke one of its tokens
+greycat user revoke-tokens     <name>                 revoke every one of its tokens
 ```
 
 `world` and `worlds` call `Identity::set_world` and `Identity::set_worlds`, and `show` prints both settings; see [identity.md, The worlds of an identity](identity.md#the-worlds-of-an-identity). These commands, like `backup` and `stats`, always run in main.
 
-`grant` and `revoke` call `Identity::grant` and `Identity::revoke`, which edit the grants of `<name>`, the list of identities that may open `files/<name>/`. `greycat user grant alice r carol` lets carol read `files/alice/` and gives alice nothing on `files/carol/`. See [identity.md, Grants and per-user files](identity.md#grants-and-per-user-files), which also covers identities used as groups.
+`grant` and `revoke` call `Identity::grant` and `Identity::revoke` once for each permission of the list, which edit what `<target>` holds on the folder and tasks of `<name>`. `greycat user grant alice carol files:read,tasks:read` lets carol list and download `files/alice/` and see the tasks of alice, and gives alice nothing from carol. `grant-permission` and `revoke-permission` call `Identity::grant_permission` and `Identity::revoke_permission`, which grant the permissions to every caller whose role holds `<holders>`: `greycat user grant-permission alice api files:read` lets every signed-in user whose role holds `api` read `files/alice/`. A command fails when no permission of the list changed the grant. See [identity.md, Grants and per-user files](identity.md#grants-and-per-user-files), which also covers identities used as groups.
+
+`tokens`, `revoke-token` and `revoke-tokens` call `Identity::tokens`, `Identity::revoke_token` and `Identity::revoke_tokens`. `tokens` prints the id, creation, expiry and label of each, and the ids are what `revoke-token` takes.
+
+`show` prints, besides the role and worlds, the identities that grant the user permissions (`granted by:`) and those it grants permissions to (`grants to:`), each followed by the permissions, as in `carol(files:read,tasks:read)`. A grant to the holders of a permission reads `@grid(files:read)`.
 
 Built-in users: `id=0` (`public`, anonymous), `id=1` (`root`, role `admin`). Built-in roles live in `lib/std/runtime.gcl`: `public`, `user`, `admin`.
 
@@ -276,22 +325,28 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--workers_small` / `GREYCAT_WORKERS_SMALL` | 20% of `--workers` | `serve`                             | How many of `--workers` run small tasks, which RPC requests run as; rounded, at least 1 from 2 workers. `run` and `test` start none. |
 | `--user` / `GREYCAT_USER`               | `public`           | `run`, `serve`, `test`              | **Footgun.** Bypasses auth on every request, running it as `<name>`. Never propose this flag — use `greycat token` + a real `Authorization` header instead. See [identity.md, the `--user=<name>` impersonation flag](identity.md#the---username-impersonation-flag--footgun-do-not-promote). |
 | `--validity` / `GREYCAT_VALIDITY`       | `24h`              | `serve`, `token`                    | TTL for session tokens.                                                                                                                                                                                                            |
+| `--label` / `GREYCAT_TOKEN_LABEL`       | none               | `token`                             | Label of the token, as `Identity::tokens` lists it.                                                                                                                                                                                |
 | `--tz` / `GREYCAT_TZ`                   | host TZ            | `run`, `serve`                      | Default IANA timezone (e.g. `Europe/Luxembourg`).                                                                                                                                                                                  |
 | `--mode` / `GREYCAT_MODE`               | none               | (global)                            | If set, runs as if the user had typed that command. Values: `serve`, `run`.                                                                                                                                                        |
 | `--key` / `GREYCAT_KEY`                 | none               | `serve`                             | Path to a license / signing key.                                                                                                                                                                                                   |
 | `--keysafe` / `GREYCAT_KEYSAFE`         | none               | `serve`                             | Password for the on-disk user secret store.                                                                                                                                                                                        |
-| `--unsecure` / `GREYCAT_UNSECURE`       | `false`            | `serve`                             | Allow session tokens behind a non-HTTPS reverse proxy.                                                                                                                                                                             |
+| `--unsecure` / `GREYCAT_UNSECURE`       | `false`            | `serve`, `dev`                      | Skip the certificate check of the outbound HTTPS requests of the `http` library. The server ignores it.                                                                                                                            |
 | `--backup_path` / `GREYCAT_BACKUP_PATH` | `backup`           | `backup`, `restore`, `run`, `serve` | Where backups go.                                                                                                                                                                                                                  |
 | `--max_backup_files`                    | `3`                | `backup`, `run`, `serve`            | Max backup files retained in `backup_path`.                                                                                                                                                                                        |
 | `--defrag_ratio`                        | `2.0`              | `run`, `serve`                      | Blocks held per live block tolerated across the whole store before a zone is defragged (`2.0` = half garbage). Must be `> 1.0` — `1.0` is a perfectly compacted store, so startup refuses anything in `(0, 1.0]`. `<= 0` disables auto-defrag.                                                                                                                                                                         |
 | `--ca_path` / `GREYCAT_CA_PATH`         | none               | `run`, `serve`, `test`              | Directory of extra CA certs to trust for outbound TLS, on top of the system store. A directory that yields no certificate is skipped with a warning. |
 | `SSL_CERT_FILE` (env only)              | none               | every command                       | PEM file of extra CA certificates to trust for outbound TLS, read by the libraries and `greycat install` too. Added on top of the system store, where OpenSSL takes it instead of its default store. A file that yields no certificate is skipped with a warning. |
 | `SSL_CERT_DIR` (env only)               | none               | every command                       | Directories of extra CA certificates, separated by `:` (`;` on Windows). Added like `SSL_CERT_FILE`, and a directory that yields no certificate is skipped with a warning. |
+| `--tls` / `GREYCAT_TLS`                 | `false`            | `serve`, `dev`, `call`, `print`     | Serve HTTPS on `--port`, with `gcdata/security/tls/cert.pem` and `key.pem`. See [http.md](http.md#https).                                                                                                                                                                                                                    |
+| `--acme` / `GREYCAT_ACME`               | none               | `serve`, `dev`                      | Comma-separated domains to obtain and renew the certificate of from Let's Encrypt, which turns `--tls` on. See [http.md](http.md#certificates-from-lets-encrypt).                                                                                                                                                            |
+| `--acme_email`                          | none               | `serve`, `dev`                      | Contact email of the ACME account.                                                                                                                                                                                                                                                                                           |
+| `--acme_directory`                      | Let's Encrypt      | `serve`, `dev`                      | Directory URL of the ACME authority, `https://acme-v02.api.letsencrypt.org/directory` by default.                                                                                                                                                                                                                            |
 | `--keep_alive` / `GREYCAT_KEEP_ALIVE`   | `true`             | `serve`                             | Let a client reuse one connection for several requests. `--keep_alive=false` restores one-connection-per-request.                                                                                                                                                                                                            |
 | `--task_pool_capacity`                  | `10000`            | `serve`                             | Max queued tasks.                                                                                                                                                                                                                  |
 | `--request_pool_capacity`               | `8192`             | `serve`                             | Max connections served at once. A kept-alive connection holds a slot for its whole idle window, so this bounds concurrent *connections*, not just in-flight requests; past it, new arrivals wait in the listen backlog.                                                                                                                                                                                                          |
 | `--request_ttl`                         | `20s`              | `serve`                             | Cancel an RPC request still queued or running after this long; it answers 503 with the reason.                                                                                                                                     |
-| `--max_args_memory`                     | `1 MiB`            | `serve`                             | RPC arguments larger than this are streamed to the task's arguments file in `gcdata/jobs/` instead of held in memory; `Task::body()` is then `null`.                                                                                                 |
+| `--max_args_memory`                     | `1 MiB`            | `serve`                             | RPC arguments larger than this are streamed to the task's arguments file in `gcdata/tasks/<id>/` instead of held in memory; a function taking a `runtime::HttpRequest` gets such a body as `body_file`.                                                    |
+| `--task_retention` / `GREYCAT_TASK_RETENTION` | `24h`        | `serve`, `dev`                      | How long the folder of a task (`gcdata/tasks/<id>/`: its result for `Task::result` and its `File::workingDir()`) is kept once the task ended. See [tasks.md](tasks.md#task-results-and-folders). |
 | `--metrics` / `GREYCAT_METRICS`         | unset (none)       | `run`, `serve`                      | Comma-separated metrics to record, each to its own stream: `host` (`host_metrics`), `task` (`task_metrics`), `http` (`http_metrics`, one `HttpMetric` per HTTP request). Example: `--metrics=host,task,http`.                                                                                                                              |
 | `--metrics_http_fields` / `GREYCAT_METRICS_HTTP_FIELDS` | unset (none) | `serve`                         | Personal data an `HttpMetric` records, comma-separated: `ip`, `forwarded_for` (`X-Forwarded-For`), `user_agent`. A field left out is null in every record.                                                                                                                |
 | `--metrics_http_flush_size` / `GREYCAT_METRICS_HTTP_FLUSH_SIZE` | `64KB` | `serve`, `dev`                  | `HttpMetric` records are buffered and written to `http_metrics` once they reach this size. `0` writes each record at once.                                                                                                                                              |
@@ -307,8 +362,9 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--mcp_instructions`                    | none               | `serve`, `dev`                      | Usage guidance returned to MCP clients as `instructions` in the `initialize` result.                                                                                                                                               |
 | `--openapi` / `GREYCAT_OPENAPI`         | `true`             | `serve`, `dev`                      | Whether every `@expose`d function lands in the OpenAPI v3 document by default. `false` narrows the document to functions carrying `@tag("openapi")`.                                                                                |
 | `--force`                               | `false`            | `install`                           | Re-download even libraries already at the requested version. `install` has its own option set (`--bump`, `--branch`, `--check`, ...); see [`greycat install`](#greycat-install) above.                                             |
-| `--registry` / `GREYCAT_REGISTRY`       | `legacy`           | `new`, `upgrade`, env-only `install` | Registry to resolve libraries and core releases from: `legacy` for `get.greycat.io`, otherwise the base URL of a JSON-RPC registry. See [Registries](#registries). |
+| `--registry` / `GREYCAT_REGISTRY`       | `https://registry.greycat.io` | `new`, `upgrade`, env-only `install` | Base URL of the registry to resolve libraries and core releases from. An empty value means the default. See [Registries](#registries). |
 | `--registry_token`                      | none               | `new`, `upgrade`, env-only `install` | `GREYCAT_REGISTRY_TOKEN`. Token sent to that registry, for packages that are not anonymously readable. Shown as `<set>` by `-h`. |
+| `--paste` / `GREYCAT_PASTE`             | `false`            | `login`                             | Ask for a registry token at the prompt instead of approving the login in the browser. See [`greycat login`](#greycat-login--greycat-logout). |
 | `--with=<cmd>`                          | none               | `dev`                               | Watch-build command to spawn alongside the server.                                                                                                                                                                                 |
 
 Run `greycat <command> -h` to see only the options that apply to `<command>` along with their **resolved** values (after `.env` and env-var processing) — handy for debugging configuration.
@@ -349,27 +405,17 @@ greycat stats                             # zone usage and cache hit rates
 
 ## Registries
 
-`install`, `upgrade` and `new` resolve libraries and core releases from a registry. Unset, or `legacy`, means the historical file tree under `https://get.greycat.io/files/`. Any other value is the base URL of a GreyCat registry server, which answers `registry::resolve`, `registry::latest_version` and `registry::artifact_url` for libraries and their `asset_` counterparts for everything else (the `lang` tooling is published there as an asset).
+`install`, `upgrade` and `new` resolve libraries and core releases from a GreyCat registry, `https://registry.greycat.io` by default. It answers `registry::resolve`, `registry::latest_version` and `registry::artifact_url`. The core archive, which holds both `bin/greycat` and `lib/std`, is the `std` library there, and the language tooling is the `lang` library. `GREYCAT_REGISTRY` points a machine at another registry, such as a local or a staging instance.
 
-Two settings, resolved in this order:
+The token, which libraries other than `std`, `lang` and `rust` need, is the first of:
 
-| Setting               | Flag (`new`, `upgrade`)     | Environment              | File key   |
-| --------------------- | --------------------------- | ------------------------ | ---------- |
-| Registry origin       | `--registry=<url>`          | `GREYCAT_REGISTRY`       | `default`  |
-| Token for that origin | `--registry_token=<token>`  | `GREYCAT_REGISTRY_TOKEN` | `<origin>` |
+1. `--registry_token=<token>` (`new` and `upgrade` only).
+2. `GREYCAT_REGISTRY_TOKEN`, from the environment or the project `.env`.
+3. `<home>/registry_token`, where `<home>` is `$GREYCAT_HOME` or `~/.greycat`, holding the bare token. [`greycat login`](#greycat-login--greycat-logout) writes it.
 
-The origin is settled first: flag, then environment, then the project `.env`, then the file's `default`. The token is then looked up for exactly that origin, and it is sent to that origin only, on RPC calls and on artifact downloads alike. `install`, `lint`, `fmt` and `lsp` forward their flags to the language tooling, so for them only the environment, `.env` and the file apply.
+The file belongs to `https://registry.greycat.io`: it is read only when no `GREYCAT_REGISTRY` (or `--registry`) names another registry, so a stored token never reaches another host. A local or staging registry takes its token from `GREYCAT_REGISTRY_TOKEN`. Whichever token applies is sent to the registry only, on RPC calls and on artifact downloads alike, as `Authorization: <token>` with no `Bearer` prefix.
 
-The file is `<home>/registries`, where `<home>` is `$GREYCAT_HOME` or `~/.greycat`. It is what lets a configured machine work with no variables at all:
-
-```
-# ~/.greycat/registries
-default = https://registry.example.com
-https://registry.example.com = <token>
-https://greycat.corp.example = <token>
-```
-
-One `key = value` per line, `#` comments, trailing slashes ignored. It holds credentials: keep it `0600`; the CLI warns when other users can read it, and `greycat <command> -h` prints the token as `<set>`, never its value. Whatever the runtime resolves is exported to its own environment before any command runs, so the language tooling loaded in-process sees the same registry and token.
+The file holds a credential: keep it `0600`. The CLI warns when other users can read it, and `greycat <command> -h` prints the token as `<set>`, never its value. Whatever the runtime resolves is exported to its own environment before any command runs, so the language tooling loaded in-process sees the same registry and token. `install`, `lint`, `fmt` and `lsp` forward their flags to that tooling, so for them only the environment, `.env` and the file apply.
 
 ## The `.env` file
 
@@ -392,7 +438,7 @@ Generated SDKs land at standard paths in the project:
 | -------- | ---------------------------------------------------------------------- |
 | `c`      | Header(s) under the project's CMake-controlled tree.                   |
 | `ts`     | Typed client into `node_modules`-style path or `src/`.                 |
-| `python` | Python module — emit looks for `python` library or `requirements.txt`. |
+| `python` | `project_types.pyi`, written by the `python` library, which the project must declare. |
 | `rust`   | Crate-shaped output near `Cargo.toml`.                                 |
 | `java`   | Maven/Gradle output near `pom.xml` / `gradle.properties`.              |
 
@@ -402,7 +448,7 @@ Codegen reads `@expose`, `@permission`, and `@tag` from the project's compiled p
 
 A served project exposes:
 
-- **JSON-RPC** at `POST /` — call any `@expose`d function by method `"<module>.<fn_name>"` and a JSON `params` array or object.
+- **JSON-RPC** at `POST /` — call any `@expose`d function by method `"<module>::<fn_name>"` and a JSON `params` array or object.
 - **Path-RPC** at `POST /<module>::<fn_name>` — body is a JSON array of positional args.
 - **OpenAPI v3** — call `runtime::OpenApi::v3` (stdlib `Runtime::OpenApi::v3`) to get the spec from the live program. `--openapi` / `GREYCAT_OPENAPI` decides what lands in it: `true` (the default) puts every `@expose`d function in the document, `false` narrows it to the ones carrying `@tag("openapi")`.
 
