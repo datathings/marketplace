@@ -25,6 +25,18 @@ Complete syntax reference. Reach for this when a construct in `SKILL.md` needs t
 
 `///` is **not** a generic line comment — it is captured as documentation by the lang and shown in hover / completion. Place it directly above a `type`, `enum`, `fn`, `var`, attribute, or method. Internal `//` and `/* */` are stripped by the lexer.
 
+A doc block documents the declaration below it only when no blank line separates them. A line holding just `///` belongs to the block, a line holding only whitespace ends it. A block followed by a blank line documents nothing: its text reaches neither OpenAPI, MCP nor the SDKs.
+
+```gcl
+/// Detached: the blank line below ends it, and `greet` does not carry it.
+
+/// Says hello.
+@expose
+fn greet(): String {
+    return "hello";
+}
+```
+
 ## Identifiers and keywords
 
 Identifiers match `[a-zA-Z_][a-zA-Z0-9_]*`. The following are reserved keywords and cannot be used as identifiers:
@@ -71,7 +83,9 @@ var name: nodeIndex<K, V>;
 var name: nodeSet<V>;
 var name: nodeIndexSet<K, V>;
 var name: nodeTime<T>;
+var name: nodeTimeSet<T>;
 var name: nodeGeo<T>;
+var name: nodeGeoSet<T>;
 private var name: node<T?>;
 ```
 

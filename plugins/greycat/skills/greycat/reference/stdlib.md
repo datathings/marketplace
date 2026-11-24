@@ -6,7 +6,7 @@ The stdlib ships under `lib/std/` (split into `core.gcl`, `io.gcl`, `runtime.gcl
 
 - Collections (Array, Map, Set, Tuple, Table, Buffer)
 - Util collections (Queue, Stack, SlidingWindow, TimeWindow)
-- Node tags (graph-persisted: node, nodeTime, nodeList, nodeIndex, nodeSet, nodeIndexSet, nodeGeo)
+- Node tags: see [nodes.md](nodes.md)
 - Time and duration
 - Geographic types (geo, GeoBox, GeoCircle, GeoPoly)
 - IO (Reader / Writer, Json, Csv)
@@ -114,7 +114,7 @@ b.clear();
 
 ## Util collections
 
-From `lib/std/util.gcl`. Memory-only — these are not graph-persisted; for persisted equivalents use the node tags below.
+From `lib/std/util.gcl`. Memory-only — these are not graph-persisted; for persisted equivalents use the node tags of [nodes.md](nodes.md).
 
 ### Queue<T>
 
@@ -169,201 +169,8 @@ w.min();   w.max();               // each returns Tuple<time, T>?
 
 ## Node tags (graph-persisted)
 
-These types persist across worker restarts. They are the bridge between in-memory logic and the GreyCat graph database.
-
-A value fetched from the graph (`idx.get(k)`, `n.resolve()`, a `for ... in nodeIndex` loop) is a **live node**: mutate its fields in place and the change persists on commit; do NOT `set` it back, which re-attaches an already-attached node and throws `object is already attached to another node`. `set` is for inserting a brand-new node. See [idioms.md](idioms.md), "Working with the graph".
-
-While a `for` loop walks a `nodeTime`, `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` or `nodeGeo`, it can set a new value at a key the node already holds. Adding or removing a key of that node (`setAt`, `set` or `add` with a new key or value, `setAll`, `remove`, `removeAt`, `removeAll`) throws `concurrent modification`, and so it does while a `nodeTimeCursor` over the node stands on one of its values. A node that holds a single value is the exception: the loop reads that value before its body runs, so the body can change the node. Collect the keys to add or remove, and change the node after the loop; other nodes can change inside it.
-
-### node<T>
-
-Singleton, lazily resolved.
-
-```gcl
-var n: node<User> = ...;
-n.resolve();                       // T — the inner value
-n.set(updated_user);               // mutate the pointed-to value
-n->name;                           // == n.resolve().name (deref + access)
-*n;                                // == n.resolve() — unary `*` is deref-shorthand
-```
-
-Tagged `@deref("resolve")` — the `->` operator calls `resolve()` then accesses the result.
-
-### nodeTime<T>
-
-Time-series of `T` values keyed by `time`.
-
-```gcl
-var s: nodeTime<float> = /* ... */;
-s.setAt(time::now(), 1.0);
-s.setAll(time::now(), [1.0, 2.0, 3.0], 1s);
-s.getAt(t);                        // exact-match read; null if no entry
-s.resolveAt(t);                    // closest-prior read
-s.resolveTimeAt(t);                // the actual timestamp resolved to
-s.firstTime();   s.first();
-s.lastTime();    s.last();
-s.prev(t);   s.next(t);
-s.size();
-s.rangeSize(from, to);
-s.removeAt(t);   s.removeAll();
-
-// Iteration with time-window query
-for (t, v in s[from..to]) {} // from/to included
-for (t, v in s[from..to[) {} // to excluded
-for (t, v in s]from..to]) {} // from excluded
-for (t, v in s]from..to[) {} // from/to execluded
-```
-
-Tagged `@iterable @deref("resolve")`.
-
-### nodeList<T>
-
-A list of values read and removed by position: every index is a position `0..size()-1`, and the values after a removed one shift down. There is no `set`: `greycat lint` reports a call to it as `unknown-member`, and `greycat build` still accepts it, so it fails only when it runs, with `type nodeList has no function named set`. Change an object value in place, or `remove` and `add`.
-
-```gcl
-var l = nodeList<float> {};
-l.add(1.0);                        // append at position size()
-l.add(2.0);
-l.get(1);                          // 2.0; null outside 0..size()-1
-l.resolve(5);                      // the last value past the end, null below 0
-l.firstIndex();  l.first();        // 0, null when empty
-l.lastIndex();   l.last();         // size() - 1, null when empty
-l.rangeSize(0, 1);                 // positions in the range; reversed bounds are swapped, the range is clamped to the list
-l.remove(0);                       // true; later values shift down, false outside the list
-for (i, v in l[0..1]) { /* i counts positions; ]a..b], [a..b[ and descending l]4..2] too */ }
-```
-
-A list written by an earlier version with sparse keys (from `set`) reads by position: `get(0)` is the first stored value.
-
-A position is not an id: it changes when an earlier value is removed. Code that keeps an index elsewhere uses a `nodeIndex<int, T>` with a counter it owns.
-
-Two tasks appending to one list both keep their values, in merge order, and removals and appends do not conflict: the conflicts left are in [tasks.md](tasks.md#concurrent-appends-to-a-nodelist).
-
-### nodeIndex<K, V>
-
-Sorted index with O(log n) keyed access.
-
-```gcl
-var idx: nodeIndex<String, User> = /* ... */;
-idx.set("alice", User { /* ... */ });
-idx.get("alice");                  // User?
-idx.search("alice", 10);           // closest-neighbor search
-idx.remove("alice");
-idx.size();
-for (k, v in idx) { /* ... */ }
-```
-
-### nodeSet<V>
-
-Set of unique values, generic over any `V`.
-
-```gcl
-var s = nodeSet<String> {};
-s.add("red"); // true: "red" was not in the set yet
-s.add("red"); // false: the set already holds it
-s.contains("red"); // true
-s.remove("red");
-s.size();
-s.removeAll();
-// both loop variables bind the value
-for (_, v in s) {
-    println(v);
-}
-```
-
-Two values are the same when they are deeply equal, the rule of a `nodeIndex` key: an `int`, `String`, enum entry or
-other scalar by value, an object by its content, and a `node<T>` by reference. `null` is never an element: `add(null)`
-throws, `contains(null)` is false and `remove(null)` does nothing. A loop walks the values in the order of their
-encoding for a scalar `V` and in hash order otherwise. `->` on a `nodeSet` throws.
-
-Tasks that commit to the same set at once never conflict. The merge applies what each side added and removed: a value
-added on either side is present, a value removed on either side is absent. `removeAll()` removes the values the task
-saw, so a value another task added at the same time stays. `fusion_by_key_last_win` changes nothing for a set, and
-`no_fusion_fail_on_conflict` refuses it like any other structured node ([tasks.md](tasks.md#workers-tasks-and-jobs)).
-
-### nodeIndexSet<K, V>
-
-A multimap: each key holds a set of distinct values, as a `nodeIndex<K, nodeSet<V>>` would, without a node per key.
-
-```gcl
-var idx = nodeIndexSet<String, String> {};
-idx.add("fruit", "apple"); // true: a new pair
-idx.add("fruit", "pear"); // true: a second value under the key
-idx.add("fruit", "apple"); // false: the key holds it already
-idx.get("fruit"); // Array<String> {"apple", "pear"}
-idx.get("nut"); // an empty Array
-idx.contains("fruit", "pear"); // true
-idx.size(); // 2: pairs, not keys
-// one turn per pair, the values of a key one after the other
-for (k, v in idx) {
-    println("${k} ${v}");
-}
-idx.remove("fruit", "pear"); // one pair
-idx.removeKey("fruit"); // the key and every value it holds
-idx.removeAll();
-```
-
-A pair is a key and one of its values. Keys compare as `nodeIndex` keys do, values by deep equality as the elements of a
-`nodeSet` do, and a pair is new when no pair with an equal key and an equal value is there. `null` is never a value:
-`add(key, null)` throws `null can not be added to a nodeIndexSet`. A loop walks the keys in the order of a `nodeIndex`,
-by encoding for a scalar key and by hash otherwise, the values of one key together and in no set order: a merge or a
-removal can change it, and `get` returns them in that order. `->` on a `nodeIndexSet` throws. An object value edited in
-place after `add` does not change the pair; change it with `remove(key, old)` then `add(key, new)`. `greycat lint` does
-not know `nodeIndexSet` yet: it reports a loop over one as `not-iterable` and a module variable of the type as
-`modvar-must-be-node-tag`, and `greycat build` and `greycat run` accept both.
-
-A key with one value costs what it costs in a `nodeIndex`. Up to 32 values, a key keeps them in a chain that every `add`
-to the key walks. Its 33rd value moves them into a `nodeSet` of their own, where `add`, `contains` and `remove` take
-O(log n). The key keeps that set for the life of the index: `remove`, `removeKey` and `removeAll` empty it and leave it
-in the store, and a later `add` fills it again. `NodeReader` lists the set as a `nodeSet`
-([storage.md](storage.md#listing-every-node)).
-
-Tasks that commit to the same index at once never conflict under the default strategies: the pairs merge one by one, as
-the elements of a `nodeSet`. A pair added on either side is present and a pair removed on either side is absent, so two
-values added under one key are both kept. `removeKey` and `removeAll` remove only the pairs the task saw: a pair another
-task added at the same time stays. `fusion_by_key_last_win` changes nothing for it, and `no_fusion_fail_on_conflict`
-refuses it like any other structured node ([tasks.md](tasks.md#workers-tasks-and-jobs)).
-
-### nodeGeo<T>
-
-Spatial index keyed by `geo`.
-
-```gcl
-var g: nodeGeo<Station> = /* ... */;
-g.set(geo { 49.6, 6.1 }, station);
-g.get(geo { 49.6, 6.1 });
-g.resolve(geo { 49.7, 6.0 });      // closest-prior read
-g.rangeSize(geo { 49, 6 }, geo { 50, 7 });
-for (pos, station in g[geo { 49, 6 }..geo { 50, 7 }]) { /* every key of the box, south-west first */ }
-```
-
-A range `g[a..b]` is the box spanned by `a` and `b` (any two opposite corners): it yields exactly the keys inside, in curve order, and `rangeSize` counts the same keys. Walking from the higher code, `g[b..a]`, runs the box backwards. No `GeoBox.contains` filter is needed on the keys.
-
-### Sampling node tags
-
-Every node tag exposes a static `sample(...)` that returns a `Table` of values from a range, plus `info(...)` returning a per-node `NodeInfo<K>` for metadata. Signatures differ by tag:
-
-```gcl
-nodeTime::sample(refs: Array<nodeTime>, from: time?, to: time?, maxRows: int,
-                 mode: SamplingMode, maxDephasing: duration?, tz: TimeZone?): Table
-nodeIndex::sample(refs: Array<nodeIndex>, from: any?, maxRows: int, mode: SamplingMode): Table
-nodeSet::sample(refs: Array<nodeSet>, from: any?, maxRows: int, mode: SamplingMode): Table   // one column per set
-nodeIndexSet::sample(refs: Array<nodeIndexSet>, from: any?, maxRows: int, mode: SamplingMode): Table   // a row per pair
-nodeList::sample(refs: Array<nodeList>, from: int?, to: int?, maxRows: int,
-                 mode: SamplingMode, maxDephasing: int?): Table
-nodeGeo::sample(refs: Array<nodeGeo>, from: geo?, to: geo?, maxRows: int, mode: SamplingMode): Table
-```
-
-`SamplingMode` controls how points within the range are picked:
-
-| Mode          | Behavior                                                                                                  |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| `fixed`       | Pick samples at a fixed delta between index values. Can return a large set — bound `from`/`to` carefully.  |
-| `fixed_reg`   | Like `fixed`, but linearly regresses numerical values between the nearest stored points to smooth output. |
-| `adaptative`  | Variable delta — bound the number of skipped elements between samples. Useful for non-monotonic series.   |
-| `dense`       | All elements in range; no down-sampling.                                                                  |
-
-`maxRows` is the upper bound on rows returned regardless of mode. On a `nodeGeo` the range `from..to` is the box of the two corners (a `null` corner is the world's) and no row falls outside it: `dense` and `adaptative` pick among the keys of the box, `fixed` and `fixed_reg` lay `maxRows` grid points over the box, evenly spaced along the curve from the south-west corner, each carrying the value of the stored key before it on the curve when one follows it too. On a `nodeTime` or `nodeList`, `fixed` and `fixed_reg` lay rows at even steps from `from` to `to`, every ref of `refs` sampled at the same keys. Going forward (`from < to`) a row holds the value at or before its key, going backward the value at or after it. A row past the last key going forward, or before the first going backward, is `null`: on a `nodeTime`, it holds that edge value only while it is less than `maxDephasing` away from it (`null` is 0). A `nodeList` sample ignores `maxDephasing`. Its `from` and `to` are positions: without `to` it stops at the last position of the shortest list in `refs`, an empty list there gives an empty table, `fixed_reg` gives the same rows as `fixed` (a list has no gaps), and with no `to` and a `from` past the shortest list's end it walks backward. `nodeList::info` reports the range `0..size()-1`, with a `null` `from` for an empty list.
+The node types (`node`, `nodeTime`, `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeGeo`,
+`nodeGeoSet`) and their sampling are in [nodes.md](nodes.md).
 
 ## Time and duration
 
@@ -512,7 +319,7 @@ Concrete subtypes:
 | `CsvWriter<T>` / `CsvReader<T>`   | CSV (config via `CsvFormat`)                       |
 | `BinReader`                       | Raw `i32` / `i64` / `f32` / `f64` / `Tensor` reads |
 
-`GcxWriter<T>` / `GcxReader<T>` write and read `.gcx`, a binary format that does not depend on the ABI: objects carry their field names and the type, field and enum entry names sit once in a dictionary at the end of the file. Choose it over GCB for a file that must survive changes to the program's types or be read by another tool; GCB is smaller and faster but only reads back into the same types. `GcxWriter` is not a `Writer`: it has `write(v)` and `close()`, no `flush()`, and the file is readable only once `close()`d. Read back into changed types, a removed field is skipped and a missing nullable field reads as null. Layout and rules: `lib/std/io.md` (GcxWriter / GcxReader).
+`GcxWriter<T>` / `GcxReader<T>` write and read `.gcx`, a binary format that does not depend on the ABI: objects carry their field names and the type, field and enum entry names sit once in a dictionary at the end of the file. Choose it over GCB for a file that must survive changes to the program's types or be read by another tool; GCB is smaller and faster but only reads back into the same types. `GcxWriter` is not a `Writer`: it has `write(v)` and `close()`, no `flush()`, and the file is readable only once `close()`d. Read back into changed types, a removed field is skipped and a missing nullable field reads as null. Byte layout: `lib/std/gcx.md`.
 
 `Stream<T>`, an append-only file of records that concurrent tasks write and a callback drains in batches, is covered in [streams.md](streams.md).
 
@@ -624,7 +431,9 @@ spawn(Job { function: f, task_class: TaskClass::large });   // also on each awai
 
 ### Smtp
 
-`Smtp` for sending email (with `Email`, `SmtpMode`, `SmtpAuth`).
+`Smtp` for sending email (with `Email`, `SmtpMode`, `SmtpAuth`). A sender or recipient is a bare address or
+`Name <a@b.c>`: the headers carry it as written, the SMTP envelope the address alone. A refused send throws with
+the server's reply, such as `(reply=550 5.7.1 ...)`.
 
 See `lib/std/io.gcl` for full signatures.
 
@@ -701,6 +510,7 @@ YearlyPeriodicity { dates: [DateTuple { day: 1, month: Month::Jan }], timezone: 
 Identity::current();                          // requires authentication
 Identity::current_id();                       // 0 if anonymous
 Identity::login("alice", "password");         // returns session token
+Identity::sign_in(user_id, 30day);            // signs the call in without a password, see identity.md
 Identity::token(user_id, 24hour, "ci");     // a token labeled "ci", null for the --validity of the server
 Identity::tokens("alice", 0, 100);            // the tokens of alice that have not expired, a page at a time
 Identity::revoke_token("alice", token_id);    // false when alice has no such token

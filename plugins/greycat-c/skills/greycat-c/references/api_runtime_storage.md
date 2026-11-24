@@ -575,8 +575,14 @@ struct gc_block {
     bool cmp_up_to_date : 1;   // Compression is current
     bool cmp_found : 1;        // Compression data found
     bool dropped : 1;          // Block has been dropped
-    bool contains_objects : 1; // Block contains object entries
+    bool contains_objects : 1; // A slot may hold an object: gc_block__free finalizes them and a split moves them
+                               // only when set. Set by gc_block__object_attach, cleared by a save (which empties slots)
     bool dirty : 1;            // Block has been modified since last save
+    bool multi_valued : 1;     // In memory only, never stored: a key of the block (nodeTimeSet / nodeGeoSet) may hold
+                               // other than one value (slot = chain of buckets or spilled-key marker). Set by every write
+                               // putting one in a slot, recomputed on load; clear = every value counts one pair
+    bool multi_valued_stale : 1; // In memory only: a write took a bucket chain / spill marker out of a slot; the next
+                               // count of the block's values recomputes `multi_valued` from its slots first
     gc_block_slot_t *backend;  // Array of entries
 };
 ```

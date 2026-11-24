@@ -87,7 +87,7 @@ typedef struct {
 
 Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serialization, etc.).
 
-**Breaking in 9.0 (renumbered, ABI protocol 4):** `nodeSet` (7) and `nodeIndexSet` (9) were inserted among the node tags, so every tag from `gc_type_node_index` on moved up (by 1 or 2). Always use the enumerators, never raw numbers; a store/ABI/GCB of protocol 3 (GreyCat 8.4) is refused.
+**Breaking in 9.0 (renumbered, ABI protocol 4):** `nodeTimeSet` (7), `nodeSet` (8), `nodeIndexSet` (10) and `nodeGeoSet` (13) were inserted among the node tags, so every tag from `gc_type_node_index` on moved up (by 2 to 4). `nodeTimeSet` / `nodeGeoSet` arrived after upstream `24f7110f4` (shifting every tag from `gc_type_node_set` on again) while `GC_ABI_PROTO` stayed 4. Always use the enumerators, never raw numbers; a store/ABI/GCB of protocol 3 (GreyCat 8.4) is refused.
 
 | Value | Name | Description |
 |-------|------|-------------|
@@ -98,33 +98,36 @@ Must fit in 8 bits. Used everywhere a type tag is needed (slot types, serializat
 | 4  | `gc_type_float` | 64-bit double-precision float |
 | 5  | `gc_type_node` | Graph node reference |
 | 6  | `gc_type_node_time` | Time-indexed node reference |
-| 7  | `gc_type_node_set` | **New in 9.0.** Set node (`nodeSet<V>`) |
-| 8  | `gc_type_node_index` | Indexed node reference |
-| 9  | `gc_type_node_index_set` | **New in 9.0.** Multimap node (`nodeIndexSet<K, V>`) |
-| 10 | `gc_type_node_list` | Node list reference |
-| 11 | `gc_type_node_geo` | Geospatially-indexed node reference |
-| 12 | `gc_type_geo` | Geospatial hash |
-| 13 | `gc_type_time` | Timestamp (microseconds since epoch) |
-| 14 | `gc_type_duration` | Duration (microseconds) |
-| 15 | `gc_type_cubic` | Cubic interpolation value |
-| 16 | `gc_type_static_field` | Static field / enum value (stored as `gc_slot_tuple_u32_t`) |
-| 17 | `gc_type_object` | Heap-allocated object pointer |
-| 18 | `gc_type_block_ref` | Storage block reference |
-| 19 | `gc_type_block_inline` | Inline storage block |
-| 20 | `gc_type_function` | Function reference |
-| 21 | `gc_type_undefined` | Undefined / unknown type |
-| 22 | `gc_type_type` | Type reference |
-| 23 | `gc_type_field` | Field reference |
-| 24 | `gc_type_stringlit` | String literal (serialization only) |
-| 25 | `gc_type_error` | Error (C internal only) |
+| 7  | `gc_type_node_time_set` | **New in 9.0.** Time-indexed set node (`nodeTimeSet<T>`, a set of values per time) |
+| 8  | `gc_type_node_set` | **New in 9.0.** Set node (`nodeSet<V>`) |
+| 9  | `gc_type_node_index` | Indexed node reference |
+| 10 | `gc_type_node_index_set` | **New in 9.0.** Multimap node (`nodeIndexSet<K, V>`) |
+| 11 | `gc_type_node_list` | Node list reference |
+| 12 | `gc_type_node_geo` | Geospatially-indexed node reference |
+| 13 | `gc_type_node_geo_set` | **New in 9.0.** Geospatially-indexed set node (`nodeGeoSet<T>`, a set of values per point) |
+| 14 | `gc_type_geo` | Geospatial hash |
+| 15 | `gc_type_time` | Timestamp (microseconds since epoch) |
+| 16 | `gc_type_duration` | Duration (microseconds) |
+| 17 | `gc_type_cubic` | Cubic interpolation value |
+| 18 | `gc_type_static_field` | Static field / enum value (stored as `gc_slot_tuple_u32_t`) |
+| 19 | `gc_type_object` | Heap-allocated object pointer |
+| 20 | `gc_type_block_ref` | Storage block reference |
+| 21 | `gc_type_block_inline` | Inline storage block |
+| 22 | `gc_type_function` | Function reference |
+| 23 | `gc_type_undefined` | Undefined / unknown type |
+| 24 | `gc_type_type` | Type reference |
+| 25 | `gc_type_field` | Field reference |
+| 26 | `gc_type_stringlit` | String literal (serialization only) |
+| 27 | `gc_type_error` | Error (C internal only) |
 
 Helpers (new in 9.0):
 
 | Symbol | Description |
 |--------|-------------|
 | `GC_TYPE_LAST` | `gc_type_error`, the highest tag: a type byte above it is not a tag. |
-| `static inline bool gc_type__is_node(gc_type_t t)` | `t` tags a node handle (`gc_type_node` .. `gc_type_node_geo`, nodeSet / nodeIndexSet included). |
+| `static inline bool gc_type__is_node(gc_type_t t)` | `t` tags a node handle (`gc_type_node` .. `gc_type_node_geo_set`: node, nodeTime, nodeTimeSet, nodeSet, nodeIndex, nodeIndexSet, nodeList, nodeGeo, nodeGeoSet). |
 | `static inline bool gc_type__is_keyed_node(gc_type_t t)` | `t` is `gc_type_node_index`, `gc_type_node_set` or `gc_type_node_index_set` (keyed by any value). |
+| `static inline bool gc_type__is_pair_counted(gc_type_t t)` | `t` is `gc_type_node_time_set` or `gc_type_node_geo_set`: the node's tree counts (key, value) pairs rather than keys (each key holds a set of values; blocks keep the pairs below them in `deep_size`, a leaf included). |
 
 ### gc_object_t — Object Header
 
@@ -201,7 +204,7 @@ typedef struct gc_program_core_types {
     u32_t any;
     // New in 9.0: primitive / node types (a C keyword takes a trailing `_`)
     u32_t null, bool_, char_, int_, float_;
-    u32_t node, nodeTime, nodeIndex, nodeSet, nodeIndexSet, nodeList, nodeGeo;
+    u32_t node, nodeTime, nodeTimeSet, nodeIndex, nodeSet, nodeIndexSet, nodeList, nodeGeo, nodeGeoSet;
     u32_t geo, time, duration, function, type, field;
     // Collections
     u32_t String, Buffer, Array, Tuple, Map, Table, Tensor;
@@ -211,7 +214,7 @@ typedef struct gc_program_core_types {
 } gc_program_core_types_t;   // each 0 until resolved, or if the program doesn't declare the type
 ```
 
-Name macros (`gc/program.h`): `GC_CORE_MODULE_NAME` (`"core"`) and one `GC_CORE_TYPE_NAME_<name>` per field (the bare type name string): `_any`, and new in 9.0 `_null`, `_bool`, `_char`, `_int`, `_float`, `_node`, `_nodeTime`, `_nodeIndex`, `_nodeSet`, `_nodeIndexSet`, `_nodeList`, `_nodeGeo`, `_geo`, `_time`, `_duration`, `_function`, `_type`, `_field`, `_DurationUnit`, `_TimeZone`; plus `_String`, `_Buffer`, `_Array`, `_Tuple`, `_Map`, `_Table`, `_Tensor`, `_TensorType`.
+Name macros (`gc/program.h`): `GC_CORE_MODULE_NAME` (`"core"`) and one `GC_CORE_TYPE_NAME_<name>` per field (the bare type name string): `_any`, and new in 9.0 `_null`, `_bool`, `_char`, `_int`, `_float`, `_node`, `_nodeTime`, `_nodeTimeSet`, `_nodeIndex`, `_nodeSet`, `_nodeIndexSet`, `_nodeList`, `_nodeGeo`, `_nodeGeoSet`, `_geo`, `_time`, `_duration`, `_function`, `_type`, `_field`, `_DurationUnit`, `_TimeZone`; plus `_String`, `_Buffer`, `_Array`, `_Tuple`, `_Map`, `_Table`, `_Tensor`, `_TensorType`.
 
 `gc/type.h` does not include `<stddef.h>` — include it yourself for `size_t` / `NULL` / `offsetof`.
 

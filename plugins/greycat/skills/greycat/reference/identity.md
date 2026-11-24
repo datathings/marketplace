@@ -1,11 +1,12 @@
 # Identity and permissions
 
-Who a request runs as and what it may do. Reach here when the task is about users, roles, permissions, `@permission`, tokens, grants on per-user folders, group identities, the worlds a user's calls run in, or why `--user` must not be used.
+Who a request runs as and what it may do. Reach here when the task is about users, roles, permissions, `@permission`, tokens, a sign-in without a password (a link sent by email), grants on per-user folders, group identities, the worlds a user's calls run in, or why `--user` must not be used.
 
 ## Contents
 
 - Identity and permissions
 - Tokens
+- A sign-in without a password
 - Grants and per-user files
 - Identities as groups
 - The worlds of an identity
@@ -61,7 +62,7 @@ fn ping(): String { return "pong"; }              // anonymous — use only when
 
 A handful of stdlib endpoints are `@permission("public")` because they filter their *own* output by the caller's permission mask rather than gating the call: MCP `tools/list` and `runtime::OpenApi::v3` both drop every function the caller could not invoke, so reaching them anonymously discloses only the `public` endpoints. That pattern — public entry point, per-item filtering inside — is the only reason to make a listing endpoint public; a function that returns data rather than a filtered catalogue still needs a real permission.
 
-Identity management at runtime: `Identity::login`, `Identity::logout`, `Identity::token`, `Identity::tokens`, `Identity::revoke_token`, `Identity::revoke_tokens`, `Identity::set_password`, `Identity::create`, `Identity::create_with_password`, `Identity::all`, `Identity::set_role`, `Identity::set_grants`, `Identity::grant`, `Identity::revoke`, `Identity::grant_permission`, `Identity::revoke_permission`, `Identity::remove`, `Identity::set_world`, `Identity::set_worlds`. CLI equivalents under `greycat user`.
+Identity management at runtime: `Identity::login`, `Identity::logout`, `Identity::sign_in`, `Identity::token`, `Identity::tokens`, `Identity::revoke_token`, `Identity::revoke_tokens`, `Identity::set_password`, `Identity::create`, `Identity::create_with_password`, `Identity::all`, `Identity::set_role`, `Identity::set_grants`, `Identity::grant`, `Identity::revoke`, `Identity::grant_permission`, `Identity::revoke_permission`, `Identity::remove`, `Identity::set_world`, `Identity::set_worlds`. CLI equivalents under `greycat user`.
 
 `@permission` is checked when a function is called over HTTP or as an MCP tool. A call from GCL code is not checked. `Identity::get_by_id`, `get_by_name`, `all`, `create`, `create_with_password`, `set_role`, `remove`, `grant`, `revoke`, `grant_permission`, `revoke_permission`, `set_world`, `set_worlds` and `Role::all` are `admin` over HTTP, but any caller runs them from GCL. An `@expose`d function that forwards untrusted input to them must check its caller itself (`Identity::has_permission("admin")`, for example). `Identity::token`, `tokens`, `revoke_token`, `revoke_tokens`, `set_password`, `set_grants`, `grants`, `granted_to` and `grant_of` do compare the caller to the identities they name, from GCL as well.
 
@@ -83,6 +84,7 @@ A token is what a request carries to run as an identity ([http.md, Authenticatio
 | `Identity::revoke_token(name, id)` | revokes one token, `false` when `name` has no token `id` |
 | `Identity::revoke_tokens(name, keep_current)` | revokes every token of `name`, except the token of the call when `keep_current` is `true`, and returns how many it revoked |
 | `Identity::logout()` | revokes the token of the call and clears the cookie |
+| `Identity::sign_in(id, ttl)` | signs the call in as `id` without a password, as `login` does, for `ttl` (`null` for `--validity`). See [below](#a-sign-in-without-a-password) |
 
 `current` is `true` for the token the call carries, which lets a "signed-in devices" page mark the session in use. A call from GCL code that no request started (`greycat run`, a scheduled task) carries none. A token id is below 2^53, so a JavaScript client reads it exactly.
 
@@ -96,6 +98,31 @@ fn sign_out_elsewhere(): int {
 A revoke applies to the next request, and it closes the `Task::events` streams opened with the token. A task the token already started keeps running as its identity. `Identity::set_password` leaves the sessions open, so a password change that should sign out the other devices calls `revoke_tokens(name, true)` as well. `Identity::remove` revokes every token of the identity.
 
 `greycat serve` issues two root tokens for itself at each start, and revokes the two of the previous start. The URL it prints on a terminal carries one, valid for `--validity` and labeled `serve`, which a start that prints none revokes too. `gcdata/security/token` holds the other, which the CLI uses to call the running server. That one is valid for a year, is not listed, and `revoke_tokens` leaves it. A backup does not hold tokens, so `greycat restore` ends every session (see [storage.md](storage.md#backups)).
+
+### A sign-in without a password
+
+`Identity::sign_in(id, ttl)` opens the session `login` opens, without checking a password: it issues a token labeled `login`, valid for `ttl` (`null` for `--validity`), returns it, runs the rest of the call as `id`, and the response sets it as the `greycat` cookie with that expiry. The identity needs no password, so an account created with `Identity::create` signs in this way. It is the call behind a sign-in the program checks itself, such as a link sent by email. It is not `@expose`d and checks no permission, from GCL or otherwise, so the function calling it is `@permission("public")` (the visitor is not signed in yet) and must refuse whatever it has not verified. It throws `user not found: <id>` for an unknown id, and `the public identity cannot sign in` for id `0`.
+
+```gcl
+/// The identity each pending link signs in, by the SHA-256 of its secret.
+var pending_links: nodeIndex<String, int>;
+
+/// Signs the visitor in with the secret of a link the server emailed them, once.
+@expose
+@permission("public")
+fn redeem_link(secret: String): String {
+    var hash = Crypto::sha256hex(secret);
+    var id = pending_links.get(hash);
+    if (id == null) {
+        throw "this link is not valid";
+    }
+    pending_links.remove(hash);
+    Identity::sign_in(id, 30day);
+    return Identity::current().name;
+}
+```
+
+Keep the secret long and random (a `Uuid::v4()` or more), store only its hash, and let a link expire. A mail scanner opens every link it finds, so the page behind the link redeems it on a click rather than on load.
 
 ### Grants and per-user files
 

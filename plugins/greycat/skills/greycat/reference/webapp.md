@@ -152,9 +152,9 @@ greycat install sdk_web   # writes the pragma at the newest release on the std p
 greycat install --bump    # later: moves std and sdk_web together
 ```
 
-Like every library other than `std`, `lang` and `rust`, `sdk_web` needs a registry token to download (see
-[cli.md](cli.md#registries)). `lib/` is gitignored, so a fresh checkout runs `greycat install` before
-`vp install`.
+`sdk_web` is in the `toolchain` tier, so it downloads without a registry token (see
+[libraries.md](libraries.md#tiers-and-tokens)). `lib/` is gitignored, so a fresh checkout runs `greycat install`
+before `vp install`.
 
 ### `vite.config.ts`
 

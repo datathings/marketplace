@@ -2,7 +2,7 @@
 
 ## Overview
 
-The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **9.0** (see [SKILL.md](../SKILL.md) for the change summary). **Breaking in 9.0:** `ErrorCode`, `License` / `LicenseType`, `RuntimeInfo.license`, `IdentityGrantType`, `Identity.grants` and `Task::header` / `headers` / `uri` / `body` were removed; `@raw` is gone (an `@expose`d function takes `runtime::HttpRequest` / returns `runtime::HttpResponse` instead); `nodeList` is positional (`set` removed); grants are per-permission (`Identity::grant(name, target, permission)`); `Tensor.scale(value, inPlace: bool)`. **New:** `nodeSet<V>`, `nodeIndexSet<K, V>`, `Task::result(task_id)` + `Job` results kept on disk, `Task.worker_id` / `Task.jobs`, `Identity` tokens (`tokens` / `revoke_token(s)`, labels), `Runtime::program()`, `Tensor.mean/min/max`, `GeoBox.crosses_antimeridian/lobes`, permissions `files:read` / `files:write` / `tasks:read` / `tasks:cancel`. (8.4 moved S3/XML out of std into the `s3` / `xml` libraries — see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std).) The library is organized into four modules:
+The GreyCat Standard Library provides essential data structures, I/O operations, runtime features, and utilities for GCL applications. Documentation tracks GreyCat SDK **9.0** (see [SKILL.md](../SKILL.md) for the change summary). **Breaking in 9.0:** `ErrorCode`, `License` / `LicenseType`, `RuntimeInfo.license`, `IdentityGrantType`, `Identity.grants` and `Task::header` / `headers` / `uri` / `body` were removed; `@raw` is gone (an `@expose`d function takes `runtime::HttpRequest` / returns `runtime::HttpResponse` instead); `nodeList` is positional (`set` removed); grants are per-permission (`Identity::grant(name, target, permission)`); `Tensor.scale(value, inPlace: bool)`. **New:** `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTimeSet<T>`, `nodeGeoSet<T>`, `Identity::sign_in(id, ttl)`, `Task::result(task_id)` + `Job` results kept on disk, `Task.worker_id` / `Task.jobs`, `Identity` tokens (`tokens` / `revoke_token(s)`, labels), `Runtime::program()`, `Tensor.mean/min/max`, `GeoBox.crosses_antimeridian/lobes`, permissions `files:read` / `files:write` / `tasks:read` / `tasks:cancel`. (8.4 moved S3/XML out of std into the `s3` / `xml` libraries — see [XML and S3 moved out of std](#xml-and-s3-moved-out-of-std).) The library is organized into four modules:
 
 - **core** - Fundamental types and data structures (primitives, time/date, nodes, tensors, geo, error handling, math)
 - **runtime** - Scheduled/recurring tasks (Scheduler + periodicities), background job processing (Task/Job/await), application logging, identity/authentication, system-information queries, raw HTTP request/response (`runtime::HttpRequest` / `runtime::HttpResponse`), OpenAPI export, MCP server endpoints
@@ -18,7 +18,7 @@ The GreyCat Standard Library provides essential data structures, I/O operations,
   - [Numbers & Strings](#numbers--strings) - int, float, String, Buffer, Chars
   - [Time & Duration](#time--duration) - time, duration, Date
   - [Containers](#containers) - Array, Map, Tuple, Table
-  - [Nodes](#nodes) - node, nodeTime, nodeList, nodeIndex, nodeGeo, nodeSet, nodeIndexSet, VectorIndex
+  - [Nodes](#nodes) - node, nodeTime, nodeTimeSet, nodeList, nodeIndex, nodeGeo, nodeGeoSet, nodeSet, nodeIndexSet, VectorIndex
   - [Tensors](#tensors) - Tensor, TensorType, TensorDistance
   - [Geospatial Types](#geospatial-types) - geo, GeoCircle, GeoPoly, GeoBox
   - [Reflection](#reflection) - type, field
@@ -192,6 +192,8 @@ Persistent graph node primitives. All are `native` and stored to disk.
 - **`nodeGeo<T>`** - geo-indexed series. `get(geo)`, `set(geo, value)`, `resolve(geo)`, `rangeSize(from: geo, to: geo)`, `firstIndex`/`lastIndex` (SW/NE), `search(center: geo, max: int): Array<SearchResult<geo,T>>`, etc. **8.4:** a range `for (g, v in idx[a..b])` and `rangeSize(a, b)` cover **only the box** spanned by any two opposite corners (they used to walk the whole curve stretch between them, outside the box too); `idx[b..a]` walks it backwards. Static `sample(refs, from, to, maxRows, mode)` returns no row outside the box (a `null` corner = the world's).
 - **`nodeSet<V>`** (**new in 9.0**, `@iterable`) - persistent set of unique values compared by deep equality, membership in O(log n). `size(): int`, `add(value: V): bool` (true if new; throws on null), `contains(value: V): bool`, `remove(value: V)`, `removeAll()`, static `sample(refs: Array<nodeSet>, from: any?, maxRows: int, mode: SamplingMode): Table`, static `info(nodes: Array<nodeSet>): Array<NodeInfo>` (both `@expose @permission("debug")`). Concurrent merges never conflict (adds/removes of both sides apply).
 - **`nodeIndexSet<K, V>`** (**new in 9.0**, `@iterable`) - persistent multimap: per key a set of distinct values (keys compare as `nodeIndex` keys, values by deep equality; a key past 32 values spills into its own `nodeSet`). `size(): int` (number of pairs), `add(key: K, value: V): bool` (throws on null value), `get(key: K): Array<V>` (empty if none), `contains(key: K, value: V): bool`, `remove(key: K, value: V)`, `removeKey(key: K)`, `removeAll()`, static `sample` / `info` (as nodeSet). Merges pair by pair, never conflicts; `removeKey`/`removeAll` remove only the pairs the task saw.
+- **`nodeTimeSet<T>`** (**new in 9.0**, `@iterable`) - time series where each timestamp holds a **set** of distinct values (deep equality). `size(): int` (number of (time, value) pairs), `add(exactTime: time, value: T): bool` (true if that time did not hold it yet; throws on null), `getAt(exactTime: time): Array<T>` (empty if none), `contains(exactTime: time, value: T): bool`, `remove(exactTime: time, value: T)`, `removeAllAt(exactTime: time)`, `removeAll()`, `resolve(): Array<T>?` (at the enclosing `at` scope time), `resolveAt(reqTime: time): Array<T>?` / `resolveAtWithin(reqTime: time, max_dephase: duration): Array<T>?` (closest previous timestamp), `resolveTimeAt(reqTime: time): time?`, `resolveTimeValueAt(reqTime: time): Tuple<time, Array<T>>?`, `rangeSize(from: time, to: time): int` (pairs), `firstTime(): time?` / `first(): Array<T>?` / `lastTime(): time?` / `last(): Array<T>?`, `prev(v: time): time?` / `next(v: time): time?`; `@expose @permission("debug")` static `sample(refs: Array<nodeTimeSet>, from: time?, to: time?, maxRows: int, mode: SamplingMode, maxDephasing: duration?, tz: TimeZone?): Table` (a time + value column per node; `dense`/`adaptative` give a row per pair, a time repeated per value; `fixed`/`fixed_reg` align rows on the grid, a grid point giving as many rows as the most values a node carries there, `null` padding; `fixed_reg` does not interpolate — reads as `fixed`; at most `maxRows` rows) and static `info(nodes: Array<nodeTimeSet>): Array<NodeInfo<time>>`. Merges pair by pair like nodeIndexSet.
+- **`nodeGeoSet<T>`** (**new in 9.0**, `@iterable`) - a nodeGeo where each point holds a **set** of distinct values (deep equality); a range `for (g, v in idx[a..b])` walks the box spanned by `a` and `b`, as for nodeGeo. `size(): int` (pairs), `add(index: geo, value: T): bool` (throws on null), `get(index: geo): Array<T>` (empty if none), `resolve(index: geo): Array<T>?`, `contains(index: geo, value: T): bool`, `remove(index: geo, value: T)`, `removeAllAt(index: geo)`, `removeAll()`, `rangeSize(from: geo, to: geo): int` (pairs in the box), `firstIndex(): geo?` / `first(): Array<T>?` (SW), `lastIndex(): geo?` / `last(): Array<T>?` (NE); `@expose @permission("debug")`: static `sample(refs: Array<nodeGeoSet>, from: geo?, to: geo?, maxRows: int, mode: SamplingMode): Table` (point + value column per node, same row rules as nodeTimeSet), static `info(nodes: Array<nodeGeoSet>): Array<NodeInfo<geo>>`, `search(center: geo, max: int): Array<SearchResult<geo, T>>` (at most `max` values nearest `center`, one result per value). Merges pair by pair like nodeIndexSet.
 - **`nodeTimeCursor<T>`** (`@volatile`) - iterator over a nodeTime (`first`, `last`, `next`, `previous`, `lessOrEq(t)`, `skip_values`, `skip_duration`, `currentTime`, `current`).
 
 ```gcl
@@ -526,9 +528,9 @@ enum TaskClass { small; medium; large; }
 **Merge strategy (new, upstream `14cd9a918`).** `Task::set_merge_strategy(s)` chooses how the current task's commit resolves a conflict (two writes of the same key/field, both changed from the same origin); a task starts with the default and nothing it spawns inherits it. **A `Map` now merges key by key** (writes to different keys all land; a plain-object value merges field by field), and a concurrent change of an `Array` / `Map` attribute now **conflicts** where it was silently overwritten by the last commit.
 ```gcl
 enum MergeStrategy {
-  fusion_by_key_fail_on_conflict,   // default: nodes/objects merge key by key; a key/field both sides changed differently fails with `incompatible fusion`
+  fusion_by_key_fail_on_conflict,   // default: nodes/objects merge key by key; a key/field both sides changed differently fails (`incompatible fusion` for a field or Map key, `fusion error` for a key of a structured node)
   fusion_by_key_last_win,           // same, but a conflicting key/field takes this task's value
-  no_fusion_fail_on_conflict,       // a structured node (nodeTime/nodeIndex/nodeList/nodeGeo/nodeSet/nodeIndexSet) changed by both fails the commit (or the await merge); plain fields still merge
+  no_fusion_fail_on_conflict,       // a structured node (nodeTime/nodeTimeSet/nodeIndex/nodeList/nodeGeo/nodeGeoSet/nodeSet/nodeIndexSet) changed by both fails the commit (or the await merge); plain fields still merge
 }
 Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win);
 ```
@@ -548,7 +550,8 @@ type Job<T> {
 // native fn await(jobs: Array<Job>)   // no strategy param; see Task::set_merge_strategy below
 // 9.0: jobs also run in parallel under `greycat run` (serially only under `greycat test`); the task is suspended while
 // they run, and a writer opened before the await truncates its file if written again after -- reopen with `append: true`.
-// nodeSet / nodeIndexSet changes merge without conflicts.
+// nodeSet / nodeIndexSet / nodeTimeSet / nodeGeoSet changes merge without conflicts (pairs merge as nodeSet elements;
+// removeKey / removeAllAt / removeAll remove only the pairs the task saw).
 ```
 
 ### Logging
@@ -663,7 +666,7 @@ type Runtime {
   // @expose @permission("admin"): export_store(): String   (new; every node, as the task sees the store, to a `.gce` file
   //   under the backup dir, returns its path. A .gce is a gcx file (see GcxWriter): info Map (format, next_key, time, world),
   //   root object with the module vars, then per node in reference order a node-begin record (tag 25: handle + type) and
-  //   its entries. Survives program changes; lasts at least as long as store_stats)
+  //   its entries; a nodeIndexSet / nodeTimeSet / nodeGeoSet writes a pair per value, a spilled key's too. Survives program changes; lasts at least as long as store_stats)
   // @expose @permission("admin"): backup_full(): String   (now returns the archive path)
   // @expose @permission("admin"): store_stats(): StoreStats  (new; live blocks/bytes by type vs file bytes on disk, damaged blocks,
   //   unreadable zones; reads every live block, as long as a full backup)
@@ -790,7 +793,7 @@ var id = spawn(Job { function: project::simulate, world: "what-if" });   // runs
 type WorldChangesReader {
   pos: int?;                      // nodes already read; a restored reader (suspend/resume) recomputes and skips them
   // native fn can_read(): bool
-  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle; fails past the end
+  // native fn read(): any        // a node<T> / nodeTime / nodeTimeSet / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeGeoSet / nodeSet handle; fails past the end
   // native fn available(): int
 }
 var r = WorldChangesReader {};
@@ -803,22 +806,22 @@ type NodeReader {
   type: type?;   // exact node type (`nodeTime<float>`, `node<Sensor>`) or node kind (`nodeTime`); null = every node; other types fail
   last: any?;    // last node read; a restored reader (suspend/resume) resumes after it
   // native fn can_read(): bool
-  // native fn read(): any        // a node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle; fails past the end
+  // native fn read(): any        // a node<T> / nodeTime / nodeTimeSet / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeGeoSet / nodeSet handle; fails past the end
 }
 var r = NodeReader {};             // every node; set `type` to filter
 while (r.can_read()) { var n = r.read(); }
 ```
-**`WorldDiffReader` (new, upstream `d0bfe2ca7`).** The keys of one node whose value differs between the current world and its base, as committed when the task started (not the task's pending writes), in the node's key order (time for nodeTime, position for nodeList, encoded key for nodeIndex/nodeGeo, hash order for a non-scalar nodeIndex key). Deep-equal values are not listed; a standalone world reports every key as `added`. The base is read as it is now, down its overlay chain. Loads each internal block once and only the differing leaves. Fails in main and when `node` is not a node. **9.0:** nodeSet / nodeIndexSet supported (a nodeIndexSet pair is only ever `added`/`removed`); a nodeList value keeps its identity as positions shift — `removed` at its base position, `added`/`changed` at its world position.
+**`WorldDiffReader` (new, upstream `d0bfe2ca7`).** The keys of one node whose value differs between the current world and its base, as committed when the task started (not the task's pending writes), in the node's key order (time for nodeTime/nodeTimeSet, position for nodeList, encoded key for nodeIndex/nodeIndexSet/nodeSet/nodeGeo/nodeGeoSet, hash order for a non-scalar nodeIndex key). Deep-equal values are not listed; a standalone world reports every key as `added`. The base is read as it is now, down its overlay chain. Loads each internal block once and only the differing leaves. Fails in main and when `node` is not a node. **9.0:** nodeSet / nodeIndexSet / nodeTimeSet / nodeGeoSet supported (a pair of a nodeIndexSet / nodeTimeSet / nodeGeoSet is only ever `added`/`removed`, a spilled key's pairs too); a nodeList value keeps its identity as positions shift — `removed` at its base position, `added`/`changed` at its world position.
 ```gcl
 enum WorldDiffKind { added; removed; changed; }
 type WorldDiff {
   kind: WorldDiffKind;
-  key: any?;     // index key / time / list position / geo / nodeSet element / nodeIndexSet pair key; null for a node<T>
+  key: any?;     // index key / time / list position / geo / nodeSet element / nodeIndexSet pair key / nodeTimeSet pair time / nodeGeoSet pair geo; null for a node<T>
   base: any?;    // null when added
   world: any?;   // null when removed
 }
 type WorldDiffReader {
-  node: any;          // node<T> / nodeTime / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeSet handle to compare
+  node: any;          // node<T> / nodeTime / nodeTimeSet / nodeIndex / nodeIndexSet / nodeList / nodeGeo / nodeGeoSet / nodeSet handle to compare
   last: WorldDiff?;   // last entry read; a new or restored reader resumes after it (exact if no commit in between)
   // native fn can_read(): bool
   // native fn read(): WorldDiff   // fails past the end
@@ -865,6 +868,10 @@ type Identity {
   // @expose                       static native fn revoke_token(name: String, id: int): bool       (new; the token then runs as anonymous, its SSE streams close)
   // @expose                       static native fn revoke_tokens(name: String, keep_current: bool): int   (new; returns how many)
   // @expose @permission("public") static native fn login(login: String, password: String): String   (case-insensitive login, as get_by_name)
+  //                               static native fn sign_in(id: int, ttl: duration?): String   (new; signs the call in as identity `id` without a password and
+  //      returns a session token as `login` does: label `login`, `Set-Cookie: greycat=<TOKEN>`; holds for `ttl`, null = server's
+  //      `default_validity_duration`. Not exposed, checks no permission -- the @expose'd caller must have authenticated the visitor
+  //      (e.g. an emailed link). Throws if no identity has the id, and for the `public` identity)
   // @expose                       static native fn logout()   (9.0: revokes the call's token, not just the cookie)
   // @expose @permission("public") static native fn permissions(): Array<String>
   //                               static native fn has_permission(permission: String): bool   (role of the caller)
@@ -981,7 +988,7 @@ w.close();
 var r = GcxReader<Person> { path: "people.gcx" };
 while (r.can_read()) { var p = r.read(); }
 ```
-Schema drift: a field the type no longer has is skipped; a field missing from the file reads as null (error if not nullable); an unknown type / enum entry / field / function is an error naming it. A writer whose task was suspended (`await`) refuses further writes rather than restart the file; `GcxReader` resumes at its `pos`. Max nesting 512. Layout: `"GCX\0"` + u16 version `1`, tagged values (tags 0–24: null, false, true, int `vi`, float, char, time, duration, geo, String, Buffer, node kinds 11–15, enum, object (non-null fields only), Array, Map, Table, Tensor, type, field, function), then the name dictionary, then u64 dictionary length + `"GCXE"`; node references are raw (meaningful only in the writing store). Full byte layout: upstream `lib/std/io.md` § GcxWriter / GcxReader.
+Schema drift: a field the type no longer has is skipped; a field missing from the file reads as null (error if not nullable); an unknown type / enum entry / field / function is an error naming it. A writer whose task was suspended (`await`) refuses further writes rather than restart the file; `GcxReader` resumes at its `pos`. Max nesting 512. Layout: `"GCX\0"` + u16 version `1`, tagged values (tags 0–24: null, false, true, int `vi`, float, char, time, duration, geo, String, Buffer, node kinds 11–15 (node, nodeTime, nodeIndex, nodeList, nodeGeo), enum, object (non-null fields only), Array, Map, Table, Tensor, type, field, function; then 26 nodeSet, 27 nodeIndexSet, 28 nodeTimeSet, 29 nodeGeoSet), then the name dictionary, then u64 dictionary length + `"GCXE"`; node references are raw (meaningful only in the writing store). Full byte layout: upstream `lib/std/gcx.md`.
 
 #### TextWriter<T> / TextReader
 UTF-8 text, line oriented. `TextWriter` adds `writeln(v: T)`. `TextReader` reads one line per `read()` (trims trailing `\r` and null bytes; throws when exhausted).
@@ -1290,7 +1297,7 @@ fn start() {
 #### Queue<T>
 Optionally bounded FIFO (`capacity` is private; drops the front element when full).
 ```gcl
-// native fns: push(value), pop(): T?, front(): T?, back(): T?, clear()
+// native fns: push(value), pop(): T?, front(): T? (oldest), back(): T? (newest), clear()
 var q = Queue<String> {};
 q.push("first");
 var item = q.pop();

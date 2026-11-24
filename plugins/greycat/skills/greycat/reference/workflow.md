@@ -17,7 +17,19 @@ Reach for this file when the task is operational: starting a fresh project, evol
 
 ## Bootstrapping a new project
 
-A minimum viable project is three files: a `project.gcl`, one source file, and a `.env` (optional).
+Install the toolchain once per machine. It lands in `~/.greycat`, and the script puts `~/.greycat/bin` on the `PATH` of new shells:
+
+```sh
+curl -fsSL https://registry.greycat.io/install.sh | bash -s dev    # Linux, macOS
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://registry.greycat.io/install.ps1))) -Branch dev    # Windows
+```
+
+The argument is a branch (`stable` when omitted) or an exact version such as `9.0.485-dev`. An agent on a machine with no GreyCat yet can start from `https://registry.greycat.io/SKILL.md`, which walks these steps and hands over to the skill installed with `std`. A machine that already has a GreyCat of another major needs [cli.md, Two majors on one machine](cli.md#two-majors-on-one-machine).
+
+`greycat new my-app` scaffolds a project pinned to the newest `std` on the branch of the installed binary (see [cli.md](cli.md#greycat-new-name)). By hand, a minimum viable project is three files: a `project.gcl`, one source file, and a `.env` (optional). Take the version from `greycat new` or from [libraries.md](libraries.md#reading-a-version-without-touching-the-project):
 
 ```sh
 mkdir my-app && cd my-app
@@ -25,7 +37,7 @@ mkdir my-app && cd my-app
 
 ```gcl
 // project.gcl
-@library("std", "8.0.0");
+@library("std", "9.0.485-dev");
 @include("src");
 
 fn main() {
@@ -152,7 +164,7 @@ var sensors: nodeIndex<String, Sensor>;     // global, persisted, lazily created
 
 `sensors` exists across restarts. First access creates it; subsequent calls read it back from `gcdata/`.
 
-See [types.md](types.md) for nullability rules and [stdlib.md](stdlib.md) for the full node-tag API.
+See [types.md](types.md) for nullability rules and [nodes.md](nodes.md) for the full node-tag API.
 
 ## Writing and running tests
 

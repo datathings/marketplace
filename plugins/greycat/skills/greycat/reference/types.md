@@ -150,7 +150,7 @@ fn main() {
 }
 ```
 
-This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTime<T>`, etc.
+This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTime<T>`, `nodeTimeSet<T>`, etc.
 
 ### "Raw" forms
 
@@ -301,15 +301,16 @@ some_type.nb_enum_values()   // enum entry count
 
 ## Subtyping summary
 
-| Relationship                   | Direction                                                      |
-| ------------------------------ | -------------------------------------------------------------- |
-| `T` → `T?`                     | Implicit. (Non-null widens to nullable.)                       |
-| `T?` → `T`                     | Requires `!!`, `??`, or null-flow narrowing.                   |
-| `Sub` → `Super`                | Implicit (one `extends` step).                                 |
-| `Super` → `Sub`                | Requires `as Sub`. Best paired with `is Sub` first.            |
-| `T` → `any`                    | Implicit.                                                      |
-| `any` → `T`                    | Requires `as T`.                                               |
-| `Array<int>` → `Array<any>`    | **Allowed.** Generics are invariant BUT `any` is an exception. |
-| `nodeTime<float>` → `nodeTime` | Allowed because `nodeTime` is sugar for `nodeTime<any?>`.      |
+| Relationship                                                     | Direction                                                                                 |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `T` → `T?`                                                       | Implicit. (Non-null widens to nullable.)                                                  |
+| `T?` → `T`                                                       | Requires `!!`, `??`, or null-flow narrowing.                                              |
+| `Sub` → `Super`                                                  | Implicit (one `extends` step).                                                            |
+| `Super` → `Sub`                                                  | Requires `as Sub`. Best paired with `is Sub` first.                                       |
+| `T` → `any`                                                      | Implicit.                                                                                 |
+| `any` → `T`                                                      | Requires `as T`.                                                                          |
+| `Array<int>` → `Array<any>`                                      | **Allowed.** Generics are invariant BUT `any` is an exception.                            |
+| `nodeTime<float>` → `nodeTime`                                   | Allowed because `nodeTime` is sugar for `nodeTime<any?>`.                                 |
+| `nodeTimeSet<T>` → `nodeTime<T>`, `nodeGeoSet<T>` → `nodeGeo<T>` | Refused: a set kind is no subtype of its base kind ([nodes.md](nodes.md#nodetimesett)). |
 
 When in doubt, run the program through `greycat run` — the runtime is the oracle for assignability decisions, especially where the TS-style lang and the C-runtime disagree (the runtime wins).

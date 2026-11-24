@@ -135,6 +135,12 @@ A key naming no parameter is ignored, which is what keeps `?authorization=<token
 other non-binding query strings as harmless as they have always been — and is why they do
 not trip the conflict above.
 
+A JSON object reads as the type declared where it lands, and a `"_type"` field in it is ignored.
+Where that type is abstract or `any` (a parameter, a field, an element of a collection), `"_type"`
+names the type the object reads as: `{"_type":"api::Circle","radius":2}` is an `api::Circle`. A
+`"_type"` that names no type of the program leaves a `Map`, as an object without one does, and an
+object that does not read as the type it names answers `400`.
+
 A function taking a `runtime::HttpRequest` binds neither: it reads both from the request, see
 [Reading the request](#reading-the-request-writing-the-response).
 
@@ -179,7 +185,7 @@ its modification time. Any other caller is answered **403**. `greycat call` and
 
 JSON-RPC follows the standard `{jsonrpc, id, result | error}` envelope. Path-RPC returns the raw JSON-encoded result, or the GCB-encoded result when the caller asked for it via `Accept: application/octet-stream`. A function returning a `runtime::HttpResponse` writes the response itself, see [Writing the response](#writing-the-response).
 
-Errors: 400 (bad request or params), 401 (no valid credentials, the caller may log in and retry), 403 (authenticated, but the permission is missing, with an empty body, or the call lands in a world the caller may not use, with a `core::Error` saying so, see [storage.md](storage.md#worlds-branches-of-the-store)), 404 (no such function or file), 422 (ABI mismatch, the caller sends a payload incompatible with the server's current ABI), 500 (runtime exception in the function).
+Errors: 400 (bad request or params, or the function threw or failed at runtime, such as a division by zero or an index out of bounds, with the `core::Error` as JSON, or as GCB for a caller that asked for it), 401 (no valid credentials, the caller may log in and retry), 403 (authenticated, but the permission is missing, with an empty body, or the call lands in a world the caller may not use, with a `core::Error` saying so, see [storage.md](storage.md#worlds-branches-of-the-store)), 404 (no such function or file), 422 (ABI mismatch, the caller sends a payload incompatible with the server's current ABI), 500 (the server failed on its side, such as writing the call's arguments to disk, with an empty body, or the function returned an invalid `runtime::HttpResponse`, see [Errors and commits](#errors-and-commits)).
 
 ## Reading the request, writing the response
 

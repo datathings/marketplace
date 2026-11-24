@@ -42,7 +42,7 @@ This is how a project pins a specific runtime version: `@library("std", "1.2.3")
 
 Scaffolds a new project. With a `name`, creates a `./<name>/` directory; without one, scaffolds into the current directory. Refuses to run when the target already contains a `project.gcl`.
 
-Writes `project.gcl` pinned to the latest `std` on the branch of the running `greycat` (`dev` for a `9.0.x-dev` build, `stable` for a release), resolved from the registry (see [Registries](#registries)), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENT.md` that auto-loads the installed skill (`lib/std/skills/SKILL.md`), and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
+Writes `project.gcl` pinned to the latest `std` on the branch of the running `greycat` (`dev` for a `9.0.x-dev` build, `stable` for a release), resolved from the registry (see [Registries](#registries)), a `src/api.gcl` with two `@expose`d example functions, a `tests/api_test.gcl` covering them, an `AGENTS.md` that points agents at the installed skill (`lib/std/skills/SKILL.md`), a `CLAUDE.md` that imports it, and a `.gitignore`. To add a frontend, follow [webapp.md](webapp.md) after installing.
 
 ```sh
 greycat new my-app     # into ./my-app/
@@ -148,7 +148,7 @@ Builds the project (including `*_test.gcl` modules), then runs every function an
 
 ### `greycat lint` / `greycat fmt` / `greycat lsp` / `greycat doc`
 
-Static analysis over the entrypoint's `@library` / `@include` closure: `lint` reports diagnostics (`--fix` applies auto-fixes), `fmt` rewrites `.gcl` files canonically (`--mode=check` is the CI gate), `lsp` runs the language server over stdio, `doc` prints an API reference of the project's declarations.
+Static analysis over the entrypoint's `@library` / `@include` closure: `lint` reports diagnostics (`--fix` applies auto-fixes), `fmt` rewrites `.gcl` files canonically (`--mode=check` is the CI gate), `lsp` runs the language server over stdio, `doc` writes the `doc.json` API reference of the package and fails on a broken doc link.
 
 ```sh
 greycat fmt --mode=check   # exit non-zero on formatting drift
@@ -161,7 +161,7 @@ These delegate to the `lang` library, loaded from `lib/lang/` or `~/.greycat/lib
 
 Reads every `@library` pragma in the project closure (normally all in `project.gcl`) and downloads each library + the matching core binary into `lib/<name>/` and `bin/`. Skips libraries already at the requested version (tracked in `lib/installed`).
 
-Downloads each archive from the registry (`https://registry.greycat.io` unless [Registries](#registries) names another one), which answers its URL for this machine's target, or for `noarch`. `std`, `lang` and `rust` download anonymously. Any other library needs a registry token, which [`greycat login`](#greycat-login--greycat-logout) stores once.
+Downloads each archive from the registry of its major: `https://registry.greycat.io` for GreyCat 9 and newer (unless [Registries](#registries) names another one), `https://get.greycat.io` for GreyCat 8 and older. The registry answers its URL for this machine's target, or for `noarch`. Libraries of the `toolchain` tier (`std`, `lang`, `rust`, `sdk_web`) download anonymously. Any other library needs a registry token, which [`greycat login`](#greycat-login--greycat-logout) stores once (see [libraries.md](libraries.md#tiers-and-tokens)).
 
 | Option                    | Meaning                                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -214,7 +214,7 @@ A pin that could not move says why, including what the looser bound would have g
 
 ### `greycat login` / `greycat logout`
 
-`greycat login` stores a token of `https://registry.greycat.io` in `~/.greycat/registry_token` (see [Registries](#registries)), so `install` can fetch libraries other than `std`, `lang` and `rust`.
+`greycat login` stores a token of `https://registry.greycat.io` in `~/.greycat/registry_token` (see [Registries](#registries)), so `install` can fetch libraries outside the `toolchain` tier.
 
 On a desktop it opens the registry in the browser. Sign in there if needed and approve the login. The registry then creates a 365-day token named `greycat login on <host>` and sends the browser back to a listener `login` opened on `127.0.0.1`, which receives a one-time code and exchanges it for the token. The code is useless to anyone else, since the exchange also needs a secret that never leaves the CLI. `login` waits 5 minutes for the browser.
 
@@ -405,9 +405,9 @@ greycat stats                             # zone usage and cache hit rates
 
 ## Registries
 
-`install`, `upgrade` and `new` resolve libraries and core releases from a GreyCat registry, `https://registry.greycat.io` by default. It answers `registry::resolve`, `registry::latest_version` and `registry::artifact_url`. The core archive, which holds both `bin/greycat` and `lib/std`, is the `std` library there, and the language tooling is the `lang` library. `GREYCAT_REGISTRY` points a machine at another registry, such as a local or a staging instance.
+`install`, `upgrade` and `new` resolve libraries and core releases of GreyCat 9 and newer from a GreyCat registry, `https://registry.greycat.io` by default. `install` resolves a GreyCat 8 pin from `https://get.greycat.io` instead, whatever `GREYCAT_REGISTRY` says (see [Two majors on one machine](#two-majors-on-one-machine)). It answers `registry::resolve`, `registry::latest_version` and `registry::artifact_url`. The core archive, which holds both `bin/greycat` and `lib/std`, is the `std` library there, and the language tooling is the `lang` library. `GREYCAT_REGISTRY` points a machine at another registry, such as a local or a staging instance.
 
-The token, which libraries other than `std`, `lang` and `rust` need, is the first of:
+The token, which libraries outside the `toolchain` tier need, is the first of:
 
 1. `--registry_token=<token>` (`new` and `upgrade` only).
 2. `GREYCAT_REGISTRY_TOKEN`, from the environment or the project `.env`.
@@ -416,6 +416,39 @@ The token, which libraries other than `std`, `lang` and `rust` need, is the firs
 The file belongs to `https://registry.greycat.io`: it is read only when no `GREYCAT_REGISTRY` (or `--registry`) names another registry, so a stored token never reaches another host. A local or staging registry takes its token from `GREYCAT_REGISTRY_TOKEN`. Whichever token applies is sent to the registry only, on RPC calls and on artifact downloads alike, as `Authorization: <token>` with no `Bearer` prefix.
 
 The file holds a credential: keep it `0600`. The CLI warns when other users can read it, and `greycat <command> -h` prints the token as `<set>`, never its value. Whatever the runtime resolves is exported to its own environment before any command runs, so the language tooling loaded in-process sees the same registry and token. `install`, `lint`, `fmt` and `lsp` forward their flags to that tooling, so for them only the environment, `.env` and the file apply.
+
+### Two majors on one machine
+
+A project picks its GreyCat major with its `std` pin, and the global `greycat` (the one on `PATH`, usually `~/.greycat/bin/greycat`) may be of the other major. Two rules decide what happens:
+
+- `install` and `upgrade` always run in the global binary. Every other command, run as `greycat` from `PATH` inside a project, re-execs into the project's `bin/greycat` (see [Binary discovery](#binary-discovery-bingreycat)). Only the first `install` of a project depends on the global major.
+- `lint`, `fmt` and `lsp` load the project's `lib/lang/`, else the global `~/.greycat/lib/lang/`. A global `lang` of the other major checks the wrong grammar (a GreyCat 8 `lang` rejects a `nodeIndexSet` module variable). `greycat install lang` pins `lang` on the branch and major of the `std` pin, which ends the mismatch.
+
+**Global GreyCat 9, GreyCat 8 project.** Nothing to set up, since a GreyCat 9 `install` fetches an 8.x pin from `get.greycat.io`:
+
+```sh
+greycat install         # std 8.4.x-stable and bin/greycat come from get.greycat.io
+greycat install lang    # writes @library("lang", "8.4.x-stable")
+```
+
+**Global GreyCat 8, GreyCat 9 project.** An 8.x `install` reads only `get.greycat.io` by default, and fails with `not published for x64-linux; latest: 9.0.267-dev, 8.4.666-stable`. Name the registry in the project `.env`, which the 8.x `install` reads too, and pass the token in the environment for libraries outside the `toolchain` tier (an 8.x CLI does not read `~/.greycat/registry_token`):
+
+```sh
+echo 'GREYCAT_REGISTRY=https://registry.greycat.io' >> .env
+GREYCAT_REGISTRY_TOKEN="$(cat ~/.greycat/registry_token)" greycat install
+greycat install lang
+```
+
+Keep the token out of `.env`, which `greycat new` does not gitignore.
+
+**A second toolchain.** Each registry has an install script that puts a toolchain wherever `GREYCAT_HOME` says. The argument is a branch (`stable` when omitted) or, for `registry.greycat.io`, an exact version:
+
+```sh
+curl -fsSL https://registry.greycat.io/install.sh | GREYCAT_HOME=~/.greycat9 bash -s dev   # GreyCat 9
+curl -fsSL https://get.greycat.io/install.sh | GREYCAT_HOME=~/.greycat8 bash                # GreyCat 8
+```
+
+Both scripts empty `$GREYCAT_HOME/lib` first, so give the second toolchain its own home. Both also add its `bin` to the front of `PATH` in `~/.zshrc` or `~/.bashrc`, which makes it the default `greycat` of every new shell. Remove that line to keep the first toolchain as the default, and run the second one by its full path for the first install of a project (`~/.greycat9/bin/greycat install`). From then on the project's `bin/greycat` runs every other command.
 
 ## The `.env` file
 

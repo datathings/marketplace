@@ -103,6 +103,8 @@ Run `greycat lint --list-rules` for the live set. Rules to know:
   auto-fix removes it.
 - **`no-breakpoint`** - advisory rule, off by default. Enable with `--on=no-breakpoint` to catch `breakpoint;`
   left in committed code.
+- **`detached-doc-comment`** - a `///` block a blank line detaches from the item below, other than the
+  module doc (see [`doc`](#doc---api-reference)). It documents nothing: join it to the item or make it `//`.
 - **`literal-overflow`** - a float or duration literal saturated or rounded to fit its type. An out-of-range
   integer literal is an `invalid-literal` error instead.
 
@@ -184,14 +186,68 @@ walking up from each opened file - see [project.md](project.md) on multi-project
 ## `doc` - API reference
 
 ```sh
-greycat doc                        # readable outline of the project's declarations
-greycat doc --expose               # only the @expose'd endpoints, under their addresses
-greycat doc --json --out doc.json  # the doc.json the package registry consumes
+greycat doc --out doc.json         # the doc.json bundle the package registry consumes
 greycat doc --lib=<name>           # document the installed lib/<name>/ instead
 ```
 
-The output never contains a function body. `greycat doc -h` lists the packaging flags (`--name`,
-`--package-version`, `--kind`).
+The output is a JSON bundle and nothing else, written to stdout without `--out` (`--json` is accepted and
+changes nothing). It holds every declaration with its signature and `///` doc, every module doc, and every
+markdown page of the package. It never contains a function body. `greycat doc -h` lists the packaging
+flags (`--name`, `--package-version`, `--kind`).
+
+- **Module doc**: the first `///` block of a file, when a blank line separates it from what follows. A block
+  touching a declaration documents that declaration instead. `detached-doc-comment` flags every other
+  detached block.
+- **Pages**: every `.md` of a library's tree, or, for a project, the `.md` files in its root and under the
+  entrypoint's `@include` directories. Skill files (`skills/` at the package root) are not pages. Hidden
+  directories, `node_modules`, `webroot`, `gcdata`, `files`, `bin`, `target`, `dist` and `build` are
+  skipped at any depth: `--exclude-dir <PATTERN>` adds one, `--no-default-excludes` drops them.
+
+### Links are checked
+
+Every link of a page and of a `///` doc must resolve. A broken one fails the run: `greycat doc` exits
+non-zero, writes nothing, and reports every broken link like a lint diagnostic (`--format=compact|pretty`).
+A destination is one of:
+
+- an absolute URL (`https://...`), not checked;
+- a relative path to a page, a skill file or a `.gcl` module of the package, resolved as a browser would
+  (from the page's directory, or from the package root in a `///` doc), case included. `reference/core.html`
+  does not find `reference/core.md`;
+- `#heading-id`, alone in a page or after a page path. The id is GitHub's: lowercase, punctuation dropped,
+  each space a `-` (`## Environment variables` is `#environment-variables`);
+- a GCL path, as in rustdoc: `[Greeting]`, `` [`greet`] ``, `[Formality::formal]`, `[the result](Greeting)`,
+  `` [`mod@core`] `` for a module. It resolves as the same name written there would in code, into other
+  libraries too (`[String]`). Generic arguments go in backticks, `` [`Array<int>`] ``.
+
+Bracketed text that is not a GCL path (`[see below]`, `[^1]`, `- [ ]`) is plain text. Escape a literal path
+with `\[TODO\]`. Images and raw HTML with a relative URL are errors, since only `.md` files are published. A `help:` line
+under an error names the close match when there is one (`did you mean reference/core.md?`).
+
+| Rule                           | Fires on                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| `doc-link-unresolved-path`     | a path to no page, skill file or shipped `.gcl`                                |
+| `doc-link-outside-package`     | a path above the package root, or root-relative (`/guide/x.md`)                |
+| `doc-link-unresolved-fragment` | a `#id` no heading of the target page has, or `#id` alone in a `///` doc       |
+| `doc-link-unresolved-symbol`   | a GCL path naming nothing, a type parameter, or a test module or declaration   |
+| `doc-link-ambiguous-symbol`    | a GCL path naming several declarations: write `module::name`                   |
+| `doc-link-raw-html`            | raw HTML with a relative URL, or generic arguments outside backticks           |
+
+### Documenting a library
+
+The registry renders a library's `doc.json` as its docs page, so the reference lives in the code:
+
+- The README says what the library is, gives a quick start, and links to the reference
+  (`` [`mod@mylib`] ``). It does not restate the API, which drifts.
+- A module doc carries the overview and how the pieces fit, and every exported declaration gets a `///` doc
+  with its contract. The leading paragraph of a doc is its summary, shown inline in listings.
+- Publishing builds the bundle from the installed tree and sends it as a targetless `doc.json` artifact
+  beside the archives, which `greycat install` never downloads:
+
+  ```sh
+  greycat doc --lib mylib --package-version 1.2.0-dev --out dist/doc.json
+  ```
+
+  A broken link fails the run and writes nothing, which makes it a publish gate.
 
 ## Suppression directives
 

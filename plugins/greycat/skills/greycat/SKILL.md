@@ -9,7 +9,7 @@ GreyCat is **one language and one runtime in one binary**. A project lives in a 
 
 `.gcl` source files are organized into projects with a single entrypoint named `project.gcl`, whose `@include` pragmas (valid in that file only) plus the `@library` pragmas of every module they reach form the closure of analyzed modules. Compiled and run by the `greycat` runtime; statically analyzed by `greycat lint` and formatted by `greycat fmt`.
 
-Beyond the required `std`, GreyCat publishes optional **domain libraries** (Kafka, MQTT, OPC UA, SSH/FTP, PostgreSQL, LLM inference, linear algebra, full-text search, OpenStreetMap, and more). Before hand-rolling a domain integration, check the catalog in [reference/libraries.md](reference/libraries.md) for one that already fits, then pull it in with `greycat install <name>`, which writes the `@library` pragma and installs it. Let `greycat install --bump` (optionally `--branch=<name>`) resolve and write the version pins; do not `curl` the registry and hand-edit `project.gcl`.
+Beyond the required `std`, GreyCat publishes optional **domain libraries** on its registry, `registry.greycat.io` (HTTP client, Kafka, MQTT, OPC UA, PostgreSQL, Parquet, S3, LLM inference, linear algebra, full-text search, and many more). Before hand-rolling a domain integration, search the registry for one that already fits and read its skill, as [reference/libraries.md](reference/libraries.md) shows, then pull it in with `greycat install <name>`, which writes the `@library` pragma and installs it. Let `greycat install --bump` (optionally `--branch=<name>`) resolve and write the version pins, and do not hand-edit them into `project.gcl`.
 
 ## Anti-hallucination rule
 
@@ -25,7 +25,8 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 
 - **[reference/syntax.md](reference/syntax.md)** — Complete grammar reference: every statement, every expression form, operator precedence, literals (string substitution, time `'…'`, typed-suffix numbers).
 - **[reference/types.md](reference/types.md)** — Type system in depth: nullability, narrowing, generic invariance, casting, inheritance, `is`/`as`.
-- **[reference/stdlib.md](reference/stdlib.md)** — Built-in types by category (collections, node types, time/duration/geo, IO, Url, S3, Crypto). Method signatures.
+- **[reference/stdlib.md](reference/stdlib.md)** — Built-in types by category (collections, time/duration/geo, IO, Url, S3, Crypto). Method signatures.
+- **[reference/nodes.md](reference/nodes.md)** — The graph-persisted node types: `node`, `nodeTime`, `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeGeo`, `nodeGeoSet`. Reads by key, time, position or point, loops and writes inside them, the set kinds' pairs and spill, how concurrent tasks merge each one, and `sample` / `info`.
 - **[reference/tensors.md](reference/tensors.md)** — `Tensor` (numeric arrays: shape, elements, fill/append/slice/reshape, sums, complex parts), `TensorDistance` (`l2sq`, `euclidean`, `cosine`, hyperbolic) and `VectorIndex` (approximate nearest-vector search stored in the graph).
 - **[reference/annotations.md](reference/annotations.md)** — Every annotation (`@expose`, `@permission`, `@reserved`, `@volatile`, `@format`, `@precision`, `@test`, `@tag`) and every modifier (`private`, `static`, `abstract`, `native`). Doc-comment tags like `@param`.
 - **[reference/idioms.md](reference/idioms.md)** — Idiomatic patterns and common pitfalls (no ternary, no `void`, no `::new()`, `function` slot semantics, `private` semantics, generic invariance).
@@ -33,13 +34,13 @@ This file covers the 80% you need across language _and_ tooling. Drill into a re
 **Tooling / project / runtime:**
 
 - **[reference/project.md](reference/project.md)** — Project model: entrypoint, `@library` / `@include` resolution, `lib/<name>/` layout, FQN, multi-project workspaces.
-- **[reference/libraries.md](reference/libraries.md)** — Catalog of publishable **domain libraries** (`kafka`, `mqtt`, `opcua`, `sql`, `ai`, `algebra`, `text_search`, ...) with what each pulls in, how to discover a library's latest version, and the per-library skill to load from `lib/<name>/skills/SKILL.md` after installing one. Check here before hand-rolling a domain integration.
+- **[reference/libraries.md](reference/libraries.md)**: finding a library before hand-rolling one: the libraries worth knowing, searching the registry (`app::kind_packages`), reading a library's skill before and after installing it, branches and versions, tiers and registry tokens.
 - **[reference/cli.md](reference/cli.md)** — `greycat` CLI: every command (`run`, `serve`, `dev`, `build`, `test`, `install`, `codegen`, `user`, `backup`, `restore`, …), every option, the `.env` file.
 - **[reference/lang.md](reference/lang.md)** — `greycat lint`, `greycat fmt`, `greycat lsp`, `greycat doc`: lint rules, suppression directives, formatter modes and pragmas, API reference. The pre-commit / definition-of-done tooling.
 - **[reference/runtime.md](reference/runtime.md)**: what a running server holds, which file below documents each part, and a troubleshooting table.
 - **[reference/http.md](reference/http.md)**: HTTPS (`--tls`, Let's Encrypt certificates with `--acme`), HTTP routes, JSON-RPC and path-RPC, authentication tokens, how arguments bind, response shapes and status codes.
 - **[reference/tasks.md](reference/tasks.md)**: workers and task classes, background calls with the `task` header, task results (`Task::result`) and folders (`File::workingDir`), `await` jobs and merge conflicts, transactions, the scheduler, task events over SSE.
-- **[reference/identity.md](reference/identity.md)**: users, roles, permissions, `@permission`, tokens, grants, group identities, why `--user` must not be used.
+- **[reference/identity.md](reference/identity.md)**: users, roles, permissions, `@permission`, tokens, a sign-in without a password, grants, group identities, why `--user` must not be used.
 - **[reference/files.md](reference/files.md)**: the `/files` API (upload, download, list, delete, ranges, content types), who may open a folder, `on_files_put` / `on_files_get`, `File` and `FileWalker`, `webroot/` and static assets.
 - **[reference/storage.md](reference/storage.md)**: the graph store (`gcdata/`), what is persisted, ABI evolution, backups and restore, worlds (branches of the store).
 - **[reference/observability.md](reference/observability.md)**: log levels, where log records go, `GREYCAT_METRICS` and the fields of `TaskMetric`, `HostMetric` and `HttpMetric`.
@@ -72,7 +73,7 @@ type Point<T> extends Shape {      // generic, inheriting
 
 enum Color { red, green, blue }
 
-var threshold: node<float?>;       // module-level var: must be node<T?>, nodeList<T>, nodeIndex<K, V>, nodeSet<V>, nodeIndexSet<K, V>, nodeTime<T>, nodeGeo<T>
+var threshold: node<float?>;       // module-level var: must be node<T?>, nodeList<T>, nodeIndex<K, V>, nodeSet<V>, nodeIndexSet<K, V>, nodeTime<T>, nodeTimeSet<T>, nodeGeo<T>, nodeGeoSet<T>
 
 @expose
 fn ping(): String {
@@ -112,7 +113,7 @@ greycat build       # produce project.gcp (strips *_test.gcl)
 greycat lint        # static analysis of the .gcl closure (--fix applies auto-fixes)
 greycat fmt         # canonical formatting (--mode=check as a CI gate)
 greycat lsp         # language server over stdio, for editors
-greycat doc         # API reference of the project's declarations (--expose: endpoints only)
+greycat doc         # doc.json API reference: declarations, module docs, pages, checked links
 greycat codegen     # generate typed client SDKs (c/ts/python/rust/java)
 greycat user list   # admin LMDB-backed user database
 greycat backup      # snapshot gcdata/ into ./backup/
@@ -177,7 +178,7 @@ Everything is typed. Type references appear after `:` and inside generic bracket
 | ----------------------------------- | ------------------------------------------------------------------------ |
 | Primitives                          | `bool`, `int` (i64), `float` (f64), `char`, `String`                     |
 | Native containers                   | `Array<T>`, `Map<K, V>`, `Tuple<T, U>`, `Buffer`, `Table<T>`, `Tensor`   |
-| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeGeo<T>` |
+| Native node types (graph-persisted) | `node<T>`, `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTimeSet<T>`, `nodeGeo<T>`, `nodeGeoSet<T>` |
 | Native value types                  | `time`, `duration`, `geo`, `function`, `field`, `type`, `any`, `null`    |
 | User-defined                        | Anything declared with `type` / `enum`                                   |
 
@@ -255,7 +256,7 @@ Color::red;                // enum entry
 MathConstants::pi;         // module-qualified static (defined in std/core)
 ```
 
-`->` is **not optional sugar for `.`** — it errors on any receiver other than `node` / `nodeTime` (on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` and `nodeGeo` it throws at runtime).
+`->` is **not optional sugar for `.`** — it errors on any receiver other than `node` / `nodeTime` (on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeGeo` and `nodeGeoSet` it throws at runtime).
 
 ### Optional chaining
 
@@ -285,6 +286,7 @@ for (t, v in node[from..to]) {}         // time-window query on nodeTime
 for (k, v in idx) {}                    // iterate nodeIndex/nodeList
 for (_, v in set) {}                    // iterate nodeSet: k and v both bind the value
 for (k, v in multi) {}                  // iterate nodeIndexSet: once per (key, value) pair
+for (t, v in events[from..to]) {}       // nodeTimeSet (nodeGeoSet: a box): once per (key, value) pair
 
 return;          return expr;
 throw error;
@@ -293,7 +295,7 @@ try {} catch (e) {}                    // catch ident optional
 at (targetTime) {}                          // time-aware-scope binding
 ```
 
-`greycat lint` rejects the `nodeIndexSet` loop for now: see [reference/stdlib.md](reference/stdlib.md#nodeindexsetk-v).
+`greycat lint` rejects the `nodeIndexSet`, `nodeTimeSet` and `nodeGeoSet` loops for now: see [reference/nodes.md](reference/nodes.md#nodeindexsetk-v).
 
 There is **no ternary (`?:`)**, **no `switch`/`match`**, and **no `void` keyword**. A function with no `: T` return type "returns nothing"; using its call as a value yields `null`.
 
@@ -486,14 +488,14 @@ The most-bitten gotchas (full list in [reference/idioms.md](reference/idioms.md)
 3. **No `::new()`.** Always `Type {}` or `Type<G> {}`. Unless an explicit `Type { static fn new(): Type { /*...*/ } }` exists.
 4. **`function` parameters are opaque.** Lambdas and static fn references carry their signature in source position (`var f = fn(a: int): int {...}` → `f: fn(int): int`), but once a value flows into a `function`-typed slot the signature is gone and calls through it are runtime-checked. Instance methods (`obj.method`, non-static `Foo::method`) are NOT first-class values; the workaround is a lambda that takes the receiver as a parameter (`fn (r: Foo) { r.method(); }`), since lambdas don't capture enclosing locals or `this`.
 5. **Generics are invariantly typed.** `Array<int?>` is not assignable to `Array<int>`. Same for `Map`, `nodeIndex`, etc.
-6. **`->` is reserved for `node` and `nodeTime`.** Only `node<T>` and `nodeTime<T>` support `->`; on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet` and `nodeGeo` it throws at runtime. User types cannot opt in — use `.` instead.
+6. **`->` is reserved for `node` and `nodeTime`.** Only `node<T>` and `nodeTime<T>` support `->`; on `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeGeo` and `nodeGeoSet` it throws at runtime. User types cannot opt in — use `.` instead.
 7. **`private` ≠ "hidden."** A `private type` is still visible across modules via its fully-qualified name; only bare-name lookup is blocked. A `private attr` is read-public, write-private. Never gate same-module access on `private`.
 8. **No imports.** Visibility comes from the project graph (`@library` / `@include`), not from `import`/`use` statements.
 9. **`as` is unchecked for object types.** Casts to primitives (`int`, `float`, `bool`, ...) are checked at runtime, and `int` <-> `float` converts. Casts to `String`, user and other object types are dropped, so the lang's static check is the only safety net; a wrong cast throws on the first mismatched member access.
 10. **Trailing `;` after `}` is lint-rejected.** A method/function body's closing brace stands alone — `greycat lint` fires `warning[redundant-semicolon]` (auto-fixable) although `greycat build` accepts it.
 11. **Don't commit `gcdata/`, `bin/`, or `lib/`.** They are runtime / install state, not source. `gcdata/` is the durable application state — back it up but never check it in.
 12. **Default `@expose` to authenticated. `@permission("public")` requires user opt-in.** A bare `@expose` already requires the `api` permission (any authenticated caller). Reaching for `@permission("public")` because "the frontend doesn't have auth wired up yet" hands every anonymous caller on the network the same write access. Only add it when the user explicitly asks for an anonymous endpoint (typical examples: `login`, an unauthenticated health probe). If the answer is "I made it public so the demo would work," remove it and wire login instead. See [reference/idioms.md § HTTP / @expose patterns](reference/idioms.md).
-13. **Never hand-edit a version pin you resolved with `curl`.** `greycat install --bump` (bound `patch` by default, `latest` to cross a `major.minor`) rewrites every `@library` pin in `project.gcl` and installs what it wrote; `--branch=<name>` moves the whole project onto another branch. Reach for `curl .../latest` only to *read* a version, or for non-GCL artifacts like the web SDK tarball. See [reference/libraries.md](reference/libraries.md).
+13. **Never hand-edit a version pin you resolved with `curl`.** `greycat install --bump` (bound `patch` by default, `latest` to cross a `major.minor`) rewrites every `@library` pin in `project.gcl` and installs what it wrote, and `--branch=<name>` moves the whole project onto another branch. Query the registry only to *read* a version or to find a library. See [reference/libraries.md](reference/libraries.md).
 14. **Never run `greycat serve --user=<name>` / `GREYCAT_USER=<name>`.** That flag makes every request — from anyone, anywhere on the network — execute as that user, with their full permission set. It is **not** a "dev convenience"; it removes auth entirely. If the user explicitly asks for it for a one-off local test, fine; never propose it yourself, never put it in a recipe, never bake it into a `.env`. The correct dev pattern is `Identity::login` from a script or the browser, or `greycat token --user=<name>` to mint a short-lived token and pass it via header as `Authorization: <TOKEN>` (**no `Bearer`**) / cookie. See [reference/identity.md](reference/identity.md).
 15. **A container field created on first use breaks under concurrency.** A `Map` or other collection field that starts `null` and is created with `?=` conflicts when two tasks create it at once, and the commit fails with `incompatible fusion`. Create the container together with its node. Before setting `Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win)`, read [reference/tasks.md](reference/tasks.md#merge-conflicts-on-shared-nodes), since the strategy covers every write the task commits.
 

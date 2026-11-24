@@ -29,7 +29,7 @@ What lives in `gcdata/` and how to protect it. Reach here when the task is about
 
 A type is graph-persistent (its values can be saved into `gcdata/`) unless it is tagged `@volatile`. Stdlib runtime types like `Log`, `RuntimeInfo`, `HostMetric`, `TaskMetric`, `HttpMetric`, `Identity`, `Task` are `@volatile` — they describe live process state and cannot be stored.
 
-User types holding `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeGeo<T>`, or `node<T>` attributes get persisted lazily as the program writes to those node tags. See [stdlib.md § Node tags](stdlib.md).
+User types holding `nodeTime<T>`, `nodeList<T>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTimeSet<T>`, `nodeGeo<T>`, `nodeGeoSet<T>`, or `node<T>` attributes get persisted lazily as the program writes to those node tags. See [nodes.md](nodes.md).
 
 ### Listing every node
 
@@ -45,16 +45,17 @@ while (r.can_read()) {
 ```
 
 It walks the block index in node reference order and lists every node, reachable from a module variable or not, as a
-`node<T>`, `nodeTime`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeList` or `nodeGeo` handle. It lists what was committed when the task started,
+`node<T>`, `nodeTime`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeList`, `nodeGeo` or `nodeGeoSet` handle. It lists what was committed when the task started,
 not the task's own pending writes. Inside a world it lists the world's view (see
 [What a world changed](#worlds-branches-of-the-store) for the world's own changes). `last` holds the last node read,
 and a reader resumed after its task was suspended, or built with `last` set, continues after it. A `type` that is not
 a node type fails. A full scan reads the header of every block of the store, so it lasts about as long as
 `Runtime::store_stats()`.
 
-The set holding the values of a spilled `nodeIndexSet` key ([stdlib.md](stdlib.md#nodeindexsetk-v)) is a node of the
-store, and is listed as a `nodeSet`. Read it, do not write it: a value added or removed through it changes the pairs of
-the index but not the count `size()` returns, which then no longer matches a loop over the index.
+The set holding the values of a spilled `nodeIndexSet`, `nodeTimeSet` or `nodeGeoSet` key
+([nodes.md](nodes.md#nodeindexsetk-v)) is a node of the store, and is listed as a `nodeSet`. Read it, do not write
+it: a value added or removed through it changes the pairs of the node that holds the key but not the count `size()`
+returns, which then no longer matches a loop over that node.
 
 ### ABI evolution
 
@@ -96,11 +97,11 @@ An archive or a `gcdata/` of 8.x cannot be used: it numbers the value types othe
 
 What a reset node reads as:
 
-| The block that does not decode                                                                | The node reads as                                                                                                                                  |
-| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a tree block of a `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTime` or `nodeGeo` | never written: the whole collection is empty                                                                                                       |
-| a head, value nullable (`node<Item?>`)                                                        | `null`                                                                                                                                             |
-| a head, value not nullable (`node<Item>`, `node<int>`)                                        | zero: `0`, `false`, the first enum entry, `""`, an empty `Array` or `Map`, an object whose non-nullable fields are zero and nullable fields `null` |
+| The block that does not decode                                                                                             | The node reads as                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a tree block of a `nodeList`, `nodeIndex`, `nodeSet`, `nodeIndexSet`, `nodeTime`, `nodeTimeSet`, `nodeGeo` or `nodeGeoSet` | never written: the whole collection is empty                                                                                                       |
+| a head, value nullable (`node<Item?>`)                                                                                     | `null`                                                                                                                                             |
+| a head, value not nullable (`node<Item>`, `node<int>`)                                                                     | zero: `0`, `false`, the first enum entry, `""`, an empty `Array` or `Map`, an object whose non-nullable fields are zero and nullable fields `null` |
 
 A head whose values cannot be null and have no zero (an abstract type, `any` or a `function`) fails the repair before any block is written, with `restore: head <n> cannot be emptied: ...` naming the type. A zero value cannot be told apart from one written as such, so keep the printed list: it is the only record of what was reset.
 
@@ -116,9 +117,9 @@ The file holds, in this order:
 
 1. an info `Map` with the keys `format`, `next_key`, `time` and `world`
 2. the root object, whose fields are the module variables
-3. for each node, in reference order, a node begin record (tag `25`, then the node handle and the node's type), followed by its entries: the value of a `node<T>`, or key and value pairs for the other node kinds (a `nodeList` at keys `0..n-1`), until the next begin record. A `nodeIndexSet` writes a pair per value, those of a spilled key too, whose set is no node of the export: the import spills the key again
+3. for each node, in reference order, a node begin record (tag `25`, then the node handle and the node's type), followed by its entries: the value of a `node<T>`, or key and value pairs for the other node kinds (a `nodeList` at keys `0..n-1`), until the next begin record. A `nodeIndexSet`, `nodeTimeSet` or `nodeGeoSet` writes a pair per value, those of a spilled key too, whose set is no node of the export: the import spills the key again
 
-The byte layout is in `lib/std/io.md` (GcxWriter / GcxReader).
+The byte layout is in `lib/std/gcx.md`.
 
 `greycat import backup/export-<µs>.gce`, run in the project against a new `gcdata/`, reads such a file into the store, giving every node its original reference, so the node handles that values hold stay valid. It prints how many nodes and entries it imported.
 
@@ -183,15 +184,15 @@ read:
 ```gcl
 var r = WorldChangesReader {};
 while (r.can_read()) {
-    var n = r.read();   // node<T>, nodeTime, nodeIndex, nodeSet, nodeIndexSet, nodeList or nodeGeo
+    var n = r.read();   // node<T>, nodeTime, nodeIndex, nodeSet, nodeIndexSet, nodeTimeSet, nodeList, nodeGeo or nodeGeoSet
 }
 ```
 
 Each node whose world version differs from its base's current version, among the blocks the world wrote, comes once,
 in node reference order. It lists what was committed when the task started, not the task's own pending writes. It
 skips a `node<T>` the world set back to the base's value, but lists a `nodeTime`, `nodeIndex`, `nodeSet`, `nodeIndexSet`,
-`nodeList` or `nodeGeo` whose tree the world rewrote, even when it holds the base's values again. The set holding the
-values of a spilled `nodeIndexSet` key is not listed: a change to it lists the `nodeIndexSet`. In a snapshot world, a node the base changed after
+`nodeTimeSet`, `nodeList`, `nodeGeo` or `nodeGeoSet` whose tree the world rewrote, even when it holds the base's values
+again. The set holding the values of a spilled key is not listed: a change to it lists the node that holds the key. In a snapshot world, a node the base changed after
 the world was created also shows when it shares a head block with a node the world modified. A standalone world has no
 base: every node it holds is listed, its module variables included. `available()` counts the nodes left; `pos` counts
 those read, and a reader resumed after its task was suspended skips them. It fails in main. Building the list costs
@@ -228,9 +229,9 @@ WorldDiffKind::changed apple: 1.0 -> 0.8
 plum holds the same value on both sides and is not listed: a key whose two values are deep-equal never is, even when the
 world rewrote it. `key` is the time of a `nodeTime`, the position of a `nodeList` (a value the world removed at its position in the base, one it added or changed at its position in the world; base `[1,2,3,4]`, a world that removed position 1 and appended 5 gives `removed` at 1 and `added` at 3, and `last` is a position in the version it was reported in), the geo of a `nodeGeo`, the key of a
 `nodeIndex`, the value of a `nodeSet` (added or removed only, `base` and `world` null), the key of a pair of a
-`nodeIndexSet` (added or removed only, the value in `world` or `base`), and null for a `node<T>`. Keys come in the
-node's order: by time, by position, by encoded key for a `nodeIndex`, `nodeSet` or `nodeIndexSet` with a scalar key and
-a `nodeGeo`, and by hash for a `nodeIndex`, `nodeSet` or `nodeIndexSet` with any other key (`String`, objects).
+`nodeIndexSet`, `nodeTimeSet` or `nodeGeoSet` (added or removed only, the value in `world` or `base`), and null for a
+`node<T>`. Keys come in the node's order: by time, by position, by encoded key for a `nodeIndex`, `nodeSet` or
+`nodeIndexSet` with a scalar key and a `nodeGeo` or `nodeGeoSet`, and by hash for a `nodeIndex`, `nodeSet` or `nodeIndexSet` with any other key (`String`, objects).
 
 The base is read as it is now, down its overlay chain, not as it was when the world was created. In a snapshot world,
 the base's later changes show up as differences. An overlay world reads the base for a node it never modified, so

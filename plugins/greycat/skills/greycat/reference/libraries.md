@@ -1,65 +1,84 @@
-# Available libraries
+# Libraries
 
-Libraries published to `registry.greycat.io` and pulled into a project with an `@library("<name>", "<version>")` pragma in `project.gcl`, then fetched by `greycat install`. `std` is required; the rest are optional and domain-specific. Reach for one of these before hand-rolling the same capability.
+Reach here when a task needs a capability beyond `std` (a protocol client, a file format, a database, numerical code, LLM inference): find the library that already does it, read its skill, then pull it in with `greycat install <name>`.
 
-For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the whole-graph closure, see [project.md](project.md).
+Libraries are published to `registry.greycat.io` and pulled into a project with an `@library("<name>", "<version>")` pragma in `project.gcl`, then fetched by `greycat install`. `std` is required, the rest are optional. For how `@library` resolves to `lib/<name>/`, the `std` home fallback, and the whole-graph closure, see [project.md](project.md).
 
-## Catalog
+## Contents
 
-| Library       | Pulls in                                                                                                  |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| `std`         | Required. Core types, collections, time/duration, IO, runtime, util (`Crypto`, `Random`, `Uuid`, sliding windows, ...). |
-| `lang`        | Language tooling behind `greycat lint` / `greycat fmt` / `greycat lsp`. Ships with a global GreyCat install; pin it here to hold a project to one toolchain version. See [lang.md](lang.md). |
-| `explorer`    | Graph UI + admin tool served at `/explorer` — dev convenience.                                            |
-| `http`        | HTTP/HTTPS client over libcurl: `Http<T>` (`get` / `post` / `put` / `getFile` / `send` / `chunked`), `HttpRequest`, `HttpResponse<T>`, `HttpMethod`, and `HttpReader<T>` for SSE / line-delimited streams. Not part of `std`. |
-| `ai`          | LLM inference (llama.cpp): `Model`, `LLM`, `ChatMessage`, embeddings, LoRA.                               |
-| `algebra`     | `PCA`, `FFT`, neural nets, k-means, time-series decomposition, climate (UTCI).                            |
-| `kafka`       | Typed Kafka producer/consumer: `KafkaReader<T>`, `KafkaWriter<T>`, `KafkaConf`.                           |
-| `mqtt`        | MQTT pub/sub client: `Mqtt`, `MqttQoS`.                                                                   |
-| `opcua`       | OPC UA client: `OpcuaClient` (browse / read / write / subscribe), `OpcuaEvent`, `OpcuaCertificate`.       |
-| `ftp`         | FTP/FTPS client: `Ftp`, `FtpEntry`.                                                                       |
-| `ssh`         | SSH and SFTP: `Sftp`, `SftpFile`, `SshPasswordAuth`, `SshKeyAuth`.                                        |
-| `osm`         | OpenStreetMap toolkit: Overpass API client + Overpass-QL builder, ring math on `geo` / `GeoBox` / `GeoPoly`, opt-in persistent graph (`OsmNode` / `OsmWay` / `OsmRelation`), GPS edge snapping, elevation enrichment. |
-| `xml`         | XML: `XmlElement` for a parsed tree, `XmlReader<T>` for streaming a document too large to hold whole. Was `io::XmlReader` in `std` until 8.4. |
-| `s3`          | S3 client (AWS and compatible: MinIO, Ceph, R2, B2, Wasabi), SigV4-signed. Pure GCL over `http` + `xml`. Was `io::S3` in `std` until 8.4, with a different API. |
-| `useragent`   | User-agent string parsing: `UserAgent::parse`.                                                            |
-| `finance`     | IBAN parsing / validation (ISO 13616): `Iban::parse`.                                                     |
-| `powerflow`   | Power flow analysis (Newton–Raphson): `PowerNetwork`, `PowerBusResult`, `PowerLineResult`.                |
-| `powergrid`   | Successor to `powerflow`, on power-grid-model with its names and SI units (V, W, var, A, Ohm): `PowerNetwork` (`addNode` / `addLine` / `addSource` / `addSymLoad`, `calculatePowerFlow`, Tensor time series `calculatePowerFlowBatch`, IEC 60909 `calculateShortCircuit`, several feeders), plus `DcNetwork` DC load flow, PTDF / LODF and N-1 screening. API differs from `powerflow` (9.0). |
-| `text_search` | Full-text search: `TextIndex<T>`, 15 search modes including BM25/BM25F, 33-language tokenization, C-accelerated. |
-| `fcs`         | Reader for Flow Cytometry Standard (FCS) files: `FcsReader`, `FcsMeta`, `FcsChannel`.                     |
-| `ifc`         | IFC (Industry Foundation Classes) BIM reader: `IfcReader`, `IfcEntity`. *(Pro license required.)*         |
-| `sql`         | PostgreSQL client: `Postgres`, transactions, COPY. *(Pro license required.)*                              |
-| `openid`      | OIDC single sign-on: `OidcProvider`, `Openid`, redirect + PKCE flow. *(Pro license required.)*            |
+- Libraries worth knowing
+- Finding a library in the registry
+- Reading a library's skill
+- Branch and version
+- Tiers and tokens
 
-Run `greycat install` after editing `project.gcl` to fetch/refresh the resolved versions into `<project>/lib/<name>/`.
+## Libraries worth knowing
 
-## After install, load the library's own skill
+The ones most projects reach for, and the ones most often re-invented by hand. The registry holds many more (domain models, device protocols, file formats), so search it before writing an integration from scratch.
 
-`greycat install` unpacks a library into `<project>/lib/<name>/`. Most libraries
-ship their own agent skill there, and it is the authoritative reference for that
-library:
+| Library       | What it is                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `http`        | HTTP/HTTPS client over libcurl, with SSE and line-delimited streams. Not part of `std`.        |
+| `explorer`    | Web UI served at `/explorer` to look inside a running server: graph, tasks, files, users.      |
+| `lang`        | The tooling behind `greycat lint`, `fmt` and `lsp`. Pin it to hold a project to one toolchain. See [lang.md](lang.md). |
+| `sdk_web`     | The `@greycat/web` SDK a webapp calls the backend with. See [webapp.md](webapp.md).             |
+| `xml`, `s3`   | XML tree and streaming reader. S3 client (AWS and compatible) on `http` + `xml`.                |
+| `parquet`, `msgpack`, `archive` | Parquet import, MessagePack files, zip and tar archives.                     |
+| `sql`         | PostgreSQL client: queries, transactions, COPY.                                                |
+| `kafka`, `mqtt`, `opcua` | Kafka producer and consumer, MQTT pub/sub, OPC UA client.                           |
+| `text_search` | Full-text index (BM25, 33 languages).                                                          |
+| `algebra`     | PCA, FFT, neural nets, clustering, time-series decomposition.                                  |
+| `ai`, `ai_client` | Local LLM inference (llama.cpp). LLM providers over HTTP.                                  |
+| `openid`      | OpenID Connect single sign-on.                                                                 |
+| `python`      | An embedded CPython interpreter that calls GCL and is called from it.                          |
 
-- `lib/<name>/skills/SKILL.md` - the library skill. Read it into context before
-  writing any code against the library. It is written against the exact version
-  installed, so it supersedes the one-line summary in the catalog above and
-  anything inferred from the type names.
+## Finding a library in the registry
+
+The registry is the catalog. `app::kind_packages` searches the names and summaries of every library, most downloaded first. It needs no token:
+
+```bash
+curl -sX POST https://registry.greycat.io/app::kind_packages \
+  -H 'Content-Type: application/json' -d '["lib","postgres",0,10]' \
+  | jq -r '.packages[] | "\(.name)\t\(.tier.name)\t\(.latest.version)\t\(.summary)"'
+# sql   community   9.0.19-dev   This library provides an implementation of a Postgres client...
+```
+
+The arguments are the kind (`"lib"`), a search word, an offset and a page size (1-100). A `null` search word lists every library, and `total` in the answer counts all the matches. Search by what the library does (`postgres`, `parquet`, `weather`), since a library's name is not always the protocol's (`sql` above).
+
+Each package carries `name`, `summary`, `tier` (see [Tiers and tokens](#tiers-and-tokens)), `default_branch`, `latest.version` and `branches[]`. `registry::get_library` returns the same shape for one name, and `null` when no library has it:
+
+```bash
+curl -sX POST https://registry.greycat.io/registry::get_library \
+  -H 'Content-Type: application/json' -d '["http"]'
+```
+
+## Reading a library's skill
+
+Most libraries ship their own agent skill, written against the exact version that ships it. It is the reference for that library, and supersedes the one-line summaries above and anything inferred from type names.
+
+Before installing, `registry::skill_url` gives the skill of a branch's newest release, readable by anyone whatever the library's tier:
+
+```bash
+R=https://registry.greycat.io
+U=$(curl -sX POST $R/registry::skill_url -H 'Content-Type: application/json' -d '["http","dev"]' | tr -d '"')
+curl -s "$R$U"    # /files/public/docs/lib/http/dev/9.0.21/skills/SKILL.md
+```
+
+`null` means that release ships no skill. Its README is still public, at `/files/public/docs/lib/<name>/<branch>/<M.m.p>/README.md`, and a `GET` on that directory lists every `.md` it holds.
+
+After `greycat install`, the same files are on disk:
+
+- `lib/<name>/skills/SKILL.md` - the library skill. Read it into context before writing any code against the library.
 - `lib/<name>/README.md` - prose overview. Read it when there is no skill.
-- `lib/<name>/<name>.gcl` - the declarations themselves; every type and method
-  carries a `///` doc comment. The last resort, and always the ground truth.
+- `lib/<name>/<name>.gcl` - the declarations, each with a `///` doc comment. The last resort, and always the ground truth.
 
-A library may also carry `lib/<name>/webroot/`, static assets served at `/` alongside the
-project's own `webroot/`. See [files.md](files.md) for the resolution order.
-
-`std` follows the same layout: the installed copy carries `lib/std/skills/SKILL.md`
-plus a `skills/reference/` directory beside it - this very file is one of its pages.
-
-Not every entry in the catalog is a GCL library: some ship only static assets and
-`lang` installs a shared object, so there is no skill to read for those.
+A library may also carry `lib/<name>/webroot/`, static assets served at `/` alongside the project's own `webroot/`. See [files.md](files.md) for the resolution order. `std` follows the same layout: the installed copy carries `lib/std/skills/SKILL.md` plus a `skills/reference/` directory beside it, and this very file is one of its pages. `lang` installs a shared object and has no skill.
 
 ## Branch and version
 
-Every library is published on two branches: **`stable`** (the default - use it unless you have a reason not to) and **`dev`**. Keep every `@library` on the same branch as `std`: if `std` is pinned to a `dev` version, pin the other libraries to `dev` too. Mixing branches across libraries is advanced usage; 99% of projects keep them uniform, following `std`.
+A version is `MAJOR.MINOR.PATCH-BRANCH` (`9.0.21-dev`). Keep every `@library` on the same branch as `std`: if `std` is pinned to a `dev` version, pin the other libraries to `dev` too. Mixing branches across libraries is advanced usage, and almost every project keeps them uniform, following `std`.
+
+`registry.greycat.io` serves GreyCat 9 and newer. GreyCat 8 libraries live on `get.greycat.io`, and `greycat install` picks the registry from the major of each pin. See [cli.md](cli.md#two-majors-on-one-machine) for a machine whose global `greycat` is not the major a project pins.
 
 ### Let `greycat install` resolve the version
 
@@ -79,7 +98,7 @@ Add a library with `greycat install <name>` (or `<name>@<version>`): it writes t
 @library("kafka", "0.0.0-dev");   // then: greycat install --bump=latest
 ```
 
-Give the placeholder the branch suffix the rest of the project uses (`-dev` above), or pass `--branch` - without one there is no branch to search.
+Give the placeholder the branch suffix the rest of the project uses (`-dev` above), or pass `--branch`, since without one there is no branch to search.
 
 Full semantics (bounds, branch switching, why a pin was skipped) in [cli.md, `greycat install`](cli.md#greycat-install).
 
@@ -89,11 +108,19 @@ Full semantics (bounds, branch switching, why a pin was skipped) in [cli.md, `gr
 
 ```bash
 curl -sX POST https://registry.greycat.io/registry::latest_version \
-  -H 'Content-Type: application/json' -d '["<lib>","stable"]'   # -> "9.0.12-stable"   (default branch)
-curl -sX POST https://registry.greycat.io/registry::latest_version \
-  -H 'Content-Type: application/json' -d '["<lib>","dev"]'      # -> "9.0.271-dev"
+  -H 'Content-Type: application/json' -d '["http","dev"]'      # -> "9.0.21-dev"
 ```
 
-The quoted string is the version used in `@library("<lib>", "<version>")`, `std` included. `null` means the branch has no release of that library. The call needs no token, even for a library whose archives do.
+The quoted string is the version used in `@library("<lib>", "<version>")`, `std` included. `null` means the branch has no release of that library.
 
-`GREYCAT_REGISTRY` points the CLI at another registry, and the token that libraries other than `std`, `lang` and `rust` need is stored once in `~/.greycat/registry_token` (see [cli.md](cli.md#registries)).
+## Tiers and tokens
+
+Every package sits in a tier, which decides who may download its archives. The catalog, the skills and the READMEs are public whatever the tier.
+
+| `tier.name` | `tier.audience` | Who downloads it                                          |
+| ----------- | --------------- | --------------------------------------------------------- |
+| `toolchain` | `everyone`      | Anyone, no token: `std`, `lang`, `rust`, `sdk_web`.       |
+| `community` | `signed_in`     | Any registry account. The default tier.                   |
+| `pro`       | `granted`       | Only the accounts the tier is granted to.                 |
+
+`tier.can_read` in a package says whether the caller may download it, so a search sent with the token shows what `greycat install` will be allowed to fetch. A `401` from `install` on a library outside `toolchain` means it needs a token. `greycat login` stores one in `~/.greycat/registry_token`, and `GREYCAT_REGISTRY` points the CLI at another registry (see [cli.md](cli.md#registries)).
