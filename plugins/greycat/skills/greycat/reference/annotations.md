@@ -213,17 +213,32 @@ Files outside `_test.gcl` are packaged normally.
 
 #### `setup()` / `teardown()` lifecycle
 
-A module may declare module-level `fn setup()` and `fn teardown()`. `greycat test` runs `setup()` once before the module's tests, then each `@test` in source-definition order, then `teardown()` once at the end. **Tests share module state** — anything `setup()` writes to module-level node variables is visible (and mutable) across every test in the module.
+A module may declare module-level `fn setup()` and `fn teardown()`. `greycat test` runs `setup()` once before the module's tests, then each `@test` in source-definition order, then `teardown()` once at the end. Each of them is a task, as an RPC call is, on a store of the module's own (see [cli.md § greycat test](cli.md#greycat-test-function)). **Tests share module state**: a write commits when its function returns, so what `setup()` writes to module-level node variables is read by every later test of the module, and what a test writes by the next ones.
 
 ```gcl
 private var counter: node<int?>;
 
-fn setup()    { counter.set(100); }
-fn teardown() { println("final: ${counter.resolve()}"); }
+fn setup() {
+    counter.set(100);
+}
 
-@test fn test_a() { Assert::equals(counter.resolve(), 100); counter.set(101); }
-@test fn test_b() { Assert::equals(counter.resolve(), 101); }       // sees test_a's write
+fn teardown() {
+    println("final: ${counter.resolve()}");
+}
+
+@test
+fn test_a() {
+    Assert::equals(counter.resolve(), 100);
+    counter.set(101);
+}
+
+@test
+fn test_b() {
+    Assert::equals(counter.resolve(), 101); // sees test_a's write
+}
 ```
+
+The store of the module, what a failed test leaves of it, and how a test passes or fails are in [cli.md](cli.md#greycat-test-function); a test that calls `await` or `spawn` is in [tasks.md](tasks.md#workers-tasks-and-jobs).
 
 `greycat test` reports the lifecycle hooks alongside the tests (each appears in the output with `ok (Nus)`), so the count of "tests success" includes setup/teardown invocations.
 

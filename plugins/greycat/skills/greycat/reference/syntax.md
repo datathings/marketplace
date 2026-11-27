@@ -237,6 +237,7 @@ a is T                                          // type test (returns bool, narr
 a as T                                          // cast
 a = b                                           // assignment
 a ?= b                                          // assign only if a is null
+a?.f ?= b                                       // assign a.f if null, nothing if a is null; `a?.f = b` is an error
 ```
 
 ## Operator precedence

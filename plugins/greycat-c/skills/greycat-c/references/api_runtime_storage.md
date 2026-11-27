@@ -423,11 +423,16 @@ typedef enum {
     gc_env_options__label,           // New in 9.0
     gc_env_options__repair,          // New in 9.0
     gc_env_options__task_retention,  // New in 9.0
+    gc_env_options__compiler,        // New (upstream 9bafd68ea) — inserted here, NOT appended: tls..paste moved up by one
     gc_env_options__tls,             // New in 9.0
     gc_env_options__acme,            // New in 9.0
     gc_env_options__acme_email,      // New in 9.0
     gc_env_options__acme_directory,  // New in 9.0
     gc_env_options__paste,           // New in 9.0
+    gc_env_options__native,          // New (upstream 9bafd68ea)
+    gc_env_options__native_load,     // New (upstream 9bafd68ea)
+    gc_env_options__keep_store,      // New (upstream 9bafd68ea)
+    gc_env_options__drop_credentials,// New (upstream 9bafd68ea)
     // do not move that last one, it serves as an automatic length marker
     gc_env_options_len,
 } gc_env_options_offset_t;
@@ -465,7 +470,7 @@ typedef enum {
 | `gc_env_options__log_flush_size` / `__metrics_http_flush_size` / `__metrics_host_flush_size` / `__metrics_task_flush_size` | `--log_flush_size`, `--metrics_{http,host,task}_flush_size` / `GREYCAT_LOG_FLUSH_SIZE`, `GREYCAT_METRICS_{HTTP,HOST,TASK}_FLUSH_SIZE` | `64KB` (`.u64` bytes) | **New.** The `log` / metric stream's buffer is written to its file once this many bytes are pending; `0` writes each record at once. |
 | `gc_env_options__log_flush_step` / `__metrics_http_flush_step` / `__metrics_host_flush_step` / `__metrics_task_flush_step` | `--log_flush_step`, `--metrics_{http,host,task}_flush_step` | `1s` (`.i64` µs) | **New.** Longest time a record of that stream stays buffered. |
 | `gc_env_options__log_flush_on_error` | `--log_flush_on_error` / `GREYCAT_LOG_FLUSH_ON_ERROR` | `false` (`.b`) | **New.** An `error` record writes the buffered log records at once, so errors preceding a crash reach the file. |
-| `gc_env_options__label` | `--label` / `GREYCAT_TOKEN_LABEL` | `NULL` (`.str`) | **New in 9.0** (all eight below appended before `gc_env_options_len`; earlier offsets unchanged). Label of a token `greycat token` issues, as `Identity::tokens` lists it. |
+| `gc_env_options__label` | `--label` / `GREYCAT_TOKEN_LABEL` | `NULL` (`.str`) | **New in 9.0** (the eight 9.0 options were appended before `gc_env_options_len`; `__compiler` was later inserted between `__task_retention` and `__tls`, see below). Label of a token `greycat token` issues, as `Identity::tokens` lists it. |
 | `gc_env_options__repair` | `--repair` / `GREYCAT_REPAIR` | `false` (`.b`) | **New.** `greycat restore` resets (and lists) nodes whose blocks do not decode instead of failing. |
 | `gc_env_options__task_retention` | `--task_retention` / `GREYCAT_TASK_RETENTION` | `24h` (duration, `.i64` µs) | **New.** How long an ended task's folder `gcdata/tasks/<id>/` (result + working dir) is kept; past it `Task::result` answers `410`. |
 | `gc_env_options__tls` | `--tls` / `GREYCAT_TLS` | `false` (`.b`) | **New.** Serve HTTPS on the port with `gcdata/security/tls/cert.pem` + `key.pem` (OpenSSL 3.5 replaced Mbed TLS). |
@@ -473,6 +478,11 @@ typedef enum {
 | `gc_env_options__acme_email` | `--acme_email` / `GREYCAT_ACME_EMAIL` | `NULL` (`.str`) | **New.** ACME account contact email. |
 | `gc_env_options__acme_directory` | `--acme_directory` / `GREYCAT_ACME_DIRECTORY` | Let's Encrypt v2 URL (`.str`) | **New.** ACME directory URL. |
 | `gc_env_options__paste` | `--paste` / `GREYCAT_PASTE` | `false` (`.b`) | **New.** `greycat login`: paste a registry token at the prompt instead of approving in the browser. |
+| `gc_env_options__compiler` | `--compiler` / `GREYCAT_COMPILER` | `"c"` (`.str`; `c` / `lang`) | **New (upstream `9bafd68ea`), inserted after `__task_retention` — not appended**, so `__tls`, `__acme`, `__acme_email`, `__acme_directory`, `__paste` each moved up by one (ABI-breaking for raw stored offsets; rebuild plugins, use the enumerator names). Compiler that builds the project: `c` (built into greycat) or `lang` (the language tools in `lib/lang`). `build`, `run`, `test`, `bytecode`, `codegen`, `serve`. |
+| `gc_env_options__native` | `--native` / `GREYCAT_NATIVE` | `false` (`.b`) | **New** (appended, as are the three below). Also compile the program's functions to native code: into `project.gcn` (`greycat build --native`) or for the run (`greycat test --native`). |
+| `gc_env_options__native_load` | `--native_load` / `GREYCAT_NATIVE_LOAD` | `true` (`.b`) | **New.** Run the functions of `project.gcn` (the native code `greycat build --native` wrote) when present; such functions get `gc_program_function_t.has_native_body`. `run`, `test`, `serve`. |
+| `gc_env_options__keep_store` | `--keep_store` / `GREYCAT_KEEP_STORE` | `false` (`.b`) | **New.** `greycat test`: keep the store of a module whose test failed, and print where. |
+| `gc_env_options__drop_credentials` | `--drop_credentials` / `GREYCAT_DROP_CREDENTIALS` | `false` (`.b`) | **New.** `greycat restore` without the archive's passwords and tokens (which a missing or different `gcdata/security/private_key` cannot check). |
 | `gc_env_options__request_ttl` | `--request_ttl` | `20s` | Now cancels an RPC request still queued **or running** after this long, like any task; it answers `503` with the reason. Background tasks are not subject to it. |
 
 ### Usage Examples
@@ -497,13 +507,13 @@ const char *ca_path = opts[gc_env_options__ca_path].str;  // NULL if unset
 <a id="gcca-h"></a>
 ## gc/ca.h — Resolved TLS Trust Chain
 
-**New header in 8.2.** Exposes the trust chain the process resolved at startup — the system CA store concatenated with whatever the `ca_path` option and the `SSL_CERT_FILE` / `SSL_CERT_DIR` environment variables added (the latter two honoured since upstream `6070615de`) — so a library that verifies its own TLS connections (e.g. it links its own TLS stack rather than reusing the host's) can honor the same configuration the runtime does instead of rediscovering a store of its own.
+**New header in 8.2.** Exposes the trust chain of the process — the system CA store concatenated with whatever the `ca_path` option and the `SSL_CERT_FILE` / `SSL_CERT_DIR` environment variables added (the latter two honoured since upstream `6070615de`) — so a library that verifies its own TLS connections (e.g. it links its own TLS stack rather than reusing the host's) can honor the same configuration the runtime does instead of rediscovering a store of its own.
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `gc_ssl_ca__pem_bundle` | `const char *gc_ssl_ca__pem_bundle(u64_t *len)` | Returns the resolved trust chain, PEM-encoded, or `NULL` when no certificate could be resolved (`*len` is left untouched on `NULL`). Owned by the runtime, valid until shutdown — **must not be freed** by the caller. |
+| `gc_ssl_ca__pem_bundle` | `const char *gc_ssl_ca__pem_bundle(u64_t *len)` | Returns the resolved trust chain, PEM-encoded, or `NULL` when no certificate could be resolved (`*len` is left untouched on `NULL`). Resolved lazily by the first call (or the runtime's first outbound TLS connection) and kept for the rest of the process; safe to call from any thread, concurrently with other callers. Owned by the runtime, valid until shutdown — **must not be freed** by the caller. |
 
 Handed out as PEM bytes rather than as a parsed (e.g. OpenSSL) store on purpose: PEM is what every TLS stack accepts, so the library doesn't need to link the same one GreyCat uses internally. (9.0: GreyCat's own TLS stack moved from Mbed TLS to OpenSSL 3.5, shipped shared in `lib/ssl`.)
 
@@ -1129,11 +1139,13 @@ typedef struct {
 
 ### Functions
 
-All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`, `nodeIndex`.
+All of these work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`, `nodeIndex` (and the 9.0 set kinds).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `gc_node__resolve` | `gc_slot_t gc_node__resolve(u64_t node_ref, gc_type_t *result_type, gc_machine_t *ctx)` | Resolve a node reference to its stored slot value. Writes the resolved type to `*result_type`. Marks the value if it is an object (caller must `gc_object__un_mark` it). This is the plain-`node<T>` dereference, and also the per-entry resolve used by every variant. |
+| `gc_node__type_fits` | `gc_sdk bool gc_node__type_fits(u64_t node_ref, u32_t expected_id, gc_machine_t *ctx)` | **New (upstream `9bafd68ea`).** Whether node `node_ref` fits type `expected_id`, a specialization of the node's kind (`node<Q>`, `nodeList<T>`, ...): the type its block records is `expected_id`, or a specialization whose arguments fit **covariantly** (`node<Sub>` fits `node<Base>` and `node<Base?>`; `node<T?>` does not fit `node<T>`). `true` for a node whose block does not load, and for one whose block records the kind alone (a node built by generic code: its arguments are not known). |
+| `gc_node__type_fits_strict` | `gc_sdk bool gc_node__type_fits_strict(u64_t node_ref, u32_t expected_id, gc_machine_t *ctx)` | **New.** As `gc_node__type_fits`, except a node whose block records the kind alone fits only when `expected_id`'s arguments are `any` — what such a node holds was never checked, so code relying on its arguments must not take it. (The same strict rule as the `node_fits` opcode.) |
 | `gc_machine_native__node_set_at` | `void gc_machine_native__node_set_at(u64_t node_ref, gc_slot_t key_value, gc_type_t key_type, bool add_semantic, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Insert/update the entry identified by the typed `key_value` on `node_ref`. When `add_semantic` is `true` the key is treated as an append/auto position (e.g. `nodeList.add`). Used by `setAt`/`set`/`add` (on a `nodeList`, append only since 9.0). |
 | `gc_machine_native__node_get` | `gc_node_single_value_t gc_machine_native__node_get(u64_t node_ref, u64_t key, u32_t expected_type_id, gc_machine_t *ctx)` | **Exact-key** read of a single entry (`key`/`value`/types/node type) from `node_ref`. `key` is the already-encoded raw `u64_t` (see encoding table). `expected_type_id` is the node variant the caller expects — `prog->core.nodeTime` / `.nodeGeo` / `.nodeIndex` / `.node` (9.0 fields; std's own natives use the `gc_core_nodeTime` etc. `extern u32_t` symbols of their generated `nativegen.h`, which an out-of-tree plugin does not have); see *Type-id guard* below. Returns a null single if no entry matches exactly. Backs `nodeTime.getAt`, `nodeGeo.get` (not `nodeList.get` since 9.0). |
 | `gc_node_single_value__clear` | `void gc_node_single_value__clear(gc_node_single_value_t *value, gc_machine_t *ctx)` | Release/unmark the contents of a `gc_node_single_value_t` returned by `gc_machine_native__node_get` (and the internal `node_first`/`node_last`/`node_resolve`). **Always call this** on the returned single once you have consumed its slots, or object values leak a GC mark. |
@@ -1152,7 +1164,7 @@ All four work on any node variant — `node`, `nodeTime`, `nodeList`, `nodeGeo`,
 
 > **Type-id guard (8.1).** `gc_machine_native__node_get` takes an `expected_type_id` and refuses to read a block of any other type. The check is `gc_program__is_type(prog, block->type, expected_type_id)`, so declared subtypes pass. On mismatch — or on an unresolvable block id — the call sets a runtime error on `ctx` (`"resolved block <id> is of type 'X' while 'Y' was expected"`) and returns a null single, guarding against type confusion from a forged or stale `node_ref`. Pass the id matching the variant you were handed (`gc_machine__program(ctx)->core.nodeTime` etc.). Always check `ctx` for a runtime error after the call when the `node_ref` came from untrusted input.
 
-> **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — plus broader range helpers (first / last / size / range-size / remove) are powered by internal *floor* lookups declared in the runtime's internal `machine.h`, **not** in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The four functions documented above are the publicly exported, uniform-across-variants surface.
+> **Exact vs. floor lookup.** `gc_machine_native__node_get` is an *exact* match. The temporal/range "resolve" semantics (`nodeTime.resolve`/`resolveAt`, `nodeList.resolve`) — return the entry with the largest key ≤ the requested key — plus broader range helpers (first / last / size / range-size / remove) are powered by internal *floor* lookups declared in the runtime's internal `machine.h`, **not** in the public `gc/node.h` SDK header, so they are not guaranteed available to out-of-tree plugins. The functions documented above are the publicly exported, uniform-across-variants surface.
 
 ### Usage Examples
 

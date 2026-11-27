@@ -104,6 +104,8 @@ idx.size();
 for (k, v in idx) { /* ... */ }
 ```
 
+A node stored as a value (`nodeIndex<String, nodeIndex<String, bool>>`) is replaced as a whole by `set`, not merged: what a concurrent task writes into the node it replaces stays in that node, which the index no longer reaches. Update the inner node in place instead, as [tasks.md](tasks.md#merge-conflicts-on-shared-nodes) shows.
+
 ## nodeSet<V>
 
 Set of unique values, generic over any `V`.
@@ -255,11 +257,17 @@ var g: nodeGeo<Station> = /* ... */;
 g.set(geo { 49.6, 6.1 }, station);
 g.get(geo { 49.6, 6.1 });
 g.resolve(geo { 49.7, 6.0 });      // closest-prior read
+g.resolveEntry(geo { 49.7, 6.0 }); // Tuple<geo, Station>?: the point resolve lands on, and its value
 g.rangeSize(geo { 49, 6 }, geo { 50, 7 });
-for (pos, station in g[geo { 49, 6 }..geo { 50, 7 }]) { /* every key of the box, south-west first */ }
+for (pos, station in g[geo { 49, 6 }..geo { 50, 7 }]) { /* every key of the box, in curve order */ }
 ```
 
 A range `g[a..b]` is the box spanned by `a` and `b` (any two opposite corners): it yields exactly the keys inside, in curve order, and `rangeSize` counts the same keys. Walking from the higher code, `g[b..a]`, runs the box backwards. No `GeoBox.contains` filter is needed on the keys.
+
+`firstIndex()` and `lastIndex()` are the first and last keys in curve order, the ones a loop reads first and last.
+They are not the most south-western and north-eastern keys: the curve interleaves latitude and longitude, so a key
+further south or west can come after the first one. `nodeGeo::info` reports them as its `from` and `to`, so sampling
+the box they span can leave keys out. Sample with `null` corners to cover every key.
 
 ## nodeGeoSet<T>
 

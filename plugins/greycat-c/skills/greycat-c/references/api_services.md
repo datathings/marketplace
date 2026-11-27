@@ -11,6 +11,7 @@ _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL
 - [gc/time.h — Date & Time](#gctime-h)
 - [gc/math.h — Math Functions (WASM)](#gcmath-h)
 - [gc/util.h — Utility Functions](#gcutil-h)
+- [gc/equals_inline.h — Inline Scalar Equality](#gcequals-inline-h)
 
 ---
 
@@ -747,6 +748,7 @@ These functions interleave/deinterleave integer coordinates into a single 64-bit
 | Function | Description |
 |----------|-------------|
 | `gc__deep_equals(left, left_type, right, right_type, prog)` | Deep structural equality comparison of two slots |
+| `gc__equals_is_composite` / `gc__equals_scalar` | The non-recursive part of `gc__deep_equals` as `static inline` functions — see [gc/equals_inline.h](#gcequals-inline-h) (new, not in `greycat.h`) |
 | `gc_slot__hash(slot, type, prog)` | Hash consistent with `gc__deep_equals` (**8.4:** an `int` and a `float` of the same value hash alike, `-0.0` included; composites fold position/pairing). Used by Map keys and non-scalar `nodeIndex` keys |
 
 ### Sorting
@@ -944,3 +946,22 @@ u16_t w = deinterleave64_4d_x3(key4d);
 
 
 ---
+
+---
+
+<a id="gcequals-inline-h"></a>
+## gc/equals_inline.h — Inline Scalar Equality
+
+**New header (upstream `9bafd68ea`), not included by `greycat.h`** — `#include "gc/equals_inline.h"` explicitly. The comparison of `gc__deep_equals` that does not recurse, as `static inline` functions, for code that must not call (the fast forms of the interpreter's `==` / `!=`). `gc__deep_equals` is these plus the field-by-field comparison of two objects of one type and of two inline blocks.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc__equals_is_composite` | `static inline bool gc__equals_is_composite(gc_slot_t left_slot, gc_type_t left_slot_type, gc_slot_t right_slot, gc_type_t right_slot_type)` | Whether `gc__deep_equals` would compare the two values field by field: two `gc_type_block_inline`, or two `gc_type_object` of the same `type_id`. |
+| `gc__equals_scalar` | `static inline bool gc__equals_scalar(gc_slot_t left_slot, gc_type_t left_slot_type, gc_slot_t right_slot, gc_type_t right_slot_type)` | `gc__deep_equals` of two values it does not compare field by field (only valid when `gc__equals_is_composite` is `false`). `int` vs `float` compare by value (`(f64_t) i64 == f64`); other differing tags are unequal; `null` / `undefined` always equal; node kinds, `geo`, `cubic`, `char`, `block_ref` compare `.u64`; `type` / `function` / `stringlit` compare `.u32`; `time` / `duration` / `int` compare `.i64`; `field` / `static_field` compare both `tu32` halves; anything else (errors, objects of two types) is `false`. |
+
+```c
+#include "gc/equals_inline.h"
+bool eq = gc__equals_is_composite(a, a_t, b, b_t)
+            ? gc__deep_equals(a, a_t, b, b_t, prog)   // recursive, may call
+            : gc__equals_scalar(a, a_t, b, b_t);       // inline, no call
+```

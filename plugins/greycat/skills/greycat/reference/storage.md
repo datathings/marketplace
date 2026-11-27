@@ -19,7 +19,7 @@ What lives in `gcdata/` and how to protect it. Reach here when the task is about
 | `program`                   | The compiled program. Updated on each compatible rebuild. One this version cannot read, or whose bytecode holds a jump, a stack depth or an id out of range, is rebuilt from `project.gcl` or `project.gcp` by the next command, a store command such as `backup` included, which compiles the current sources and upgrades `gcdata/abi` against them; with neither, the command fails and asks for the project's sources, or a `project.gcp` built by this version, next to `gcdata/`. |
 | `abi`                       | ABI snapshot. Stored separately to track type-shape evolution across builds. The store cannot be read without it: a command over a store whose `abi` is missing or damaged fails and says so, and never writes a new one over it; restore `gcdata/` from a backup. |
 | `history/`                  | Task history (recent task records — for the `Task::history` API).               |
-| `security/`                 | User / role / grant database (LMDB), the server's private key, the root `password` minted on first boot, and a root `token` (valid one year) re-minted on every `serve`. |
+| `security/`                 | User / role / grant database (LMDB), the server's private key (`private_key`, which a backup does not hold: see [Identities and the server key](#identities-and-the-server-key)), the root `password` minted on first boot, and a root `token` (valid one year) re-minted on every `serve`. |
 | `lock`                      | Process lock — prevents two workers from opening the same store simultaneously. |
 | `tasks/<task id>/`          | The folder of a task: its result and working directory, kept for `--task_retention` once it ended, and what the server reads back while it runs (arguments, transaction logs, the files of its `await` jobs), removed when it ends or the process starts. See [tasks.md, Task results and folders](tasks.md#task-results-and-folders). Never served by `/files`. |
 
@@ -61,6 +61,8 @@ returns, which then no longer matches a loop over that node.
 
 When you change a type's shape (rename, reorder, change attribute types) and rebuild, the compiler stores a new ABI version next to the existing one and migrates symbols where it can. Incompatible drift causes a load error on next startup — at that point, either fix the source or restore from backup.
 
+A module variable the new program adds starts as an empty node, which `greycat serve`, `run` and `test` commit when they start, in main and in every world, before any task runs: `main`, a periodic task and HTTP calls that start at once all write to that same node, and no initialization step is needed before serving.
+
 ## Backups
 
 In-process API:
@@ -82,7 +84,17 @@ Restore with `greycat restore <archive>`, the server stopped. See [Restoring a d
 
 A backup holds main and every world (see [Worlds](#worlds-branches-of-the-store)); a block a world shares with main is stored once. It must run in main: called from a task running in a world it raises. `greycat restore` replaces the worlds of the store with those of the archive, and an archive made before worlds existed restores none.
 
-A backup holds the identities, their roles, passwords and grants, but not their tokens: `greycat restore` ends every session, and every client signs in again.
+### Identities and the server key
+
+A backup holds the identities with their roles, passwords, grants, worlds and tokens. A restore brings the sessions and tokens back as they were when the backup was taken, so a token revoked since then holds again: after a restore made because of a leak, revoke the tokens with `Identity::revoke_tokens`.
+
+The backup does not hold the server key, `gcdata/security/private_key`, which signs the tokens and hashes the passwords. Keep a copy of that file apart from the archives, since the archive alone cannot sign anyone in. The archive seals its identities under that key, and `greycat restore` checks the seal against the key in place before it writes anything:
+
+- With the key the backup was made with, the restore brings everything back.
+- Without a key file, it stops with `gcdata/security/private_key was missing, and the archive was made with a key` and exits non-zero. Copy the original file into `gcdata/security/` and restore again.
+- With another key, or an archive whose identities were modified, it stops with `the archive was not made with the key in gcdata/security/private_key, or it was modified`.
+- A key file that does not hold 64 hexadecimal characters (trailing whitespace aside) stops the restore, and every other command, with `gcdata/security/private_key is not a key`, and stays as it is. The server writes a new key only where the file is missing or empty.
+- `--drop_credentials` (`GREYCAT_DROP_CREDENTIALS`) restores the archive without its passwords and tokens, for when the key is lost: the identities, roles, grants and data come back, every session ends, and users get a new password from an admin (`Identity::set_password`) or sign in another way.
 
 ### Restoring a damaged archive
 

@@ -5,7 +5,7 @@ description: "GreyCat C API and GCL Standard Library reference. Use for: (1) Nat
 
 # GreyCat SDK - C API, Standard Library & Plugin Development
 
-Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **9.0** (headers re-verified 2026-11-24 against upstream `642356556`).
+Comprehensive reference for GreyCat native development (C API), the GCL Standard Library, and plugin development patterns. Tracks SDK **9.0** (headers re-verified 2026-11-27 against upstream `9bafd68ea`).
 
 ## Changes since 8.4
 
@@ -19,6 +19,8 @@ Comprehensive reference for GreyCat native development (C API), the GCL Standard
 
 **New C API:** `gc_u32_map_t` / `gc_u64_map_t` (`gc/u32_map.h`, `gc/u64_map.h`) and `gc_str_map_t` (`gc/str_map.h`) hash maps; `gc_char__parse` (`gc/char.h`); `gc_slot__to_f64`; `gc_host__run_function(host)`; `gc_core_tensor__add_type_name` / `_add_shape`; `prog->core` gained ids for every primitive/node type (`int_`, `nodeSet`, `nodeIndexSet`, `nodeTimeSet`, `nodeGeoSet`, `DurationUnit`, `TimeZone`, …); `gc_program__encode_symbol`, `__runtime_type`, `__resolve_ptype`, `__compute_layout`, `.gcp` `gc_program__save` / `__load` / `__check` / `__rebuild_indexes`; env options `__label`, `__repair`, `__task_retention`, `__tls`, `__acme`, `__acme_email`, `__acme_directory`, `__paste` (appended; HTTPS via OpenSSL 3.5).
 
+**Since `642356556` (incremental, rebuild plugins):** env option `gc_env_options__compiler` was **inserted after `__task_retention`** (`__tls` .. `__paste` moved up by one — index by enumerator name, never raw values) and `__native`, `__native_load`, `__keep_store`, `__drop_credentials` appended; `gc_program_function_t.has_native_body` bit; opcodes 83-130 (`GC_PROGRAM_OPCODE_LAST` = `node_fits`), `.gcp` `GC_PROGRAM_FORMAT_VERSION` 4 (reads ≥ `_MIN` 2), `GC_PROGRAM_PUSH_ARR_GUESSED`, `gc_program__pair_ops`, `gc_program_function__trusted_return`, new program-check enum values (`gc_program_check_operand_empty_node_type` 20 → 21); `gc_node__type_fits` / `_strict`; new inline-only headers `gc/equals_inline.h` (`gc__equals_is_composite` / `gc__equals_scalar`) and `gc/object_inline.h` (`gc_object__segments_inline` / `gc_object__get_offset_inline`), not in `greycat.h`; `gc_ssl_ca__pem_bundle` documented as lazily resolved and thread-safe.
+
 **Stdlib (breaking):** `Task::header/headers/uri/body` + `@raw` removed → an `@expose`d fn takes `runtime::HttpRequest` (only param) / returns `runtime::HttpResponse`; `nodeList` is positional (`set` removed, `remove` shifts); grants are per permission (`IdentityGrantType` + `Identity.grants` removed; `grant/revoke(name, target, permission): bool`, `grant_permission`, `has_grant`; new permissions `files:read`/`files:write`/`tasks:read`/`tasks:cancel`); `License` / `LicenseType` / `RuntimeInfo.license` / `ErrorCode` removed; `Tensor.scale(value, inPlace: bool)`; `System::exec` returns stdout+stderr. **New:** `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTimeSet<T>` / `nodeGeoSet<T>` (a set of values per time / per point), `Identity::sign_in(id, ttl)`, `Task::result(id)`, `Task.worker_id` / `.jobs`, `Identity::tokens` / `revoke_token(s)` / `IdentityToken`, `Runtime::program()`, `Tensor.mean/min/max`, `GeoBox.crosses_antimeridian/lobes`; task folders under `gcdata/tasks/<id>/` (`File::workingDir()`, kept `--task_retention`). Details: [standard_library.md](references/standard_library.md).
 
 ## Key Considerations
@@ -30,7 +32,8 @@ Comprehensive reference for GreyCat native development (C API), the GCL Standard
 - **Strings.** Use `gc_string_t` (heap, immutable, hash-cached; NUL-terminated at `buffer[size]`, but `size` is authoritative since content may embed NUL). No inline short strings (`gc_str_t` is not public).
 - **`gc_machine__call_function` takes a `const gc_program_function_t *fn`.** On `false` the result is a synthesized `Error` object (`gc_type_object`); the caller owns one mark. `gc_machine__impersonate(ctx, user_id)` switches the effective user.
 - **Host/Scheduler (`gc/host.h`).** `gc_host__cancel_task(self, task_id, requester_id, requester_permissions, out_task)` is thread-safe and permission-checked; `gc_host__spawn_task` takes a `u64_t user_permissions` mask; `gc_host__options(self)` exposes resolved CLI/env config (`gc/env.h`); `gc_host__run_function(self)` tells a start hook which function `greycat run` will call. Periodic scheduling via `gc_scheduler_t` / `gc_periodic_task_t` / `gc_periodicity_t`. See [api_runtime_storage.md](references/api_runtime_storage.md).
-- **Nodes.** `gc_node__resolve` / `gc_machine_native__node_get` / `node_set_at` work across node kinds via a `u64_t node_ref`; `nodeList` positions are not raw keys since 9.0 (append only via `node_set_at(..., add_semantic = true, ...)`).
+- **Nodes.** `gc_node__resolve` / `gc_machine_native__node_get` / `node_set_at` work across node kinds via a `u64_t node_ref`; `nodeList` positions are not raw keys since 9.0 (append only via `node_set_at(..., add_semantic = true, ...)`). Check a node's declared specialization with `gc_node__type_fits_strict` (generic-built nodes fit only `any` arguments) before trusting its element type.
+- **Native GCL bodies.** `greycat build --native` compiles GCL functions to `project.gcn`; at load (`--native_load`, default on) those functions get `has_native_body` and run native code — don't assume a non-`is_native` function is interpreted bytecode.
 - **Tensors.** `gc_tensor_t` / `gc_tensor_descriptor_t` (`descriptor.type` is a `gc_tensor_type_t`); `data` survives a reshape to zero elements — test `descriptor.size`. A tensor over caller-owned data (`gc_machine__init_tensor` + proxy) must not be re-shaped. See [api_collections.md](references/api_collections.md).
 - **Streams (`gc/stream.h`, not in `greycat.h`).** Appends only fill a buffer (flushed by size / step / reader / clean shutdown); call `gc_stream__flush` before persisting a drain offset.
 - **Map keys.** `gc_map__set` stores object keys uncopied; keys hash with `gc_slot__hash` and compare with `gc__deep_equals` (`int` and `float` of equal value are one key).
@@ -93,7 +96,7 @@ The C API reference is split by domain — each file below is linked directly (o
 - Memory allocation: per-call, plugin-global, aligned, thread-bound helpers, `gc_alloc__create(bool shared)`, sizing/stats
 - Buffer building and binary read/write (varint, zig-zag encoding)
 - Heap-allocated immutable strings (`gc_string_t`, allocator-aware constructors)
-- Object/field manipulation, type introspection, GC mark/un-mark, serialization
+- Object/field manipulation, type introspection, GC mark/un-mark, serialization; inline field reads (`gc/object_inline.h`)
 
 **[references/api_collections.md](references/api_collections.md)** — array, map, table, tensor, C hash maps
 - Array, Map, Table get/set/add operations
@@ -103,12 +106,12 @@ The C API reference is split by domain — each file below is linked directly (o
 **[references/api_runtime_storage.md](references/api_runtime_storage.md)** — runtime, persistence, graph nodes
 - Host/Task management (spawn, cancel, status), periodic scheduler (`gc_scheduler_t`, `gc_periodic_task_t`), plugin-global allocator (`gc_host__allocator` / `gc_host__global_allocator`)
 - Storage blocks (attach/detach objects), ABI (allocator-aware, proto=4, `is_static`, truncated-header error, signed `@precision`), file I/O (open/sync), streams (`gc/stream.h`: buffered, `gc_stream__flush`, ndjson/csv), resolved env options (incl. metrics / flush / TLS / task retention)
-- Node resolution (`gc_node__resolve`, `gc_node__parse`) and direct node-entry read/write (`gc_machine_native__node_get` / `node_set_at` via `gc_node_single_value_t`, released with `gc_node_single_value__clear`); `node_get` takes an `expected_type_id` (`prog->core.nodeTime` / `.nodeGeo` / `.nodeIndex`) and refuses other block types
+- Node resolution (`gc_node__resolve`, `gc_node__parse`, `gc_node__type_fits` / `_strict`) and direct node-entry read/write (`gc_machine_native__node_get` / `node_set_at` via `gc_node_single_value_t`, released with `gc_node_single_value__clear`); `node_get` takes an `expected_type_id` (`prog->core.nodeTime` / `.nodeGeo` / `.nodeIndex`) and refuses other block types
 
 **[references/api_services.md](references/api_services.md)** — crypto, geo, time, math, util
 - Cryptography (SHA-256, HMAC-SHA-256, Base64, Base64URL)
 - Geospatial (geohashing, Haversine distance, geo boxes with BIGMIN/LITMAX); Time/Date/Timezone (dtz zone indexes, `GC_DTZ_UTC`, `gc_dtz_time__print` / `parse`)
-- Math (WASM shims, f64 PI/TAU/E/LN2 constants); Utility (Morton codes, hex, number/char parsing, deep equality, sorting with allocator)
+- Math (WASM shims, f64 PI/TAU/E/LN2 constants); Utility (Morton codes, hex, number/char parsing, deep equality incl. inline `gc/equals_inline.h`, sorting with allocator)
 
 ---
 

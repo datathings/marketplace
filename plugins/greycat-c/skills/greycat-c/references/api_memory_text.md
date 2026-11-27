@@ -10,6 +10,7 @@ _Part of the GreyCat C SDK reference (each file is linked from the skill's SKILL
 - [gc/buffer.h — Buffer Operations](#gcbuffer-h)
 - [gc/string.h — String Objects](#gcstring-h)
 - [gc/object.h — Object Manipulation](#gcobject-h)
+- [gc/object_inline.h — Inline Field Reads](#gcobject-inline-h)
 
 ---
 
@@ -734,7 +735,7 @@ gc_object__field_to_type(field)
 |----------|-----------|-------------|
 | `gc_object__get_at` | `gc_slot_t gc_object__get_at(const gc_object_t *self, u32_t offset, gc_type_t *type_res, const gc_machine_t *ctx)` | Get a field value by its field offset. Writes the field type to `*type_res`. |
 | `gc_object__set_at` | `bool gc_object__set_at(gc_object_t *self, u32_t offset, gc_slot_t value, gc_type_t value_type, gc_machine_t *ctx)` | Set a field value by offset. Returns `false` on error. |
-| `gc_object__get_offset` | `gc_slot_t gc_object__get_offset(const gc_object_t *self, u32_t offset, gc_type_t *type_res, const gc_program_t *prog)` | Get a field value using the program directly (no machine context). |
+| `gc_object__get_offset` | `gc_slot_t gc_object__get_offset(const gc_object_t *self, u32_t offset, gc_type_t *type_res, const gc_program_t *prog)` | Get a field value using the program directly (no machine context). Inline form: `gc_object__get_offset_inline` (`gc/object_inline.h`). |
 
 ### GC & Lifecycle
 
@@ -915,3 +916,15 @@ gc_object__finalize(slot.object, ctx);
 
 
 ---
+
+---
+
+<a id="gcobject-inline-h"></a>
+## gc/object_inline.h — Inline Field Reads
+
+**New header (upstream `9bafd68ea`), not included by `greycat.h`** — `#include "gc/object_inline.h"` explicitly (it re-exports `gc/object.h` and includes `gc/program.h`). The field reads of `gc/object.h` as `static inline` functions, for code that must not make a call (the fast forms of the interpreter's ops keep their registers only when they make no call). `gc_object__segments` / `gc_object__get_offset` are the same logic out of line; ordinary plugin code should keep using those.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `gc_object__segments_inline` | `static inline gc_object_data_t gc_object__segments_inline(const gc_object_t *self, const gc_program_type_t *type)` | `gc_object__segments`, inline: the nullable bitset / any-type / data segments at `type->binary_nullable_off` / `binary_any_types_off` / `binary_data_off`. |
+| `gc_object__get_offset_inline` | `static inline gc_slot_t gc_object__get_offset_inline(const gc_object_t *self, u32_t offset, gc_type_t *type_res, const gc_program_t *prog)` | `gc_object__get_offset`, inline: a nullable field whose bit is clear, or an object field holding `nullptr`, reads as `gc_type_null`. |

@@ -16,7 +16,7 @@ A **task** is a function call run on a worker thread. Two ways to spawn:
 - **HTTP-triggered** — an incoming JSON-RPC / path-RPC call resolves to a function and is enqueued as a task; the response is the task's return value. To dispatch a long-running call as a background task instead of blocking the HTTP response, set request header `task: true` (or `task: small` / `task: medium` / `task: large` to pick the worker class; `true` is `medium`, any other value is answered `400`) — the server returns the `task_id` immediately. A `@reserved` function (`Task::running`, `Task::cancel`, ...) never takes a task slot. The server ignores the header, answers with the value as it does without it, and adds the response header `task: none`, listed in `Access-Control-Expose-Headers` so that a browser app on another origin can read it. Poll its status with `Task::tasks([task_id])` (see [Task lifecycle](#task-lifecycle)), then fetch its value with `Task::result(task_id)` once the task has ended (see [Task results and folders](#task-results-and-folders)). `greycat call <fn> [args]` does this from the shell, in `medium` unless `--task_class` names another class, following the task through `Task::events` rather than polling (see [cli.md](cli.md)). A call of either kind that carries the request header `sse: <id>` is reported on the event stream with that id (see [Task events](#task-events-over-sse)).
 - **Programmatic** — `Scheduler::add(fn, periodicity, ...)` schedules a periodic task; the startup `main()` is enqueued as a task on `serve` boot.
 
-A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and run in parallel in every task, the root task of `greycat run` included, except under `greycat test`, which runs them one after the other. The task workers (`--workers`, `GREYCAT_WORKERS`) cap how many jobs run at once, so `GREYCAT_WORKERS=1` also runs them one after the other. Every job's `result()` stays readable after later `await`s, until the task ends: the results stay in files of the task (`error.gcb` for a job that threw), and each call reads one, so a large fan-out can be awaited chunk by chunk and read one result at a time. Keep the value instead of calling `result()` twice. A `Job` kept past its task (in a node, say) throws on `result()`. A writer opened before an `await` loses its file across it: written again after, it truncates the file, so write the rest with a new writer created with `append: true`.
+A **job** is a parallel sub-computation kicked off from within a task via `await(...)`. Jobs share the parent task's transaction by default and run in parallel in every task, the root task of `greycat run` and each test of `greycat test` included: a test that calls `await` serializes the arguments of its jobs and is suspended until they end, a job it spawns runs, and the next function of its module starts once that job ended. The task workers (`--workers`, `GREYCAT_WORKERS`) cap how many jobs run at once, so `GREYCAT_WORKERS=1` also runs them one after the other. Every job's `result()` stays readable after later `await`s, until the task ends: the results stay in files of the task (`error.gcb` for a job that threw), and each call reads one, so a large fan-out can be awaited chunk by chunk and read one result at a time. Keep the value instead of calling `result()` twice. A `Job` kept past its task (in a node, say) throws on `result()`. A writer opened before an `await` loses its file across it: written again after, it truncates the file, so write the rest with a new writer created with `append: true`. `await` and `spawn` check each job as a call is checked, in the calling task and before any job starts: as many `arguments` as the function has parameters, then each argument against its parameter's type. A bad job throws there, where `try` catches it (`function 'f' takes 1 argument but 2 arguments were supplied`, or `argument of type 'int' is not assignable to parameter 'x' of type ...`), and an `await` holding one starts none of its jobs.
 
 ```gcl
 var jobs = Array<Job> { };
@@ -162,6 +162,22 @@ fn add_card(id: int) {
 With the field non-null, `face` reads `card.faces.get(lang)` and writes `card.faces.set(lang, fetched)`, with no `?.` and no `?=`.
 
 Turning an existing nullable field non-null leaves the stored `null`s in place, so they need a one-off fill, described in [Schema / type evolution](workflow.md#schema--type-evolution).
+
+A merge works node by node, and a node stored under a key or in a field is a value there. A task that replaces it therefore does not merge with the tasks that write into the node it replaces. Take `var groups: nodeIndex<String, nodeIndex<String, bool>>`. One task copies `groups.get("k")` into a fresh index and sets `groups.set("k", fresh)`. Meanwhile another task adds an entry to the old index. Both commit without an error, in either order. `groups` keeps the fresh index, and the added entry stays in the old index, which nothing reaches any more. The same happens to a node held in a field, as `group->members = fresh` on a `node<Group>` does. To keep the concurrent writes, change the inner node in place, so that the writes merge key by key:
+
+```gcl
+var groups: nodeIndex<String, nodeIndex<String, bool>>;
+
+fn set_members(name: String, members: Array<String>) {
+    var group = groups.get(name)!!;
+    group.removeAll();
+    for (_, member in members) {
+        group.set(member, true);
+    }
+}
+```
+
+An entry another task adds while `set_members` runs is kept, since `removeAll` removes only the keys this task saw.
 
 For a value that is a cache, where any writer's copy is as good as another's, the writing task can keep its own value with `Task::set_merge_strategy(MergeStrategy::fusion_by_key_last_win)`. It resolves a conflict on a key, such as two tasks writing the same key. It does not resolve a conflict on a field. There the writing task's map replaces the other one as a whole, and the entries the other task wrote are lost without an error. The lazily created field above therefore needs the container created with its node, not this strategy.
 

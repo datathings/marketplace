@@ -97,7 +97,7 @@ fn sign_out_elsewhere(): int {
 
 A revoke applies to the next request, and it closes the `Task::events` streams opened with the token. A task the token already started keeps running as its identity. `Identity::set_password` leaves the sessions open, so a password change that should sign out the other devices calls `revoke_tokens(name, true)` as well. `Identity::remove` revokes every token of the identity.
 
-`greycat serve` issues two root tokens for itself at each start, and revokes the two of the previous start. The URL it prints on a terminal carries one, valid for `--validity` and labeled `serve`, which a start that prints none revokes too. `gcdata/security/token` holds the other, which the CLI uses to call the running server. That one is valid for a year, is not listed, and `revoke_tokens` leaves it. A backup does not hold tokens, so `greycat restore` ends every session (see [storage.md](storage.md#backups)).
+`greycat serve` issues two root tokens for itself at each start, and revokes the two of the previous start. The URL it prints on a terminal carries one, valid for `--validity` and labeled `serve`, which a start that prints none revokes too. `gcdata/security/token` holds the other, which the CLI uses to call the running server. That one is valid for a year, is not listed, and `revoke_tokens` leaves it. A backup holds the tokens, and a restore brings them back with the server key they were signed with (see [storage.md](storage.md#identities-and-the-server-key)).
 
 ### A sign-in without a password
 

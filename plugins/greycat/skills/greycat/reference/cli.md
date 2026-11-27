@@ -10,6 +10,7 @@ Static analysis is part of the same binary: `greycat lint`, `greycat fmt`, `grey
 
 - Synopsis and binary discovery
 - Commands (`run`, `serve`, `build`, `test`, …)
+- Native code (`greycat build --native`, `project.gcn`)
 - Common options and environment variables
 - Registries and tokens
 - The `.env` file
@@ -70,6 +71,8 @@ greycat run foo 42 hello '{"name":"John"}'   # foo(42, "hello", Person { name: "
 ```
 
 The result prints in GCL notation, or as JSON with `--format=json`; `--pretty` indents it. When stderr is a TTY, a progress bar shows once the function has run 500ms, with the percentage it reports through `Task::expected_steps` / `Task::add_steps`.
+
+The exit code is 0 when the task of the function ended, and non-zero when it threw or was cancelled. That task alone decides it: a job it awaits that throws and is caught, a task it spawns that throws, or one it cancels, does not fail the command. The same holds for `backup`, `stats`, `token` and `user` when they run in the process (see [Store commands](#store-commands-in-place-or-through-the-server)).
 
 A first Ctrl-C lets the running code and `await` jobs finish, starts none of the jobs still queued, and exits with code 1 and `<function> did not complete: stopped` when the function had not returned. A second Ctrl-C quits at once.
 
@@ -140,11 +143,31 @@ See [webapp.md](webapp.md) for the one prescribed webapp stack (VitePlus + MPA +
 
 ### `greycat build`
 
-Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `project.gcl`. Stripped of every `*_test.gcl` module. Use to produce a deployable package without starting the runtime. A `project.gcp` of another `.gcp` format version, which is every one 8.x built, is refused: rebuild it with `greycat build`. So is one whose bytecode holds a jump, a stack depth or an id the runtime would follow out of range, as a damaged or hand-made file can: the error names the function and the op at fault.
+Compiles the project to a `project.gcp` (GreyCat package) artifact alongside `project.gcl`. Stripped of every `*_test.gcl` module. Use to produce a deployable package without starting the runtime. A `project.gcp` of another `.gcp` format version, which is every one 8.x built, is refused: rebuild it with `greycat build`. So is one whose bytecode holds a jump, a stack depth or an id the runtime would follow out of range, as a damaged or hand-made file can: the error names the function and the op at fault. `--native` also compiles the functions to native code, into `project.gcn`: see [Native code](#native-code).
 
 ### `greycat test [function]`
 
-Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. A module whose run leaks memory or leaves a graph block marked counts as one more failure (`leak in module ...`, `mark errors in module ...`): GCL code cannot cause either, so it is a bug of the runtime or of a native library to report. Exit code is non-zero when anything failed. See [annotations.md § @test](annotations.md).
+Builds the project (including `*_test.gcl` modules), then runs every function annotated with `@test` (or just `function` if specified). Reports pass/fail counts. `--quiet` hides successful tests. Exit code is non-zero when anything failed. See [annotations.md § @test](annotations.md). `--native` runs the tests through native code: see [Native code](#native-code).
+
+- Each module runs on a store of its own, which starts empty, and the store is removed when the module ends. `setup`, each `@test` and `teardown` are tasks on it, as an RPC call is, in source order: a write commits when the function returns and the module's later tests read it, a test that fails or throws commits nothing, and a test whose commit fails, such as an `incompatible fusion` against a task it spawned, fails with that error. Another module never sees the store.
+- `await` and `spawn` in a test are those of any task: see [tasks.md](tasks.md#workers-tasks-and-jobs).
+- A test passes or fails on the status of its own task, as [`greycat run`](#greycat-run-function) does.
+- `--keep_store` (`GREYCAT_KEEP_STORE`) keeps the store of a module with a failed test and prints `store of module <name> kept at <path>`, to open it with `greycat` afterwards. Without it every store is removed.
+- The project's `gcdata/` is never opened, created or written: `--store_paths` is refused with `wrong command option`, and `GREYCAT_STORE_PATHS` is ignored. A test does not see what `greycat run` or `serve` stored. Log records still go to `files/root/streams/log.ndjson` of the project, as for every command (see `--log_flush_size` in the options table).
+- While a `serve` or `dev` of the project holds `gcdata/lock`, the run does not start: it exits 1 with `Another instance is already running, lock file found at gcdata/lock`, since both would append to `files/`. A lock file that no process holds, left by a server that was killed, does not stop it.
+- A test whose task leaks memory fails with `leak in <module>::<test>: +<n> bytes`, and a module that leaves a graph block marked counts as one more failure (`mark errors in module ...`). GCL code cannot cause either, so it is a bug of the runtime or of a native library to report.
+- Ctrl-C cancels the running test, starts no other function, and the run exits 1.
+
+### Native code
+
+`greycat build --native` writes `project.gcp`, then translates the functions of the program to C and compiles that C with clang into `project.gcn`, a shared library next to it. `run`, `serve`, `dev` and `test` load the `project.gcn` of the current directory when there is one and run each function it holds natively, the others interpreted. Results, errors, stack traces, `try`/`catch`, `await` and tasks behave as interpreted. On a GCL-heavy workload (loops, arithmetic, calls, field access) a run takes 40 to 50% less time. A workload spent in the runtime (CSV import, node reads, vector search) gains a few percent.
+
+- Supported on macOS on arm64 and on Linux on arm64 and x64. Elsewhere (Windows) the build refuses with `native: greycat build --native is not supported on <target>: ...`.
+- The compiler is `$CC`, `cc` when unset, and must be clang (on macOS the `cc` of the Xcode command line tools is; on Linux install clang and set `CC=clang`). gcc is refused. The C only includes headers greycat carries: nothing else to install. Compiling takes time, about 10 s for 60 functions and 2 min for 2,000 on 10 cores. When the compiler fails, the message names the directory where the generated C is kept.
+- A library matches the program it was built from, function by function, and the greycat that built it. At start greycat logs `native: N of M functions of project.gcn installed`. A library of another greycat version or build, of another target, or damaged, is ignored with a warning and everything runs interpreted: build it again after every greycat upgrade. A function edited since the build runs interpreted, as do the functions after it when the edit changes its length; the line is then a warning saying to run the `project.gcp` built with the library or to build again.
+- Deploy `project.gcp` and `project.gcn` together and run from `project.gcp`, with no `project.gcl` next to them: a server that compiles the sources again may lay the functions out otherwise and match none. Build on the OS and architecture of the servers. On Linux, the C library (glibc) of the build machine must not be newer than the one of the servers, or the library does not load there (a warning, and everything interpreted).
+- `--native_load=false` (`GREYCAT_NATIVE_LOAD=false`) runs everything interpreted although a `project.gcn` is there.
+- `greycat test --native` compiles the program it tests, which holds the `*_test.gcl` modules and so is not the program of `project.gcn`, into a temporary directory, runs the tests through it, then removes it. It leaves `project.gcn` alone, and so does a `greycat build` without `--native`.
 
 ### `greycat lint` / `greycat fmt` / `greycat lsp` / `greycat doc`
 
@@ -252,7 +275,7 @@ Writes a full backup with `Runtime::backup_full()`, in this process or on the se
 
 ### `greycat restore <archive>`
 
-Restores `gcdata/` from a backup archive. `--verify` stops at the first block that does not decode; `--repair` restores an archive holding such blocks by resetting the nodes they hold. See [storage.md](storage.md#restoring-a-damaged-archive).
+Restores `gcdata/` from a backup archive. `--verify` stops at the first block that does not decode; `--repair` restores an archive holding such blocks by resetting the nodes they hold. See [storage.md](storage.md#restoring-a-damaged-archive). The restore needs the `gcdata/security/private_key` the backup was made with, and `--drop_credentials` restores without the passwords and tokens when it is lost: see [storage.md](storage.md#identities-and-the-server-key).
 
 ### `greycat import <file.gce>`
 
@@ -327,6 +350,9 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--validity` / `GREYCAT_VALIDITY`       | `24h`              | `serve`, `token`                    | TTL for session tokens.                                                                                                                                                                                                            |
 | `--label` / `GREYCAT_TOKEN_LABEL`       | none               | `token`                             | Label of the token, as `Identity::tokens` lists it.                                                                                                                                                                                |
 | `--tz` / `GREYCAT_TZ`                   | host TZ            | `run`, `serve`                      | Default IANA timezone (e.g. `Europe/Luxembourg`).                                                                                                                                                                                  |
+| `--compiler` / `GREYCAT_COMPILER`       | `c`                | `build`, `run`, `test`, `serve`, `dev`, `codegen`, `bytecode` | Compiler that builds the project. `c` is the one built into `greycat`. `lang` is the one of the language tools in `lib/lang` (`./lib/lang`, else `~/.greycat/lib/lang`; those `greycat lint` and `greycat fmt` run), which refuses a program on any error `greycat lint` reports, libraries included. `install` always uses `c`. |
+| `--native` / `GREYCAT_NATIVE`           | `false`            | `build`, `test`                     | Compile the functions to native code: into `project.gcn` (`build`), or into a temporary directory for the run (`test`). See [Native code](#native-code). |
+| `--native_load` / `GREYCAT_NATIVE_LOAD` | `true`             | `run`, `serve`, `dev`, `test`       | Run the functions of `project.gcn` natively when it is there. `false` runs everything interpreted. |
 | `--mode` / `GREYCAT_MODE`               | none               | (global)                            | If set, runs as if the user had typed that command. Values: `serve`, `run`.                                                                                                                                                        |
 | `--key` / `GREYCAT_KEY`                 | none               | `serve`                             | Path to a license / signing key.                                                                                                                                                                                                   |
 | `--keysafe` / `GREYCAT_KEYSAFE`         | none               | `serve`                             | Password for the on-disk user secret store.                                                                                                                                                                                        |
@@ -334,7 +360,7 @@ Options can be passed on the command line (`--name=value`) or as environment var
 | `--backup_path` / `GREYCAT_BACKUP_PATH` | `backup`           | `backup`, `restore`, `run`, `serve` | Where backups go.                                                                                                                                                                                                                  |
 | `--max_backup_files`                    | `3`                | `backup`, `run`, `serve`            | Max backup files retained in `backup_path`.                                                                                                                                                                                        |
 | `--defrag_ratio`                        | `2.0`              | `run`, `serve`                      | Blocks held per live block tolerated across the whole store before a zone is defragged (`2.0` = half garbage). Must be `> 1.0` — `1.0` is a perfectly compacted store, so startup refuses anything in `(0, 1.0]`. `<= 0` disables auto-defrag.                                                                                                                                                                         |
-| `--ca_path` / `GREYCAT_CA_PATH`         | none               | `run`, `serve`, `test`              | Directory of extra CA certs to trust for outbound TLS, on top of the system store. A directory that yields no certificate is skipped with a warning. |
+| `--ca_path` / `GREYCAT_CA_PATH`         | none               | `run`, `serve`, `test`              | Directory of extra CA certs to trust for outbound TLS, on top of the system store. A directory that yields no certificate is skipped with a warning. The trust chain (this option, `SSL_CERT_FILE`, `SSL_CERT_DIR` and the system store) is read on the first outbound TLS connection, so its warnings are logged then, not at startup. |
 | `SSL_CERT_FILE` (env only)              | none               | every command                       | PEM file of extra CA certificates to trust for outbound TLS, read by the libraries and `greycat install` too. Added on top of the system store, where OpenSSL takes it instead of its default store. A file that yields no certificate is skipped with a warning. |
 | `SSL_CERT_DIR` (env only)               | none               | every command                       | Directories of extra CA certificates, separated by `:` (`;` on Windows). Added like `SSL_CERT_FILE`, and a directory that yields no certificate is skipped with a warning. |
 | `--tls` / `GREYCAT_TLS`                 | `false`            | `serve`, `dev`, `call`, `print`     | Serve HTTPS on `--port`, with `gcdata/security/tls/cert.pem` and `key.pem`. See [http.md](http.md#https).                                                                                                                                                                                                                    |

@@ -237,11 +237,11 @@ If you need to call a function that takes `Array<int?>` and you have `Array<int>
 - Copy element-by-element through a fresh `Array<int?>`, or
 - Refactor the function signature.
 
-Casting (`ints as Array<int?>`) does **not** convert the underlying container — it's a static reinterpret and may break at runtime.
+Casting (`ints as Array<int?>`) does **not** convert the underlying container: an `Array<int>` is not an `Array<int?>`, so the cast throws.
 
 ## Casting safely with `is` then `as`
 
-`is` narrows; `as` does not check at runtime. The safe pattern is to test first:
+`is` narrows; `as` throws on a mismatch. When the value may be of several types, test first:
 
 ```gcl
 fn process(thing: any?) {
@@ -258,7 +258,9 @@ fn process(thing: any?) {
 }
 ```
 
-A bare `thing as User` without an `is` check is allowed but will behave unpredictably if the value isn't actually a `User` (the runtime does no enforcement on object casts; the first mismatched member access throws). Reserve unchecked `as` for cases where the type is provably known by external invariant.
+A bare `thing as User` throws `casting <type> to User is not allowed` when the value is not a `User`. Use it where any other type is a bug.
+
+The same cast is how a value of type `any` goes into a local declared `User`: without it the build fails, see [types.md](types.md#typed-locals).
 
 ## HTTP / `@expose` patterns
 

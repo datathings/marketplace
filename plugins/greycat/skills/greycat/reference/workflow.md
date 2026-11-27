@@ -279,6 +279,7 @@ A production GreyCat deployment is **one binary, one `gcdata/`, one `webroot/`, 
 
 - [ ] `greycat fmt --mode=check` and `greycat lint` both exit `0` on the deploy commit. See [lang.md](lang.md).
 - [ ] `greycat build` produces a `project.gcp` artifact (or ship the source tree with `lib/` populated).
+- [ ] For a GCL-heavy workload on macOS (arm64) or Linux (arm64, x64), `greycat build --native` also writes `project.gcn`, its functions compiled to native code. Build it on the servers' OS and architecture with the greycat they run, ship it with `project.gcp`, and run from `project.gcp`. See [cli.md § Native code](cli.md#native-code).
 - [ ] Ship `project.gcl`, `src/`, `lib/`, `webroot/`, and the whole `bin/` (see [project.md](project.md#practical-layout); or have the deploy host run `greycat install` once).
 - [ ] If `webroot/` is bundler output and therefore gitignored, build it on the deploy host or ship it as a
       separate artifact - it is not in the source tree. See [webapp.md](webapp.md).

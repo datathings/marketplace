@@ -45,6 +45,15 @@ ys.range_equals(0, 4, null);        // all five elements equal null?
 is always false and `!= null` always true. Lint reports such a comparison as `decidable-condition` only when it is
 the condition of an `if` or a loop. Elsewhere, as in `return xs.index_of(v) != null;`, it passes lint.
 
+`xs[i] = v`, `set`, `add` and every other store into an `Array<T>` raise `wrong type found for parameter value type U
+found while T expected` when `v` is not of type `T`, also when the Array is reached through `any`. An `int` is not a
+`float`: store `2.0`, or `n as float`, into an `Array<float>`. An `Array<T> {...}` literal checks its elements the same
+way, and a `Map<K, V> {...}` its keys and values, except that an `int` literal in an `Array<float>` or `Map<K, float>`
+literal is the `float` of the same value: `Array<float> { 1, 2, 3 }` holds `1.0`, `2.0`, `3.0`. A `[...]` literal
+takes the type of the literals in it as a guess, and is an untyped `Array` when an element does not fit: `[all[0]]`,
+whose only literal is the index `0`, is an `Array` and not an `Array<int>`. Spell the type, `Array<Foo> { all[0] }`,
+to get an `Array<Foo>`.
+
 Iteration:
 
 ```gcl
@@ -233,6 +242,16 @@ d.add(10, DurationUnit::minutes);
 d.subtract(5, DurationUnit::seconds);
 ```
 
+`duration::parse` reads a String written as a duration literal, and throws `bad duration format` on anything else (a fraction, a space inside, an unknown unit, a value out of range). A number without a unit is in microseconds. There is no `as duration` cast from a String.
+
+```gcl
+duration::parse("10min");          // 10min
+duration::parse("1hour_30min");    // 1hour30min
+duration::parse("90");             // 90us
+```
+
+Typed JSON and `CsvReader` read a `duration` from such a String as well (`{"ttl":"10min"}`, a `10min` cell). A number is in the unit of the field's `@format`, microseconds without one.
+
 ### Enums
 
 ```gcl
@@ -314,10 +333,21 @@ Concrete subtypes:
 | Type                              | Format                                             |
 | --------------------------------- | -------------------------------------------------- |
 | `GcbWriter<T>` / `GcbReader<T>`   | GreyCat binary (compact, fast)                     |
-| `TextWriter<T>` / `TextReader`    | UTF-8 line-based                                   |
+| `TextWriter<T>` / `TextReader`    | UTF-8 lines: `read()` drops `\n` or `\r\n`, `writeln` ends with `\n` |
 | `JsonWriter<T>` / `JsonReader<T>` | NDJSON (line-separated JSON)                       |
 | `CsvWriter<T>` / `CsvReader<T>`   | CSV (config via `CsvFormat`)                       |
 | `BinReader`                       | Raw `i32` / `i64` / `f32` / `f64` / `Tensor` reads |
+
+To check a prefix on every line of a large file, use `TextReader.skip_lines_with_prefix(prefix)` rather than a loop of `read()` and `startsWith`. It moves past the lines that start with `prefix`, compares them in place without a String per line, and is about 10 times faster than that loop and faster than `grep`. It stops before the first line that does not start with `prefix`, which `read()` returns next, and returns the number of lines it skipped:
+
+```gcl
+/// True when every line of the file starts with `prefix`.
+fn all_lines_start_with(path: String, prefix: String): bool {
+    var r = TextReader { path: path };
+    r.skip_lines_with_prefix(prefix);
+    return !r.can_read();
+}
+```
 
 `GcxWriter<T>` / `GcxReader<T>` write and read `.gcx`, a binary format that does not depend on the ABI: objects carry their field names and the type, field and enum entry names sit once in a dictionary at the end of the file. Choose it over GCB for a file that must survive changes to the program's types or be read by another tool; GCB is smaller and faster but only reads back into the same types. `GcxWriter` is not a `Writer`: it has `write(v)` and `close()`, no `flush()`, and the file is readable only once `close()`d. Read back into changed types, a removed field is skipped and a missing nullable field reads as null. Byte layout: `lib/std/gcx.md`.
 
@@ -481,7 +511,8 @@ var r = WorldChangesReader {};                // the nodes the current world mod
 var d = WorldDiffReader { node: n };          // n's keys that differ from the base: read(): WorldDiff {kind, key, base, world}
 
 System::exec("/bin/ls", ["-la"]);             // blocking subprocess
-System::spawn("/bin/sleep", ["60"]);          // non-blocking
+var p = System::spawn("/bin/sleep", ["60"]);  // non-blocking: ChildProcess { pid }
+p.kill();   p.wait();                         // wait(): ChildProcessResult { code, stdout, stderr }
 System::getEnv("PATH");
 System::tz();                                 // host TimeZone
 
@@ -493,6 +524,15 @@ Scheduler::add(my_fn, FixedPeriodicity { every: 5min }, null);
 Scheduler::list();
 Scheduler::activate(my_fn);    Scheduler::deactivate(my_fn);
 ```
+
+A `ChildProcess` kept in a node and read back by a later task, passed to a job, or held in a local across an `await`,
+holds only its `pid`. While that process is a child of the server, `kill()` kills it, or reaps it when it had ended, and
+`wait()` waits it and returns its exit code with no output. The object that waited or reaped it returns that code again
+on `wait()`. A handle read back after the process was reaped, by a `wait()` or such a `kill()` in another task, throws
+`kill failed: process <pid> is not a child of this process` (or `wait failed: ...`), as for any other pid. Do not wait
+or kill one process from two handles at once, such as the one `spawn` returned and one read back: the first to reap it
+gets its exit code, and what the other does is not defined (it may throw, or kill a process that took the pid since). On
+Windows a read-back handle always throws.
 
 ### Periodicity types
 

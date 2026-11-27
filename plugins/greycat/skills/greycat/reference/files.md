@@ -141,6 +141,14 @@ f.path;   f.size;   f.last_modification;   // size is null for a folder
 f.isDir();   f.name();   f.extension();   f.sha256();
 ```
 
+`File::chmod(path, mode, recursive)` and `File::chgrp(path, group, recursive)` set the permissions and the group of a file or a folder, as `chmod` and `chgrp` do. The mode is a String of 3 or 4 octal digits, since GCL has no octal literal, and the group is named. With `recursive`, they also change everything under a folder, except symbolic links, which are neither followed nor changed. Both return false when an entry could not be changed, after trying the others, and throw on a bad mode, an unknown group, and on Windows. Only a member of the group, or root, may give it a file. Set the group before the mode: a change of group can clear the setgid bit, and the OS silently drops setgid on a folder whose group the caller is not in.
+
+```gcl
+File::chmod("files/alice/report.csv", "640", false);
+File::chgrp("files/alice/shared/", "analysts", true); // the group first: a change of group can clear setgid
+File::chmod("files/alice/shared/", "2750", true); // setgid folder: new files take its group
+```
+
 `FileWalker` lists one folder, not recursively:
 
 ```gcl

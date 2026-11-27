@@ -788,6 +788,8 @@ struct gc_program_function {
                                     // (server fills it from the request instead of binding args)
     bool returns_http_response : 1; // New in 9.0: declared return type runtime::HttpResponse (nullable or not);
                                     // the server writes the response it returns
+    bool has_native_body : 1;       // New (upstream 9bafd68ea): a GCL function a native library (`greycat build --native`)
+                                    // gave a body: its frames run that body. Set when the library is installed.
     // (`is_raw` / `@raw` was REMOVED in 9.0 — return runtime::HttpResponse instead)
     u64_t permissions_mask;         // Required permissions bitmask
     gc_program_src_id_t source;     // Source location
@@ -1002,7 +1004,7 @@ typedef struct gc_program_op {
 The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 
 <details>
-<summary>Full opcode list (83 opcodes, 0-82)</summary>
+<summary>Full opcode list (131 opcodes, 0-130; <code>GC_PROGRAM_OPCODE_LAST</code> = <code>node_fits</code>)</summary>
 
 **Renumbered in 9.0:** the five `push_node_time` / `push_node_list` / `push_node_index` / `push_node_geo` opcodes became one `push_node_empty` (44, operand = the node type: nodeTime, nodeList, nodeIndex, nodeSet, nodeIndexSet or nodeGeo), so every opcode after it moved down by 3.
 
@@ -1057,6 +1059,29 @@ The GreyCat VM bytecode instruction set. Used internally by the interpreter.
 | 80 | `volatile_mod` | Volatile module access |
 | 81 | `jol` | Jump on log level greater than machine log level |
 | 82 | `push_obj_g` | `push_obj` of the type the fn's `operand`-th `Foo<T> {}` literal builds |
+| 83 | `cast_check` | **New.** Raise unless the value passes `is` against the operand's type descriptor |
+| 84 | `not_null` | **New.** Raise on null |
+| 85-86 | `read_ofield` / `push_ofield` | **New (format 3, typed / offset-addressed forms).** Replace current by offset-ed field / push it, keep the receiver |
+| 87 | `call_met_off` | Call the function the data cell names |
+| 88-89 | `pop_jof_u` / `pop_jot_u` | `pop_jof` / `pop_jot`, operand known to be a bool |
+| 90-92 | `load_null` / `load_true` / `load_false` | Push null / true / false |
+| 93 | `load_int` | Push the operand as an int, sign-extended |
+| 94-98 | `add_i64` / `sub_i64` / `mul_i64` / `div_i64` / `mod_i64` | Both operands are int |
+| 99-102 | `add_f64` / `sub_f64` / `mul_f64` / `div_f64` | Both operands are float |
+| 103-108 | `eq_i64` / `ne_i64` / `lt_i64` / `le_i64` / `gt_i64` / `ge_i64` | Both operands share one i64-backed type |
+| 109-114 | `eq_f64` / `ne_f64` / `lt_f64` / `le_f64` / `gt_f64` / `ge_f64` | Both operands are float |
+| 115-116 | `call_fn_u` / `call_met_off_u` | `call_fn` / `call_met_off`, arguments already checked |
+| 117 | `ret_u` | `ret`, value already known to fit the return type |
+| 118 | `store_field_off` | `store_nfield` by offset, the data cell names the field |
+| 119-120 | `read_lfield` / `store_lfield` | `read_ofield` / `store_field_off` on a local or `this`; the data cell names the field then the slot |
+| 121-122 | `inc_lvar` / `dec_lvar` | `inc_load_lvar` / `dec_load_lvar` whose value is discarded, pushes nothing |
+| 123 | `load_float` | Push the operand's f32 bits as a float |
+| 124-125 | `load_lvar_load` / `store_lvar_load` | `load_lvar` / `store_lvar`, then the `load_lvar` of the next op, not dispatched (written by `gc_program__pair_ops`) |
+| 126 | `unref_ofield` | `unref` then `read_ofield`, the data cell names the field |
+| 127 | `unref_lfield` | `load_lvar`, `unref` then `read_ofield`; the data cell names the field then the slot |
+| 128 | `call_met_slot` | **New (format 4, virtual calls).** `call_met` of the method at slot `high 4 bytes` of the receiver's method table, which the compiler proved holds the method named `low 4 bytes` in every type the receiver can have; arguments are checked |
+| 129 | `call_met_slot_u` | `call_met_slot`, arguments already checked |
+| 130 | `node_fits` | The node collection on top fits the node type the operand names, strictly (one built by generic code fits a declared `any` only). Before a for-in whose key or element the compiler proved from the collection's type |
 
 </details>
 
@@ -1128,6 +1153,7 @@ Maps to the binary operator opcodes. Values 0-18 covering: `not`, `uminus`, `unr
 | `gc_program_function__function_name_off(prog, fn_off)` | Get the function name offset. |
 | `gc_program_function__return_type_desc(prog, fn_off)` | Get the return type descriptor. |
 | `gc_program_function__get_param_by_off(fn, offset, out)` | Get parameter info by index. |
+| `gc_sdk bool gc_program_function__trusted_return(const gc_program_t *prog, const gc_program_function_t *fn)` | **New (upstream `9bafd68ea`).** Whether the result of native `fn` may be taken to be of its declared return type (the compiler proves argument types from it; debug builds check it on every return). Not for a generic function, a generic or specialized return type, nor — on a generic or specialized type — a return type other than a primitive or `String` (`T` is erased to `any`). |
 
 #### Enum Entries & Fixed-Value Enum Maps (new in 9.0)
 
@@ -1166,7 +1192,8 @@ The compiled program has a specified binary format (`core/doc/gcp-format.md`). M
 | `gc_sdk bool gc_program__rebuild_indexes(gc_program_t *prog, gc_buffer_t *err)` | Fill every name index a loader does not store (modules, per-module types/functions, per-type fields/static fields/functions, permissions, roles, expose names). `false` with `err` on a name collision. |
 | `gc_sdk void gc_program__set_http_flags(gc_program_t *prog, u32_t from_fn)` | Set `takes_http_request` / `returns_http_response` from signatures for functions `>= from_fn` (call once the types exist when building a program yourself). |
 | `gc_sdk bool gc_program_opcode__has_data(gc_program_opcode_t op)` | Whether `op` is followed by a data op slot. |
-| `gc_sdk const gc_program_opcode_rule_t *gc_program_opcode__rule(gc_program_opcode_t op)` | Row of `op` in the program-check opcode table (`pops`, `pushes`, `reads`, `pops_extra`, `operand`, `data`, `flow` — enums `gc_program_check_pops_t` / `_operand_t` / `_data_t` / `_flow_t`); nullptr for a non-opcode. |
+| `gc_sdk void gc_program__pair_ops(gc_program_t *prog)` | **New (upstream `9bafd68ea`).** Writes the pair forms over the ops in memory: a `load_lvar` or `store_lvar` followed by a `load_lvar` of the same body becomes `load_lvar_load` / `store_lvar_load`, operand kept. The second op stays a `load_lvar` (a jump landing on it runs it alone) and is never itself the first of a pair; idempotent. Same behaviour, one dispatch less per pair. |
+| `gc_sdk const gc_program_opcode_rule_t *gc_program_opcode__rule(gc_program_opcode_t op)` | Row of `op` in the program-check opcode table (`pops`, `pushes`, `reads`, `pops_extra`, `operand`, `data`, `flow` — enums `gc_program_check_pops_t` / `_operand_t` / `_data_t` / `_flow_t`); nullptr for a non-opcode. Upstream `9bafd68ea` added `gc_program_check_pops_elements = 7`, `gc_program_check_data_method = 9` / `_field_local = 10` / `_method_ref = 11`, and `gc_program_check_operand_local_paired = 20` — which **renumbered `gc_program_check_operand_empty_node_type` 20 → 21**. |
 | `gc_sdk bool gc_program__check(const gc_program_t *prog, gc_buffer_t *err)` | Verify the bytecode of every function (jumps, stack depths, locals, operand ids, try/for-in scopes, module vars, `$args` of exposed fns); no type checking. `false` with `<module>::<function> op <index>: <rule>` in `err`. |
 | `static inline gc_object_type_load_t *gc_program__abi_type_loader(const gc_program_t *prog, const u32_t abi_type)` | Loader for an ABI type id read from a block; nullptr when it maps to no program type (damaged id, removed type). |
 
@@ -1252,6 +1279,10 @@ typedef struct gc_program_type_field_format {
 | `gc_compiler_tags_max` | 2 | Max compiler tags per function |
 | `GC_PROGRAM_INHERITANCE_MAX_DEPTH` | 8 | Ancestors a type holds in `super_types`, nearest first — **not a depth limit** (was `4`, and a limit, before upstream `6070615de`): an is-a check scans these slots, then walks `super_type` from `gc_program_type__super_past_slots` for a deeper chain. Changes `sizeof(gc_program_type_t)` and every field offset after `super_types` — rebuild plugins. |
 | `GC_PROGRAM_TEMPLATE_MAX_NESTED` | 4 | Maximum nested generic type depth |
+| `GC_PROGRAM_FORMAT_VERSION` | `4u` | **New (upstream `9bafd68ea`).** Format version of the `.gcp` file `gc_program__save` writes (`core/doc/gcp-format.md`). |
+| `GC_PROGRAM_FORMAT_VERSION_MIN` | `2u` | **New.** Oldest format version `gc_program__load` reads. Version 2 is version 3 without the opcodes after `push_obj_g`; version 3 is version 4 without `call_met_slot`, `call_met_slot_u` and `node_fits`, its `unref` operands and the payload types of its `unref_ofield` 0. |
+| `GC_PROGRAM_OPCODE_LAST` | `gc_program_opcode_node_fits` (130) | **New.** The last opcode, for tables indexed by opcode. |
+| `GC_PROGRAM_PUSH_ARR_GUESSED` | `0x80000000u` | **New.** Bit 31 of the `push_arr` operand (low 31 bits count the elements): the C compiler guessed the element type of the `[...]` literal, so an element that does not fit makes the Array untyped instead of raising. |
 
 ### Usage Examples
 

@@ -33,6 +33,15 @@ Reach for this when reasoning about assignability, nullability, generics, narrow
 
 Primitives are passed by value. `String` behaves as a value semantically (immutable, auto-cloned on assignment across containers).
 
+A `float` written as text (`println`, `"${x}"`, JSON, CSV) has the shortest digits that read back as the same value, in fixed notation between `1e-9` and `1e9` and in exponent notation past them. To round for display, use `float::to_string`:
+
+```gcl
+println(0.1 + 0.2); // 0.30000000000000004
+println("${100.0}"); // 100.0
+println(4.0e-11); // 4e-11
+println(float::to_string(3.14159, '.', null, 2, false)); // 3.14
+```
+
 `time`, `duration`, `geo` are **native types with no fields** — they have methods only. `t.format(fmt, tz)` works; `t.year` is not (use `t.toDate(tz).year` instead).
 
 ## Nullability rules
@@ -61,6 +70,21 @@ fn use(maybe: int?) {
     }
 }
 ```
+
+### Typed locals
+
+A local declared with a type only takes a value of that type: `var x: T = e;`, `x = e;` and `x ?= e;` fail to compile when `e` is of a type that does not fit `T`, such as `any`, another type, or `T?` into a `T`. The error names the local and its line: `local x is declared project::User and cannot hold a core::any: cast it with 'as'`. Cast with `as T`, which checks the value at runtime, or eliminate the null first. A local declared `T` is a `T` when read and a call is of the return type its function declares, so copying one typed local into another of the same type always compiles.
+
+```gcl
+fn load(raw: any, maybe: User?) {
+    var a: User = raw; // ERROR — any does not fit User
+    var b: User = raw as User; // ok — checked at runtime
+    var c: User = maybe; // ERROR — User? does not fit User
+    var d: User = maybe!!; // ok
+}
+```
+
+A value whose type the compiler does not know at that point, such as an element read with `arr[i]`, is stored without a check.
 
 ### Operations that require non-null receivers
 
@@ -104,7 +128,7 @@ var len: int = (s ?? "").size();   // ?? produces non-null
 var len2: int = s!!.size();        // !! is the unsafe escape — assert non-null
 ```
 
-`!!` is **postfix**. It compiles to a runtime null-check that throws on null, then types the expression as non-null.
+`!!` is **postfix**. It compiles to a runtime null-check that throws `` `!!` found null `` on null, then types the expression as non-null.
 
 ## Generic types and invariance
 
@@ -152,6 +176,8 @@ fn main() {
 
 This holds for **every** generic, including built-ins: `Map<K, V>`, `Tuple<T, U>`, `nodeIndex<K, V>`, `nodeSet<V>`, `nodeIndexSet<K, V>`, `nodeTime<T>`, `nodeTimeSet<T>`, etc.
 
+Node types are the exception: they are covariant in their arguments. A `node<Sub>` is accepted where a `node<Base>` or a `node<Sub?>` is declared, and a `nodeTime<float>` where a `nodeTime<float?>` is, but a `node<Sub?>` is not accepted where a `node<Sub>` is. The runtime checks the type a node was created with where GCL code passes, returns or stores one, so a `node<B>` that reaches a `node<A>` parameter through `any` raises `argument of type 'node<B>' is not assignable to parameter 'n' of type 'node<A>'`. `node<any>` and `node<any?>` take any node of the kind. A node built by generic code, as `node<T> { v }` in a generic function, records no type argument (`is node<Foo>` is false on it) and is accepted as any specialization of its kind. Decoders (`Json`, `CsvReader`, `GcbReader`), `type::field_set` and natives do not check: a field may then hold a node of another type, and `n->` on it raises `the node holds a B, not the A its type declares`. A `for` over a node collection whose declared type gives its elements raises `the nodeList is not the nodeList<A> its type declares` on a collection of another type and on one built by generic code, so declare such a collection with its concrete type (`nodeList<Foo> {}`) outside generic code.
+
 ### "Raw" forms
 
 Every generic type without explicit generic params is materialized as: `Generic<any?>`
@@ -188,6 +214,7 @@ Rules:
 - A `Circle` value is assignable to a `Shape` slot (subtype → supertype is implicit).
 - `Shape` → `Circle` requires an explicit `as Circle` and is checked at parse/analysis time only; the runtime does not enforce it.
 - `abstract type` cannot be instantiated. Its `abstract fn` declarations have no body and must be implemented by every non-abstract subtype.
+- An implementation keeps the signature of the abstract method: the same number of parameters, each of the same type, and a return type that fits the abstract one (the same type, a subtype, or a non-null type for a nullable one). Otherwise the build fails with `override area in type Circle does not keep the signature of area in Shape: ...`, naming what differs. A parameter or return typed by a generic parameter of the abstract type (`T` in `abstract type Box<T>`) is not compared.
 
 ### `Object` / root type
 
@@ -217,12 +244,12 @@ fn describe(x: any?) {
 
 ## The `as` operator
 
-`as T` is a cast. Casts to primitives (`int`, `float`, `bool`, ...) are checked at runtime and throw on a mismatch; `int` <-> `float` converts. Casts to `String`, user and other object types are **dropped**: no runtime check.
+`as T` is a cast, checked at runtime: it throws `casting <type> to T is not allowed` unless the value `is T`, by the rule above. `int` <-> `float` converts. A cast to a generic parameter (erased at runtime) or to `any?` (which admits every value) is not checked.
 
 ```gcl
 fn handle(raw: any?) {
-    var u = raw as User;       // lang accepts; runtime does not verify
-    println(u.name);           // if raw was not a User, member access throws at runtime
+    var u = raw as User; // throws here if raw is not a User (or is null)
+    println(u.name);
 }
 ```
 
@@ -231,7 +258,7 @@ Use `as` to:
 - Re-type a value the lang cannot infer.
 - Downcast (`Shape` → `Circle`) after a parallel `is` check.
 
-The lang rejects `as` casts between unrelated types. Use `is` first when you want a checked downcast.
+The lang rejects `as` casts between unrelated types. Use `is` first when a mismatch is a case to handle rather than an error.
 
 ## The `function` type
 
